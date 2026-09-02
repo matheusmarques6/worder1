@@ -1285,6 +1285,27 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   Depois: 1308 testes (+9: 1 novo em `budget.test.ts`, 8 novos em `cost-tracker.test.ts`), 1301 verdes,
   as MESMAS 4 falhas pré-existentes, nenhuma nova. `npx tsc --noEmit` limpo.
 
+  **Fix round 1 (review — `task-42-report.md`, seção "Fix round 1"). 0 Critical, 0 Important, 4
+  Minor.** Todos endereçados. **Minor 1 (o que mais preocupava, com precedente caro): a migration
+  assumia `ai_usage_logs` já existente.** A tabela nasce fora de `supabase/migrations/` — mesma
+  classe do item 0a (`CREATE INDEX` fora do bloco guardado em `20260621_phase0_foundations.sql`
+  derrubava `supabase start` num banco limpo). Risco herdado do item 37 (que fez a mesma suposição
+  no trigger), mas herdado não é justificativa: a migration inteira agora vive dentro de
+  `DO $guard$ ... $guard$`, guardada por `to_regclass('public.ai_usage_logs')`, no molde exato do
+  item 0a — sem a tabela, `RAISE NOTICE` e sai sem tocar em nada. **Minor 2, declarado, sem
+  backfill:** linhas de `cost_usd = 0` gravadas antes desta migration são ambíguas (podiam ser gasto
+  real zero OU modelo sem preço, o comportamento antigo) — sem volume conhecido, backfill seria
+  inventar trabalho; declarado via `COMMENT ON COLUMN ai_usage_logs.cost_usd` na migration e aqui:
+  **uma soma histórica que cruza 2026-09-02 é um piso, não um total.** **Minor 3: item 69 reescrito**
+  com as duas fontes de "não sei o gasto" (o fail-open triplo original + o `hasUnknownCost` novo
+  deste item), o efeito de cada saída nas duas, e uma recomendação (manter fail-open, tratar como
+  monitoramento — não é decisão, é ponto de partida pro dono do produto). **Minor 4:** teste novo
+  cobrindo `costUsdOverride: null` explícito contra um modelo QUE ESTÁ em `PRICING` — prova que o
+  override vence mesmo quando a tabela teria um preço, não só quando não teria.
+
+  **Suíte após o fix round 1:** 1309 testes (+1), 1302 verdes, as mesmas 4 falhas pré-existentes.
+  `npx tsc --noEmit` limpo.
+
 - [ ] **43. Apagar o fallback de full scan do RAG** `[confirmado]`
   `src/lib/ai/rag.ts:56-73` — o `try/catch` nunca dispara porque `.rpc()` devolve `{error}` em vez de
   lançar; qualquer erro cai em `searchDirect` (`:84-155`), que faz `select …embedding` sem `.limit()` e
@@ -1512,24 +1533,56 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   única chamada lenta. Não implementado no item 41 por ruling F explícito do controlador — é achado
   vizinho, não o mesmo item.
 
-- [ ] **69. Decidir o que fazer com custo desconhecido no orçamento** `[relatado]` · *(descoberto no item 42)*
-  Depois do item 42, `checkAiBudget` (`src/lib/ai/budget.ts`) sabe distinguir "gastou $0" de "gastou
-  um valor desconhecido" (`BudgetCheckResult.hasUnknownCost`) — mas a decisão de bloqueio continua
-  igual: `allowed = spentUsd < budgetUsd`, onde `spentUsd` soma só o custo CONHECIDO do mês. Uma org
-  cujo uso é inteiramente (ou majoritariamente) de modelo fora da tabela de preços — o caso real do
-  piloto, `google/gemini-3.5-flash` — tem `spentUsd` artificialmente baixo e o orçamento pode nunca
-  fechar, mesmo com o achado do item 42 corrigido: agora o gasto desconhecido é VISÍVEL
-  (`console.warn` a cada `checkAiBudget`, `hasUnknownCost` no retorno e em `/api/ai/usage`), mas
-  continua sem CONSEQUÊNCIA no bloqueio. Escolher entre (a) manter como está — best-effort, nunca
-  bloqueia por custo que não sabe calcular, risco de gasto real sem teto para modelo sem preço
-  publicado; (b) tratar `hasUnknownCost` como equivalente a orçamento estourado (fail-closed) —
-  simples, mas pode calar o agente inteiro assim que a org usar um modelo novo, antes de qualquer
-  operador notar e cadastrar o preço; (c) um teto separado, tipo "no máximo N chamadas de custo
-  desconhecido por mês antes de bloquear" — meio-termo, mas é a política plugável que o item 42
-  evitou por YAGNI. É a mesma família de decisão do fail-open triplo de `budget.ts` (rulings E dos
-  itens 37/41/42): o que fazer quando o sistema não sabe quanto foi gasto é escolha de produto do
-  dono, não do implementador. Ponto de partida: `src/lib/ai/budget.ts::checkAiBudget`, bloco que loga
-  `hasUnknownCost` sem agir sobre ele; `task-42-report.md` tem o raciocínio completo.
+- [ ] **69. Decidir o que fazer quando `checkAiBudget` não sabe o gasto real** `[relatado]` · *(descoberto no item 42)*
+  `checkAiBudget` (`src/lib/ai/budget.ts`) tem HOJE duas fontes independentes de "não sei o gasto
+  real da org", e as duas resolvem pro mesmo `allowed: true` sem exceção — decisão de produto que
+  nenhum dos itens 37/41/42 tomou, só documentou. Fix round 1 do item 42 pediu a recomendação que
+  faltava (ruling E cobrado explicitamente) — vai abaixo, com o preço de cada saída.
+
+  **Fonte 1 — os três `catch` que já existiam (o "fail-open triplo" citado desde o item 37).**
+  `budget.ts:149-153` (erro lendo `ai_budgets`), `:166-174` (erro somando `ai_usage_logs`, RPC ou
+  fallback) e `:185-190` (catch-all) devolvem `{allowed: true, ...}` sempre que a consulta ao banco
+  falha — não é ausência de dado, é ERRO de conexão/consulta.
+  *Efeito de cada saída, hoje vs. a alternativa:*
+  - **Manter fail-open (atual):** a org segue sendo atendida no WhatsApp normalmente enquanto o banco
+    tossir; o preço é gasto sem teto durante a janela do erro — limitado, na prática, pelo volume de
+    mensagens que chegam nesse intervalo, e com o `console.warn` de cada ramo como único sinal.
+  - **Virar fail-closed (lançar/bloquear nesses três `catch`):** qualquer soluço de `ai_budgets` ou
+    `ai_usage_logs` — não só um orçamento realmente estourado — cala o agente pra TODOS os clientes
+    da org até o banco voltar. `checkAiBudget` roda perto do início de `processMessage`
+    (`engine.ts:92`) e nos 4 outros chamadores (`evals.ts`, `proposals.ts`, `test-runner.ts` ×2,
+    `process/document/route.ts`); um blip transitório de rede vira silêncio total no canal que o
+    cliente final enxerga, não um erro interno.
+
+  **Fonte 2 — nova, do item 42: `hasUnknownCost`.** Diferente da Fonte 1, aqui a consulta ao banco
+  FUNCIONA — o que falta é preço pro modelo (`google/gemini-3.5-flash`, o caso real do piloto).
+  `spentUsd` soma só o conhecido (nunca inventa `0` — esse era o próprio achado do item 42) e
+  `hasUnknownCost: true` sinaliza que a soma é parcial, mas `allowed` não reage a isso.
+  *Efeito de cada saída:*
+  - **Manter como está (atual):** best-effort — nunca bloqueia por custo que não sabe calcular; risco
+    de gasto real sem teto enquanto o modelo não tiver preço cadastrado. Agora VISÍVEL
+    (`console.warn` a cada `checkAiBudget`, `hasUnknownCost` no retorno e em `/api/ai/usage`), o que
+    muda o risco de "silencioso" pra "monitorável", mas não pra "limitado".
+  - **Tratar `hasUnknownCost` como orçamento estourado (fail-closed):** simples de implementar, mas
+    calaria o agente assim que a org usasse QUALQUER modelo novo — antes de um operador notar e
+    cadastrar o preço. Pune o caso comum (modelo novo, preço ainda não cadastrado) do mesmo jeito que
+    o caso raro (uso deliberado de modelo caro sem controle).
+  - **Meio-termo (teto de N chamadas desconhecidas antes de bloquear):** amortece os dois riscos
+    acima, mas é a política plugável que o item 42 evitou por YAGNI — não cabe sem um dono decidindo
+    o N e o horizonte.
+
+  **Recomendação (não é decisão — é o ponto de partida pro dono do produto avaliar):** manter
+  fail-open nas duas fontes por enquanto, e tratar a MITIGAÇÃO como monitoramento, não como
+  bloqueio — motivo: o produto é um canal de atendimento ao cliente final (WhatsApp), e nas duas
+  fontes o modo de falha do fail-closed (cliente manda mensagem, ninguém responde, sem aviso nenhum
+  pro lojista nem pro cliente) é mais caro pra confiança na loja do que uma janela limitada de gasto
+  sem teto — sobretudo com o limite-default de $50/mês (`DEFAULT_MONTHLY_LIMIT_USD`) mantendo o
+  pior caso pequeno em dólar absoluto. Essa conta muda se/quando: (a) o limite por org crescer muito
+  além do default; (b) `console.warn` virar alerta de verdade (Slack/PagerDuty) que alguém realmente
+  olha — aí fail-closed com alerta simultâneo fica mais defensável, porque o silêncio pro cliente
+  vem acompanhado de um humano já a caminho. Ponto de partida técnico:
+  `src/lib/ai/budget.ts::checkAiBudget` (os três `catch` e o bloco que loga `hasUnknownCost` sem agir
+  sobre ele); `task-42-report.md`, seção "Fix round 1", tem o raciocínio completo.
 
 ---
 
