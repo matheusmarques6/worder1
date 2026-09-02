@@ -820,15 +820,16 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `ai_usage_logs` (`FOR ALL USING (true)`, sem isolamento real por org) fica como está — ruling E:
   consertá-la é postura de segurança que atinge o lado TS também, não é este item.
 
-  **Mais um, vindo do item 30 — não implementado nesta tarefa (é a parte Python):**
-  `conversation-ai-status.ts:166-168` desliga o badge explicativo para org em modo `runtime` com o
-  argumento de que "o runtime Python nunca lê essa coluna". Agora lê, e os guards decidem — então o
-  badge pode dizer "Bot ativo" numa conversa em que o agente está calado por `stop_on_human_reply`,
-  teto, horário, cooldown ou ativação manual. Nas duas TRANSFERÊNCIAS o badge fica honesto (a checagem
-  de `ai_enabled` roda antes do early-return de `runtime`); a mentira sobra nos outros cinco. O
-  conserto reusa a ponte SQL que o item 30 construiu, e o passo `skipped` já leva o motivo ao inbox.
-  Decisão de UI: fica aqui, não vira item novo — mas é `src/`, e esta tarefa não tocou em `src/`. Vai
-  em despacho separado.
+  **Mais um, vindo do item 30 — não implementado nesta tarefa (é a parte Python):** no estado
+  observado durante esta tarefa, `conversation-ai-status.ts` desligava o badge explicativo para org em
+  modo `runtime` com o argumento de que "o runtime Python nunca lê essa coluna". Agora lê, e os guards
+  decidem — então o badge podia dizer "Bot ativo" numa conversa em que o agente está calado por
+  `stop_on_human_reply`, teto, horário, cooldown ou ativação manual. Nas duas TRANSFERÊNCIAS o badge
+  ficava honesto (a checagem de `ai_enabled` roda antes do early-return de `runtime`); a mentira
+  sobrava nos outros cinco. É `src/`, e esta tarefa (a parte Python do item 37) não tocou em `src/` —
+  fica registrado aqui como achado, não como trabalho desta parte. (Nota: `git log -- src/lib/ai/
+  conversation-ai-status.ts` mostra commits posteriores a este relatório mexendo neste arquivo; não
+  verifiquei o estado atual dele nem é desta parte confirmar se o achado segue de pé.)
 
   **Suíte:** `tests/unit` 1170 verdes (`PYTHONUTF8=1`). `tests/pipeline` e `tests/db` não rodaram —
   pedem Postgres em Docker, indisponível nesta máquina; o teste novo do espelho
