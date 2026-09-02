@@ -105,7 +105,12 @@ export function isWithinSchedule(
   const currentTime = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
 
   const { start, end } = schedule.hours || { start: '08:00', end: '18:00' };
-  const inTimeRange = currentTime >= (start ?? '08:00') && currentTime <= (end ?? '18:00');
+  // `as string`: se `schedule.hours` vier parcial (só start ou só end, jsonb
+  // de configuração ruim), o lado que faltar é `undefined` em runtime — igual
+  // ao `engine.ts` original, que não tinha fallback nenhum aqui (comparação
+  // com `undefined` dá sempre `false`, então bloqueia em silêncio). O cast é
+  // só pra satisfazer o `strictNullChecks`; o comportamento não mudou.
+  const inTimeRange = currentTime >= (start as string) && currentTime <= (end as string);
 
   const dayFormatter = new Intl.DateTimeFormat('en-US', {
     timeZone: tz,

@@ -143,4 +143,13 @@ describe('isWithinSchedule (porte 1:1 de engine.ts:checkSchedule, item 37)', () 
   it('sem hours/days explícitos usa default 08:00-18:00, seg-sex', () => {
     expect(isWithinSchedule({ timezone: 'America/Sao_Paulo' }, quartaDeManha)).toBe(true)
   })
+
+  it('hours parcial (só start, sem fallback pra end) bloqueia em silêncio — igual ao engine.ts original (fix round 1, achado 2)', () => {
+    // `end` fica undefined; a comparação `currentTime <= undefined` é sempre
+    // false em JS. Isto reproduz o engine.ts original de propósito (sem
+    // fallback de campo a campo) — não é o comportamento ideal, é paridade.
+    expect(
+      isWithinSchedule({ hours: { start: '00:00' }, days: ['wed'] } as any, quartaDeManha),
+    ).toBe(false)
+  })
 })
