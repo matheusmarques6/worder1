@@ -1307,7 +1307,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `npx tsc --noEmit` limpo.
 
 - [x] **43. Apagar o fallback de full scan do RAG** `[confirmado]` · commits `7a808467` (promove a RPC),
-  `<hash do commit 2>` (apaga o fallback)
+  `93be34de` (apaga o fallback)
   `src/lib/ai/rag.ts:56-73` (antes) — o `try/catch` nunca disparava porque `.rpc()` devolve `{error}` em
   vez de lançar; o fallback era alcançado por queda através do `if (!error && data)`, sem `return` nem
   `throw`. `searchDirect` (`:84-155`) fazia `select …embedding` sem `.limit()` e calculava cosseno em
