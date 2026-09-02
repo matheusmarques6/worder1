@@ -34,6 +34,7 @@ from agents_runtime.agent_core.guards import (
     schedule_silence,
 )
 from agents_runtime.agent_core.llm import ChatRequest, LlmPort, Message
+from agents_runtime.agent_core.metering import TurnBudget
 from agents_runtime.agent_core.mission_resolver import (
     NodeDelta,
     merge_mission,
@@ -54,6 +55,7 @@ from agents_runtime.agent_core.responder import (
     TRANSCRIPT_LIMIT,
     _as_chat,
     _metered,
+    default_turn_llm_call_limit,
     transfer_to_human,
 )
 from agents_runtime.clock import Clock, SystemClock
@@ -127,13 +129,21 @@ def build_toucher(
     agent_llm_from_org_keys: bool = False,
     base_secret: str | None = None,
     shopify_transport: httpx.AsyncBaseTransport | None = None,
+    turn_llm_call_limit: int | None = None,
 ):
     """O toucher real. Mesmas costuras do build_responder — `llm` é a porta da
-    PLATAFORMA (Judge 1); a fala do agente sai pela cascata BYO em produção."""
+    PLATAFORMA (Judge 1); a fala do agente sai pela cascata BYO em produção.
+
+    `turn_llm_call_limit` (item 41, fix round 1): o toque é o SEGUNDO tipo de
+    turno que passa por `guarded_reply`/`MeteredLlm` — sem isto ele ficava
+    inteiramente fora do teto de chamadas do item 41 (achado da review)."""
     clock = clock or SystemClock()
     from agents_runtime.agent_core.responder import default_rubrics_directory
 
     rubrics = load_rubrics(rubrics_directory or default_rubrics_directory())
+    turn_llm_call_limit = (
+        turn_llm_call_limit if turn_llm_call_limit is not None else default_turn_llm_call_limit()
+    )
 
     async def touch(job: MissionTouchJob) -> TouchDraft:
         async with await psycopg.AsyncConnection.connect(dsn, autocommit=True) as conn:
@@ -380,9 +390,19 @@ def build_toucher(
                     mode="turn",
                 )
 
-                chat = _metered(conn, job, agent_llm, clock, "agent_reply", version.agent_id)
+                # Item 41, fix round 1: UM teto por toque, compartilhado pelas
+                # duas finalidades (`agent_reply`, `judge_pre`) — mesmo padrão
+                # de `respond()` em `responder.py`.
+                turn_budget = TurnBudget(limit=turn_llm_call_limit)
+                chat = _metered(
+                    conn, job, agent_llm, clock, "agent_reply", version.agent_id,
+                    budget=turn_budget,
+                )
                 judge = PreSendJudge(
-                    _metered(conn, job, llm, clock, "judge_pre", version.agent_id),
+                    _metered(
+                        conn, job, llm, clock, "judge_pre", version.agent_id,
+                        budget=turn_budget,
+                    ),
                     with_merchant_judges(rubrics, version.settings),
                 )
                 context = JudgeContext(
@@ -430,11 +450,20 @@ def build_toucher(
                         )
 
                 if outcome.draft is None:
+                    # Item 41: mesma correção do responder — um título que
+                    # culpasse o Judge 1 por um estouro de teto mentiria sobre
+                    # a causa (regra da casa).
+                    title = (
+                        "Teto de custo do toque foi atingido antes de haver "
+                        "rascunho aprovável — nada foi enviado"
+                        if outcome.blocked_by == "budget_exceeded"
+                        else "Judge 1 reprovou o toque e nada foi enviado"
+                    )
                     await _alert(
                         conn, job,
                         type=alerts_repo.CRITICAL_VIOLATION,
                         severity="critical",
-                        title="Judge 1 reprovou o toque e nada foi enviado",
+                        title=title,
                         payload={
                             "node_ref": job.node_ref,
                             "blocked_by": outcome.blocked_by,

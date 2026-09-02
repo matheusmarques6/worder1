@@ -92,7 +92,18 @@ class TurnBudget:
     def reserve(self, purpose: str) -> None:
         """Reserva uma chamada, ou recusa. Chamado ANTES do request de rede —
         a chamada recusada nunca é feita, nunca custa nada e nunca aparece em
-        `internal.llm_calls`."""
+        `internal.llm_calls`.
+
+        Sem rollback (Minor #2 da review do item 41): `used` incrementa aqui,
+        e uma chamada que FALHA depois (exceção de rede, timeout, HTTP 500 em
+        `MeteredLlm.chat`/`.embed`) não devolve o slot — o teto conta
+        TENTATIVAS de chamada, não só as que tiveram sucesso. É a escolha
+        certa para o que o item 41 protege (a escalada de custo de um turno
+        preso tentando de novo), mas o efeito prático é que um provedor
+        instável pode fazer um turno bater no teto com MENOS respostas úteis
+        do que `limit` sugere — a proteção continua funcionando (menos
+        chamadas saem, não mais), só o número de rascunhos que ela permite
+        pode ser menor que `limit` quando há falhas no meio."""
         if self.used >= self.limit:
             raise TurnBudgetExceeded(limit=self.limit, purpose=purpose)
         self.used += 1

@@ -411,6 +411,36 @@ class TestTheTurnBudget:
         assert outcome.attempts == 1
         assert budget.used == 2
 
+    async def test_the_cap_inside_the_judge_never_promotes_the_unjudged_draft(self) -> None:
+        """Fix round 1 (Important #2 da review): o cenário mais arriscado —
+        o teto estoura DENTRO de `judge()`, depois que `generate()` já tinha
+        produzido um rascunho NESTA tentativa, com um `best` JULGADO de uma
+        tentativa anterior disponível. Sem este teste, o comportamento
+        (`judgements.append(judgement)` só roda DEPOIS do bloco `try` — um
+        rascunho não julgado nunca vira `best` nem `outcome.draft`) estava
+        certo só por leitura de código; um refactor que movesse esse append
+        para ANTES do `try` vazaria o rascunho sem julgamento nenhum, e nada
+        aqui apitaria."""
+        # 3 slots: tentativa 0 gasta 2 (gera + julga, reprova padrão → vira
+        # `best`); tentativa 1 gera (3º slot, usado agora == limite) e
+        # PRODUZ "rascunho 1" — mas o julgamento dele estoura o teto.
+        budget = TurnBudget(limit=3)
+        generate = BudgetedGenerator(budget)
+        judge = BudgetedJudge(budget, standard_failure())
+
+        outcome = await guarded_reply(generate, judge)
+
+        # "rascunho 1" foi gerado (consumiu o 3º slot) mas NUNCA foi julgado
+        # — não pode ser o que sai. O que sai é o `best` julgado da tentativa 0.
+        assert outcome.draft == "rascunho 0"
+        assert outcome.blocked_by is None
+        assert outcome.attempts == 1
+        assert budget.used == 3
+        # last_draft acompanha o que SAI no ramo de sucesso (é o mesmo texto);
+        # "rascunho 1" — gerado, nunca julgado — não aparece em lugar nenhum
+        # de `outcome`, e é isso que este teste prova.
+        assert outcome.last_draft == "rascunho 0"
+
     async def test_a_normal_turn_never_touches_the_budget(self) -> None:
         """A outra metade do ruling G: um turno que passa de primeira (1
         geração + 1 julgamento) usa 2 dos DEFAULT_TURN_LLM_CALL_LIMIT slots —

@@ -222,3 +222,51 @@ class TestTheTurnBudget:
 
         assert budget.used == 3
         assert budget.used < DEFAULT_TURN_LLM_CALL_LIMIT
+
+
+class TestEveryMeteredCallSiteIsBudgeted:
+    """Fix round 1 (Important #1 da review, item 41): `touch()`
+    (`agent_core/toucher.py`) chamava `_metered(...)` sem `budget=` e ficava
+    INTEIRAMENTE fora do teto — segunda vez seguida que `touch()` é o gêmeo
+    esquecido de `respond()` (a primeira foi o `aclose()` do item 40). Corrigido
+    ali, mas a lição é a wiring, não o call site: este teste varre TODO
+    `agent_core/*.py` por `_metered(` sem `budget=`, para que um TERCEIRO
+    esquecimento (um turno novo, um refactor) quebre a suíte em vez de
+    esperar a próxima review achar por leitura."""
+
+    def test_no_metered_call_site_forgets_the_turn_budget(self) -> None:
+        """Pega tanto uma chamada DIRETA (`_metered(..., budget=...)`, o
+        formato do `touch()` que faltava) quanto uma embrulhada em
+        `functools.partial(_metered, ..., budget=...)` (o formato do
+        `respond()`, onde `metered = partial(...)` é reusado três vezes) —
+        as duas formas legítimas que o código usa hoje."""
+        import ast
+        from pathlib import Path
+
+        import agents_runtime
+
+        agent_core_dir = Path(agents_runtime.__file__).parent / "agent_core"
+        offenders: list[str] = []
+        for path in sorted(agent_core_dir.glob("*.py")):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                target = node.func
+                direct = isinstance(target, ast.Name) and target.id == "_metered"
+                wrapped_in_partial = (
+                    isinstance(target, ast.Name)
+                    and target.id == "partial"
+                    and node.args
+                    and isinstance(node.args[0], ast.Name)
+                    and node.args[0].id == "_metered"
+                )
+                if not (direct or wrapped_in_partial):
+                    continue
+                if not any(kw.arg == "budget" for kw in node.keywords):
+                    offenders.append(f"{path.name}:{node.lineno}")
+
+        assert not offenders, (
+            "chamada(s) de `_metered(...)`/`partial(_metered, ...)` sem "
+            f"`budget=` — este turno fica fora do teto de custo do item 41: {offenders}"
+        )
