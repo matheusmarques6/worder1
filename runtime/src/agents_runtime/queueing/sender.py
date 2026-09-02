@@ -84,6 +84,29 @@ async def _report_to_guard(
         logger.warning("send-guard: desfecho não registrado", exc_info=True)
 
 
+async def _mark_read_and_typing(
+    channel: ChannelPort, conn: psycopg.AsyncConnection, send: ClaimedSend
+) -> None:
+    """Item 38: leitura + "digitando" antes de UMA bolha — mesmo POST que o
+    TS dispara em `cloud-sender.ts:257-283`, cada vez com o wamid do último
+    inbound (`send.last_inbound_wamid`).
+
+    Ruling D: sem wamid não sai nada — nem read nem typing. A linha proibida
+    em `humanize.py` (nada de typing falso) continua de pé; isto só dispara
+    quando há um wamid real para se apoiar.
+
+    Ruling C: adereço, nunca causa de morte do turno — mesmo padrão de
+    `note_step`/`_recorder` em `agent_core/responder.py` (try/except com
+    `logger.debug(..., exc_info=True)`, nunca propaga).
+    """
+    if send.channel_type != "whatsapp" or not send.last_inbound_wamid:
+        return
+    try:
+        await channel.mark_read_and_typing(conn, send)
+    except Exception:
+        logger.debug("mark-read/typing falhou", exc_info=True)
+
+
 async def _send_reporting(
     channel: ChannelPort, conn: psycopg.AsyncConnection, send: ClaimedSend
 ) -> str:
@@ -129,6 +152,7 @@ async def send_humanized(
         bubbles = split_into_bubbles(text) if isinstance(text, str) else []
     if len(bubbles) <= 1:
         # Template, payload não-texto ou bolha única: um envio, como sempre.
+        await _mark_read_and_typing(channel, conn, send)
         wamid = await _send_reporting(channel, conn, send)
         body = bubbles[0] if bubbles else None
         return [(wamid, body)] if body is not None else [(wamid, "")]
@@ -139,6 +163,7 @@ async def send_humanized(
         delay_ms = pacing.delays_ms[index]
         if delay_ms:
             await clock.sleep(delay_ms / 1000)
+        await _mark_read_and_typing(channel, conn, send)
         try:
             wamid = await _send_reporting(channel, conn, replace(send, payload={"text": bubble}))
         except Exception:

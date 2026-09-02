@@ -210,6 +210,7 @@ async def claim_outbox_batch(
             kind=row[8],
             moment_ids=tuple(row[9] or ()),
             otel=row[10],
+            last_inbound_wamid=row[11],
         )
         for row in await cursor.fetchall()
     ]

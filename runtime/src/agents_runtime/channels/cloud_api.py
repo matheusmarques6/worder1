@@ -134,6 +134,34 @@ class CloudApiChannel:
             raise ValueError(f"payload inválido: resposta 2xx sem wamid: {response.text[:200]}")
         return str(wamid)
 
+    async def mark_read_and_typing(self, conn: psycopg.AsyncConnection, send: ClaimedSend) -> None:
+        """Item 38: mesmo endpoint de `send()`, corpo de mark-read + typing.
+
+        A Meta não expõe um endpoint de typing isolado — o indicador só
+        dispara de carona num `status: read` sobre o wamid do inbound (o
+        MESMO POST que o TS usa, `cloud-api.ts:515-525`). Sem wamid, o
+        chamador (`queueing/sender.py`) nem invoca este método (ruling D) —
+        aqui só existe o caminho "tem wamid, tenta mandar".
+
+        Levanta em erro, como `send()`: quem decide "best-effort, nunca
+        derruba o turno" é o chamador (ruling C), não este adapter.
+        """
+        wamid = send.last_inbound_wamid
+        if not wamid:
+            return
+        token = await self._load_token(conn, send.organization_id)
+        response = await self._client.post(
+            f"/{send.channel_external_id}/messages",
+            json={
+                "messaging_product": "whatsapp",
+                "status": "read",
+                "message_id": wamid,
+                "typing_indicator": {"type": "text"},
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        response.raise_for_status()
+
     async def _payload_for(self, conn: psycopg.AsyncConnection, send: ClaimedSend) -> dict:
         base = {
             "messaging_product": "whatsapp",

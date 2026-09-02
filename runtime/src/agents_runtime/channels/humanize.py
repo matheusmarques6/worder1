@@ -11,9 +11,12 @@ Este módulo é a metade PURA do porte:
     proporcional do legado — ninguém espera 30s por uma resposta longa).
 
 A linha que não se cruza (D10): nada de erro de digitação proposital nem
-typing falso prolongado. Typing real fica de fora por ora — a Meta só aceita
-typing junto de mark-read do ÚLTIMO inbound wamid, que a outbox não carrega
-(DIVERGÊNCIA v1 registrada no STATUS; o próprio legado pula sem ele).
+typing falso prolongado. Typing real (item 38) manda ou não conforme o wamid
+do ÚLTIMO inbound existir na linha (`ClaimedSend.last_inbound_wamid`,
+`repository/outbox.py`) — sem ele, silêncio (ruling D), igual ao legado, que
+também pula sem ele. O disparo em si mora em `queueing/sender.py`
+(`_mark_read_and_typing`, chamado de `send_humanized`), não aqui: este módulo
+continua só o ritmo/corte das bolhas, puro.
 """
 
 from dataclasses import dataclass

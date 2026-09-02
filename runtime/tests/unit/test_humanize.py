@@ -66,9 +66,11 @@ class TestPacing:
 class _StubChannel:
     """Um canal que grava o que enviou e falha onde mandarem."""
 
-    def __init__(self, fail_at: int | None = None) -> None:
+    def __init__(self, fail_at: int | None = None, presence_fails: bool = False) -> None:
         self.sent: list[dict] = []
+        self.presence_calls: list[str | None] = []
         self._fail_at = fail_at
+        self._presence_fails = presence_fails
 
     async def send(self, conn, send: ClaimedSend) -> str:
         if self._fail_at is not None and len(self.sent) == self._fail_at:
@@ -76,8 +78,13 @@ class _StubChannel:
         self.sent.append(dict(send.payload))
         return f"wamid-{len(self.sent)}"
 
+    async def mark_read_and_typing(self, conn, send: ClaimedSend) -> None:
+        self.presence_calls.append(send.last_inbound_wamid)
+        if self._presence_fails:
+            raise ConnectionError("a Meta recusou o mark-read/typing")
 
-def _send(text: str) -> ClaimedSend:
+
+def _send(text: str, *, last_inbound_wamid: str | None = None) -> ClaimedSend:
     return ClaimedSend(
         outbox_id=uuid.uuid4(),
         organization_id=uuid.uuid4(),
@@ -87,6 +94,7 @@ def _send(text: str) -> ClaimedSend:
         payload={"text": text},
         idempotency_key="idem-1",
         attempt_count=1,
+        last_inbound_wamid=last_inbound_wamid,
     )
 
 
@@ -179,3 +187,57 @@ class TestSendHumanized:
 
         assert [p["text"] for p in channel.sent] == ["Oi Joana!"]
         assert delivered == [("wamid-1", "Oi Joana!")]
+
+
+class TestReadAndTyping:
+    """Item 38 — read + typing de carona, antes de CADA bolha (ruling E)."""
+
+    async def test_no_wamid_means_silence(self) -> None:
+        """Ruling D: sem wamid do último inbound, nada é mandado."""
+        channel = _StubChannel()
+        await send_humanized(
+            channel,
+            RecordingConnection(),
+            _send(THREE_PARAGRAPHS),  # last_inbound_wamid=None, default
+            humanize_delays=False,
+            clock=SystemClock(),
+        )
+        assert channel.presence_calls == []
+
+    async def test_with_wamid_it_fires_before_every_bubble(self) -> None:
+        """Ruling E: o TS dispara antes de cada bolha — três bolhas, três
+        chamadas, todas com o MESMO wamid (é o mesmo último inbound)."""
+        channel = _StubChannel()
+        await send_humanized(
+            channel,
+            RecordingConnection(),
+            _send(THREE_PARAGRAPHS, last_inbound_wamid="wamid.inbound-1"),
+            humanize_delays=False,
+            clock=SystemClock(),
+        )
+        assert channel.presence_calls == ["wamid.inbound-1"] * 3
+
+    async def test_a_single_bubble_gets_it_too(self) -> None:
+        channel = _StubChannel()
+        await send_humanized(
+            channel,
+            RecordingConnection(),
+            _send("oi", last_inbound_wamid="wamid.inbound-2"),
+            humanize_delays=False,
+            clock=SystemClock(),
+        )
+        assert channel.presence_calls == ["wamid.inbound-2"]
+
+    async def test_a_failure_is_best_effort_and_never_blocks_the_bubble(self) -> None:
+        """Ruling C: adereço nunca vira causa de morte do turno — a bolha
+        sai mesmo que o read/typing tenha sido recusado pela Meta."""
+        channel = _StubChannel(presence_fails=True)
+        delivered = await send_humanized(
+            channel,
+            RecordingConnection(),
+            _send("oi", last_inbound_wamid="wamid.inbound-3"),
+            humanize_delays=False,
+            clock=SystemClock(),
+        )
+        assert channel.presence_calls == ["wamid.inbound-3"]
+        assert delivered == [("wamid-1", "oi")]

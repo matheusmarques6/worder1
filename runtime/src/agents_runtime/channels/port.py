@@ -66,3 +66,17 @@ class ChannelPort(Protocol):
     """
 
     async def send(self, conn: psycopg.AsyncConnection, send: ClaimedSend) -> str: ...
+
+    async def mark_read_and_typing(
+        self, conn: psycopg.AsyncConnection, send: ClaimedSend
+    ) -> None:
+        """Item 38: marca o inbound como lido e liga o "digitando", de carona no
+        mesmo POST (a Meta não separa os dois — ver `channels/cloud_api.py`).
+
+        O chamador (`queueing/sender.py`) só invoca isto quando
+        `send.last_inbound_wamid` existe (ruling D: sem wamid, nada é
+        mandado) e trata QUALQUER exceção como best-effort (ruling C): este
+        método pode levantar como `send` levanta — não é responsabilidade
+        dele engolir o próprio erro.
+        """
+        ...

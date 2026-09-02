@@ -544,3 +544,59 @@ async def test_the_template_lookup_asks_for_the_sends_own_name_and_language() ->
     )
 
     assert asked == [(org, "carrinho", "en_US")]
+
+
+# --- item 38 — mark_read_and_typing ------------------------------------------
+
+
+async def test_mark_read_and_typing_sends_the_meta_body() -> None:
+    """O mesmo endpoint de `send()`; o corpo é read + typing de carona
+    (a Meta não separa os dois, `cloud-api.ts:515-525` do lado TS)."""
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        seen["auth"] = request.headers.get("authorization")
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"success": True})
+
+    await channel_answering(handler).mark_read_and_typing(
+        None, a_send(last_inbound_wamid="wamid.inbound-1")
+    )
+
+    assert seen["url"].endswith("/123456789012345/messages")
+    assert seen["auth"] == "Bearer token-de-teste"
+    assert seen["body"] == {
+        "messaging_product": "whatsapp",
+        "status": "read",
+        "message_id": "wamid.inbound-1",
+        "typing_indicator": {"type": "text"},
+    }
+
+
+async def test_mark_read_and_typing_without_a_wamid_calls_nothing() -> None:
+    """Ruling D: sem wamid do último inbound, nem o canal deveria tentar —
+    defensivo, embora o chamador (`queueing/sender.py`) já garanta isso."""
+    called = False
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal called
+        called = True
+        return httpx.Response(200, json={"success": True})
+
+    await channel_answering(handler).mark_read_and_typing(None, a_send(last_inbound_wamid=None))
+
+    assert called is False
+
+
+async def test_mark_read_and_typing_raises_on_a_refusal() -> None:
+    """Levanta como `send()` levanta — quem decide "best-effort" é o
+    chamador (ruling C), não este adapter."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"error": {"message": "nope"}})
+
+    with pytest.raises(httpx.HTTPStatusError):
+        await channel_answering(handler).mark_read_and_typing(
+            None, a_send(last_inbound_wamid="wamid.inbound-1")
+        )

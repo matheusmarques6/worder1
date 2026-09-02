@@ -122,6 +122,13 @@ class FakeChannel:
         self._sent = getattr(self, "_sent", 0) + 1
         return f"fake-wamid-{send.idempotency_key}-{self._sent}"
 
+    async def mark_read_and_typing(self, _conn: psycopg.AsyncConnection, send: ClaimedSend) -> None:
+        # Item 38: nenhum cenário de kill/resiliência desta suíte afirma
+        # read/typing hoje — o fake só precisa existir para não quebrar o
+        # protocolo estrutural de `ChannelPort`. Sem tabela nova (YAGNI):
+        # nada aqui para gravar até que um cenário precise verificar isto.
+        return None
+
 
 def create_channel(dsn: str) -> ChannelPort:
     """The `AGENTS_CHANNEL` factory the subprocess harness points at."""
