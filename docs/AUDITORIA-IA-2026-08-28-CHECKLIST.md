@@ -1355,12 +1355,16 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   (`/healthz` abre e fecha a cada probe). Handshake TCP+TLS+auth por turno de LLM.
 
 - [ ] **49. RPCs fora do stream versionado** `[confirmado]`
-  `search_agent_knowledge`, `get_active_agent_for_conversation`, `check_agent_cooldown`,
+  `get_active_agent_for_conversation`, `check_agent_cooldown`,
   `count_agent_messages_in_conversation` não estão em `supabase/migrations/`. Há definições em `sql/`,
   fora do que o CI aplica — inclusive **três variantes de `get_active_agent_for_conversation` com shapes
-  diferentes** e uma `search_agent_knowledge` SECURITY DEFINER isolada só por `agent_id`.
-  Mais `update_agent_stats`, `increment_agent_conversations` e `ai_monthly_cost_usd` só em
+  diferentes**. Mais `update_agent_stats`, `increment_agent_conversations` e `ai_monthly_cost_usd` só em
   `migrations-archive/`.
+  **`search_agent_knowledge` saiu daqui — promovida pelo item 43**
+  (`20260902000004_search_agent_knowledge_org_scoped.sql`), escopada por `organization_id` além de
+  `agent_id`. As quatro definições antigas em `sql/` (nenhuma escopada por organização, uma delas com
+  `GRANT` para `authenticated` sem `SECURITY DEFINER` nem RLS que sustente isso) ficaram registradas
+  como achado de segurança separado no item 70.
 
 - [ ] **50. Índices faltantes nos predicados quentes** `[relatado]`
   `whatsapp_cloud_conversations (organization_id, wa_id)` (até 3× por envio), `whatsapp_opt_status`
@@ -1583,6 +1587,31 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   vem acompanhado de um humano já a caminho. Ponto de partida técnico:
   `src/lib/ai/budget.ts::checkAiBudget` (os três `catch` e o bloco que loga `hasUnknownCost` sem agir
   sobre ele); `task-42-report.md`, seção "Fix round 1", tem o raciocínio completo.
+
+- [ ] **70. `search_agent_knowledge` em `sql/` sem escopo de organização, uma com `GRANT` para
+  `authenticated`** `[confirmado]` · *(descoberto no item 43)*
+  As quatro definições de `search_agent_knowledge` fora do stream versionado
+  (`sql/ai-agents-rpc-functions.sql:197`, `sql/ai-agents-functions.sql:9`,
+  `sql/ai-agents-stored-procedures.sql:11`, `sql/ai-agents-complete-migration.sql:364`) filtram só por
+  `c.agent_id = p_agent_id` — nenhuma usa `ai_agent_chunks.organization_id`, que é `not null`
+  (`20260812000001_agents_baseline_prereqs.sql:731`). `sql/ai-agents-functions.sql:9-38` é a pior: SEM
+  `SECURITY DEFINER`, com `GRANT EXECUTE ... TO authenticated, service_role` (`:233`). A RLS de
+  `ai_agent_chunks` só é ligada em `supabase/migrations-archive/001_enable_rls.sql`, fora do stream —
+  nesta base a tabela nasce sem RLS. Combinado: se essa variante foi a aplicada em produção (fora
+  deste repositório, não verificável daqui), qualquer usuário autenticado que soubesse ou enumerasse um
+  `agent_id` de OUTRA organização conseguiria ler seus chunks de conhecimento via a RPC. Mesmo padrão
+  que os itens 03, 04, 22 e 24 já fecharam nesta auditoria.
+  O item 43 promoveu uma versão escopada por organização
+  (`supabase/migrations/20260902000004_search_agent_knowledge_org_scoped.sql`) e, do lado do stream
+  versionado, isso fecha o buraco — inclusive com `DROP FUNCTION IF EXISTS` da assinatura antiga sem
+  escopo, pra não sobrar como overload paralelo se a migration algum dia rodar contra uma base que já
+  tinha uma das quatro variantes de `sql/` aplicada manualmente. **Mas o que está hoje em `sql/`
+  continua existindo nesses quatro arquivos, e pode já ter sido aplicado em produção fora do stream —
+  não verificável nem corrigível a partir deste repositório** (sem Postgres nesta máquina, item 43 não
+  aplicou nem testou a migration — ruling G). Se alguém aplicou manualmente a variante com `GRANT` para
+  `authenticated`, o buraco pode seguir aberto na base viva até essa migration ser aplicada lá, ou até
+  alguém confirmar e revogar manualmente. YAGNI: não criar script de reconciliação de produção sem um
+  dono definindo se/quando as migrations promovidas nesta auditoria são aplicadas fora do CI.
 
 ---
 

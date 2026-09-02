@@ -15,8 +15,9 @@ import { RAGSearchParams, RAGResult } from './types'
 export class RAGService {
   private supabase: SupabaseClient
   private openaiKey: string
+  private organizationId: string
 
-  constructor(openaiKey: string) {
+  constructor(openaiKey: string, organizationId: string) {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
@@ -28,8 +29,13 @@ export class RAGService {
       throw new Error('OpenAI API key não configurada')
     }
 
+    if (!organizationId) {
+      throw new Error('organizationId não informado')
+    }
+
     this.supabase = createClient(url, key)
     this.openaiKey = openaiKey
+    this.organizationId = organizationId
   }
 
   /**
@@ -57,6 +63,7 @@ export class RAGService {
       try {
         const { data, error } = await this.supabase.rpc('search_agent_knowledge', {
           p_agent_id: agentId,
+          p_organization_id: this.organizationId,
           p_query_embedding: `[${queryEmbedding.join(',')}]`,
           p_match_threshold: threshold,
           p_match_count: topK,
@@ -247,5 +254,5 @@ export async function createRAGServiceForOrg(
 ): Promise<RAGService | null> {
   const openaiKey = await resolveEmbeddingKey(supabase, organizationId)
   if (!openaiKey) return null
-  return new RAGService(openaiKey)
+  return new RAGService(openaiKey, organizationId)
 }
