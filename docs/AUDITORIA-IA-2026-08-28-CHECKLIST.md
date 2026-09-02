@@ -1231,7 +1231,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   e se `touch()` acompanhou: guards de comportamento (item 30) — os dois chamam
   `evaluate_inbound_guards`/`schedule_silence`/`resolve_blocked_topic` (`responder.py::respond`,
   `toucher.py::touch`); `agent_id` em `_metered` (item 37) — os dois passam `version.agent_id`
-  (`responder.py:665`, `toucher.py:397,402`); `scoped_agent_llm` (item 40) — os dois, desde o fix
+  (`responder.py:666`, `toucher.py:398,403`); `scoped_agent_llm` (item 40) — os dois, desde o fix
   round 1 daquele item; `TurnBudget` (item 41) — os dois, desde este fix round 1. `exclude_inbound_after_seq`
   (item 39, `agent_repo.load_recent_transcript`) é a ÚNICA divergência restante, e é DELIBERADA, não
   gap: só `responder.py::respond` tem uma janela de mensagens pendente para excluir do transcript —
