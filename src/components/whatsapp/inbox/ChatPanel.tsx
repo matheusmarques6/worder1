@@ -14,6 +14,7 @@ import { AgentActivity } from './AgentActivity'
 import type { AgentRunStepEvent } from '@/hooks/useCloudInboxRealtime'
 import { useServiceWindow } from './useServiceWindow'
 import { getDisabledReasonLabel, isAutoDisabledReason } from '@/lib/ai/disabled-reasons'
+import { botBadgeVariant, botBadgeText } from '@/lib/ai/bot-badge'
 import { QuickRepliesPicker } from './QuickRepliesPicker'
 import { TemplatePickerModal, type SendTemplatePayload } from './TemplatePickerModal'
 import { CSATModal } from './modals/CSATModal'
@@ -456,6 +457,9 @@ export function ChatPanel({
       cancelled = true
     }
   }, [conversation?.id, messages.length])
+  // Deriva a variante do badge (off/unknown/blocked/active) — logica pura em
+  // bot-badge.ts, achado 1 do fix round 1: aiStatus null vira 'unknown', nunca 'active'.
+  const botAiBadgeVariant = botBadgeVariant(conversation.is_bot_active, aiStatus)
   const [isSendingTemplate, setIsSendingTemplate] = useState(false)
 
   // Fonte unica derivada da janela de 24h — controla composer e banner.
@@ -731,37 +735,28 @@ export function ChatPanel({
           {/* O rotulo reflete o comportamento REAL, nao so a flag ai_enabled:
               com ai_enabled=true o agente ainda pode estar calado por um guard
               (stop_on_human_reply, max_messages, ativacao manual...). Dizer
-              "Bot Ativo" nesse estado e simplesmente mentir para quem atende. */}
+              "Bot Ativo" nesse estado e simplesmente mentir para quem atende.
+              Logica em bot-badge.ts (fix round 1, achado 1): aiStatus==null
+              (fetch em voo, falhou, ou sem espelho cloud) tambem NAO pode
+              renderizar como "Ativo" — "nao sei" nao e "sim". */}
           <button
             onClick={onToggleBot}
-            title={
-              conversation.is_bot_active && aiStatus && !aiStatus.willRespond
-                ? aiStatus.detail
-                : undefined
-            }
+            title={botAiBadgeVariant === 'blocked' ? aiStatus?.detail : undefined}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-              !conversation.is_bot_active
+              botAiBadgeVariant === 'off' || botAiBadgeVariant === 'unknown'
                 ? 'bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-700'
-                : aiStatus && !aiStatus.willRespond
+                : botAiBadgeVariant === 'blocked'
                   ? 'bg-amber-50 text-amber-700 border border-amber-300'
                   : 'bg-brand-50 text-brand-600 border border-brand-300'
             }`}
           >
-            {conversation.is_bot_active && aiStatus && !aiStatus.willRespond ? (
+            {botAiBadgeVariant === 'blocked' ? (
               <AlertCircle className="w-4 h-4" />
             ) : (
               <Bot className="w-4 h-4" />
             )}
             <span className="hidden sm:inline">
-              {!conversation.is_bot_active
-                ? aiAgentName
-                  ? `Agente ${aiAgentName} Off`
-                  : 'Bot Off'
-                : aiStatus && !aiStatus.willRespond
-                  ? aiStatus.label
-                  : aiAgentName
-                    ? `Agente ${aiAgentName} Ativo`
-                    : 'Bot Ativo'}
+              {botBadgeText(botAiBadgeVariant, aiStatus, aiAgentName)}
             </span>
           </button>
 
