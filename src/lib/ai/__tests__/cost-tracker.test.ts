@@ -109,4 +109,28 @@ describe('trackAiUsage', () => {
     const row = insertMock.mock.calls[0][0]
     expect(row.cost_usd).toBe(9.5)
   })
+
+  // Fix round 1 (item 42) — Minor 4: costUsdOverride: null explicito ("sei
+  // que e desconhecido", ver o doc do campo em TrackAiUsageInput) precisa
+  // vencer a tabela e NAO cair de volta pra estimateCostUsd -- prova que o
+  // check e `!== undefined`, nao `??` (que trataria null como "ausente" e
+  // recalcularia um preco conhecido pro model abaixo, que ESTA em PRICING).
+  it('costUsdOverride null explicito grava desconhecido mesmo pra modelo com preco na tabela', async () => {
+    await trackAiUsage({
+      organizationId: 'org-1',
+      provider: 'openai',
+      model: 'gpt-4o-mini', // esta em PRICING -- se o override nao vencesse, viraria numero
+      feature: 'whatsapp_agent',
+      promptTokens: 1_000_000,
+      completionTokens: 1_000_000,
+      costUsdOverride: null,
+    })
+
+    const row = insertMock.mock.calls[0][0]
+    expect(row.cost_usd).toBeNull()
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('custo desconhecido'),
+      expect.objectContaining({ provider: 'openai', model: 'gpt-4o-mini' })
+    )
+  })
 })
