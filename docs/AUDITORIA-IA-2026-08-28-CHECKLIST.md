@@ -852,6 +852,22 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   passando, 4 falhas pré-existentes e alheias (`reports-utils.test.ts`, timezone; `file-extractor
   .integration.test.ts`, fixture de PDF), nenhuma nos arquivos tocados aqui.
 
+  **Fix round 1 da parte de UI** · relatório (seção "Fix round 1") no mesmo `task-37-ui-report.md`.
+  Achado 1 (Important, corrigido): `ChatPanel.tsx` afirmava "Bot Ativo" quando `aiStatus` vinha `null`
+  (fetch em voo, falhou, ou sem espelho cloud pra calcular) — o mesmo defeito que este item existe pra
+  eliminar, só que na tela em vez da rota. Extraída a decisão de variante/rótulo pra
+  `src/lib/ai/bot-badge.ts` (puro, testável sem jsdom/RTL — nenhum dos dois está no projeto), com um
+  quarto estado `unknown` que nunca afirma atividade; o caminho `!conversation.is_bot_active` não foi
+  tocado. Achado 2 (Minor, corrigido): o fallback `?? '08:00'/'18:00'` em `isWithinSchedule` pra
+  `hours` parcial não existia no `engine.ts` original — removido; `hours` parcial volta a bloquear em
+  silêncio (comparação com `undefined`), igual ao motor que já rodava em produção. Achado 3 (registro,
+  não corrigido — é item de fila novo, não desta tarefa): a regra de cada guard de comportamento agora
+  tem TRÊS cópias independentes (`cloud-runner.ts`, `conversation-ai-status.ts`, `guards.py`) pros
+  quatro motivos comportamentais, e DUAS (`engine.ts` via `guards.ts:isWithinSchedule`,
+  `guards.py:is_within_schedule`) pra horário — todas mantidas por convenção de comentário ("paridade
+  de semântica, não de código"), sem teste cruzado que trave divergência entre TS e Python. Risco:
+  qualquer uma pode divergir das demais em silêncio, e nada no CI pegaria.
+
 - [ ] **38. Typing indicator** `[relatado]`
   Divergência já declarada. Depende do outbox carregar o wamid do último inbound.
 
