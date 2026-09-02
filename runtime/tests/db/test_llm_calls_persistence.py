@@ -18,7 +18,7 @@ import psycopg
 import pytest
 
 from agents_runtime.repository import llm_calls as llm_repo
-from tests.db.factories import create_tenant, create_thread
+from tests.db.factories import create_agent, create_tenant, create_thread
 
 
 @asynccontextmanager
@@ -134,6 +134,95 @@ class TestTheRow:
         assert output_tokens is None
 
 
+class TestTheUsageLogsMirror:
+    """Auditoria item 37: a linha em `internal.llm_calls` é o gatilho, não o
+    destino final para o painel de custo e o teto de gasto do lojista — os
+    dois leem `public.ai_usage_logs`."""
+
+    async def test_a_completed_call_mirrors_into_ai_usage_logs(
+        self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+    ) -> None:
+        agent_id = create_agent(admin, tenant)
+        admin.commit()
+
+        async with as_worker(dsn, tenant) as conn:
+            call_id = await llm_repo.record_llm_call(
+                conn,
+                organization_id=tenant,
+                purpose="agent_reply",
+                provider="openrouter",
+                model="anthropic/claude-sonnet-5",
+                agent_id=agent_id,
+                input_tokens=120,
+                output_tokens=40,
+                cost_usd=0.00018,
+                latency_ms=900,
+            )
+            await conn.commit()
+
+        with admin.cursor() as cur:
+            cur.execute(
+                """
+                select organization_id, provider, model, feature, agent_id, conversation_id,
+                       prompt_tokens, completion_tokens, cost_usd, duration_ms, success
+                  from public.ai_usage_logs
+                 where organization_id = %s
+                """,
+                (tenant,),
+            )
+            row = cur.fetchone()
+
+        assert row is not None, f"llm_calls row {call_id} did not mirror into ai_usage_logs"
+        (
+            organization_id,
+            provider,
+            model,
+            feature,
+            mirrored_agent_id,
+            conversation_id,
+            prompt_tokens,
+            completion_tokens,
+            cost_usd,
+            duration_ms,
+            success,
+        ) = row
+        assert organization_id == tenant
+        assert provider == "openrouter"
+        assert model == "anthropic/claude-sonnet-5"
+        # Vocabulário próprio (ruling B, item 37) — não é o `feature` do TS.
+        assert feature == "runtime_agent_reply"
+        assert mirrored_agent_id == agent_id
+        assert conversation_id is None
+        assert (prompt_tokens, completion_tokens) == (120, 40)
+        assert float(cost_usd) == pytest.approx(0.00018)
+        assert duration_ms == 900
+        # `llm_calls` só recebe linha de chamada CONCLUÍDA (metering.py) —
+        # todo espelho é, por definição, sucesso.
+        assert success is True
+
+    async def test_a_purpose_without_a_mapped_feature_fails_loud(
+        self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+    ) -> None:
+        """Se o CHECK de `purpose` um dia ganhar um valor novo sem o mapa
+        acompanhar (o que `tests/unit/test_ai_usage_logs_bridge.py` já trava
+        sem banco), o trigger tem de recusar alto — não gravar `feature`
+        inventado. Aqui a mesma garantia é provada com o mecanismo real: um
+        purpose fora do CHECK nem chega a inserir em `llm_calls`."""
+        async with as_worker(dsn, tenant) as conn:
+            with pytest.raises(psycopg.errors.CheckViolation):
+                await llm_repo.record_llm_call(
+                    conn,
+                    organization_id=tenant,
+                    purpose="not_a_real_purpose",
+                    provider="openrouter",
+                    model="anthropic/claude-sonnet-5",
+                    input_tokens=1,
+                    output_tokens=1,
+                    cost_usd=0.1,
+                    latency_ms=1,
+                )
+
+
 class TestTheBoundary:
     async def test_a_worker_cannot_bill_another_tenant(
         self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
@@ -162,7 +251,13 @@ class TestTheBoundary:
 
     def test_the_table_has_nowhere_to_put_content(self, admin: psycopg.Connection) -> None:
         """The PII law as a schema fact: cost, ids and timings — no prompt, no
-        reply, no phone. A future column named `prompt` fails here first."""
+        reply, no phone. A future column named `prompt` fails here first.
+
+        `agent_id` (auditoria item 37, `20260902000001_ai_usage_logs_bridge.sql`)
+        joined this set on purpose: it is an identifier, like `conversation_id`,
+        added only so the DB-side trigger can mirror the row into
+        `public.ai_usage_logs`. It does not carry content either.
+        """
         with admin.cursor() as cur:
             cur.execute(
                 """
@@ -184,5 +279,6 @@ class TestTheBoundary:
             "output_tokens",
             "cost_usd",
             "latency_ms",
+            "agent_id",
             "created_at",
         }

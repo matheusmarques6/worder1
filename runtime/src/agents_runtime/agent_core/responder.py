@@ -551,7 +551,7 @@ def build_responder(
                 job,
                 resolved.tools,
                 pending,
-                metered("embedding"),
+                metered("embedding", version.agent_id),
                 clock,
                 knowledge_limit,
             )
@@ -618,11 +618,12 @@ def build_responder(
                 )
             conversation = _as_chat(transcript)
 
-            chat = _metered(conn, job, agent_llm, clock, "agent_reply")
+            chat = _metered(conn, job, agent_llm, clock, "agent_reply", version.agent_id)
             # Juízes do lojista (radial → Juízes) entram como rubrica extra,
             # sempre standard — o veto de silêncio segue só da plataforma.
             judge = PreSendJudge(
-                metered("judge_pre"), with_merchant_judges(rubrics, version.settings)
+                metered("judge_pre", version.agent_id),
+                with_merchant_judges(rubrics, version.settings),
             )
             context = JudgeContext(
                 conversation=tuple(f"{message.author}: {message.text}" for message in pending),
@@ -914,18 +915,30 @@ def _metered(
     llm: LlmPort,
     clock: Clock,
     purpose: str,
+    agent_id: UUID | None = None,
 ) -> MeteredLlm:
     """Um medidor por finalidade: o custo do agente e o custo do portão são
-    linhas diferentes da mesma conta."""
+    linhas diferentes da mesma conta.
+
+    `agent_id` (auditoria item 37) chega por parâmetro, do mesmo jeito que
+    `organization_id`/`conversation_id` chegam do `job` — nunca pelo
+    `CallRecord`, que `metering.py` declara livre de identificadores de
+    negócio além de `purpose`/`provider`/`model`.
+    """
     return MeteredLlm(
         llm,
         clock=clock,
-        record=_recorder(conn, job.organization_id, job.conversation_id),
+        record=_recorder(conn, job.organization_id, job.conversation_id, agent_id),
         purpose=purpose,
     )
 
 
-def _recorder(conn: psycopg.AsyncConnection, organization_id: UUID, conversation_id: UUID):
+def _recorder(
+    conn: psycopg.AsyncConnection,
+    organization_id: UUID,
+    conversation_id: UUID,
+    agent_id: UUID | None = None,
+):
     async def record(call: CallRecord) -> None:
         async with conn.transaction():
             await scope_to_organization(conn, organization_id)
@@ -940,6 +953,7 @@ def _recorder(conn: psycopg.AsyncConnection, organization_id: UUID, conversation
                 output_tokens=call.output_tokens,
                 cost_usd=call.cost_usd,
                 latency_ms=call.latency_ms,
+                agent_id=agent_id,
             )
 
     return record

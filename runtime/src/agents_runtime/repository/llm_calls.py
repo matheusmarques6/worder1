@@ -11,6 +11,11 @@ configuration — the trail has to say what was actually billed, not what the
 platform assumes. There is no column for content, and there must never be: the
 prompt and the reply live in `messages`, and the telemetry of S10 reads only
 what is here.
+
+`agent_id` (auditoria item 37) exists only so the DB-side trigger
+(`20260902000001_ai_usage_logs_bridge.sql`) can mirror this row into
+`public.ai_usage_logs`, which the lojista's cost panel and budget gate read.
+It never carries content either — same rule, one more identifier.
 """
 
 from uuid import UUID
@@ -31,14 +36,15 @@ async def record_llm_call(
     latency_ms: int | None = None,
     conversation_id: UUID | None = None,
     eval_run_id: UUID | None = None,
+    agent_id: UUID | None = None,
 ) -> int:
     """One completed call. Returns the row's id."""
     cursor = await conn.execute(
         """
         insert into internal.llm_calls
             (organization_id, purpose, conversation_id, eval_run_id, provider, model,
-             input_tokens, output_tokens, cost_usd, latency_ms)
-        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+             input_tokens, output_tokens, cost_usd, latency_ms, agent_id)
+        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         returning id
         """,
         (
@@ -52,6 +58,7 @@ async def record_llm_call(
             output_tokens,
             cost_usd,
             latency_ms,
+            agent_id,
         ),
     )
     return (await cursor.fetchone())[0]

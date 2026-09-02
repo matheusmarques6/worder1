@@ -366,9 +366,9 @@ def build_toucher(
                 mode="turn",
             )
 
-            chat = _metered(conn, job, agent_llm, clock, "agent_reply")
+            chat = _metered(conn, job, agent_llm, clock, "agent_reply", version.agent_id)
             judge = PreSendJudge(
-                _metered(conn, job, llm, clock, "judge_pre"),
+                _metered(conn, job, llm, clock, "judge_pre", version.agent_id),
                 with_merchant_judges(rubrics, version.settings),
             )
             context = JudgeContext(
