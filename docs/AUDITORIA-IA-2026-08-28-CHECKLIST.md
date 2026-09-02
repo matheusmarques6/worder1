@@ -1021,10 +1021,82 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   (mesma contagem — os dois Minor são refactors sem mudança de comportamento). `lint-imports`: 3
   contratos mantidos, 0 quebrados.
 
-- [ ] **40. Fechar ou reusar os clientes httpx de LLM** `[confirmado]`
-  `agent_core/providers.py:75-83` constrói o adapter por turno; os três criam `httpx.AsyncClient` no
-  `__init__` (`openrouter.py:54`, `direct_providers.py:52`, `:102`) e nenhum tem `aclose()`.
-  O único `aclose` do runtime é o do canal Meta.
+- [x] **40. Fechar ou reusar os clientes httpx de LLM** `[confirmado]` · commit `23d6a76d` ·
+  relatório `task-40-report.md`
+  `agent_core/providers.py::client_for` constrói o adapter por turno; os três criam `httpx.AsyncClient`
+  no `__init__` (`openrouter.py::OpenRouterLlm`, `direct_providers.py::OpenAICompatibleLlm` e
+  `::AnthropicLlm`) e nenhum tinha `aclose()`. O único `aclose` do runtime era o do canal Meta.
+
+  **A gravidade do achado original estava errada (ruling A) — corrigida antes do código.** Recon
+  independente (`task-40-recon.md`) seguiu o resultado de `client_for` até o consumo real: não é um
+  cliente por CHAMADA de LLM, é um cliente por TURNO. `resolve_agent_llm` é chamado **uma vez** dentro
+  de `build_responder.respond`, o resultado vira `chat = _metered(...)` e é ESSE `chat` — reusando o
+  MESMO `httpx.AsyncClient` — que `generate`/`traced_generate` chamam dentro do laço de tool-rounds e
+  de todas as tentativas do `guarded_reply` (até ~12 chamadas de agente por turno, mais o juiz — que
+  usa um cliente TOTALMENTE diferente, por processo, criado uma vez em `agent_responder()`; esse não é
+  tocado por este item, ruling D). O vazamento existe — o cliente do turno nunca fechava, e sem
+  finalizador nos adapters ficava vivo até o GC recolher o objeto, não determinístico num loop asyncio
+  de longa duração — mas era um vazamento por TURNO, não por chamada; a leitura literal do achado
+  superestimava em ~12×.
+
+  **Fechar, não reusar (ruling B) — e o porquê fica escrito, não só decidido.** Reusar exigiria um pool
+  keyed por `(organização, provider, base_url efetiva, hash da api_key)` — a credencial vai no header
+  fixo do client aqui, ao contrário do `CloudApiChannel` (token por-request); e o que muda por turno é
+  a chave de autorização (sempre), às vezes a `base_url` (proxy próprio da org) e a classe do adapter
+  (por provider) — só o `timeout` é constante. Isso é máquina nova: registro de processo guardando
+  cabeçalho de autorização de várias organizações em memória, com política de expiração, para
+  economizar **um** handshake por turno — quando as até 12 chamadas do turno já compartilham a mesma
+  conexão. Não vale hoje. Registrado como possibilidade futura no `FORK.md`, condicionada à condição
+  que a justificaria: uma medida mostrando que o custo de handshake TLS por turno pesa frente ao custo
+  das ~12 chamadas que já reusam a conexão. Nenhuma medida assim existe — não é item novo aberto por
+  conta própria.
+
+  **O que subiu (ruling C — o mínimo que fecha).** `aclose()` nos três adapters, delegando para o
+  `httpx.AsyncClient` interno. `respond()` — o único ponto onde o cliente resolvido por
+  `resolve_agent_llm` nasce e morre — fecha ele num `finally` que cobre o corpo inteiro do turno
+  (da busca de conhecimento ao envio, todo `return` intermediário incluído: judge reprovou, assunto
+  bloqueado, etc.), guardado por `owns_agent_llm`: só fecha o cliente que a cascata BYO construiu,
+  nunca o `llm` de plataforma do Judge 1. Nenhum gerenciador de ciclo de vida, nenhum registro global —
+  só o `try/finally` que o item pedia.
+
+  **Achado vizinho 1 (ruling F) — o `aclose()` do canal Meta que só o teste chama.** Registrado, não
+  consertado junto: `channels/cloud_api.py::CloudApiChannel.aclose` existe, mas o único chamador em
+  `runtime/src` é a própria definição; em produção a instância vive por processo inteiro e nunca é
+  fechada num shutdown gracioso — quem chama é só `tests/db/test_cloud_api_channel_real_wiring.py`,
+  como limpeza de teste. Não é o mesmo defeito (ali o cliente É de vida longa por desenho; falta só o
+  `atexit`/shutdown que nunca existiu).
+
+  **Achado vizinho 2 — `touch()` repete o mesmo padrão e hoje também não fecha. Ruling C disparou:
+  reportado, não espalhado.** `agent_core/toucher.py::build_toucher.touch` chama `resolve_agent_llm` da
+  mesma forma que `respond()` — um segundo ponto onde um adapter de LLM nasce e morre. O ruling C deste
+  item foi explícito: se o fechamento tivesse que acontecer em mais de um lugar, o trabalho para e
+  reporta antes de espalhar `try/finally` pelo código, em vez de decidir sozinho por espalhar ou por
+  ignorar. Este item fechou só `respond()` — o único lugar citado no achado original e no ruling C
+  literal; `touch()` fica em aberto, registrado aqui, mesma classe de duplicação que o item 44
+  ("Fatorar `_prepare_turn` entre responder e toucher") já rastreia como dívida.
+
+  **O TS não é referência aqui (ruling H) — divergência estrutural, não paridade que falta.**
+  `ai-providers.ts` fala com todo provider pelo `fetch` global do runtime Node/undici, uma vez por
+  request — não existe objeto cliente para fechar ou reusar; o pool keep-alive é gerenciado
+  implicitamente pelo Node. O Python precisa deste `aclose()` porque escolheu a API
+  `httpx.AsyncClient`, não porque o TS faz algo equivalente que faltava portar. Declarado em
+  comentário no `OpenRouterLlm.aclose` (`openrouter.py`), e aqui e no `FORK.md`.
+
+  **Teste que trava a regressão (ruling E).**
+  `tests/unit/test_agent_llm_closes_after_the_turn.py` — sem `respond()` rodar de ponta a ponta aqui
+  (precisa de Postgres real: guards, arbitragem de missão, conhecimento, trilha — por isso vive em
+  `tests/db`, que não roda nesta suíte), a prova é por AST, mesmo padrão de
+  `test_listener_connects_in_one_guarded_place.py`: acha a `respond()` real (a que chama
+  `resolve_agent_llm`, não a `fixed_responder` trivial) e afirma que ela fecha o cliente dentro de um
+  `finally` guardado por um `if` — falha se o `finally` for removido (o cliente volta a vazar) ou se a
+  guarda virar chamada incondicional (o cliente de plataforma do Judge 1 passaria a fechar a cada
+  turno). Testado ao vivo: revertendo o `finally` para um `pass`, as duas asserções quebram. Mais um
+  teste comportamental por adapter (`MockTransport`, sem rede) provando que `aclose()` fecha o
+  `httpx.AsyncClient` de verdade (`client.is_closed` vira `True`).
+
+  **Suíte:** `tests/unit` 1193 verdes (`PYTHONUTF8=1`; 1188 da baseline local + 5 testes novos —
+  1188, não os 1187 do brief: a contagem já havia avançado por commits de item 39 fora da amostragem
+  do brief). `lint-imports`: 3 contratos mantidos, 0 quebrados.
 
 - [ ] **41. Teto de custo por turno** `[relatado]`
   `MAX_TOOL_ROUNDS=3` é por tentativa e o juiz dá 3 tentativas → pior caso 12 gerações + 3 juízes por

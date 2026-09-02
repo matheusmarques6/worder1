@@ -115,10 +115,15 @@ class OpenRouterLlm:
 
     async def aclose(self) -> None:
         # Item 40 da auditoria: um cliente novo por turno (`providers.py::client_for`),
-        # nunca reusado — quem constrói é quem tem que fechar. `respond()`/`touch()`
-        # chamam isto no `finally` do turno; sem finalizador aqui, o pool de conexões
-        # do httpcore fica retido até o GC (não determinístico em asyncio de longa
-        # duração).
+        # nunca reusado — quem constrói é quem tem que fechar. `respond()` chama isto
+        # no `finally` do turno; sem finalizador aqui, o pool de conexões do httpcore
+        # fica retido até o GC (não determinístico em asyncio de longa duração).
+        #
+        # DIVERGÊNCIA DELIBERADA do TS: `ai-providers.ts` fala com todo provider pelo
+        # `fetch` global do Node/undici, uma vez por request — não existe objeto
+        # cliente para fechar ou reusar lá. Este método é estrutural do Python, por
+        # ter escolhido `httpx.AsyncClient`, não paridade com algo que faltava portar
+        # (task-40-report.md, ruling H).
         await self._client.aclose()
 
 
