@@ -914,13 +914,28 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
 
   **Sem prova executável:** a migração
   `supabase/migrations/20260902000002_claim_outbox_last_inbound_wamid.sql` não rodou — sem
-  Postgres nesta máquina. `tests/pipeline` e `tests/db` (inclusive o teste novo de
-  `test_outbox_claim.py` que este item deveria ganhar, caso a suíte rodasse) não executaram pelo
-  mesmo motivo.
+  Postgres nesta máquina. `tests/pipeline` e `tests/db` não executaram pelo mesmo motivo —
+  inclusive `tests/db/test_outbox_claim.py::TestLastInboundWamid`, que cobre por escrito o
+  subselect novo mas nunca RODOU contra um Postgres de verdade.
 
-  **Suíte:** `tests/unit` 1182 verdes (`PYTHONUTF8=1`; 7 testes novos — 4 em
-  `test_humanize.py::TestReadAndTyping`, 3 em `test_cloud_api_channel.py` — sobre a baseline de
-  1175 medida nesta máquina antes da mudança). `lint-imports`: 3 contratos mantidos, 0 quebrados.
+  **Suíte (fechamento original):** `tests/unit` 1182 verdes (`PYTHONUTF8=1`; baseline real 1174 +
+  7 testes declarados + 1 caso automático de `test_no_max_seq.py` que a própria migração gera).
+  `lint-imports`: 3 contratos mantidos, 0 quebrados.
+
+  **Fix round 1** (achados da review) · relatório, seção "Fix round 1" em `task-38-report.md`.
+  Corrigida a frase acima que insinuava um teste de `tests/db` já escrito quando não havia nenhum
+  (Important) — `TestLastInboundWamid` foi escrito em `test_outbox_claim.py` cobrindo o subselect
+  (último `seq`, múltiplos inbounds, mensagem outbound não conta, sem inbound e sem conversa
+  devolvem `null`), ainda sem prova executada. Duas divergências do TS que não estavam declaradas
+  em comentário (Minor 1 e 2) foram alinhadas ao TS, não mantidas: `send_humanized` só dispara
+  read/typing para bolha de TEXTO (nunca para template — `sendHumanizedReply` do TS é exclusivo de
+  resposta de IA) e só quando `humanize_delays` está ligado (o mesmo knob que desliga o ritmo do TS
+  desliga o typing junto, `cloud-sender.ts:257`). A baseline de testes corrigida para 1174 (a
+  verificação independente da review, num worktree isolado no commit-base, achou que o 1175 do
+  relatório original vinha do ambiente da máquina do implementador, não de uma diferença real —
+  Minor 3). **Suíte após o fix:** `tests/unit` 1184 verdes (`PYTHONUTF8=1`; os dois testes novos de
+  `TestReadAndTyping` somados aos 1182 de antes). `lint-imports`: 3 contratos mantidos, 0
+  quebrados.
 
 ---
 
