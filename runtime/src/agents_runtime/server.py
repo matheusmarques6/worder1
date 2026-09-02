@@ -182,7 +182,7 @@ async def _preview(dsn: str, *, set_role: str | None, body: dict[str, Any]) -> b
             constraints=(),
         ),
         conversation=(
-            ConversationBlock(conversation_id="preview", transcript=transcript, pending=())
+            ConversationBlock(conversation_id="preview", transcript=transcript)
             if transcript
             else None
         ),

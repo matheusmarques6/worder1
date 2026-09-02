@@ -84,7 +84,6 @@ def a_conversation_block() -> ConversationBlock:
     return ConversationBlock(
         conversation_id="00000000-0000-0000-0000-0000000000c1",
         transcript=(("contact", "oi, ainda tem o tênis?"),),
-        pending=(("contact", "e qual o preço?"),),
     )
 
 
@@ -189,6 +188,61 @@ class TestWhatTheMissionPutsOnTheTable:
         assert "prometer prazo de entrega" in compiled.text
         # O prompt INFORMA as tools; quem trava é a tool (§1.2 inv. 5).
         assert "create_coupon" in compiled.text
+
+
+class TestTheConversationBlockDoesNotDuplicateTheChatArray:
+    """Auditoria item 39: o histórico vai pro array de chat (`_as_chat`,
+    responder.py/toucher.py) UMA vez só. Se este bloco voltar a despejar o
+    transcript como texto em modo "turn", o mesmo conteúdo é pago duas vezes
+    em cada chamada ao modelo — até 12 vezes por turno."""
+
+    def test_ordinary_transcript_text_never_reaches_the_system_block(self) -> None:
+        compiled = full_compile(
+            conversation=ConversationBlock(
+                conversation_id="00000000-0000-0000-0000-0000000000c1",
+                transcript=(
+                    ("contact", "oi, ainda tem o tênis?"),
+                    ("agent", "temos sim! qual numeração?"),
+                ),
+            )
+        )
+        conversation_block = next(b for b in compiled.blocks if b.kind == "CONVERSATION")
+        assert "oi, ainda tem o tênis?" not in conversation_block.text
+        assert "temos sim! qual numeração?" not in conversation_block.text
+
+    def test_the_store_media_line_survives_as_the_blocks_exclusive_content(self) -> None:
+        """Item 31: a rubrica de mídia da loja não pode virar turno de chat
+        (imitação), então ela precisa continuar visível em algum lugar — este
+        bloco é o único lugar que sobra depois do item 39."""
+        compiled = full_compile(
+            conversation=ConversationBlock(
+                conversation_id="00000000-0000-0000-0000-0000000000c1",
+                transcript=(
+                    ("contact", "tem foto?"),
+                    ("agent", "[A loja enviou uma imagem]"),
+                ),
+            )
+        )
+        conversation_block = next(b for b in compiled.blocks if b.kind == "CONVERSATION")
+        assert "[A loja enviou uma imagem]" in conversation_block.text
+        assert "tem foto?" not in conversation_block.text
+
+    def test_preview_mode_keeps_the_raw_dump(self) -> None:
+        """O preview (`server.py::_preview`) não monta array de chat — não
+        duplica nada, então continua mostrando a conversa como texto."""
+        compiled = compile_prompt(
+            agent=an_agent_block(),
+            mission=a_resolved_mission(),
+            state=a_state_block(),
+            channel=a_channel_block(),
+            conversation=ConversationBlock(
+                conversation_id="preview",
+                transcript=(("contact", "oi, ainda tem o tênis?"),),
+            ),
+            mode="preview",
+        )
+        conversation_block = next(b for b in compiled.blocks if b.kind == "CONVERSATION")
+        assert "oi, ainda tem o tênis?" in conversation_block.text
 
 
 class TestPreviewIsTheSameFunction:

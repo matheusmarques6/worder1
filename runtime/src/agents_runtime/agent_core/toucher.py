@@ -361,7 +361,6 @@ def build_toucher(
                 conversation=ConversationBlock(
                     conversation_id=str(job.conversation_id),
                     transcript=tuple((m.author, m.text) for m in transcript),
-                    pending=(),
                 ),
                 mode="turn",
             )

@@ -22,6 +22,7 @@ relógio, sem I/O, sem LLM — momento e ledger chegam resolvidos no StateBlock.
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
+from agents_runtime.agent_core.media import STORE_MARK
 from agents_runtime.agent_core.mission_resolver import ResolvedMission
 
 AI_DISCLOSURE_LINE = (
@@ -89,11 +90,20 @@ class ChannelBlock:
 
 @dataclass(frozen=True)
 class ConversationBlock:
-    """O que foi dito — dono: a própria conversa."""
+    """O que foi dito — dono: a própria conversa.
+
+    Item 39: só carrega `transcript`. Em modo "turn" o histórico em si NUNCA
+    entra no texto deste bloco — ele vai pro array de chat (`_as_chat`,
+    responder.py/toucher.py) uma vez só; mandar os dois era ~2x tokens de
+    entrada por chamada, em até 12 chamadas por turno. `transcript` continua
+    aqui porque é dele que `_conversation_block` extrai a rubrica de mídia da
+    loja (item 31), que é EXCLUSIVA do bloco — nunca vira turno de chat. Não
+    existe mais campo `pending`: a janela pendente nunca carrega rubrica de
+    loja (é sempre inbound, `repository/agent.py::load_pending_messages`) e
+    não tinha nenhum outro uso aqui além do dump duplicado."""
 
     conversation_id: str
     transcript: tuple[tuple[str, str], ...]
-    pending: tuple[tuple[str, str], ...]
 
 
 @dataclass(frozen=True)
@@ -230,7 +240,7 @@ def _channel_block(channel: ChannelBlock | None) -> RenderedBlock:
     )
 
 
-def _conversation_block(conversation: ConversationBlock | None) -> RenderedBlock:
+def _conversation_block(conversation: ConversationBlock | None, mode: str) -> RenderedBlock:
     if conversation is None:
         return RenderedBlock(
             kind="CONVERSATION",
@@ -238,10 +248,29 @@ def _conversation_block(conversation: ConversationBlock | None) -> RenderedBlock
             ghost=True,
         )
     lines = ["# CONVERSA"]
-    lines.extend(f"{author}: {text}" for author, text in conversation.transcript)
-    if conversation.pending:
-        lines.append("— responder agora a:")
-        lines.extend(f"{author}: {text}" for author, text in conversation.pending)
+    if mode == "preview":
+        # O preview (`/internal/preview-prompt`) nunca chama um LLM nem monta
+        # array de chat — só devolve este texto para o lojista ler. Aqui o
+        # dump é a ÚNICA forma de mostrar a conversa, e não duplica nada.
+        lines.extend(f"{author}: {text}" for author, text in conversation.transcript)
+    else:
+        # Item 39: no turno real (`mode="turn"`) o histórico vai pro array de
+        # chat, montado por `_as_chat` (responder.py/toucher.py) a partir do
+        # MESMO `transcript` — repeti-lo aqui como texto dobrava o tamanho do
+        # prompt de entrada por chamada, em até 12 chamadas por turno. Só
+        # sobrevive o que é EXCLUSIVO do bloco: a rubrica de mídia da loja
+        # (`agent_core/media.py::STORE_MARK`), que `_as_chat` descarta de
+        # propósito (`is_store_media_line`, item 31) para não virar fala
+        # imitável — apresentar `[A loja enviou uma imagem]` como mensagem
+        # `assistant` anterior é a superfície de imitação que custou a
+        # resposta crua de 17/08.
+        lines.extend(
+            f"{author}: {text}"
+            for author, text in conversation.transcript
+            if author != "contact" and text.startswith(STORE_MARK)
+        )
+        if len(lines) == 1:
+            lines.append("Sem rubrica de mídia da loja nesta janela.")
     return RenderedBlock(
         kind="CONVERSATION",
         text="\n".join(lines),
@@ -272,6 +301,6 @@ def compile_prompt(
             _mission_block(mission, mode),
             _state_block(state),
             _channel_block(channel),
-            _conversation_block(conversation),
+            _conversation_block(conversation, mode),
         )
     )

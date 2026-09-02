@@ -259,6 +259,7 @@ async def load_recent_transcript(
     *,
     conversation_id: UUID,
     limit: int = DEFAULT_TRANSCRIPT_LIMIT,
+    exclude_inbound_after_seq: int | None = None,
 ) -> tuple[PendingMessage, ...]:
     """As últimas `limit` mensagens, nas duas direções, na ordem em que
     aconteceram.
@@ -266,6 +267,16 @@ async def load_recent_transcript(
     Ordenar por `seq` embaralharia a conversa: inbound e outbound têm contadores
     SEPARADOS (`unique (conversation_id, direction, seq)`), então o relógio do
     banco é o único que sabe a ordem real.
+
+    Item 39 — `exclude_inbound_after_seq`: quando informado, tira do
+    transcript as mensagens INBOUND ainda não processadas (`seq` maior que o
+    valor dado) — exatamente a janela que `load_pending_messages` também
+    busca. Sem isso as duas consultas quase sempre se sobrepõem (a pendente é
+    a cauda do transcript por tempo), e quem monta o turno tinha que dedupar
+    depois em Python — código que apodrece e some sem aviso no próximo
+    refactor. `None` (o padrão) preserva a consulta de sempre: o toque
+    (`agent_core/toucher.py`) e o preview (`server.py::_preview`) não têm
+    janela pendente e não devem filtrar nada.
     """
     cursor = await conn.execute(
         """
@@ -274,13 +285,19 @@ async def load_recent_transcript(
             select author_type, content, created_at, direction
               from public.messages
              where conversation_id = %s
+               and (direction <> 'inbound' or %s::bigint is null or seq <= %s)
              -- Empate no relógio: a pergunta vem antes da resposta a ela.
              order by created_at desc, direction asc
              limit %s
           ) recent
          order by created_at asc, direction desc
         """,
-        (conversation_id, limit),
+        (
+            conversation_id,
+            exclude_inbound_after_seq,
+            exclude_inbound_after_seq,
+            limit,
+        ),
     )
     return tuple(_message(row) for row in await cursor.fetchall())
 

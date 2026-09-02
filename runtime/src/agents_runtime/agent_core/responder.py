@@ -316,7 +316,15 @@ def build_responder(
                     target_seq=job.target_seq,
                 )
                 transcript = await agent_repo.load_recent_transcript(
-                    conn, conversation_id=job.conversation_id, limit=TRANSCRIPT_LIMIT
+                    conn,
+                    conversation_id=job.conversation_id,
+                    limit=TRANSCRIPT_LIMIT,
+                    # Item 39: sem isso `transcript` quase sempre já continha a
+                    # cauda de `pending` de novo (mesma mensagem, duas
+                    # consultas) — a fonte do dobro de tokens de entrada por
+                    # chamada. `pending` entra no array de chat separado, mais
+                    # abaixo (`_as_chat(transcript + pending)`).
+                    exclude_inbound_after_seq=state.last_processed_seq,
                 )
                 owner_mission = None
                 if state is not None and state.owner_mission_version_id is not None:
@@ -593,7 +601,6 @@ def build_responder(
                 conversation=ConversationBlock(
                     conversation_id=str(job.conversation_id),
                     transcript=tuple((m.author, m.text) for m in transcript),
-                    pending=tuple((m.author, m.text) for m in pending),
                 ),
                 mode="turn",
             )
@@ -616,7 +623,10 @@ def build_responder(
                 system += "\n\n# CONHECIMENTO\n" + "\n".join(
                     f"- {chunk}" for chunk in knowledge
                 )
-            conversation = _as_chat(transcript)
+            # Item 39: `transcript` já exclui a janela pendente (query em
+            # `repository/agent.py::load_recent_transcript`), então concatenar
+            # é seguro — nenhuma mensagem aparece duas vezes.
+            conversation = _as_chat(transcript + pending)
 
             chat = _metered(conn, job, agent_llm, clock, "agent_reply", version.agent_id)
             # Juízes do lojista (radial → Juízes) entram como rubrica extra,
