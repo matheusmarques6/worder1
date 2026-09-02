@@ -200,14 +200,12 @@ class TestTheUsageLogsMirror:
         # todo espelho é, por definição, sucesso.
         assert success is True
 
-    async def test_a_purpose_without_a_mapped_feature_fails_loud(
+    async def test_an_unknown_purpose_never_reaches_the_trigger(
         self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
     ) -> None:
-        """Se o CHECK de `purpose` um dia ganhar um valor novo sem o mapa
-        acompanhar (o que `tests/unit/test_ai_usage_logs_bridge.py` já trava
-        sem banco), o trigger tem de recusar alto — não gravar `feature`
-        inventado. Aqui a mesma garantia é provada com o mecanismo real: um
-        purpose fora do CHECK nem chega a inserir em `llm_calls`."""
+        """Guarantee diferente da do teste abaixo: HOJE o CHECK de `purpose`
+        barra um valor desconhecido antes do trigger sequer rodar — este
+        teste não prova o `else raise` do espelho, prova o CHECK."""
         async with as_worker(dsn, tenant) as conn:
             with pytest.raises(psycopg.errors.CheckViolation):
                 await llm_repo.record_llm_call(
@@ -220,6 +218,58 @@ class TestTheUsageLogsMirror:
                     output_tokens=1,
                     cost_usd=0.1,
                     latency_ms=1,
+                )
+
+    async def test_a_purpose_without_a_mapped_feature_fails_loud(
+        self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+    ) -> None:
+        """O cenário real do ruling G (fix round 1): alguém acrescenta um
+        `purpose` ao CHECK de `internal.llm_calls` e esquece de mapeá-lo no
+        `CASE` do trigger. `tests/unit/test_ai_usage_logs_bridge.py` já trava
+        essa mesma lacuna sem banco, comparando os dois `.sql` como texto —
+        este teste prova o MECANISMO em si: solta o CHECK (só um
+        superusuário consegue) para simular o purpose novo já aceito na
+        tabela mas ainda não mapeado, e confere que o trigger recusa alto em
+        vez de gravar `feature` inventado ou NULL. O CHECK volta no
+        `finally`, sempre — mesmo se a asserção falhar."""
+        with admin.cursor() as cur:
+            cur.execute(
+                """
+                select conname from pg_constraint
+                 where conrelid = 'internal.llm_calls'::regclass
+                   and contype = 'c'
+                   and pg_get_constraintdef(oid) like '%purpose%'
+                """
+            )
+            row = cur.fetchone()
+        assert row is not None, "CHECK de internal.llm_calls.purpose não encontrado"
+        (constraint_name,) = row
+
+        with admin.cursor() as cur:
+            cur.execute(f"alter table internal.llm_calls drop constraint {constraint_name}")
+        try:
+            async with as_worker(dsn, tenant) as conn:
+                with pytest.raises(psycopg.errors.RaiseException, match="sem mapa"):
+                    await llm_repo.record_llm_call(
+                        conn,
+                        organization_id=tenant,
+                        purpose="not_a_real_purpose",
+                        provider="openrouter",
+                        model="anthropic/claude-sonnet-5",
+                        input_tokens=1,
+                        output_tokens=1,
+                        cost_usd=0.1,
+                        latency_ms=1,
+                    )
+        finally:
+            with admin.cursor() as cur:
+                cur.execute(
+                    f"""
+                    alter table internal.llm_calls
+                        add constraint {constraint_name}
+                        check (purpose in ('agent_reply', 'judge_pre', 'judge_async',
+                                           'prompt_generator', 'copy_variation', 'embedding'))
+                    """
                 )
 
 

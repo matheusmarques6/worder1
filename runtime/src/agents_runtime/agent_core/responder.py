@@ -940,21 +940,31 @@ def _recorder(
     agent_id: UUID | None = None,
 ):
     async def record(call: CallRecord) -> None:
-        async with conn.transaction():
-            await scope_to_organization(conn, organization_id)
-            await llm_repo.record_llm_call(
-                conn,
-                organization_id=organization_id,
-                purpose=call.purpose,
-                provider=call.provider,
-                model=call.model,
-                conversation_id=conversation_id,
-                input_tokens=call.input_tokens,
-                output_tokens=call.output_tokens,
-                cost_usd=call.cost_usd,
-                latency_ms=call.latency_ms,
-                agent_id=agent_id,
-            )
+        try:
+            async with conn.transaction():
+                await scope_to_organization(conn, organization_id)
+                await llm_repo.record_llm_call(
+                    conn,
+                    organization_id=organization_id,
+                    purpose=call.purpose,
+                    provider=call.provider,
+                    model=call.model,
+                    conversation_id=conversation_id,
+                    input_tokens=call.input_tokens,
+                    output_tokens=call.output_tokens,
+                    cost_usd=call.cost_usd,
+                    latency_ms=call.latency_ms,
+                    agent_id=agent_id,
+                )
+        except Exception:
+            # Ruling D (item 37): trilha nunca derruba o turno. O INSERT
+            # dispara, na mesma transação, o trigger que espelha para
+            # ai_usage_logs (20260902000001) — hoje inalcançável porque o
+            # mapa purpose->feature cobre 100% do CHECK, mas "não acontece"
+            # não é "não pode acontecer": mesmo padrão de `note_step` acima
+            # ("adereço nunca vira causa de morte do turno") — a linha de
+            # custo perdida é preferível a uma resposta que nunca sai.
+            logger.debug("llm_calls write failed", exc_info=True)
 
     return record
 
