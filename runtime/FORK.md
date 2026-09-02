@@ -45,9 +45,25 @@ Este diretório é um **fork do motor `agents-worder-main`** dentro do monorepo 
    *Atualizado (item 29):* a humanização parcial já SAIU do roadmap — `channels/humanize.py`
    porta `splitIntoBubbles` do TS (≤4 bolhas, mesmos cortes, fixtures comparadas) e
    `compute_pacing` dá o ritmo entre bolhas, ligados por linha da outbox
-   (`payload.humanize.{split,rhythm}`, de `settings.delivery`). O que segue roadmap: typing
-   indicator, send-guard por tier e o `reply_delay` configurado no agente (ausência 18 da seção
-   seguinte).
+   (`payload.humanize.{split,rhythm}`, de `settings.delivery`). O que segue roadmap: send-guard
+   por tier e o `reply_delay` configurado no agente (ausência 18 da seção seguinte).
+   *Item 38, fechado:* typing indicator TAMBÉM saiu do roadmap, e trouxe junto o tique azul —
+   o achado do item era maior que o texto original dizia (ruling A): como o mark-as-read viaja
+   no MESMO POST do typing (a Meta não separa os dois), e esse disparo é o único gatilho
+   AUTOMÁTICO de mark-as-read do produto inteiro, org migrada não marcava a mensagem do
+   cliente como lida em NENHUM ponto do fluxo automático — não só o "digitando" estava ausente.
+   O pré-requisito era o wamid do último inbound viajando até o sender: `internal.claimed_send`
+   ganhou o atributo `last_inbound_wamid` (`supabase/migrations/20260902000002_claim_outbox_last_inbound_wamid.sql`,
+   mesmo padrão `alter type ... add attribute` da 9.1b/`otel`), `ClaimedSend`
+   (`repository/outbox.py`) ganhou o campo espelho, e `CloudApiChannel.mark_read_and_typing`
+   (`channels/cloud_api.py`) manda o corpo `{status: read, message_id, typing_indicator}` no
+   mesmo endpoint de `send()`. O disparo é em `queueing/sender.py::send_humanized`, antes de
+   CADA bolha (ruling E, paridade com `cloud-sender.ts:257-283`), best-effort (ruling C — o
+   mesmo padrão de `note_step`/`_recorder` em `agent_core/responder.py`: try/except com
+   `logger.debug(exc_info=True)`, nunca derruba o turno). **Sem wamid, silêncio** (ruling D) —
+   nunca um typing "falso"; a linha proibida em `humanize.py` continua de pé, só deixou de ser
+   "fica de fora por ora" para virar "dispara quando o dado existe". E quando os guards calam o
+   agente (ruling G), não há bolha — logo não há read nem typing, igual ao TS; isto não mudou.
    *Como ficou (commit 18):* o veredito mora em SQL — `internal.sender_preflight`
    (SECURITY DEFINER, transação curta; opt-out → janela → template) — e o sender só o
    executa: `queueing/sender.py` chama preflight → suprime (`window_closed`/`opt_out`/
@@ -88,8 +104,9 @@ Cada entrada é **divergência consciente** (o runtime não vai ter isso, e diz 
 **dívida** (vai ter, e diz qual item da auditoria é o dono — "sem dono" quando não há). "Prazo"
 nesta auditoria significa dono, não data.
 
-Duas ausências já estavam declaradas e **não** se repetem aqui: send-guard por tier da Meta e
-typing indicator, ambas no item 2 da seção anterior (donos: itens 32 e 38).
+Uma ausência já estava declarada e **não** se repete aqui: send-guard por tier da Meta, no item 2
+da seção anterior (dono: item 32). O typing indicator (e o mark-as-read automático que vinha
+junto) que também estava lá foi fechado pelo item 38 — ver o item 2 acima.
 
 **Se você só tiver cinco minutos, leia estas cinco.** São as que quebram a loja, não as que a
 degradam: **1** e **2** (pré-requisitos — sem eles a loja fica muda), **29** (o agente volta

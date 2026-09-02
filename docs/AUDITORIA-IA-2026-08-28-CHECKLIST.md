@@ -870,8 +870,57 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   de semântica, não de código"), sem teste cruzado que trave divergência entre TS e Python. Risco:
   qualquer uma pode divergir das demais em silêncio, e nada no CI pegaria. Virou o **item 66**.
 
-- [ ] **38. Typing indicator** `[relatado]`
+- [x] **38. Typing indicator e o tique azul que vem junto** `[relatado]` · relatório
+  `task-38-report.md`
   Divergência já declarada. Depende do outbox carregar o wamid do último inbound.
+
+  **O item entrega duas coisas, não uma (ruling A).** O texto original só nomeava o "digitando";
+  a recon achou o efeito maior: a Meta só aceita `typing_indicator` de carona num `status: read`
+  sobre o wamid do inbound — MESMO POST, `cloud-api.ts:515-525` do lado TS — e esse disparo
+  (`cloud-sender.ts:257-283`) é o ÚNICO gatilho AUTOMÁTICO de mark-as-read do produto inteiro (os
+  outros dois, `conversations/route.ts:313-334` e `message-service.ts:479`, só rodam quando um
+  operador abre a conversa). Sem o typing, org migrada nunca marcava a mensagem do cliente como
+  lida no fluxo automático — os dois tiques azuis nunca apareciam sozinhos. Fechar o typing fecha
+  os dois.
+
+  **Ruling B: rota (1), e a verificação veio antes do código.** `internal.claim_outbox_batch` e o
+  tipo `internal.claimed_send` só têm UM consumidor: `repository/engine.py::claim_outbox_batch`,
+  chamado só de `queueing/sender.py::sender_pass`; os três testes de banco que citam a função
+  (`test_outbox_claim.py`, `test_otel_carrier.py`, `test_send_guard_wiring.py`) leem por índice só
+  até a coluna 8 (`kind`) ou por nome de campo, nunca contam colunas. Uma coluna nova no fim não
+  quebra nada. `internal.claimed_send` ganhou `last_inbound_wamid` (mesmo padrão `alter type ...
+  add attribute` que a 9.1b/`otel` já usou); `claim_outbox_batch` devolve o `provider_message_id`
+  do último inbound da conversa via subselect em `public.messages`; `ClaimedSend`
+  (`runtime/src/agents_runtime/repository/outbox.py`) e `repository/engine.py` ganharam o campo
+  espelho.
+
+  **Ruling C — best-effort, molde do item 37.** `queueing/sender.py::_mark_read_and_typing`
+  (chamado de `send_humanized`, antes de CADA bolha — ruling E) segue o mesmo padrão de
+  `note_step`/`_recorder` de `agent_core/responder.py`: `try/except Exception:
+  logger.debug(..., exc_info=True)`, nunca propaga. `CloudApiChannel.mark_read_and_typing`
+  (`runtime/src/agents_runtime/channels/cloud_api.py`) faz o POST e levanta em erro como `send()`
+  levanta — quem decide engolir é o chamador, não o adapter.
+
+  **Ruling D — sem wamid, silêncio.** Linha de funil sem conversa, conversa sem inbound: o
+  subselect devolve `null`, `_mark_read_and_typing` retorna sem chamar o canal. Nenhum typing
+  "falso" — a linha proibida em `channels/humanize.py` continua de pé.
+
+  **Ruling G — o mudo continua mudo.** Guard calando o agente = nenhuma bolha = nenhum read/typing,
+  igual ao TS. Não implementado (nem cogitado): marcar como lida quando o agente não vai responder
+  seria divergência nova, fora de escopo deste item.
+
+  **`FORK.md` atualizado (ruling H)**: a entrada 2 de "Divergências conscientes do v1" e a lista de
+  ausências antes de "O que a loja PERDE" já não citam o item 38 como pendente.
+
+  **Sem prova executável:** a migração
+  `supabase/migrations/20260902000002_claim_outbox_last_inbound_wamid.sql` não rodou — sem
+  Postgres nesta máquina. `tests/pipeline` e `tests/db` (inclusive o teste novo de
+  `test_outbox_claim.py` que este item deveria ganhar, caso a suíte rodasse) não executaram pelo
+  mesmo motivo.
+
+  **Suíte:** `tests/unit` 1182 verdes (`PYTHONUTF8=1`; 7 testes novos — 4 em
+  `test_humanize.py::TestReadAndTyping`, 3 em `test_cloud_api_channel.py` — sobre a baseline de
+  1175 medida nesta máquina antes da mudança). `lint-imports`: 3 contratos mantidos, 0 quebrados.
 
 ---
 
