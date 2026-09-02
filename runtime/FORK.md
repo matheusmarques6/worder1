@@ -386,11 +386,13 @@ foi para `2026-04` (`connectors/shopify.py:26`) porque a documentação confirma
 `price_rules.json` e `discount_codes.json`, embora marcados legados desde outubro/2024, ainda
 respondem nessa versão com os mesmos filtros que `_find_price_rule_id` usa
 (`ends_at_min`/`ends_at_max`/`limit`). `runtime/.env.piloto` (arquivo local de credenciais, não
-template) segue em `v19.0` até quem roda o piloto atualizar à mão.
+template) segue em `v19.0` — e isso não é mais pendência morna: a Meta aposentou a v19.0 em
+21/mai/2026 (verificado em 02/set/2026, `task-35-evidence.md`), então o piloto local está apontando
+para uma versão já aposentada. Quem roda o piloto precisa atualizar `runtime/.env.piloto` à mão, e
+com urgência — não é um "quando der".
 *O que NÃO mudou:* o cupom continua em REST, não GraphQL — a Shopify recomenda migrar
 `PriceRule`/`DiscountCode` para o Admin GraphQL (o item 33 já registrou a depreciação), mas isso é
-desenho próprio, é o caminho do dinheiro, e não é este item. Ver item novo de fila proposto no
-relatório do item 35.
+desenho próprio, é o caminho do dinheiro, e não é este item. Proposto como item 64 do checklist.
 *Achado do item, registrado e não implementado:* o próprio lado TS não fala uma versão só. Além
 do `v22.0` de `api-version.ts:6` (WhatsApp), há `v19.0` fixo em `src/lib/meta-api.ts:13` (Ads),
 `src/lib/instagram/api.ts:6` e nas quatro rotas de `api/instagram` e `api/integrations/meta`, e

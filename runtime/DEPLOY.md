@@ -39,7 +39,10 @@ Dois modos no `docker-compose.yml` deste diretório, que coexistem:
 | `piloto` | `runtime-piloto` | nuvem (session pooler) | SIM (Meta) | `:10001` |
 
 Setup: copiar `.env.bancada.example`→`.env.bancada` e `.env.piloto.example`→
-`.env.piloto`, preencher os segredos (nunca commitar os reais).
+`.env.piloto`, preencher os segredos (nunca commitar os reais). Se você já tem
+um `.env.piloto` de antes do item 35 da auditoria, confira
+`AGENTS_META_API_VERSION`: a v19.0 foi aposentada pela Meta em 21/mai/2026
+(hoje é depois disso) — atualize para `v22.0` à mão, não é opcional.
 
 **Bancada** (espelhar + subir):
 
@@ -94,7 +97,7 @@ interruptor — subir o piloto não liga org nenhuma.
 | Variável | O que é |
 |---|---|
 | `AGENTS_CHANNEL` | `agents_runtime.channels.cloud_api:from_env` |
-| `AGENTS_META_API_VERSION` | `v22.0` (default, item 35 da auditoria) |
+| `AGENTS_META_API_VERSION` | `v22.0` (default, item 35 da auditoria). **Se seu `.env.piloto` local ainda tem `v19.0`, atualize agora**: a Meta aposentou a v19.0 em 21/mai/2026 (verificado em 02/set/2026) — não é mais uma questão de "quando der", o piloto pode já estar apontando para uma versão que a Meta recusa |
 
 Item 20 da auditoria: não existe mais um `AGENTS_META_ACCESS_TOKEN` global —
 cada envio lê a credencial da conta Cloud ATIVA da própria org
