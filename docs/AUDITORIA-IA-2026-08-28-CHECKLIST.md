@@ -1022,7 +1022,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   contratos mantidos, 0 quebrados.
 
 - [x] **40. Fechar ou reusar os clientes httpx de LLM** `[confirmado]` · commits `23d6a76d`
-  `9e0a1864` `8b6c6891` · relatório `task-40-report.md`
+  `9e0a1864` `8b6c6891` `179c1630` · relatório `task-40-report.md`
   `agent_core/providers.py::client_for` constrói o adapter por turno; os três criam `httpx.AsyncClient`
   no `__init__` (`openrouter.py::OpenRouterLlm`, `direct_providers.py::OpenAICompatibleLlm` e
   `::AnthropicLlm`) e nenhum tinha `aclose()`. O único `aclose` do runtime era o do canal Meta.
