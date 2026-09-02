@@ -20,6 +20,7 @@ uma versão falam os mesmos critérios.
 import pytest
 
 from agents_runtime.agent_core.llm import ChatResult, Usage
+from agents_runtime.agent_core.metering import DEFAULT_TURN_LLM_CALL_LIMIT, TurnBudget
 from agents_runtime.evals.rubrics import parse_rubric
 from agents_runtime.judges.pre_send import (
     JUDGE_MODEL,
@@ -28,6 +29,7 @@ from agents_runtime.judges.pre_send import (
     JudgeError,
     PreSendJudge,
     guarded_reply,
+    judge_verdicts,
 )
 
 
@@ -356,3 +358,86 @@ class TestThePlatformGate:
             "pre_send reads `.model` off something — the judge's model is "
             "platform-fixed and must never come from a tenant's configuration"
         )
+
+
+class BudgetedGenerator:
+    """A generator that draws from a shared `TurnBudget`, like the real
+    `generate()` closure in `responder.py` does through the `MeteredLlm` it
+    calls `chat.chat(...)` on."""
+
+    def __init__(self, budget: TurnBudget) -> None:
+        self._budget = budget
+
+    async def __call__(self, attempt: int, feedback: tuple[str, ...]) -> str:
+        self._budget.reserve("agent_reply")
+        return f"rascunho {attempt}"
+
+
+class BudgetedJudge:
+    """Same idea for the judge side — draws from the SAME budget, because in
+    the real turn `judge_pre` and `agent_reply` share one `TurnBudget`."""
+
+    def __init__(self, budget: TurnBudget, *verdicts_per_attempt: dict[str, bool]) -> None:
+        self._budget = budget
+        self._script = list(verdicts_per_attempt)
+        self.seen: list[str] = []
+
+    async def __call__(self, draft: str, context=None):
+        self._budget.reserve("judge_pre")
+        self.seen.append(draft)
+        entry = self._script[min(len(self.seen) - 1, len(self._script) - 1)]
+        return judge_verdicts({SAFETY.name: SAFETY}, entry, rationale="roteirizado")
+
+
+class TestTheTurnBudget:
+    """Item 41 — o teto de custo por turno, visto do `guarded_reply`. Ruling G
+    pede as duas metades: que o teto corta a escalada e entrega o melhor
+    rascunho que já tinha quando estoura, e que um turno NORMAL nunca o
+    dispara — a segunda é tão importante quanto a primeira, porque um teto
+    apertado demais aparece como resposta pior, não como erro."""
+
+    async def test_the_cap_stops_escalation_and_still_sends_the_best_draft(self) -> None:
+        # 2 slots = exatamente o custo de UMA tentativa completa (1 geração +
+        # 1 julgamento). A primeira tentativa reprova padrão e vira `best`; a
+        # segunda nem chega a gerar — o teto recusa a chamada antes da rede.
+        budget = TurnBudget(limit=2)
+        generate = BudgetedGenerator(budget)
+        judge = BudgetedJudge(budget, standard_failure())
+
+        outcome = await guarded_reply(generate, judge)
+
+        assert outcome.draft == "rascunho 0"
+        assert outcome.blocked_by is None
+        assert outcome.attempts == 1
+        assert budget.used == 2
+
+    async def test_a_normal_turn_never_touches_the_budget(self) -> None:
+        """A outra metade do ruling G: um turno que passa de primeira (1
+        geração + 1 julgamento) usa 2 dos DEFAULT_TURN_LLM_CALL_LIMIT slots —
+        bem longe do teto, então ele nunca dispara para um turno legítimo."""
+        budget = TurnBudget(limit=DEFAULT_TURN_LLM_CALL_LIMIT)
+        generate = BudgetedGenerator(budget)
+        judge = BudgetedJudge(budget, passing())
+
+        outcome = await guarded_reply(generate, judge)
+
+        assert outcome.draft == "rascunho 0"
+        assert outcome.blocked_by is None
+        assert budget.used == 2
+        assert budget.used < DEFAULT_TURN_LLM_CALL_LIMIT
+
+    async def test_no_draft_at_all_fails_loud_when_the_budget_is_gone_from_the_start(
+        self,
+    ) -> None:
+        """Ruling C, o outro desfecho: sem NENHUM rascunho já produzido, o
+        teto não tem o que entregar — e aí, só aí, o turno falha."""
+        budget = TurnBudget(limit=0)
+        generate = BudgetedGenerator(budget)
+        judge = BudgetedJudge(budget, passing())
+
+        outcome = await guarded_reply(generate, judge)
+
+        assert outcome.draft is None
+        assert outcome.blocked_by == "budget_exceeded"
+        assert outcome.last_draft is None
+        assert outcome.judgements == ()

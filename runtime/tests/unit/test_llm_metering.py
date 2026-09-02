@@ -20,7 +20,13 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from agents_runtime.agent_core.llm import ChatRequest, ChatResult, EmbeddingResult, Message, Usage
-from agents_runtime.agent_core.metering import CallRecord, MeteredLlm
+from agents_runtime.agent_core.metering import (
+    DEFAULT_TURN_LLM_CALL_LIMIT,
+    CallRecord,
+    MeteredLlm,
+    TurnBudget,
+    TurnBudgetExceeded,
+)
 from tests.support.clock import FrozenClock
 
 START = datetime(2026, 8, 3, 12, 0, tzinfo=UTC)
@@ -74,8 +80,21 @@ def a_request(**overrides) -> ChatRequest:
     return ChatRequest(**{**defaults, **overrides})
 
 
-def metered(clock: FrozenClock, ledger: Ledger, *, purpose="agent_reply", fails=None) -> MeteredLlm:
-    return MeteredLlm(SlowStandIn(clock, fails=fails), clock=clock, record=ledger, purpose=purpose)
+def metered(
+    clock: FrozenClock,
+    ledger: Ledger,
+    *,
+    purpose="agent_reply",
+    fails=None,
+    budget: TurnBudget | None = None,
+) -> MeteredLlm:
+    return MeteredLlm(
+        SlowStandIn(clock, fails=fails),
+        clock=clock,
+        record=ledger,
+        purpose=purpose,
+        budget=budget,
+    )
 
 
 class TestTheTrail:
@@ -152,3 +171,54 @@ class TestWhatIsNotRecorded:
         # field, is numbers and identifiers.
         assert not any("CPF" in value for value in recorded.values() if isinstance(value, str))
         assert not any("verific" in value for value in recorded.values() if isinstance(value, str))
+
+
+class TestTheTurnBudget:
+    """Item 41 — o teto de custo por turno. `MeteredLlm` é o único ponto por
+    onde toda chamada de LLM de um turno passa (ruling B); um `TurnBudget`
+    compartilhado entre as instâncias de finalidades diferentes (agent_reply,
+    judge_pre, embedding) é como o teto vale para a SOMA, não por finalidade."""
+
+    async def test_a_call_beyond_the_limit_is_refused_and_leaves_no_row(self) -> None:
+        """A chamada recusada nunca sai para a rede: `reserve()` corre ANTES
+        do request, então não custa nada e não vira linha no invoice."""
+        clock, ledger = FrozenClock(START), Ledger()
+        budget = TurnBudget(limit=1)
+
+        await metered(clock, ledger, budget=budget).chat(a_request())
+        with pytest.raises(TurnBudgetExceeded):
+            await metered(clock, ledger, budget=budget).chat(a_request())
+
+        assert len(ledger.records) == 1, "a segunda chamada nunca foi feita"
+
+    async def test_the_budget_is_shared_across_purposes(self) -> None:
+        """Um `TurnBudget` só, para as três finalidades do turno — é o que
+        faz o teto valer para o turno inteiro, e não reiniciar a cada
+        `MeteredLlm` novo (ruling B: contar em vários lugares diverge)."""
+        clock, ledger = FrozenClock(START), Ledger()
+        budget = TurnBudget(limit=2)
+
+        await metered(clock, ledger, purpose="agent_reply", budget=budget).chat(a_request())
+        await metered(clock, ledger, purpose="judge_pre", budget=budget).chat(a_request())
+        with pytest.raises(TurnBudgetExceeded):
+            await metered(clock, ledger, purpose="embedding", budget=budget).embed(
+                ["oi"], model="e3-small"
+            )
+
+        assert budget.used == 2
+
+    async def test_a_normal_turn_never_touches_the_default_budget(self) -> None:
+        """Ruling G, a segunda metade: um turno normal — uma geração sem
+        tool, o juiz, uma embedding — fica bem abaixo do default, então o
+        teto nunca dispara para um turno legítimo."""
+        clock, ledger = FrozenClock(START), Ledger()
+        budget = TurnBudget(limit=DEFAULT_TURN_LLM_CALL_LIMIT)
+
+        await metered(clock, ledger, purpose="agent_reply", budget=budget).chat(a_request())
+        await metered(clock, ledger, purpose="judge_pre", budget=budget).chat(a_request())
+        await metered(clock, ledger, purpose="embedding", budget=budget).embed(
+            ["oi"], model="e3-small"
+        )
+
+        assert budget.used == 3
+        assert budget.used < DEFAULT_TURN_LLM_CALL_LIMIT

@@ -34,6 +34,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 
 from agents_runtime.agent_core.llm import ChatRequest, LlmPort, Message, strip_code_fence
+from agents_runtime.agent_core.metering import TurnBudgetExceeded
 from agents_runtime.evals.rubrics import Criterion, Rubric, score
 
 #: Platform-fixed (D1, decisão 79). Never per tenant.
@@ -312,18 +313,31 @@ async def guarded_reply(
     judgements: list[Judgement] = []
     best: tuple[str, Judgement] | None = None
     feedback: tuple[str, ...] = ()
+    draft: str | None = None
+    #: Item 41: o teto do turno cortou a escalada NO MEIO de uma tentativa.
+    #: Distinto de "judge_unusable" (que é sobre O JUIZ não conseguir ler a
+    #: resposta) — aqui pode nem ter havido resposta do juiz nenhuma.
+    budget_exceeded = False
 
     for attempt in range(limit + 1):
-        draft = await generate(attempt, feedback)
-
         try:
-            judgement = await judge(draft, context)
-        except JudgeError as error:
-            # Fail-closed, and visibly so: no rubric behind it, so it can never
-            # be mistaken for evidence that the draft was fine.
-            judgement = Judgement(
-                outcome=FAIL, score=0.0, rubrics=(), rationale=f"judge unusable: {error}"
-            )
+            draft = await generate(attempt, feedback)
+
+            try:
+                judgement = await judge(draft, context)
+            except JudgeError as error:
+                # Fail-closed, and visibly so: no rubric behind it, so it can
+                # never be mistaken for evidence that the draft was fine.
+                judgement = Judgement(
+                    outcome=FAIL, score=0.0, rubrics=(), rationale=f"judge unusable: {error}"
+                )
+        except TurnBudgetExceeded:
+            # Ruling C: o teto para a ESCALADA, não a resposta. Esta tentativa
+            # não terminou (não deixou julgamento), então não entra na conta
+            # de `attempts` nem em `judgements` — o que sobra é o `best` de
+            # tentativas ANTERIORES que já tinham terminado, se houver.
+            budget_exceeded = True
+            break
         judgements.append(judgement)
 
         if judgement.outcome == CRITICAL:
@@ -350,13 +364,16 @@ async def guarded_reply(
         feedback = judgement.failed_criteria
 
     if best is None:
-        # Every attempt failed to produce a usable judgement: there is no
-        # evidence this draft is safe, so nothing goes out.
+        # Nenhuma tentativa produziu julgamento utilizável — por esgotar as
+        # regenerações (motivo de sempre) ou porque o teto do turno cortou a
+        # escalada antes de qualquer uma terminar (item 41). Nos dois casos
+        # não há evidência de que ESTE rascunho é seguro, então nada sai — e
+        # só neste ramo, sem nenhum rascunho para entregar (ruling C).
         return GuardedOutcome(
             draft=None,
-            judgement=judgements[-1],
+            judgement=judgements[-1] if judgements else None,
             attempts=len(judgements),
-            blocked_by="judge_unusable",
+            blocked_by="budget_exceeded" if budget_exceeded else "judge_unusable",
             judgements=tuple(judgements),
             last_draft=draft,
         )

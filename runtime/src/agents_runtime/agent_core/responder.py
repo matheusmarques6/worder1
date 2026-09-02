@@ -60,7 +60,13 @@ from agents_runtime.agent_core.media import (
     media_step_detail,
     speechless_media,
 )
-from agents_runtime.agent_core.metering import CallRecord, MeteredLlm
+from agents_runtime.agent_core.metering import (
+    DEFAULT_TURN_LLM_CALL_LIMIT,
+    TURN_LLM_CALL_LIMIT_VARIABLE,
+    CallRecord,
+    MeteredLlm,
+    TurnBudget,
+)
 from agents_runtime.agent_core.mission_resolver import (
     DISCOVERY_EVENT,
     MissionUnavailable,
@@ -251,6 +257,15 @@ def default_rubrics_directory() -> Path:
     return Path(agents_runtime.__file__).parents[2] / "evals" / "rubrics"
 
 
+def default_turn_llm_call_limit() -> int:
+    """Item 41 — o teto de chamadas de LLM por turno, lido uma vez na
+    composição (mesmo padrão de `default_rubrics_directory` acima). O default
+    e a conta de onde ele saiu estão em `metering.DEFAULT_TURN_LLM_CALL_LIMIT`
+    e em `runtime/FORK.md`."""
+    override = os.environ.get(TURN_LLM_CALL_LIMIT_VARIABLE)
+    return int(override) if override else DEFAULT_TURN_LLM_CALL_LIMIT
+
+
 def _as_chat(messages: Sequence[PendingMessage]) -> list[Message]:
     """A conversa na gramática do provedor: o contato é `user`, o agente é
     `assistant`. Um humano em takeover também fala como o agente — para o
@@ -282,13 +297,21 @@ def build_responder(
     agent_llm_from_org_keys: bool = False,
     base_secret: str | None = None,
     shopify_transport: httpx.AsyncBaseTransport | None = None,
+    turn_llm_call_limit: int | None = None,
 ):
     """O responder real. `llm` é a porta da PLATAFORMA (Judge 1 + embeddings —
     D4); com `agent_llm_from_org_keys` ligado (produção), a resposta do agente
     sai pela cascata BYO de organization_api_keys. Nos testes, desligado: o
-    dublê injetado serve para tudo."""
+    dublê injetado serve para tudo.
+
+    `turn_llm_call_limit` (item 41) é o teto de chamadas de LLM por turno —
+    `None` lê o default/override de ambiente uma vez aqui, na composição, do
+    mesmo jeito que `rubrics_directory` lê o seu."""
     clock = clock or SystemClock()
     rubrics = load_rubrics(rubrics_directory or default_rubrics_directory())
+    turn_llm_call_limit = (
+        turn_llm_call_limit if turn_llm_call_limit is not None else default_turn_llm_call_limit()
+    )
 
     async def respond(job: InboundJob) -> dict[str, Any] | None:
         async with await psycopg.AsyncConnection.connect(dsn, autocommit=True) as conn:
@@ -383,7 +406,11 @@ def build_responder(
                 # avançar mesmo assim — senão o coalescer a recria para sempre.
                 return None
 
-            metered = partial(_metered, conn, job, llm, clock)
+            # Item 41: UM teto por turno, compartilhado pelas três finalidades
+            # (agent_reply, judge_pre, embedding) que `metered(...)` constrói
+            # abaixo — é por isso que o `TurnBudget` nasce aqui, fora delas.
+            turn_budget = TurnBudget(limit=turn_llm_call_limit)
+            metered = partial(_metered, conn, job, llm, clock, budget=turn_budget)
             gate = should_think(pending)
 
             # --- progresso no chat (pedido 17/08): os chips do inbox. Adereço
@@ -635,7 +662,9 @@ def build_responder(
                 # é seguro — nenhuma mensagem aparece duas vezes.
                 conversation = _as_chat(transcript + pending)
 
-                chat = _metered(conn, job, agent_llm, clock, "agent_reply", version.agent_id)
+                chat = _metered(
+                    conn, job, agent_llm, clock, "agent_reply", version.agent_id, budget=turn_budget
+                )
                 # Juízes do lojista (radial → Juízes) entram como rubrica extra,
                 # sempre standard — o veto de silêncio segue só da plataforma.
                 judge = PreSendJudge(
@@ -780,6 +809,17 @@ def build_responder(
                         )
 
                 if outcome.draft is None:
+                    # Item 41: se o motivo foi o teto do turno (e não o juiz),
+                    # o título tem de dizer isso — um alerta que culpa o Judge
+                    # 1 por uma reprovação que ele nunca chegou a fazer é o
+                    # tipo de comentário/registro que mente (regra da casa).
+                    budget_capped = outcome.blocked_by == "budget_exceeded"
+                    title = (
+                        "Teto de custo do turno foi atingido antes de haver "
+                        "rascunho aprovável — nada foi enviado"
+                        if budget_capped
+                        else "Judge 1 reprovou a resposta e nada foi enviado"
+                    )
                     # O alerta vem ANTES da conclusão: uma morte no meio deixa
                     # alerta duplicado (benigno e visível) em vez de silêncio.
                     async with conn.transaction():
@@ -789,7 +829,7 @@ def build_responder(
                             organization_id=job.organization_id,
                             type=alerts_repo.CRITICAL_VIOLATION,
                             severity="critical",
-                            title="Judge 1 reprovou a resposta e nada foi enviado",
+                            title=title,
                             payload={
                                 "conversation_id": str(job.conversation_id),
                                 "blocked_by": outcome.blocked_by,
@@ -806,9 +846,12 @@ def build_responder(
                         )
                     retained = (outcome.last_draft or "").strip()
                     preview = f" — ia enviar: “{retained[:120]}”" if retained else ""
-                    await note_step(
-                        "skipped", "Resposta retida pela verificação de qualidade" + preview
+                    skip_reason = (
+                        "Teto de custo do turno atingido"
+                        if budget_capped
+                        else "Resposta retida pela verificação de qualidade"
                     )
+                    await note_step("skipped", skip_reason + preview)
                     return None
 
                 # --- blocked_topics (item 30): a última coisa antes do envio.
@@ -933,6 +976,8 @@ def _metered(
     clock: Clock,
     purpose: str,
     agent_id: UUID | None = None,
+    *,
+    budget: TurnBudget | None = None,
 ) -> MeteredLlm:
     """Um medidor por finalidade: o custo do agente e o custo do portão são
     linhas diferentes da mesma conta.
@@ -941,12 +986,17 @@ def _metered(
     `organization_id`/`conversation_id` chegam do `job` — nunca pelo
     `CallRecord`, que `metering.py` declara livre de identificadores de
     negócio além de `purpose`/`provider`/`model`.
+
+    `budget` (item 41) é o `TurnBudget` do TURNO — a mesma instância entra
+    aqui uma vez por finalidade (agent_reply, judge_pre, embedding), para que
+    as três dividam o mesmo teto em vez de cada uma ter o seu.
     """
     return MeteredLlm(
         llm,
         clock=clock,
         record=_recorder(conn, job.organization_id, job.conversation_id, agent_id),
         purpose=purpose,
+        budget=budget,
     )
 
 
