@@ -657,9 +657,41 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   price rules órfãs nunca são limpas, e o recurso `PriceRule`/`DiscountCode` do REST está deprecado
   na Shopify — migrar para GraphQL é maior que o item 35 e devia virar fila.
 
-- [ ] **34. Templates com componentes e variáveis** `[relatado]`
+- [x] **34. Templates com componentes e variáveis** `[relatado]` · commits `9af5ca4d` `5c775704`
+  `d330182d` `ecc3eff0`
   `runtime/src/agents_runtime/channels/cloud_api.py:88-94` monta só `{name, language}`.
   Template com parâmetro sai vazio ou é rejeitado pela Meta.
+
+  **O buraco não era só do canal.** O sender descarta o payload ao rebaixar para template
+  (`sender.py:220-229`, e está certo: o que sai é o template aprovado, não o texto livre), o veredito
+  do preflight devolve só `verdict`/`template_name`/`template_language`
+  (`20260813000007:88`), e nem `channel_template_policies` nem `commercial_moments.template_readiness`
+  têm campo de variável. A `public.whatsapp_templates` existe com `components`/`variables_count` desde
+  agosto e `grep whatsapp_templates runtime/src` voltava **vazio**.
+
+  **Entregue: o canal aprende a forma, e recusa fechado o que não pode preencher.**
+  `internal.whatsapp_template_shape` (`20260901000009`) devolve as quatro colunas cruas da tabela
+  legada — `SECURITY DEFINER` escopada por org, no molde do item 20, porque a tabela está com
+  `relrowsecurity=false` e `pg_policy` vazio e um `grant select` daria ao worker os templates de toda
+  org. `channels/template_components.py` é espelho de `template-components.ts:39-151`, conferido
+  função a função no review, inclusive o formato duplo (JSONB da Meta e colunas achatadas). Template
+  com parâmetro e sem valor levanta `TemplateParametersMissing` **antes do wire**, com o template, o
+  esperado e o recebido na mensagem; classifica como PERMANENT (`failures.py:103`), então não retenta
+  para sempre, e abre linha em `public.alerts` com dedup por template.
+
+  **Linha ausente significa "não sei" e envia como hoje** — recusar por falta de sincronização
+  calaria org que hoje funciona. Divergência declarada nos dois arquivos: `components` é omitido
+  quando vazio, onde o TS manda `components: []`, para o envio sem parâmetro sair byte a byte como
+  saía.
+
+  **Devolvido ao usuário, não implementado (era o ruling D):** de onde viriam os VALORES das
+  variáveis. Exige mexer em três contratos SQL — `channel_template_policies`
+  (`20260813000003:24-27`), `commercial_moments.template_readiness` (`20260813000005:42`) e o retorno
+  do `sender_preflight` (`20260813000007:88`) — e o achado que muda a pergunta é que **o TS também
+  não tem fonte automática** para o fallback de 24h: lá os valores vêm do operador no inbox ou das
+  variáveis resolvidas da campanha. Escolher uma fonte é decisão de produto, não paridade. Nota do
+  review para essa decisão: `header_media_url` já existe na linha da tabela, então o caso de header
+  de mídia tem fonte no banco — a porta não a devolve por paridade com o TS.
 
 - [ ] **35. Alinhar versões de API** `[confirmado]`
   Meta: TS `v22.0` (`src/lib/whatsapp/api-version.ts:6`) × Python `v19.0` (`cloud_api.py:29`, `render.yaml`).
