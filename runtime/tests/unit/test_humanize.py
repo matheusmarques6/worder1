@@ -10,6 +10,7 @@ falhou = nada saiu (retry ok); bolha do meio falhou = o que saiu VALE.
 
 import json
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -26,7 +27,14 @@ from agents_runtime.channels.humanize import (
 from agents_runtime.clock import SystemClock
 from agents_runtime.queueing.sender import send_humanized
 from agents_runtime.repository.outbox import ClaimedSend
+from tests.support.clock import FrozenClock
 from tests.support.fake_conn import RecordingConnection
+
+#: Item 38, fix round 1: os testes de `TestReadAndTyping` precisam de
+#: `humanize_delays=True` para provar o disparo (Minor 2: o knob desliga os
+#: dois juntos, como o TS) — `FrozenClock.sleep` avança o relógio sem esperar
+#: de verdade, então isso não deixa a suíte lenta.
+_FROZEN = FrozenClock(datetime(2026, 9, 2, 12, 0, tzinfo=UTC))
 
 VECTORS = json.loads(
     (Path(__file__).parent / "fixtures" / "bubble_vectors.json").read_text()
@@ -190,7 +198,13 @@ class TestSendHumanized:
 
 
 class TestReadAndTyping:
-    """Item 38 — read + typing de carona, antes de CADA bolha (ruling E)."""
+    """Item 38 — read + typing de carona, antes de CADA bolha (ruling E).
+
+    `humanize_delays=True` + `_FROZEN` em toda esta classe (fix round 1,
+    Minor 2): o disparo agora exige o ritmo LIGADO, como o TS
+    (`!skipDelays && inboundMessageId`), e `FrozenClock.sleep` avança o
+    relógio sem esperar de verdade — a suíte continua instantânea.
+    """
 
     async def test_no_wamid_means_silence(self) -> None:
         """Ruling D: sem wamid do último inbound, nada é mandado."""
@@ -199,8 +213,8 @@ class TestReadAndTyping:
             channel,
             RecordingConnection(),
             _send(THREE_PARAGRAPHS),  # last_inbound_wamid=None, default
-            humanize_delays=False,
-            clock=SystemClock(),
+            humanize_delays=True,
+            clock=_FROZEN,
         )
         assert channel.presence_calls == []
 
@@ -212,8 +226,8 @@ class TestReadAndTyping:
             channel,
             RecordingConnection(),
             _send(THREE_PARAGRAPHS, last_inbound_wamid="wamid.inbound-1"),
-            humanize_delays=False,
-            clock=SystemClock(),
+            humanize_delays=True,
+            clock=_FROZEN,
         )
         assert channel.presence_calls == ["wamid.inbound-1"] * 3
 
@@ -223,8 +237,8 @@ class TestReadAndTyping:
             channel,
             RecordingConnection(),
             _send("oi", last_inbound_wamid="wamid.inbound-2"),
-            humanize_delays=False,
-            clock=SystemClock(),
+            humanize_delays=True,
+            clock=_FROZEN,
         )
         assert channel.presence_calls == ["wamid.inbound-2"]
 
@@ -236,8 +250,38 @@ class TestReadAndTyping:
             channel,
             RecordingConnection(),
             _send("oi", last_inbound_wamid="wamid.inbound-3"),
-            humanize_delays=False,
-            clock=SystemClock(),
+            humanize_delays=True,
+            clock=_FROZEN,
         )
         assert channel.presence_calls == ["wamid.inbound-3"]
         assert delivered == [("wamid-1", "oi")]
+
+    async def test_humanize_delays_off_turns_presence_off_too(self) -> None:
+        """Fix round 1, Minor 2: `cloud-sender.ts:257` liga o typing sob
+        `!skipDelays && inboundMessageId` — o MESMO knob desliga os dois. O
+        runtime divergia (typing disparava mesmo com o ritmo desligado);
+        alinhado agora."""
+        channel = _StubChannel()
+        await send_humanized(
+            channel,
+            RecordingConnection(),
+            _send(THREE_PARAGRAPHS, last_inbound_wamid="wamid.inbound-4"),
+            humanize_delays=False,
+            clock=SystemClock(),
+        )
+        assert channel.presence_calls == []
+
+    async def test_a_template_never_fires_presence(self) -> None:
+        """Fix round 1, Minor 1: `sendHumanizedReply` do TS é exclusivo de
+        resposta TEXTUAL de IA — template sai por rota própria que nunca
+        chama `sendTyping`. O runtime divergia (disparava também para
+        template); alinhado agora."""
+        from dataclasses import replace as dc_replace
+
+        channel = _StubChannel()
+        send = dc_replace(
+            _send("x", last_inbound_wamid="wamid.inbound-5"),
+            payload={"template": {"name": "t", "language": "pt_BR"}},
+        )
+        await send_humanized(channel, RecordingConnection(), send, humanize_delays=True, clock=_FROZEN)
+        assert channel.presence_calls == []

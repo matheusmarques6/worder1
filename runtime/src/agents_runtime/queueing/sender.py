@@ -150,9 +150,24 @@ async def send_humanized(
         bubbles = [text.strip()] if text.strip() else []
     else:
         bubbles = split_into_bubbles(text) if isinstance(text, str) else []
+
+    # Fix round 1 (review do item 38, Minor 1 e 2) — dois pontos onde o
+    # runtime divergia do TS em silêncio, agora alinhados:
+    #   1. `sendHumanizedReply` (`cloud-sender.ts`) só existe para resposta
+    #      TEXTUAL de IA — template sai por rota TS própria que nunca chama
+    #      `sendTyping`. `bubbles` vazio é exatamente "não é bolha de
+    #      texto" (template ou payload sem `text`), então o gate exclui esse
+    #      ramo do disparo.
+    #   2. `cloud-sender.ts:257` dispara typing sob `!skipDelays &&
+    #      inboundMessageId` — o mesmo knob que desliga o ritmo desliga o
+    #      typing junto. `humanize_delays` é esse knob aqui.
+    # Alinhado ao TS nos dois pontos; não é "melhor" nem YAGNI — é paridade.
+    fire_presence = bool(bubbles) and humanize_delays
+
     if len(bubbles) <= 1:
         # Template, payload não-texto ou bolha única: um envio, como sempre.
-        await _mark_read_and_typing(channel, conn, send)
+        if fire_presence:
+            await _mark_read_and_typing(channel, conn, send)
         wamid = await _send_reporting(channel, conn, send)
         body = bubbles[0] if bubbles else None
         return [(wamid, body)] if body is not None else [(wamid, "")]
@@ -163,7 +178,8 @@ async def send_humanized(
         delay_ms = pacing.delays_ms[index]
         if delay_ms:
             await clock.sleep(delay_ms / 1000)
-        await _mark_read_and_typing(channel, conn, send)
+        if fire_presence:
+            await _mark_read_and_typing(channel, conn, send)
         try:
             wamid = await _send_reporting(channel, conn, replace(send, payload={"text": bubble}))
         except Exception:

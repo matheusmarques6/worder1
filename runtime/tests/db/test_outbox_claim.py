@@ -17,7 +17,7 @@ import psycopg
 import pytest
 
 from tests.db.conftest import TwoTenants, as_app_role
-from tests.db.factories import Thread, create_outbox_item, create_thread
+from tests.db.factories import Thread, create_message, create_outbox_item, create_thread, unique_id
 
 LIMIT = 50
 
@@ -176,6 +176,121 @@ class TestTheClaim:
             conn.commit()
 
         assert drained == {two_tenants.a.id, two_tenants.b.id}
+
+
+# --- item 38 — o wamid do último inbound viaja com o claim ------------------
+#
+# Achado Important da review (fix round 1): a lógica SQL nova
+# (`20260902000002_claim_outbox_last_inbound_wamid.sql`) não tinha teste
+# nenhum aqui — só leitura. Esta classe fecha isso, mas continua sem prova
+# EXECUTADA: `tests/db` pede Postgres em Docker, indisponível nesta máquina
+# (o mesmo texto vale para toda a suíte `tests/db`, não é peculiaridade
+# desta classe). `row[11]` é a mesma posição que `repository/engine.py`
+# desempacota como `last_inbound_wamid` — testado pelo índice exato, porque
+# é justamente a correção do desempacotamento POR POSIÇÃO que está em jogo.
+
+
+class TestLastInboundWamid:
+    def test_the_wamid_of_the_last_inbound_travels_with_the_claim(
+        self, admin: psycopg.Connection, two_tenants: TwoTenants, thread: Thread
+    ) -> None:
+        create_message(
+            admin,
+            two_tenants.a.id,
+            thread,
+            direction="inbound",
+            seq=1,
+            provider_message_id="wamid.first",
+        )
+        outbox_id = create_outbox_item(admin, two_tenants.a.id, thread)
+
+        (row,) = claim(admin, uuid.uuid4())
+        assert row[0] == outbox_id
+        assert row[11] == "wamid.first"
+
+    def test_multiple_inbounds_pick_the_highest_seq(
+        self, admin: psycopg.Connection, two_tenants: TwoTenants, thread: Thread
+    ) -> None:
+        # seq é atômico por conversa (internal.next_message_seq); dois
+        # inbounds fora de ordem de inserção não deveriam confundir o "select
+        # ... order by seq desc limit 1".
+        create_message(
+            admin,
+            two_tenants.a.id,
+            thread,
+            direction="inbound",
+            seq=2,
+            provider_message_id="wamid.newer",
+        )
+        create_message(
+            admin,
+            two_tenants.a.id,
+            thread,
+            direction="inbound",
+            seq=1,
+            provider_message_id="wamid.older",
+        )
+        create_outbox_item(admin, two_tenants.a.id, thread)
+
+        (row,) = claim(admin, uuid.uuid4())
+        assert row[11] == "wamid.newer"
+
+    def test_an_outbound_message_never_counts_as_the_last_inbound(
+        self, admin: psycopg.Connection, two_tenants: TwoTenants, thread: Thread
+    ) -> None:
+        create_message(
+            admin,
+            two_tenants.a.id,
+            thread,
+            direction="inbound",
+            seq=1,
+            provider_message_id="wamid.inbound",
+        )
+        create_message(
+            admin,
+            two_tenants.a.id,
+            thread,
+            direction="outbound",
+            seq=2,
+            provider_message_id="wamid.outbound",
+        )
+        create_outbox_item(admin, two_tenants.a.id, thread)
+
+        (row,) = claim(admin, uuid.uuid4())
+        assert row[11] == "wamid.inbound"
+
+    def test_no_inbound_yet_means_null(
+        self, admin: psycopg.Connection, two_tenants: TwoTenants, thread: Thread, pending: uuid.UUID
+    ) -> None:
+        # `thread` (create_thread) só cria a conversa, nenhuma mensagem —
+        # ruling D depende do subselect devolver null aqui, não estourar.
+        (row,) = claim(admin, uuid.uuid4())
+        assert row[11] is None
+
+    def test_a_funnel_touch_without_a_conversation_means_null_too(
+        self, admin: psycopg.Connection, two_tenants: TwoTenants, thread: Thread
+    ) -> None:
+        # conversation_id é NULLABLE em internal.message_outbox de propósito:
+        # um toque de funil pode preceder a conversa (ruling D do item 38).
+        with admin.cursor() as cur:
+            cur.execute(
+                """
+                insert into internal.message_outbox
+                    (organization_id, conversation_id, contact_id, channel_account_id,
+                     kind, payload, idempotency_key)
+                values (%s, null, %s, %s, 'funnel_touch', %s, %s)
+                """,
+                (
+                    two_tenants.a.id,
+                    thread.contact_id,
+                    thread.channel_account_id,
+                    psycopg.types.json.Jsonb({"text": "toque"}),
+                    unique_id("idem"),
+                ),
+            )
+
+        (row,) = claim(admin, uuid.uuid4())
+        assert row[11] is None
 
 
 # --- os desfechos -----------------------------------------------------------

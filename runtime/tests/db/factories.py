@@ -141,15 +141,21 @@ def create_message(
     seq: int = 1,
     text: str = "oi",
     content: dict | None = None,
+    provider_message_id: str | None = None,
 ) -> uuid.UUID:
     """`content` cru quando a mensagem não é texto puro — mídia, sobretudo
-    (item 31). Sem ele só dá para montar a conversa que o motor já lia."""
+    (item 31). Sem ele só dá para montar a conversa que o motor já lia.
+
+    `provider_message_id` (item 38): o wamid que `claim_outbox_batch` lê de
+    volta para o read/typing — ausente por padrão porque a maioria dos testes
+    de conversa não precisa dele."""
     with conn.cursor() as cur:
         cur.execute(
             """
             insert into public.messages
-                (organization_id, conversation_id, direction, seq, channel, author_type, content)
-            values (%s, %s, %s, %s, 'whatsapp', %s, %s)
+                (organization_id, conversation_id, direction, seq, channel, author_type,
+                 content, provider_message_id)
+            values (%s, %s, %s, %s, 'whatsapp', %s, %s, %s)
             returning id
             """,
             (
@@ -159,6 +165,7 @@ def create_message(
                 seq,
                 "contact" if direction == "inbound" else "agent",
                 psycopg.types.json.Jsonb(content if content is not None else {"text": text}),
+                provider_message_id,
             ),
         )
         (message_id,) = cur.fetchone()
