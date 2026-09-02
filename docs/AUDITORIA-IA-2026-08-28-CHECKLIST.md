@@ -1021,8 +1021,8 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   (mesma contagem — os dois Minor são refactors sem mudança de comportamento). `lint-imports`: 3
   contratos mantidos, 0 quebrados.
 
-- [x] **40. Fechar ou reusar os clientes httpx de LLM** `[confirmado]` · commit `23d6a76d` ·
-  relatório `task-40-report.md`
+- [x] **40. Fechar ou reusar os clientes httpx de LLM** `[confirmado]` · commits `23d6a76d`
+  `9e0a1864` `8b6c6891` · relatório `task-40-report.md`
   `agent_core/providers.py::client_for` constrói o adapter por turno; os três criam `httpx.AsyncClient`
   no `__init__` (`openrouter.py::OpenRouterLlm`, `direct_providers.py::OpenAICompatibleLlm` e
   `::AnthropicLlm`) e nenhum tinha `aclose()`. O único `aclose` do runtime era o do canal Meta.
@@ -1052,28 +1052,19 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   conta própria.
 
   **O que subiu (ruling C — o mínimo que fecha).** `aclose()` nos três adapters, delegando para o
-  `httpx.AsyncClient` interno. `respond()` — o único ponto onde o cliente resolvido por
-  `resolve_agent_llm` nasce e morre — fecha ele num `finally` que cobre o corpo inteiro do turno
-  (da busca de conhecimento ao envio, todo `return` intermediário incluído: judge reprovou, assunto
-  bloqueado, etc.), guardado por `owns_agent_llm`: só fecha o cliente que a cascata BYO construiu,
-  nunca o `llm` de plataforma do Judge 1. Nenhum gerenciador de ciclo de vida, nenhum registro global —
-  só o `try/finally` que o item pedia.
+  `httpx.AsyncClient` interno. O fechamento em si mora em
+  `agent_core/providers.py::scoped_agent_llm` — o único mecanismo que fecha o cliente resolvido por
+  `resolve_agent_llm`, guardado por `owns`: só fecha o cliente que a cascata BYO construiu, nunca o
+  `llm` de plataforma do Judge 1. Nenhum gerenciador de ciclo de vida entre turnos, nenhum registro
+  global, nenhum pool — só um `finally` (por trás de um `@asynccontextmanager`) que cobre o corpo
+  inteiro do turno, todo `return` intermediário incluído.
 
-  **Achado vizinho 1 (ruling F) — o `aclose()` do canal Meta que só o teste chama.** Registrado, não
+  **Achado vizinho (ruling F) — o `aclose()` do canal Meta que só o teste chama.** Registrado, não
   consertado junto: `channels/cloud_api.py::CloudApiChannel.aclose` existe, mas o único chamador em
   `runtime/src` é a própria definição; em produção a instância vive por processo inteiro e nunca é
   fechada num shutdown gracioso — quem chama é só `tests/db/test_cloud_api_channel_real_wiring.py`,
   como limpeza de teste. Não é o mesmo defeito (ali o cliente É de vida longa por desenho; falta só o
   `atexit`/shutdown que nunca existiu).
-
-  **Achado vizinho 2 — `touch()` repete o mesmo padrão e hoje também não fecha. Ruling C disparou:
-  reportado, não espalhado.** `agent_core/toucher.py::build_toucher.touch` chama `resolve_agent_llm` da
-  mesma forma que `respond()` — um segundo ponto onde um adapter de LLM nasce e morre. O ruling C deste
-  item foi explícito: se o fechamento tivesse que acontecer em mais de um lugar, o trabalho para e
-  reporta antes de espalhar `try/finally` pelo código, em vez de decidir sozinho por espalhar ou por
-  ignorar. Este item fechou só `respond()` — o único lugar citado no achado original e no ruling C
-  literal; `touch()` fica em aberto, registrado aqui, mesma classe de duplicação que o item 44
-  ("Fatorar `_prepare_turn` entre responder e toucher") já rastreia como dívida.
 
   **O TS não é referência aqui (ruling H) — divergência estrutural, não paridade que falta.**
   `ai-providers.ts` fala com todo provider pelo `fetch` global do runtime Node/undici, uma vez por
@@ -1082,21 +1073,48 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `httpx.AsyncClient`, não porque o TS faz algo equivalente que faltava portar. Declarado em
   comentário no `OpenRouterLlm.aclose` (`openrouter.py`), e aqui e no `FORK.md`.
 
-  **Teste que trava a regressão (ruling E).**
-  `tests/unit/test_agent_llm_closes_after_the_turn.py` — sem `respond()` rodar de ponta a ponta aqui
-  (precisa de Postgres real: guards, arbitragem de missão, conhecimento, trilha — por isso vive em
-  `tests/db`, que não roda nesta suíte), a prova é por AST, mesmo padrão de
-  `test_listener_connects_in_one_guarded_place.py`: acha a `respond()` real (a que chama
-  `resolve_agent_llm`, não a `fixed_responder` trivial) e afirma que ela fecha o cliente dentro de um
-  `finally` guardado por um `if` — falha se o `finally` for removido (o cliente volta a vazar) ou se a
-  guarda virar chamada incondicional (o cliente de plataforma do Judge 1 passaria a fechar a cada
-  turno). Testado ao vivo: revertendo o `finally` para um `pass`, as duas asserções quebram. Mais um
-  teste comportamental por adapter (`MockTransport`, sem rede) provando que `aclose()` fecha o
-  `httpx.AsyncClient` de verdade (`client.is_closed` vira `True`).
+  **Teste que trava a regressão (ruling E) — reescrito no fix round 1, ver abaixo.**
 
-  **Suíte:** `tests/unit` 1193 verdes (`PYTHONUTF8=1`; 1188 da baseline local + 5 testes novos —
-  1188, não os 1187 do brief: a contagem já havia avançado por commits de item 39 fora da amostragem
-  do brief). `lint-imports`: 3 contratos mantidos, 0 quebrados.
+  **Fix round 1** (achados da review) · commits `9e0a1864` (docs) `8b6c6891` (código) · relatório,
+  seção "Fix round 1" em `task-40-report.md`.
+
+  **Important 1 — o teste do ruling E provava a forma, não o comportamento.** A primeira versão só
+  afirmava, por AST, que `respond()` tinha um `finally` com `aclose` guardado por um `if`. A review
+  reproduziu a validação original e foi além: extraiu a MESMA guarda e o MESMO fechamento para uma
+  função auxiliar — comportamento idêntico — e as asserções quebraram do mesmo jeito, provando que o
+  teste protegia o formato sintático, não o fechamento em si; um refactor legítimo o deixaria vermelho
+  sem nada ter quebrado. Corrigido extraindo o fechamento para
+  `agent_core/providers.py::scoped_agent_llm` e reescrevendo a prova como comportamental
+  (`tests/unit/test_agent_llm_closes_after_the_turn.py::TestScopedAgentLlmClosesTheClientItOwns`),
+  contra um `LlmPort` falso que registra a ordem dos eventos: fecha depois de TODAS as chamadas do
+  turno; fecha quando o turno levanta exceção; fecha quando o turno é CANCELADO
+  (`asyncio.CancelledError` — caminho que a review pediu); nunca fecha o cliente de plataforma do
+  Judge 1. Critério duplo validado ao vivo: removendo o `aclose()` do `finally`, as três primeiras
+  asserções quebram; trocando o `@asynccontextmanager` por uma classe `__aenter__`/`__aexit__`
+  equivalente (mesmo comportamento, mecanismo diferente), as nove continuam verdes. O AST original
+  virou `TestTheTurnWiresIntoTheScope`, cinto e suspensório — checa só que `respond()`/`touch()`
+  chamam `scoped_agent_llm`, sem opinar sobre como o fechamento acontece por dentro.
+
+  **Important 2 — a nota anterior sobre o item 44 estava errada.** O texto original deste item dizia
+  que a dívida de `touch()` não fechar era "a mesma classe de duplicação que o item 44 já rastreia".
+  O item 44 lista três divergências entre `responder.py` e `toucher.py` (envelope JSON, conhecimento,
+  tool-loop) e NÃO menciona cliente HTTP não fechado — a afirmação de cobertura era falsa, o tipo de
+  defeito que esta auditoria persegue. A releitura do ruling C: `respond()` e `touch()` são dois
+  pontos INDEPENDENTES onde o adapter de LLM nasce e morre — fechar nos dois não é espalhar remendo,
+  é o mesmo conserto aplicado nos dois lugares onde o defeito existe. **`touch()`
+  (`agent_core/toucher.py::build_toucher.touch`) ganhou a mesma guarda `owns_agent_llm` e o mesmo
+  `async with scoped_agent_llm(...)` que `respond()` já tinha.** Não sobra dívida sem dono: os dois
+  caminhos onde um `httpx.AsyncClient` de LLM nasce por turno fecham.
+
+  **Suíte após o fix round 1:** `tests/unit` 1197 verdes (`PYTHONUTF8=1`; era 1193). O arquivo de
+  teste do item 40 foi reescrito: saíram os 2 testes por AST que checavam a forma do `finally`;
+  entraram 4 comportamentais (`TestScopedAgentLlmClosesTheClientItOwns`) e 2 de wiring por AST, um
+  por ponto de fechamento (`respond()` e `touch()`) — 9 testes no arquivo (era 5), líquido +4 na
+  suíte. `lint-imports`: 3 contratos mantidos, 0 quebrados.
+
+  **Suíte antes do fix round 1:** `tests/unit` 1193 verdes (`PYTHONUTF8=1`; 1188 da baseline local +
+  5 testes novos — 1188, não os 1187 do brief: a contagem já havia avançado por commits do item 39
+  fora da amostragem do brief). `lint-imports`: 3 contratos mantidos, 0 quebrados.
 
 - [ ] **41. Teto de custo por turno** `[relatado]`
   `MAX_TOOL_ROUNDS=3` é por tentativa e o juiz dá 3 tentativas → pior caso 12 gerações + 3 juízes por
