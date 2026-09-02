@@ -1306,11 +1306,47 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   **Suíte após o fix round 1:** 1309 testes (+1), 1302 verdes, as mesmas 4 falhas pré-existentes.
   `npx tsc --noEmit` limpo.
 
-- [ ] **43. Apagar o fallback de full scan do RAG** `[confirmado]`
-  `src/lib/ai/rag.ts:56-73` — o `try/catch` nunca dispara porque `.rpc()` devolve `{error}` em vez de
-  lançar; qualquer erro cai em `searchDirect` (`:84-155`), que faz `select …embedding` sem `.limit()` e
-  calcula cosseno em JS. Trunca em silêncio no default de 1000 linhas do PostgREST: resultado **errado**.
-  Deixar a RPC falhar alto.
+- [x] **43. Apagar o fallback de full scan do RAG** `[confirmado]` · commits `7a808467` (promove a RPC),
+  `<hash do commit 2>` (apaga o fallback)
+  `src/lib/ai/rag.ts:56-73` (antes) — o `try/catch` nunca disparava porque `.rpc()` devolve `{error}` em
+  vez de lançar; o fallback era alcançado por queda através do `if (!error && data)`, sem `return` nem
+  `throw`. `searchDirect` (`:84-155`) fazia `select …embedding` sem `.limit()` e calculava cosseno em
+  JS — truncava em silêncio no default de 1000 linhas do PostgREST (`supabase/config.toml:17`):
+  resultado **errado**, não só lento, e nenhum dos quatro chamadores (`engine.ts`,
+  `ai-chatbot-service.ts`, `search_knowledge.ts`, `api/ai/test/route.ts`) distinguia resultado da RPC de
+  resultado do fallback truncado.
+  **Impedimento que mudou a ordem do trabalho:** `search_agent_knowledge` nunca esteve em
+  `supabase/migrations/` — só em quatro arquivos de `sql/`, fora do que o CI aplica (o item 49 já
+  registrava isso). Apagar o fallback primeiro trocaria "resultado errado em silêncio" por "busca
+  quebrada em CI, branch nova e restore" — pior, não melhor. Por isso o item virou duas partes, em
+  commits separados: **(1) promover a RPC** — nenhuma das quatro definições de `sql/` foi copiada como
+  está: todas filtravam só por `agent_id`, ignorando que `ai_agent_chunks.organization_id` é `not null`,
+  e uma (`sql/ai-agents-functions.sql`) dava `GRANT` para `authenticated` numa função sem
+  `SECURITY DEFINER`, com a RLS da tabela ligada só fora do stream versionado — mesmo padrão de buraco
+  de tenancy que os itens 03, 04, 22 e 24 já fecharam. A RPC promovida
+  (`supabase/migrations/20260902000004_search_agent_knowledge_org_scoped.sql`) filtra por
+  `organization_id` além de `agent_id`, com `SECURITY DEFINER` + `search_path` fixo e `GRANT` só para
+  `service_role`; `RAGService` passa a receber `organizationId` no construtor. Achado de segurança das
+  quatro definições antigas registrado à parte no **item 70**; item 49 encolhido (uma das quatro RPCs
+  pendentes saiu da lista). **(2) apagar o fallback** — `searchDirect` e `cosineSimilarity` saíram
+  inteiros; `{error}` da RPC agora vira exceção direta, no molde de `tools/knowledge.py` (o gêmeo Python
+  nunca teve fallback). Efeito em cada chamador: `engine.ts` e `ai-chatbot-service.ts` já tinham
+  `try/catch` best-effort ao redor da chamada — agora esse `catch` dispara em todo erro real da RPC (e
+  não só quando o fallback também falhava), resposta sai sem contexto, visível em log
+  (`console.warn`/`logger.warn`), como já era o desenho para RAG não-fatal. `search_knowledge.ts` volta
+  `{ ok: false, error }` explícito pra IA em vez de `{ ok: true, chunks: [...] }` com dados errados — a
+  IA deixa de tratar um resultado truncado como base de conhecimento legítima. `api/ai/test/route.ts` já
+  tinha `try/catch` (`:299-336`) e passa a devolver `success: false` + `error.message` em vez de um
+  `results_count` silenciosamente incompleto. **O que o lojista vê:** nos três caminhos de produção, sem
+  mudança visível de UX no caso feliz (RAG continua não-fatal, decisão do incidente de 12/06 preservada)
+  — a mudança é que um erro real de busca agora produz *ausência* de contexto de forma honesta, em vez
+  de contexto *errado* apresentado como correto.
+  **Ruling G — sem Postgres nesta máquina: a migration não foi aplicada nem testada, só lida por
+  inspeção** (mesmo impedimento do item 42). `npx vitest run` antes: 1309 testes, 1302 verdes, 4 falhas
+  pré-existentes e alheias (timezone em `reports-utils`, fixture de PDF em
+  `file-extractor.integration`). Depois (dos dois commits): mesmos 1309 testes, 1302 verdes, as MESMAS 4
+  falhas, nenhuma nova — nenhum teste cobria `searchDirect` nem dependia do fallback. `npx tsc --noEmit`
+  limpo antes e depois. Detalhe completo em `task-43-report.md`.
 
 - [ ] **44. Fatorar `_prepare_turn` entre responder e toucher** `[relatado]`
   `toucher.py:43` já importa privados do responder. As três divergências são consequência da cópia:

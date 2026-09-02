@@ -54,113 +54,32 @@ export class RAGService {
       return []
     }
 
-    try {
-      // Gerar embedding da query
-      const queryEmbedding = await generateEmbedding(query, this.openaiKey)
+    // Gerar embedding da query — erro aqui já subia antes e continua subindo.
+    const queryEmbedding = await generateEmbedding(query, this.openaiKey)
 
-      // Buscar usando função RPC do Supabase (mais eficiente)
-      // Se a função não existir, fazer query direta
-      try {
-        const { data, error } = await this.supabase.rpc('search_agent_knowledge', {
-          p_agent_id: agentId,
-          p_organization_id: this.organizationId,
-          p_query_embedding: `[${queryEmbedding.join(',')}]`,
-          p_match_threshold: threshold,
-          p_match_count: topK,
-        })
-
-        if (!error && data) {
-          return this.formatResults(data, sourceIds)
-        }
-      } catch (rpcError) {
-        console.warn('RPC search not available, using direct query')
-      }
-
-      // Fallback: Query direta (menos eficiente mas funciona)
-      return await this.searchDirect(agentId, queryEmbedding, topK, threshold, sourceIds)
-
-    } catch (error: any) {
-      console.error('RAG search error:', error)
-      throw new Error(`Erro na busca RAG: ${error.message}`)
-    }
-  }
-
-  /**
-   * Busca direta no banco (fallback)
-   */
-  private async searchDirect(
-    agentId: string,
-    queryEmbedding: number[],
-    topK: number,
-    threshold: number,
-    sourceIds?: string[]
-  ): Promise<RAGResult[]> {
-    // Buscar todos os chunks do agente
-    let query = this.supabase
-      .from('ai_agent_chunks')
-      .select('id, source_id, content, metadata, embedding')
-      .eq('agent_id', agentId)
-
-    if (sourceIds && sourceIds.length > 0) {
-      query = query.in('source_id', sourceIds)
-    }
-
-    const { data: chunks, error } = await query
+    // Única fonte de resultados: a RPC search_agent_knowledge (promovida ao
+    // stream versionado no item 43, escopada por organização — ver
+    // supabase/migrations/20260902000004_search_agent_knowledge_org_scoped.sql).
+    // Não há fallback de full scan: {error} da RPC vira exceção, no molde de
+    // tools/knowledge.py (o gêmeo Python nunca teve fallback e sempre deixou
+    // o erro propagar). Antes, um {error} aqui caía — sem log, sem throw —
+    // num `searchDirect` que varria a tabela inteira sem LIMIT e truncava
+    // em silêncio no default de 1000 linhas do PostgREST
+    // (supabase/config.toml:17): resultado ERRADO, apresentado como certo.
+    const { data, error } = await this.supabase.rpc('search_agent_knowledge', {
+      p_agent_id: agentId,
+      p_organization_id: this.organizationId,
+      p_query_embedding: `[${queryEmbedding.join(',')}]`,
+      p_match_threshold: threshold,
+      p_match_count: topK,
+    })
 
     if (error) {
-      console.error('Error fetching chunks:', error)
-      throw error
+      console.error('RAG search error (RPC search_agent_knowledge):', error)
+      throw new Error(`Erro na busca RAG: ${error.message}`)
     }
 
-    if (!chunks || chunks.length === 0) {
-      return []
-    }
-
-    // Calcular similaridade para cada chunk
-    const results: Array<{
-      chunk: any
-      similarity: number
-    }> = []
-
-    for (const chunk of chunks) {
-      if (!chunk.embedding) continue
-
-      // Parse embedding (pode vir como string ou array)
-      let embedding: number[]
-      if (typeof chunk.embedding === 'string') {
-        embedding = JSON.parse(chunk.embedding)
-      } else {
-        embedding = chunk.embedding
-      }
-
-      const similarity = this.cosineSimilarity(queryEmbedding, embedding)
-      
-      if (similarity >= threshold) {
-        results.push({ chunk, similarity })
-      }
-    }
-
-    // Ordenar por similaridade e pegar top K
-    results.sort((a, b) => b.similarity - a.similarity)
-    const topResults = results.slice(0, topK)
-
-    // Buscar nomes das fontes
-    const sourceIdsToFetch = [...new Set(topResults.map(r => r.chunk.source_id))]
-    const { data: sources } = await this.supabase
-      .from('ai_agent_sources')
-      .select('id, name')
-      .in('id', sourceIdsToFetch)
-
-    const sourceMap = new Map(sources?.map(s => [s.id, s.name]) || [])
-
-    return topResults.map(r => ({
-      chunk_id: r.chunk.id,
-      source_id: r.chunk.source_id,
-      source_name: sourceMap.get(r.chunk.source_id) || 'Desconhecido',
-      content: r.chunk.content,
-      metadata: r.chunk.metadata || {},
-      similarity: r.similarity,
-    }))
+    return this.formatResults(data ?? [], sourceIds)
   }
 
   /**
@@ -192,30 +111,6 @@ export class RAGService {
       metadata: r.metadata || {},
       similarity: r.similarity,
     }))
-  }
-
-  /**
-   * Calcula similaridade de cosseno
-   */
-  private cosineSimilarity(a: number[], b: number[]): number {
-    if (a.length !== b.length) return 0
-
-    let dotProduct = 0
-    let normA = 0
-    let normB = 0
-
-    for (let i = 0; i < a.length; i++) {
-      dotProduct += a[i] * b[i]
-      normA += a[i] * a[i]
-      normB += b[i] * b[i]
-    }
-
-    normA = Math.sqrt(normA)
-    normB = Math.sqrt(normB)
-
-    if (normA === 0 || normB === 0) return 0
-
-    return dotProduct / (normA * normB)
   }
 
   /**
