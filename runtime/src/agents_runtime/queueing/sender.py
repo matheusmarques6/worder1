@@ -34,6 +34,7 @@ import psycopg
 
 from agents_runtime.channels.humanize import compute_pacing, split_into_bubbles
 from agents_runtime.channels.port import ChannelPort, before_the_provider
+from agents_runtime.channels.template_components import TemplateParametersMissing
 from agents_runtime.clock import Clock, SystemClock
 from agents_runtime.config import QueueingConfig
 from agents_runtime.obs.telemetry import annotate, span
@@ -324,6 +325,24 @@ async def sender_pass(
                 ),
             )
             annotate(outcome="failed")
+            if isinstance(error, TemplateParametersMissing):
+                # Item 34, ruling B: a recusa não pode ser um sumiço. O
+                # `failed` abaixo diz "falha no envio" e nada mais — que é o
+                # certo para a Meta caindo, e o errado para um fallback que a
+                # PRÓPRIA loja configurou pedindo uma variável que ninguém
+                # preenche. Esse conserto é dela, e o alerta é como ela fica
+                # sabendo. Mesmo lugar e mesmo espírito do alerta de supressão
+                # de momento, alguns blocos acima.
+                try:
+                    await engine.alert_template_not_fillable(
+                        conn,
+                        organization_id=send.organization_id,
+                        outbox_id=send.outbox_id,
+                        template_name=str(send.payload.get("template", {}).get("name") or "?"),
+                        reason=str(error)[:500],
+                    )
+                except psycopg.Error:
+                    logger.warning("alerta de template não registrado", exc_info=True)
             if send.channel_type == "whatsapp" and failure is Failure.PERMANENT:
                 try:
                     await engine.emit_ai_run_step(

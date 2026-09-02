@@ -24,6 +24,12 @@ NO_ACTIVE_MISSION = "no_active_mission"
 #: tópico proibido — a IA saiu de cena e alguém precisa entrar (item 30).
 HANDOFF = "handoff"
 
+#: O template de fallback da org não serve para o envio (item 34): exige
+#: parâmetro que ninguém preenche. Mesmo tipo que a supressão de momento já
+#: usa porque é a mesma família de problema — o template configurado não
+#: entrega —, e a diferença exata está no `metadata`.
+MOMENT_TEMPLATE_NOT_READY = "moment_template_not_ready"
+
 
 async def open_alert(
     conn: psycopg.AsyncConnection,

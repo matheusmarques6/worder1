@@ -19,6 +19,7 @@ from uuid import UUID
 import psycopg
 from psycopg.types.json import Jsonb
 
+from agents_runtime.repository import alerts
 from agents_runtime.repository.outbox import ClaimedSend
 
 # Re-exported so every caller from E1 keeps its import. The definition moved to
@@ -291,6 +292,40 @@ async def alert_moment_suppression(
                     }
                 ),
             ),
+        )
+
+
+async def alert_template_not_fillable(
+    conn: psycopg.AsyncConnection,
+    *,
+    organization_id: UUID,
+    outbox_id: UUID,
+    template_name: str,
+    reason: str,
+) -> None:
+    """O alerta da recusa de template (auditoria item 34, ruling B).
+
+    Sem ele o lojista vê "falha no envio" genérica e nunca descobre que o
+    template que ELE configurou como fallback de 24h pede uma variável que o
+    runtime não preenche — a configuração é dele e o conserto é dele. É o
+    mesmo movimento de `alert_moment_suppression` logo acima: um envio que
+    não sai por decisão nossa vira evento que um humano pode olhar.
+
+    `dedup_key` porque um fallback quebrado recusa TODO envio de janela
+    fechada da loja: sem ele, uma tarde de tráfego enterra o painel em cópias
+    do mesmo recado.
+    """
+    async with conn.transaction():
+        await scope_to_organization(conn, organization_id)
+        await alerts.open_alert(
+            conn,
+            organization_id=organization_id,
+            type=alerts.MOMENT_TEMPLATE_NOT_READY,
+            severity="warning",
+            title=f"Template '{template_name}' exige variáveis que o envio não tem",
+            payload={"outbox_id": str(outbox_id), "template_name": template_name,
+                     "reason": reason},
+            dedup_key=f"template_not_fillable:{template_name}",
         )
 
 

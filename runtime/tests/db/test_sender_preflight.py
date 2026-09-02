@@ -18,6 +18,7 @@ from contextlib import asynccontextmanager
 import psycopg
 import pytest
 
+from agents_runtime.channels.template_components import TemplateParametersMissing
 from agents_runtime.config import QueueingConfig
 from agents_runtime.queueing.sender import sender_pass
 from agents_runtime.randomness import SystemRandomness
@@ -478,3 +479,123 @@ class TestMomentSuppressionAlerts:
         ).fetchone()
         assert payload["template"]["name"] == "toque_semana_cliente"
         assert "texto livre" not in str(payload)
+
+
+class TestATemplateRefusalIsVisible:
+    """Auditoria 2026-08-28, item 34, ruling B — falha fechada e NOMEADA.
+
+    O canal recusa antes do wire quando o template exige parâmetro e ninguém
+    tem com que preenchê-lo. Recusar em silêncio seria trocar uma recusa da
+    Meta por uma nossa e pronto: o lojista continuaria vendo "falha no envio"
+    genérica e nunca saberia que o template que ELE configurou como fallback
+    de 24h pede uma variável que o runtime não preenche. A configuração é
+    dele, o conserto é dele, e o alerta é como ele fica sabendo — o mesmo
+    precedente de `alert_moment_suppression` (§3.3.4), que já abre alerta
+    para o toque que não saiu, nesta mesma passada do sender.
+    """
+
+    class RefusingChannel:
+        async def send(self, conn, send) -> str:
+            raise TemplateParametersMissing(
+                "payload inválido: template volta_pra_loja (pt_BR) espera 2 variável(is)"
+                " de corpo e o envio trouxe 0"
+            )
+
+    async def test_the_refusal_opens_an_alert_naming_the_template(
+        self, dsn: str, admin: psycopg.Connection, two_tenants: TwoTenants
+    ) -> None:
+        org = two_tenants.a.id
+        thread = create_thread(admin, org)
+        open_window(admin, thread.conversation_id, hours_ago=25)
+        create_template_policy(admin, org, template_name="volta_pra_loja")
+        outbox_id = create_outbox_item(
+            admin, org, thread, kind="funnel_touch", text="texto qualquer"
+        )
+
+        async with as_sender(dsn) as conn:
+            await sender_pass(
+                conn,
+                self.RefusingChannel(),
+                config=QueueingConfig(humanize_delays=False),
+                randomness=SystemRandomness(),
+            )
+
+        status, last_error = outbox_state(admin, outbox_id)
+        # Permanente: o template continua exigindo o que ninguém tem, e
+        # insistir só queima a escada.
+        assert status == "failed"
+        assert "volta_pra_loja" in last_error
+
+        alerts = admin.execute(
+            """
+            select type, severity, title, metadata, dedup_key
+              from public.alerts
+             where organization_id = %s and type = 'moment_template_not_ready'
+            """,
+            (org,),
+        ).fetchall()
+        assert len(alerts) == 1
+        (_, severity, title, metadata, dedup_key) = alerts[0]
+        assert severity == "warning"
+        assert "volta_pra_loja" in title
+        assert "volta_pra_loja" in metadata["reason"]
+        assert metadata["outbox_id"] == str(outbox_id)
+        assert dedup_key is not None
+
+    async def test_the_same_broken_template_does_not_open_a_second_alert(
+        self, dsn: str, admin: psycopg.Connection, two_tenants: TwoTenants
+    ) -> None:
+        """Um fallback quebrado recusa TODO envio de janela fechada da loja.
+        Sem dedup, uma tarde de tráfego enterra o painel em cópias do mesmo
+        recado — o índice parcial `alerts_dedup_uniq` existe para isto."""
+        org = two_tenants.a.id
+        thread = create_thread(admin, org)
+        open_window(admin, thread.conversation_id, hours_ago=25)
+        create_template_policy(admin, org, template_name="volta_pra_loja")
+        for _ in range(2):
+            create_outbox_item(admin, org, thread, kind="funnel_touch", text="texto")
+
+        async with as_sender(dsn) as conn:
+            await sender_pass(
+                conn,
+                self.RefusingChannel(),
+                config=QueueingConfig(humanize_delays=False),
+                randomness=SystemRandomness(),
+            )
+
+        (count,) = admin.execute(
+            "select count(*) from public.alerts"
+            " where organization_id = %s and type = 'moment_template_not_ready'",
+            (org,),
+        ).fetchone()
+        assert count == 1
+
+    async def test_an_ordinary_send_failure_opens_no_such_alert(
+        self, dsn: str, admin: psycopg.Connection, two_tenants: TwoTenants
+    ) -> None:
+        """A Meta caindo não é a loja ter configurado errado. Um alerta que
+        aparece nas duas situações não informa nada."""
+        org = two_tenants.a.id
+        thread = create_thread(admin, org)
+        open_window(admin, thread.conversation_id, hours_ago=25)
+        create_template_policy(admin, org, template_name="volta_pra_loja")
+        create_outbox_item(admin, org, thread, kind="funnel_touch", text="texto")
+
+        class BrokenChannel:
+            async def send(self, conn, send) -> str:
+                raise RuntimeError("HTTP 400 sabe-se lá o quê")
+
+        async with as_sender(dsn) as conn:
+            await sender_pass(
+                conn,
+                BrokenChannel(),
+                config=QueueingConfig(humanize_delays=False),
+                randomness=SystemRandomness(),
+            )
+
+        (count,) = admin.execute(
+            "select count(*) from public.alerts"
+            " where organization_id = %s and type = 'moment_template_not_ready'",
+            (org,),
+        ).fetchone()
+        assert count == 0
