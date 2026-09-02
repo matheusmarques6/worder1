@@ -49,7 +49,12 @@ export async function GET(req: NextRequest) {
     promptTokens: rows.reduce((s, r) => s + (r.prompt_tokens || 0), 0),
     completionTokens: rows.reduce((s, r) => s + (r.completion_tokens || 0), 0),
     totalTokens: rows.reduce((s, r) => s + (r.total_tokens || 0), 0),
-    costUsd: rows.reduce((s, r) => s + Number(r.cost_usd || 0), 0),
+    // Soma só o custo conhecido (cost_usd NULL = modelo fora da tabela de
+    // preços, item 42) — nunca inventa 0 pra ele. unknownCostCalls conta
+    // quantas chamadas ficaram de fora dessa soma, pra costUsd não passar
+    // por "gasto total" quando é só "gasto do que sabemos precificar".
+    costUsd: rows.reduce((s, r) => s + (r.cost_usd == null ? 0 : Number(r.cost_usd)), 0),
+    unknownCostCalls: rows.filter((r) => r.cost_usd == null).length,
     avgDurationMs: rows.length ? Math.round(rows.reduce((s, r) => s + (r.duration_ms || 0), 0) / rows.length) : 0,
   }
 
@@ -65,12 +70,12 @@ export async function GET(req: NextRequest) {
     const g = grouped.get(key) || { key, calls: 0, tokens: 0, costUsd: 0 }
     g.calls++
     g.tokens += r.total_tokens || 0
-    g.costUsd += Number(r.cost_usd || 0)
+    g.costUsd += r.cost_usd == null ? 0 : Number(r.cost_usd)
     grouped.set(key, g)
   }
 
   // Budget status (skipCache=true para refletir gasto atual)
-  let budget: { allowed: boolean; budgetUsd: number | null; spentUsd: number } | null = null
+  let budget: { allowed: boolean; budgetUsd: number | null; spentUsd: number; hasUnknownCost: boolean } | null = null
   try {
     budget = await checkAiBudget(orgId, { skipCache: true })
   } catch {
@@ -95,6 +100,9 @@ export async function GET(req: NextRequest) {
           usedPct: budget.budgetUsd
             ? Math.round((budget.spentUsd / budget.budgetUsd) * 10000) / 100
             : null,
+          // Item 42: spentUsd acima é PARCIAL quando true — teve chamada de
+          // modelo sem preço na tabela este mês, fora da soma.
+          hasUnknownCost: budget.hasUnknownCost,
         }
       : null,
   })
