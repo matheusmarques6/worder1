@@ -547,11 +547,19 @@ imitável). O histórico inteiro passa a viver só no array de chat
 (`_as_chat(transcript + pending)`), sem sobreposição — a query já garante que os dois conjuntos são
 disjuntos. `mode="preview"` manteve o dump completo: não fala com LLM, não duplica nada, e é a
 única forma de o lojista ver a conversa ao testar o prompt.
-*Medido* (ruling D, `task-39-report.md`): turno sintético de 20 mensagens (17 de histórico + 3
-pendentes, o caso comum descrito na recon — a conversa cabe inteira no `TRANSCRIPT_LIMIT`) foi de
-2660 para 1678 caracteres de prompt de entrada, razão **1,59× (redução de 36,9%)** — abaixo do
-"~2×" que o achado original estimava, porque o `system` também carrega AGENT/MISSÃO/ESTADO/CANAL,
-blocos que nunca duplicavam.
+*Medido* (ruling D, `task-39-report.md`, script versionado
+`runtime/scripts/measure_transcript_duplication.py`): turno sintético de 20 mensagens (17 de
+histórico + 3 pendentes, o caso comum descrito na recon — a conversa cabe inteira no
+`TRANSCRIPT_LIMIT`), em DOIS cenários (fix round 1 — a primeira medida só cobria o primeiro). Sem
+`# CONHECIMENTO`: 2660 → 1678 caracteres, razão **1,59× (redução de 36,9%)**. Com `# CONHECIMENTO`
+(o bloco que `responder.py:620-625` anexa ao `system` FORA de `compile_prompt()` em turnos com RAG
+— texto fixo, idêntico nas duas versões, o caso comum em produção): 3592 → 2610 caracteres, razão
+**1,38× (redução de 27,3%)**. Nenhum dos dois é o "~2×" que o achado original estimava, porque o
+`system` sempre carrega AGENT/MISSÃO/ESTADO/CANAL (e, com RAG, CONHECIMENTO) além da CONVERSA —
+blocos fixos que nunca duplicavam, e diluem a razão. **A economia absoluta é a mesma nos dois
+cenários — 982 caracteres a menos por chamada** — porque é exatamente o tamanho do dump que deixou
+de ser escrito duas vezes; só o denominador muda. A razão varia com a composição do prompt; a
+economia absoluta, não.
 *Sem prova executável aqui:* `tests/db` e `tests/pipeline` pedem Postgres em Docker, ausente nesta
 máquina — a query nova só é exercida por `tests/db/test_agent_loaders.py`, não rodado nesta tarefa.
 

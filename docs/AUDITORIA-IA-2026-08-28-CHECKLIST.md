@@ -970,12 +970,19 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   a query já garante os dois conjuntos disjuntos.
 
   **Ruling D — a medida, e a correção da promessa.** Turno sintético de 20 mensagens (17 de
-  histórico + 3 pendentes, o caso comum em que a conversa cabe no `TRANSCRIPT_LIMIT`): **2660 → 1678
-  caracteres de prompt de entrada, razão 1,59× (redução de 36,9%)** — não ~2× como o achado original
-  estimava. O `system` também carrega AGENT/MISSÃO/ESTADO/CANAL, blocos que nunca duplicavam, e
-  dilui a razão; a parte que de fato duplicava (o histórico em si) chega perto de 2× isolada.
-  **Corrigindo a promessa deste item: o ganho real medido é 1,59×**, não ~2×. Continua valendo por
-  chamada, multiplicado pelas até 12 gerações por turno (ruling E, intocado).
+  histórico + 3 pendentes, o caso comum em que a conversa cabe no `TRANSCRIPT_LIMIT`), medido em
+  DOIS cenários (fix round 1 — ver abaixo): **sem `# CONHECIMENTO`, 2660 → 1678 caracteres, razão
+  1,59× (redução de 36,9%); com `# CONHECIMENTO`** (o bloco que `responder.py` anexa fora do
+  compilador em turnos com RAG, 5 chunks sintéticos = `knowledge_limit` padrão), **3592 → 2610
+  caracteres, razão 1,38× (redução de 27,3%)** — nenhum dos dois é ~2× como o achado original
+  estimava. **A economia absoluta é a mesma nos dois cenários: 982 caracteres a menos por chamada**
+  (o tamanho do dump que deixou de ser escrito duas vezes) — o que muda entre os cenários é só o
+  denominador, quanto do resto do `system` (AGENT/MISSÃO/ESTADO/CANAL, e agora CONHECIMENTO) já
+  pesava sem nunca ter duplicado. **A razão varia com a composição do prompt; a economia absoluta,
+  não** — um `system` de produção com mais conhecimento/persona tende a uma razão ainda mais perto
+  de 1,0×–1,3× do que de 1,59×. **Corrigindo a promessa deste item: o ganho medido vai de 1,38× a
+  1,59×** neste cenário sintético, não ~2×, com 982 caracteres de economia absoluta por chamada.
+  Continua valendo por chamada, multiplicado pelas até 12 gerações por turno (ruling E, intocado).
 
   **Teste que trava a duplicação.** `tests/unit/test_prompt_compiler_blocks.py::TestTheConversationBlockDoesNotDuplicateTheChatArray`
   (3 casos, sem banco): texto comum do transcript não chega ao bloco em modo `"turn"`; a rubrica de
@@ -991,6 +998,19 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
 
   **Suíte:** `tests/unit` 1187 verdes (`PYTHONUTF8=1`; 1184 da baseline + 3 testes novos).
   `lint-imports`: 3 contratos mantidos, 0 quebrados.
+
+  **Fix round 1** (achados da review) · relatório, seção "Fix round 1" em `task-39-report.md`.
+  **Important:** a medida original (1,59×) não incluía o bloco `# CONHECIMENTO`, que
+  `responder.py::build_responder.respond` anexa ao `system` fora do compilador em turnos com RAG —
+  texto fixo que dilui a razão sem mudar a economia absoluta. Corrigido medindo os dois cenários
+  (sem/com conhecimento) acima, com a economia absoluta (982 caracteres) e a frase de que a razão
+  varia com a composição do prompt. **Minor 1:** o script de medida só existia no scratchpad de
+  sessão — versionado em `runtime/scripts/measure_transcript_duplication.py`. **Minor 2:**
+  `_conversation_block` reimplementava `is_store_media_line` inline sobre a tupla `(author, text)`
+  — corrigido reconstruindo `PendingMessage(author=author, text=text)` e chamando o predicado
+  canônico de `agent_core/media.py`, uma fonte só. **Suíte após o fix:** `tests/unit` 1187 verdes
+  (mesma contagem — os dois Minor são refactors sem mudança de comportamento). `lint-imports`: 3
+  contratos mantidos, 0 quebrados.
 
 - [ ] **40. Fechar ou reusar os clientes httpx de LLM** `[confirmado]`
   `agent_core/providers.py:75-83` constrói o adapter por turno; os três criam `httpx.AsyncClient` no
