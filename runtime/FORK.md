@@ -417,10 +417,14 @@ a org não gravou `base_url` própria (essa continua vencendo). Groq
 OpenAI que `OpenAICompatibleLlm` implementa; só faltava a URL — mesma prova que o TS já fazia ao
 chamar `/chat/completions` nos dois. Gemini e o alias `google` (o TS trata as duas strings no mesmo
 `case`, `ai-providers.ts:426-427`) entram no MESMO mapa, contra o endpoint OpenAI-compatível do
-Google (`https://generativelanguage.googleapis.com/v1beta/openai`) — verificado por POST real com
-chave inválida, sem gastar credencial de lojista (evidência em
-`.superpowers/sdd/AUDITORIA-IA-2026-08-28-CHECKLIST/task-36-report.md`): o endpoint existe (400, não
-404), aceita `Authorization: Bearer` e aceita `tools` no formato OpenAI.
+Google (`https://generativelanguage.googleapis.com/v1beta/openai`) — verificado antes de escolher
+(evidência em `.superpowers/sdd/AUDITORIA-IA-2026-08-28-CHECKLIST/task-36-report.md`): por POST
+real com chave inválida, sem gastar credencial de lojista, o endpoint existe (400, não 404) e
+aceita `Authorization: Bearer`; aceitar `tools` no formato OpenAI não dá para provar com chave
+inválida (a mesma resposta de erro com ou sem `tools` também é consistente com o endpoint
+rejeitando por auth antes de olhar o corpo), então essa terceira prova vem de documentação oficial
+(`https://ai.google.dev/gemini-api/docs/openai`, seção "Function calling" — `curl` de exemplo
+contra este mesmo endpoint com corpo `tools`/`tool_choice` no formato OpenAI padrão).
 *O que ficou de fora:* o adapter NATIVO do Gemini (`:generateContent`, corpo `contents`/`parts`,
 header `x-goog-api-key`, que é o que o TS de fato chama em `ai-providers.ts:246`) não foi portado —
 o item 36 escolheu o caminho OpenAI-compatível porque cabe no mapa/branch existente, sem arquivo

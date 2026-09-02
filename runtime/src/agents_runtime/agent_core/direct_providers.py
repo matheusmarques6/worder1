@@ -44,20 +44,27 @@ DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 #: com o Gemini pelo endpoint NATIVO `:generateContent` (`ai-providers.ts:246`
 #: — corpo `contents`/`parts`, header `x-goog-api-key`, não é formato OpenAI).
 #: Aqui usamos o endpoint OpenAI-COMPATÍVEL do Google (mesmo host, path
-#: `/v1beta/openai`), verificado por POST real com chave inválida, sem gastar
-#: credencial de lojista (evidência completa em
+#: `/v1beta/openai`). DUAS provas por POST real com chave inválida, sem
+#: gastar credencial de lojista (evidência completa em
 #: `.superpowers/sdd/AUDITORIA-IA-2026-08-28-CHECKLIST/task-36-report.md`):
 #: (1) o endpoint EXISTE — 400 `INVALID_ARGUMENT`, não 404; (2) ACEITA
 #: `Authorization: Bearer` — a mensagem muda de "Missing or invalid
 #: Authorization header." (sem header) para "Please pass a valid API key"
-#: (header presente, chave inválida); (3) ACEITA `tools` no formato OpenAI —
-#: a mesma chamada com e sem `tools` no corpo devolve o mesmo erro de chave,
-#: ou seja o corpo com `tools` não é rejeitado antes da checagem de auth.
-#: Escolhido em vez de um adapter nativo porque cabe no mesmo mapa/branch do
-#: Groq e DeepSeek, sem arquivo novo e sem mexer na trava de fitness
-#: (`test_no_provider_network.py`). Se este endpoint um dia sair do ar ou
-#: perder paridade de tools, a escolha entre adapter nativo e bloqueio na UI
-#: volta a ser decisão de produto (ruling C original).
+#: (header presente, chave inválida). A TERCEIRA prova — aceitar `tools` no
+#: formato OpenAI — NÃO dá para tirar de uma chamada com chave inválida: o
+#: endpoint pode estar rejeitando por auth ANTES de olhar o corpo, e a
+#: mesma resposta de erro com ou sem `tools` não descarta essa hipótese (é
+#: a mais provável). Essa prova vem de documentação oficial, não de chamada
+#: real: `https://ai.google.dev/gemini-api/docs/openai`, seção "Function
+#: calling", mostra um `curl` contra este MESMO endpoint
+#: (`.../v1beta/openai/chat/completions`) com corpo `tools` no formato
+#: OpenAI padrão (`type: "function"`, `function: {name, description,
+#: parameters}`) e `tool_choice`. Escolhido em vez de um adapter nativo
+#: porque cabe no mesmo mapa/branch do Groq e DeepSeek, sem arquivo novo e
+#: sem mexer na trava de fitness (`test_no_provider_network.py`). Se a
+#: documentação um dia contradisser isso ou o endpoint sair do ar, a
+#: escolha entre adapter nativo e bloqueio na UI volta a ser decisão de
+#: produto (ruling C original).
 GEMINI_OPENAI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
 
 #: Provider → base_url default quando a org não gravou uma própria. "google"

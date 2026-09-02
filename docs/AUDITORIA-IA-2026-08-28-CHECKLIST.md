@@ -742,10 +742,10 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
 
   **A premissa estava errada, e não era `NoOrgLlmKey`.** `agent_core/providers.py:79-91`
   (`client_for`) já mandava todo provider desconhecido para `OpenAICompatibleLlm`; o problema era
-  o default de `direct_providers.py:93` (antes do item 36: linha 52) — `base_url or
+  o default de `direct_providers.py:93` (antes do item 36: linha 53) — `base_url or
   OPENAI_BASE_URL` incondicional. Org com provider `groq`/`deepseek`/`gemini` e sem `base_url`
   própria enviava a chave **certa** para a **OpenAI**, que devolvia 401 classificado PERMANENTE
-  (`queueing/failures.py:85`) — sem alerta de chave ausente. `NoOrgLlmKey` só dispara quando não
+  (`queueing/failures.py:95-98`) — sem alerta de chave ausente. `NoOrgLlmKey` só dispara quando não
   há chave nenhuma (`providers.py:117`) ou quando falta `ENCRYPTION_KEY` para decifrar (`:55`);
   nenhum dos dois é o caso de uma org com a chave da Groq cadastrada.
 
@@ -756,15 +756,20 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   (`providers.py:87-91`) passa a montar `choice.base_url or DEFAULT_BASE_URLS.get(provider)` — a
   `base_url` gravada na linha do banco continua vencendo; org com proxy próprio não é atropelada.
 
-  **Gemini foi verificado antes de escolher, e passou nas três provas.** POST real contra
+  **Gemini foi verificado antes de escolher, e passou nas três provas — duas por chamada real, uma
+  por documentação.** POST real contra
   `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions` com chave inválida
   (sem gastar credencial de lojista, precedente do item 27): o endpoint EXISTE (400
   `INVALID_ARGUMENT`, não 404); ACEITA `Authorization: Bearer` — a mensagem muda de "Missing or
   invalid Authorization header." (sem header) para "Please pass a valid API key" (header presente,
-  chave inválida); e ACEITA `tools` no formato OpenAI — a mesma chamada com e sem `tools` no corpo
-  devolve o mesmo erro de auth, ou seja o corpo não é rejeitado antes da checagem de chave. As três
-  provas do ruling C se confirmaram, então Gemini entrou no MESMO mapa/branch de Groq e DeepSeek —
-  sem adapter nativo, sem arquivo novo, sem mexer na trava de fitness. **Divergência deliberada do
+  chave inválida). A terceira prova — ACEITA `tools` no formato OpenAI — não dá para tirar de uma
+  chamada com chave inválida: a mesma resposta de erro com ou sem `tools` no corpo não descarta a
+  hipótese mais provável, que é o endpoint rejeitar por auth antes de olhar o corpo. Essa prova vem
+  da documentação oficial: `https://ai.google.dev/gemini-api/docs/openai`, seção "Function calling",
+  mostra um `curl` contra este MESMO endpoint com corpo `tools` no formato OpenAI padrão
+  (`type: "function"`, `function: {name, description, parameters}`) e `tool_choice`. As três provas
+  do ruling C se confirmaram, então Gemini entrou no MESMO mapa/branch de Groq e DeepSeek — sem
+  adapter nativo, sem arquivo novo, sem mexer na trava de fitness. **Divergência deliberada do
   TS** (que chama o `:generateContent` nativo, `ai-providers.ts:246`), declarada em comentário em
   `direct_providers.py`, com a evidência bruta em `task-36-report.md`. `google` é alias de `gemini`,
   como o TS trata as duas no mesmo `case` (`ai-providers.ts:426-427`).
