@@ -789,10 +789,20 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   Relatórios, propostas, kappa, painel de custo, analytics e `update_agent_stats` leem `agent_traces` /
   `ai_usage_logs`, que o runtime não escreve. Para org migrada tudo vira zero permanente.
 
-  **Fechado: `ai_usage_logs`, e com ela o teto de gasto.** Era a razão do item, não o painel —
-  `budget.ts:101-112` somava zero em `ai_usage_logs` e falhava **ABERTO**: org migrada gastava sem
-  limite algum. Entre abrir uma segunda escrita em Python e fechar a lacuna na trilha que o runtime
-  já grava (`internal.llm_calls`), a ponte coube inteira: `agent_id` virou coluna nova (preenchida
+  **Fechado: `ai_usage_logs` ganhou visibilidade real — não um teto.** *Correção de registro (ruling
+  A do item 41, que investigou esta frase e a achou errada): a versão anterior deste parágrafo dizia
+  "e com ela o teto de gasto [voltou a existir]". Não voltou. `checkAiBudget`
+  (`src/lib/ai/budget.ts:123-191`) é quem de fato BLOQUEIA (`throwOnExceeded`), e só é chamado de
+  `engine.ts`, `evals.ts`, `proposals.ts` e `test-runner.ts` — quatro caminhos TypeScript. O runtime
+  Python (`responder.py`/`toucher.py`, o turno de WhatsApp) nunca importa nem chama `budget.ts`; é
+  outro processo, outra linguagem. O que este item fechou foi a razão pela qual `budget.ts`, SE algum
+  dia rodasse sobre uma org migrada, deixaria de somar sempre zero — `budget.ts:101-112` somava
+  `ai_usage_logs`, que ficava vazia (ausência 24), e falhava **ABERTO** por isso. Isso é visibilidade
+  do gasto, não um limite aplicado ao turno do runtime: nada no caminho que responde ao cliente ficou
+  mais barato nem mais lento por causa desta mudança. O teto de custo por turno do runtime é o
+  **item 41**, um mecanismo Python novo e separado — não uma ativação do `budget.ts` existente.*
+  Dito isso, a ponte em si: entre abrir uma segunda escrita em Python e fechar a lacuna na trilha que
+  o runtime já grava (`internal.llm_calls`), a ponte coube inteira: `agent_id` virou coluna nova (preenchida
   pelo escritor já existente em `responder.py`/`toucher.py`, do mesmo jeito que `organization_id` e
   `conversation_id` já chegam por parâmetro, nunca pelo `CallRecord`); `success` não virou coluna —
   `internal.llm_calls` só recebe chamada CONCLUÍDA (`metering.py`), então todo espelho É sucesso, por
@@ -1116,9 +1126,58 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   5 testes novos — 1188, não os 1187 do brief: a contagem já havia avançado por commits do item 39
   fora da amostragem do brief). `lint-imports`: 3 contratos mantidos, 0 quebrados.
 
-- [ ] **41. Teto de custo por turno** `[relatado]`
+- [x] **41. Teto de custo por turno** `[relatado]` · relatório `task-41-report.md`
   `MAX_TOOL_ROUNDS=3` é por tentativa e o juiz dá 3 tentativas → pior caso 12 gerações + 3 juízes por
   mensagem, cada uma com timeout de 60s, com a lease renovada pelo keepalive.
+
+  **A conta confere e é maior que a do achado (ruling A da recon).** 3 tentativas × (3 rodadas de
+  tool + 1 chamada final forçada sem tools) = 12 gerações, mais 3 juízes, mais até 1 embedding (uma
+  vez por turno, não multiplicado) = **até 16 chamadas de LLM por mensagem de cliente**, no pior caso
+  de desenho.
+
+  **Onde o teto mora (ruling B): `MeteredLlm`, e só lá.** `agent_core/metering.py::MeteredLlm` é o
+  único código por onde passa TODA chamada de LLM de um turno — `agent_reply`, `judge_pre`,
+  `embedding`. Ganhou um `TurnBudget` opcional (`reserve(purpose)`, chamado ANTES do request de
+  rede): uma instância nova por turno, compartilhada por referência entre as três finalidades na
+  composição (`agent_core/responder.py::build_responder.respond`). A chamada recusada nunca sai para
+  a rede — nunca custa, nunca vira linha em `internal.llm_calls`.
+
+  **Ao estourar (ruling C): a escalada para, o rascunho vai.** `TurnBudgetExceeded`, capturada em
+  `judges/pre_send.py::guarded_reply`, interrompe o loop de tentativas SEM contar a tentativa em
+  curso (ela não produziu julgamento). Se uma tentativa anterior já tinha um rascunho reprovado só em
+  critério `standard` (o `best` que o mecanismo de regeneração já guarda), ele sai — mesmo caminho de
+  código de quando as regenerações se esgotam sozinhas. Só sem NENHUM rascunho é que o turno falha:
+  `blocked_by="budget_exceeded"`, alerta `critical_violation` com título que nomeia a causa real (não
+  "Judge 1 reprovou" — isso mentiria).
+
+  **O default (ruling D): 8, e a conta é o turno normal, não o pior caso.**
+  `DEFAULT_TURN_LLM_CALL_LIMIT = 8` (`agent_core/metering.py`), override por
+  `AGENTS_TURN_LLM_CALL_LIMIT`. Um turno que passa de primeira gasta 2 chamadas (1 geração sem tool +
+  1 julgamento); com uma rodada de tool (o caso comum de `create_coupon`, ver
+  `tests/db/test_responder_tool_loop.py`), 3; com embedding, até 4. 8 dá folga para uma regeneração
+  INTEIRA do Judge 1 sem disparar, e ainda para em metade do pior caso de desenho (16) — apertado o
+  bastante para nunca custar as 16 chamadas por acidente, folgado o bastante para não cortar turno
+  legítimo (o risco que o ruling D pede para evitar: um teto raso vira resposta pior, não erro visível).
+
+  **Ruling E, respeitado.** `MAX_TOOL_ROUNDS` e `REGENERATION_LIMIT` não mudaram.
+
+  **Ruling F, registrado e não implementado.** O teto de TEMPO do turno (sem `wait_for` agregado em
+  `queueing/worker.py`, `_keepalive` renovando lease e visibilidade sem limite de renovações) virou
+  item novo — **item 68**.
+
+  **Divergência do TS, declarada em `metering.py`.** O TS bloqueia por orçamento em dólar
+  (`checkAiBudget`) em vários pontos de entrada; o runtime tem um teto de CHAMADAS por turno, num
+  ponto único — YAGNI: sem framework de orçamento, sem política por organização.
+
+  **Testes (ruling G).** `test_pre_send_judge.py::TestTheTurnBudget` — o teto corta a escalada e
+  entrega o melhor rascunho quando estoura no meio de uma tentativa, e um turno normal fica bem
+  abaixo do default e nunca dispara (mais um terceiro caso: sem rascunho nenhum, falha alto com o
+  `blocked_by` certo). `test_llm_metering.py::TestTheTurnBudget` — a chamada além do teto é recusada
+  sem deixar linha, o teto é compartilhado entre finalidades, e um turno normal com as três
+  finalidades reais fica sob o default.
+
+  **Suíte:** `tests/unit` 1203 verdes (`PYTHONUTF8=1`; era 1197, +6). `lint-imports`: 3 contratos
+  mantidos, 0 quebrados. `tests/db`/`tests/pipeline` pedem Postgres, indisponível nesta máquina.
 
 - [ ] **42. Custo vindo do provedor, não de tabela hardcoded** `[confirmado]`
   `src/lib/ai/cost-tracker.ts:61-62` devolve `0` para modelo fora do dicionário; as 15 chaves são todas
@@ -1311,6 +1370,26 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `src/lib/ai/proposals.ts` filtra por `ai_agent_id` em `whatsapp_cloud_messages` (`:132,160,166`),
   então sem o carimbo essas consultas também ficam sem linha para atribuir ao agente certo em org
   migrada.
+
+- [ ] **68. Teto de TEMPO do turno** `[relatado]` · *(descoberto no item 41)*
+  A recon do item 41 mostrou que só existe teto POR CHAMADA (`DEFAULT_TIMEOUT_SECONDS = 60.0`, os
+  dois em `agent_core/openrouter.py:43` e `agent_core/direct_providers.py:81`) — nenhum teto agregado
+  cobre o turno inteiro. `respond(job)` é chamado dentro de `_turn`
+  (`queueing/worker.py:136`) com um `await` direto, sem `asyncio.wait_for` nem qualquer outro
+  envelope de prazo (o único `wait_for` do runtime é em `server.py:216`, para o parse HTTP de
+  entrada — sem relação com o turno de resposta). E a lease que impede outro worker de assumir a
+  mesma conversa nunca expira sozinha enquanto o turno roda: `_keepalive`
+  (`queueing/worker.py:40-69`) renova a lease de 2 minutos (`config.conversation_lease`) e a
+  visibilidade do pgmq de 60s (`config.visibility_timeout`) a cada 45s
+  (`config.heartbeat_every`), em loop `while True`, **sem limite de renovações** — o resultado de
+  `renew_lease` é explicitamente ignorado (`worker.py:59-61`, comentário: "se a lease foi perdida, o
+  CAS na conclusão é a autoridade que recusa"). Efeito: um turno preso (rede lenta, provedor
+  pendurado, laço no tool-loop) pode segurar o worker e a conversa por até 16 chamadas × 60s = até
+  16 minutos de timeouts encadeados, sem nenhum mecanismo interrompendo antes disso — e o keepalive
+  garante que nenhum outro worker pode assumir enquanto isso acontece. O item 41 (teto de chamadas)
+  não cobre isto: um turno pode ficar dentro do teto de CHAMADAS e ainda assim demorar minutos numa
+  única chamada lenta. Não implementado no item 41 por ruling F explícito do controlador — é achado
+  vizinho, não o mesmo item.
 
 ---
 

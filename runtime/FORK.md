@@ -505,8 +505,14 @@ sem dono.** O item 42 conserta a contabilidade de custo do lado TS (o dicionári
 preços que devolve `0`, o fail-open do `budget.ts`) e manda portar a decisão do
 `agent_core/metering.py`; nada nele, nem o item 37, faz o runtime **ler `ai_budgets` e parar de
 responder** — o item 37 só corrigiu o dado que o gate leria, não construiu o gate em Python. O
-item 42 pode fechar inteiro com a loja migrada ainda sem teto NENHUM aplicado por dentro do
+item 42 pode fechar inteiro com a loja migrada ainda sem teto de DÓLAR nenhum aplicado por dentro do
 runtime — o próprio `agent_core/providers.py:7` já diz por dentro que "a tela Budget é informativa".
+**Atualização (item 41):** o runtime ganhou um teto, mas não É este — `ai_budgets`/`checkAiBudget`
+continuam sem chamador em Python. O item 41 é um teto de CHAMADAS de LLM por turno
+(`agent_core/metering.py::TurnBudget`), pensado para a escalada de custo de UMA mensagem (até 16
+chamadas), não para o gasto mensal em dólar da organização — os dois podem conviver: o 41 impede que
+um turno individual fuja do controle; o teto de `ai_budgets` (se algum dia portado para o runtime)
+impediria que a SOMA do mês passasse do combinado com o lojista. Ver item 41 abaixo.
 
 **26. Falha permanente não vira sinal para o lojista.** TS: chave inválida, erro permanente ou
 tentativas esgotadas desativam a conversa com `ai_disabled_reason` e disparam `sendAlert` mais uma
@@ -643,6 +649,82 @@ do item 40 foi reescrito, não só aumentado: saíram os 2 testes por AST que ch
 `finally`; entraram 4 comportamentais (`TestScopedAgentLlmClosesTheClientItOwns`) e 2 de wiring por
 AST, um por ponto de fechamento (`TestTheTurnWiresIntoTheScope`, `respond()` e `touch()`) — 9 testes
 no arquivo (era 5), líquido +4 na suíte. `lint-imports`: 3 contratos mantidos, 0 quebrados.
+
+**Item 41, fechado — teto de custo por turno.** `MAX_TOOL_ROUNDS=3` (`agent_core/responder.py`) é
+POR TENTATIVA de geração e `REGENERATION_LIMIT=2` (`judges/pre_send.py`) dá 3 tentativas por turno:
+3 × (3 rodadas de tool + 1 chamada final forçada sem tools) = **12 chamadas de geração** + **3
+chamadas de juiz** (uma por tentativa) + **até 1 embedding** (uma vez por turno, não multiplicado) =
+**até 16 chamadas de LLM por mensagem de cliente, no pior caso**. Nenhum teto existia: `MeteredLlm`
+(`agent_core/metering.py`) sempre registrava, nunca recusava; e o `checkAiBudget` do TS
+(`src/lib/ai/budget.ts`) nunca é chamado do runtime (ver a correção do item 37 acima).
+
+*Onde o teto mora, e por quê (ruling B).* `MeteredLlm` é o único código por onde passa TODA chamada
+de LLM de um turno — `agent_reply`, `judge_pre` e `embedding`, três finalidades, três instâncias,
+UM `TurnBudget` (`agent_core/metering.py`) compartilhado por referência entre as três na composição
+(`responder.py::build_responder.respond`, uma instância nova por turno). `TurnBudget.reserve(purpose)`
+roda ANTES do request de rede, dentro de `MeteredLlm.chat`/`.embed` — a chamada recusada nunca sai,
+nunca custa nada e nunca vira linha em `internal.llm_calls`. Contar em outro lugar (dentro de
+`generate`, de `guarded_reply`, de `_knowledge`) divergiria do que `MeteredLlm` já vê; não foi
+preciso, porque `MeteredLlm` serve.
+
+*O que acontece ao estourar (ruling C) — em `judges/pre_send.py::guarded_reply`.* Uma
+`TurnBudgetExceeded` levantada de `generate()` ou de `judge()` PARA a escalada: a tentativa em curso
+não conta (não produziu julgamento), e o loop sai sem tentar mais nenhuma geração nem regeneração.
+Se uma tentativa ANTERIOR já tinha produzido um rascunho reprovado só em critério `standard` (o
+`best` que o mecanismo de regeneração já mantinha), esse rascunho SAI — o cliente recebe a melhor
+resposta que o turno conseguiu gerar dentro do teto, exatamente como quando as regenerações se
+esgotam sozinhas (mesmo código, mesmo `if best is None`). Só quando não existe rascunho NENHUM
+(o teto estourou antes de qualquer tentativa terminar) é que o turno falha: `outcome.draft is None`,
+`outcome.blocked_by == "budget_exceeded"`, e `responder.py` abre `public.alerts`
+(`type=critical_violation`, `severity=critical`) com um título que diz a verdade — "Teto de custo do
+turno foi atingido..." — em vez do título fixo "Judge 1 reprovou...", que mentiria sobre a causa.
+
+*O default, e de onde saiu (ruling D).* `DEFAULT_TURN_LLM_CALL_LIMIT = 8`
+(`agent_core/metering.py`), configurável por `AGENTS_TURN_LLM_CALL_LIMIT` (ms-style env override, lido
+uma vez na composição por `responder.py::default_turn_llm_call_limit`, mesmo padrão de
+`AGENTS_RUBRICS_DIR`). NÃO é metade do pior caso por coincidência de conta redonda — é o gasto de um
+turno NORMAL, medido pela FORMA do código, não pela média empírica (sem banco disponível nesta
+tarefa): um turno que passa de primeira usa 1 chamada de geração (sem tool) + 1 julgamento = 2; um
+turno com UMA rodada de tool (o caso comum documentado em
+`tests/db/test_responder_tool_loop.py` — `create_coupon`) usa 2 gerações + 1 julgamento = 3; com
+embedding (busca de conhecimento, no máximo +1) chega a 4. Um turno normal gasta **2 a 4 chamadas**.
+8 dá folga para absorver uma regeneração INTEIRA do Judge 1 (mais 1 geração + 1 julgamento, e ainda
+uma rodada extra de tool) sem jamais chegar perto do teto — e ainda para bem antes do pior caso de
+desenho (8 é 50% de 16). Um teto mais apertado (ex.: 4) cortaria exatamente o caso comum "uma
+regeneração com uma rodada de tool"; o sintoma não seria erro, seria resposta pior sem ninguém ligar
+ao teto — o risco que o ruling D pede para evitar.
+
+*Divergência deliberada do TS, declarada (ver `agent_core/metering.py`, docstring do módulo).* O TS
+bloqueia por ORÇAMENTO (dólar/mês, `ai_budgets`) em vários pontos de entrada via `checkAiBudget`. O
+runtime tem um teto de CHAMADAS por turno, num ponto único — não é o mesmo mecanismo, nem cobre o
+mesmo risco (ver item 25 acima). YAGNI: sem framework de orçamento, sem política por organização —
+`TurnBudget.limit` é um inteiro fixo por ambiente, não uma tabela.
+
+*Ruling E, respeitado.* `MAX_TOOL_ROUNDS` e `REGENERATION_LIMIT` não mudaram — o teto novo é um limite
+SUPERIOR que a suíte prova não disparar num turno normal, não uma redução dos limites de qualidade.
+
+*Ruling F, registrado e NÃO implementado.* O teto de TEMPO do turno inteiro (achado vizinho da
+recon: `respond(job)` roda sem `wait_for` em `queueing/worker.py`, e o `_keepalive` renova lease e
+visibilidade a cada 45s SEM limite de renovações — um turno preso segura worker e cliente
+indefinidamente) virou item novo na fila. Ver **item 68**.
+
+*Testes (ruling G — as duas metades).* `tests/unit/test_pre_send_judge.py::TestTheTurnBudget`: o teto
+corta a escalada e ENTREGA o melhor rascunho quando estoura no meio de uma tentativa
+(`test_the_cap_stops_escalation_and_still_sends_the_best_draft`), e um turno normal fica bem abaixo
+do default e nunca dispara (`test_a_normal_turn_never_touches_the_budget`) — mais um terceiro caso,
+sem rascunho nenhum disponível, que falha alto com o `blocked_by` certo
+(`test_no_draft_at_all_fails_loud_when_the_budget_is_gone_from_the_start`).
+`tests/unit/test_llm_metering.py::TestTheTurnBudget`: a chamada além do teto é recusada e não deixa
+linha (`test_a_call_beyond_the_limit_is_refused_and_leaves_no_row`), o teto é compartilhado entre
+finalidades diferentes (`test_the_budget_is_shared_across_purposes`), e um turno normal com as três
+finalidades reais (agent_reply + judge_pre + embedding) fica sob o default
+(`test_a_normal_turn_never_touches_the_default_budget`).
+
+**Suíte:** `tests/unit` 1203 verdes (`PYTHONUTF8=1`; era 1197, +6). `lint-imports`: 3 contratos
+mantidos, 0 quebrados. `tests/db` e `tests/pipeline` pedem Postgres, indisponível nesta máquina — não
+rodaram; a integração completa (`_metered`/`partial` compartilhando o `TurnBudget` do turno real) foi
+verificada manualmente contra a composição de `responder.py` (ver `task-41-report.md`), não só contra
+dublês.
 
 ### Regras When/Do
 
