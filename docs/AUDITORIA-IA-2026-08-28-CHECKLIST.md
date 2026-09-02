@@ -784,18 +784,55 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   montada certa, sem rede real (só inspeciona o `base_url` do client). `tests/pipeline` e
   `tests/db` não rodaram — pedem Postgres em Docker.
 
-- [ ] **37. Trilha e relatórios para org migrada** `[confirmado]`
+- [x] **37. Trilha e relatórios para org migrada** `[relatado]` · commit `3e2a4462`
+  (parte Python) · relatório `task-37-report.md`
   Relatórios, propostas, kappa, painel de custo, analytics e `update_agent_stats` leem `agent_traces` /
   `ai_usage_logs`, que o runtime não escreve. Para org migrada tudo vira zero permanente.
 
-  **Mais um, vindo do item 30:** `conversation-ai-status.ts:166-168` desliga o badge
-  explicativo para org em modo `runtime` com o argumento de que "o runtime Python nunca lê
-  essa coluna". Agora lê, e os guards decidem — então o badge pode dizer "Bot ativo" numa
-  conversa em que o agente está calado por `stop_on_human_reply`, teto, horário, cooldown
-  ou ativação manual. Nas duas TRANSFERÊNCIAS o badge fica honesto (a checagem de
-  `ai_enabled` roda antes do early-return de `runtime`); a mentira sobra nos outros cinco.
-  O conserto reusa a ponte SQL que o item 30 construiu, e o passo `skipped` já leva o motivo
-  ao inbox. Decisão de UI: fica aqui, não vira item novo.
+  **Fechado: `ai_usage_logs`, e com ela o teto de gasto.** Era a razão do item, não o painel —
+  `budget.ts:101-112` somava zero em `ai_usage_logs` e falhava **ABERTO**: org migrada gastava sem
+  limite algum. Entre abrir uma segunda escrita em Python e fechar a lacuna na trilha que o runtime
+  já grava (`internal.llm_calls`), a ponte coube inteira: `agent_id` virou coluna nova (preenchida
+  pelo escritor já existente em `responder.py`/`toucher.py`, do mesmo jeito que `organization_id` e
+  `conversation_id` já chegam por parâmetro, nunca pelo `CallRecord`); `success` não virou coluna —
+  `internal.llm_calls` só recebe chamada CONCLUÍDA (`metering.py`), então todo espelho É sucesso, por
+  definição, sem inventar dado. Um trigger (`supabase/migrations/20260902000001_ai_usage_logs_bridge.sql`)
+  espelha cada linha nova de `internal.llm_calls` para `public.ai_usage_logs`, com um mapa
+  `purpose`→`feature` explícito (`runtime_agent_reply`, `runtime_judge_pre`, ...; vocabulário próprio,
+  não o do TS) que falha alto — não inventa `feature` — se um `purpose` novo não estiver mapeado.
+  Travado sem banco por `runtime/tests/unit/test_ai_usage_logs_bridge.py`, que lê os dois `.sql` e
+  quebra se o CHECK de `purpose` e o `CASE` do trigger divergirem.
+
+  **Bloqueado, e reportado em vez de forçado: `agent_traces`.** O ruling do controlador foi explícito
+  — se cumprir a regra de `metering.py` ("conteúdo nunca entra num `CallRecord`") exigisse mais que um
+  repositório novo e sua migração, parar e reportar. Exige. `agent_traces.input/output/tool_calls`
+  pede o texto e as tool calls do turno VENCEDOR, mas `guarded_reply` (`judges/pre_send.py:304-371`,
+  `REGENERATION_LIMIT=2`) escolhe o rascunho de **melhor nota entre até 3 tentativas**, não
+  necessariamente a última — hoje nenhuma camada devolve, junto com o rascunho escolhido, QUAIS tool
+  calls e QUAL geração produziram aquele rascunho especificamente. Fechar isso direito pede
+  encadear estado por `generate`/`traced_generate`/`guarded_reply` (qual tentativa venceu, as tool
+  calls dela) — redesenho de fluxo, não wiring de uma escrita nova. Consumidores que dependem de
+  `agent_traces` (propostas de melhoria, dataset de kappa/eval) continuam zerados para org migrada.
+  Proposto como item novo na fila, com o próprio achado desta investigação como ponto de partida.
+
+  **Fora desta parte, por escopo:** `update_agent_stats` (não lê nenhuma das duas tabelas — só nunca é
+  chamada para org migrada; nenhum ruling do item cobriu isso, não implementado). A RLS de
+  `ai_usage_logs` (`FOR ALL USING (true)`, sem isolamento real por org) fica como está — ruling E:
+  consertá-la é postura de segurança que atinge o lado TS também, não é este item.
+
+  **Mais um, vindo do item 30 — não implementado nesta tarefa (é a parte Python):**
+  `conversation-ai-status.ts:166-168` desliga o badge explicativo para org em modo `runtime` com o
+  argumento de que "o runtime Python nunca lê essa coluna". Agora lê, e os guards decidem — então o
+  badge pode dizer "Bot ativo" numa conversa em que o agente está calado por `stop_on_human_reply`,
+  teto, horário, cooldown ou ativação manual. Nas duas TRANSFERÊNCIAS o badge fica honesto (a checagem
+  de `ai_enabled` roda antes do early-return de `runtime`); a mentira sobra nos outros cinco. O
+  conserto reusa a ponte SQL que o item 30 construiu, e o passo `skipped` já leva o motivo ao inbox.
+  Decisão de UI: fica aqui, não vira item novo — mas é `src/`, e esta tarefa não tocou em `src/`. Vai
+  em despacho separado.
+
+  **Suíte:** `tests/unit` 1170 verdes (`PYTHONUTF8=1`). `tests/pipeline` e `tests/db` não rodaram —
+  pedem Postgres em Docker, indisponível nesta máquina; o teste novo do espelho
+  (`tests/db/test_llm_calls_persistence.py::TestTheUsageLogsMirror`) fica sem prova executável aqui.
 
 - [ ] **38. Typing indicator** `[relatado]`
   Divergência já declarada. Depende do outbox carregar o wamid do último inbound.

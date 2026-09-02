@@ -446,7 +446,17 @@ chave direta responde — vai para o host certo, no formato que já era falado.
 `agent_traces`: as anotações do lojista (bom/ruim/corrigir) e, por cima delas, os datasets de eval
 (`src/lib/ai/evals.ts:249,337`) e as propostas de melhoria do agente (`proposals.ts:320`).
 *Efeito na loja:* não há turno para o lojista avaliar, então não há dataset de eval nem proposta de
-melhoria — o ciclo de qualidade do produto para de girar para essa org. **Dívida — item 37.**
+melhoria — o ciclo de qualidade do produto para de girar para essa org.
+**Dívida — item 37 investigou e parou de propósito (BLOCKED, não implementado).** A regra de
+`agent_core/metering.py` ("conteúdo nunca entra num `CallRecord`") não abre exceção por
+conveniência, e escrever `agent_traces` direito esbarra em algo mais fundo que um repositório novo:
+`judges/pre_send.py:304-371` (`guarded_reply`, `REGENERATION_LIMIT=2`) escolhe o rascunho de MELHOR
+NOTA entre até 3 tentativas de geração — não necessariamente a última —, e hoje nenhuma camada
+devolve, junto com o rascunho vencedor, quais tool calls e qual geração especificamente o
+produziram. Gravar `agent_traces` certo pede encadear esse estado por
+`generate`/`traced_generate`/`guarded_reply`; é redesenho de fluxo, não wiring de uma escrita nova
+— o ruling do item mandou parar e reportar exatamente neste ponto, em vez de forçar. Ver
+`task-37-report.md`.
 
 **24. `ai_usage_logs` e os contadores do agente não são escritos.** TS: `engine.ts:455-494` grava
 uso via `trackAiUsage` e incrementa `update_agent_stats`; `cloud-sender.ts:369-377` incrementa
@@ -455,7 +465,16 @@ nenhum dos quatro; o custo vai para `internal.llm_calls` (`agent_core/metering.p
 Atividade (`src/lib/ai/activity.ts`) mas não estas telas.
 *Efeito na loja:* Configurações → Uso de IA (`/api/ai/usage`, que lê `ai_usage_logs`) mostra zero
 permanente, e o dashboard do agente fica em "0 mensagens / 0 conversas" enquanto ele atende.
-**Dívida — item 37.**
+**`ai_usage_logs` — resolvido pelo item 37.** `internal.llm_calls` ganhou a coluna `agent_id`
+(preenchida pelo mesmo escritor de sempre, `responder.py`/`toucher.py`) e um trigger
+(`supabase/migrations/20260902000001_ai_usage_logs_bridge.sql`) espelha cada linha concluída para
+`public.ai_usage_logs`, com mapa `purpose`→`feature` explícito e travado por teste. Configurações →
+Uso de IA passa a mostrar dado real para org migrada.
+**`update_agent_stats`/`increment_agent_conversations`/carimbo de `ai_agent_id` — seguem dívida, sem
+dono.** Nenhum ruling do item 37 cobriu esses três; não é a mesma tabela, é lido/escrito só em
+`ai_agents`/`whatsapp_cloud_conversations`, e nenhum leitor do item 37 depende deles. "0 mensagens /
+0 conversas" no dashboard do agente continua, mesmo para a org cujo custo real já aparece em
+Uso de IA.
 
 **25. O teto de gasto mensal não é aplicado.** TS: `engine.ts:91` chama `checkAiBudget` a cada
 turno, e o limite de `ai_budgets` desativa a conversa com `budget_exceeded`
@@ -463,11 +482,14 @@ turno, e o limite de `ai_budgets` desativa a conversa com `budget_exceeded`
 milissegundos da humanização. E o gate do TS, se um dia rodasse sobre esta org, leria sempre zero:
 `src/lib/ai/budget.ts:101` soma `ai_usage_logs`, que a ausência 24 deixa vazia.
 *Efeito na loja:* o limite mensal em dólar deixa de existir para a loja migrada.
-**Dívida — sem dono.** O item 42 conserta a contabilidade de custo do lado TS (o dicionário de
+**A causa imediata (24, `ai_usage_logs` vazia) está fechada pelo item 37** — se `budget.ts` algum
+dia rodar sobre uma org `runtime`, a soma não é mais zero por definição. **O resto segue dívida —
+sem dono.** O item 42 conserta a contabilidade de custo do lado TS (o dicionário de
 preços que devolve `0`, o fail-open do `budget.ts`) e manda portar a decisão do
-`agent_core/metering.py`; nada nele faz o runtime **ler `ai_budgets` e parar de responder**. O
-item 42 pode fechar inteiro com a loja migrada ainda sem teto nenhum — o próprio
-`agent_core/providers.py:7` já diz por dentro que "a tela Budget é informativa".
+`agent_core/metering.py`; nada nele, nem o item 37, faz o runtime **ler `ai_budgets` e parar de
+responder** — o item 37 só corrigiu o dado que o gate leria, não construiu o gate em Python. O
+item 42 pode fechar inteiro com a loja migrada ainda sem teto NENHUM aplicado por dentro do
+runtime — o próprio `agent_core/providers.py:7` já diz por dentro que "a tela Budget é informativa".
 
 **26. Falha permanente não vira sinal para o lojista.** TS: chave inválida, erro permanente ou
 tentativas esgotadas desativam a conversa com `ai_disabled_reason` e disparam `sendAlert` mais uma
