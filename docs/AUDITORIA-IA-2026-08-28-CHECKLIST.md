@@ -734,10 +734,50 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `tests/pipeline` e `tests/db` não rodaram — pedem Postgres em Docker, e o Docker Desktop desta
   máquina está desligado; nenhuma delas afirma versão de API.
 
-- [ ] **36. Providers ausentes no Python** `[confirmado]`
+- [x] **36. Providers ausentes no Python** `[relatado]` · commit `ff1469d4` · relatório
+  `task-36-report.md`
   Python tem OpenRouter, OpenAI-compat e Anthropic; o TS tem esses mais Gemini, DeepSeek e Groq.
   Org migrada com agente em `gemini` cai em `NoOrgLlmKey` e o turno morre.
   Ação: portar, ou bloquear a escolha na UI para org em `runtime`.
+
+  **A premissa estava errada, e não era `NoOrgLlmKey`.** `agent_core/providers.py:79-91`
+  (`client_for`) já mandava todo provider desconhecido para `OpenAICompatibleLlm`; o problema era
+  o default de `direct_providers.py:93` (antes do item 36: linha 52) — `base_url or
+  OPENAI_BASE_URL` incondicional. Org com provider `groq`/`deepseek`/`gemini` e sem `base_url`
+  própria enviava a chave **certa** para a **OpenAI**, que devolvia 401 classificado PERMANENTE
+  (`queueing/failures.py:85`) — sem alerta de chave ausente. `NoOrgLlmKey` só dispara quando não
+  há chave nenhuma (`providers.py:117`) ou quando falta `ENCRYPTION_KEY` para decifrar (`:55`);
+  nenhum dos dois é o caso de uma org com a chave da Groq cadastrada.
+
+  **Groq e DeepSeek ganharam URL, não adapter.** Os dois já falam o dialeto OpenAI que
+  `OpenAICompatibleLlm` implementa — é o próprio TS que prova, chamando `/chat/completions` nos
+  dois (`ai-providers.ts:284,318`). `DEFAULT_BASE_URLS` em `direct_providers.py` é o mapa
+  provider → host (porta já autorizada pela fitness `test_no_provider_network.py`), e `client_for`
+  (`providers.py:87-91`) passa a montar `choice.base_url or DEFAULT_BASE_URLS.get(provider)` — a
+  `base_url` gravada na linha do banco continua vencendo; org com proxy próprio não é atropelada.
+
+  **Gemini foi verificado antes de escolher, e passou nas três provas.** POST real contra
+  `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions` com chave inválida
+  (sem gastar credencial de lojista, precedente do item 27): o endpoint EXISTE (400
+  `INVALID_ARGUMENT`, não 404); ACEITA `Authorization: Bearer` — a mensagem muda de "Missing or
+  invalid Authorization header." (sem header) para "Please pass a valid API key" (header presente,
+  chave inválida); e ACEITA `tools` no formato OpenAI — a mesma chamada com e sem `tools` no corpo
+  devolve o mesmo erro de auth, ou seja o corpo não é rejeitado antes da checagem de chave. As três
+  provas do ruling C se confirmaram, então Gemini entrou no MESMO mapa/branch de Groq e DeepSeek —
+  sem adapter nativo, sem arquivo novo, sem mexer na trava de fitness. **Divergência deliberada do
+  TS** (que chama o `:generateContent` nativo, `ai-providers.ts:246`), declarada em comentário em
+  `direct_providers.py`, com a evidência bruta em `task-36-report.md`. `google` é alias de `gemini`,
+  como o TS trata as duas no mesmo `case` (`ai-providers.ts:426-427`).
+
+  **Registrado, não implementado:** bloquear a escolha de provider na UI para org em `runtime` (a
+  alternativa que o item oferecia) é decisão de produto, fica registrada. `ai_agents.provider` e
+  `organization_api_keys.provider` seguem texto livre — sem `CHECK`/enum: apertar o domínio agora
+  quebraria org que já gravou uma string fora da lista, e migração de banco não é este item.
+
+  **Suíte:** `tests/unit` 1160 verdes (`PYTHONUTF8=1`, item 54 fora da conta). Testes novos em
+  `test_provider_cascade.py::TestDefaultBaseUrls` — cada provider prova a classe certa E a URL
+  montada certa, sem rede real (só inspeciona o `base_url` do client). `tests/pipeline` e
+  `tests/db` não rodaram — pedem Postgres em Docker.
 
 - [ ] **37. Trilha e relatórios para org migrada** `[confirmado]`
   Relatórios, propostas, kappa, painel de custo, analytics e `update_agent_stats` leem `agent_traces` /

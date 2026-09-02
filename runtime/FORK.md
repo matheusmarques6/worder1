@@ -402,14 +402,37 @@ versão da Meta precisa mexer em seis arquivos do TS, não em um.
 
 ### O provedor de LLM
 
-**22. Gemini, Groq e DeepSeek não existem no runtime.** TS: `ai-providers.ts:5` aceita sete
-providers, com adapter nativo para cada um. Runtime: OpenRouter (`openrouter.py`), Anthropic e
-"qualquer OpenAI-compatível" (`direct_providers.py`) — `agent_core/providers.py:80-87` manda todo
-provider desconhecido para `/chat/completions` na `base_url` da linha; sem `base_url` própria, vai
-para `api.openai.com` com a chave errada.
-*Efeito na loja:* agente configurado em `gemini` com chave direta do Google não responde (falha do
-provedor a cada turno, escada até a DLQ) ou cai em `NoOrgLlmKey`, que abre alerta e cala.
-**Dívida — item 36.**
+**22. Gemini, Groq e DeepSeek — item 36, resolvido para os três, sem adapter nativo para o Gemini.**
+TS: `ai-providers.ts:5` aceita sete providers, com adapter nativo para cada um. Runtime (estado
+ANTES do item 36): OpenRouter (`openrouter.py`), Anthropic e "qualquer OpenAI-compatível"
+(`direct_providers.py`) — `agent_core/providers.py:75-83` (`client_for`, antes do item 36) mandava
+todo provider desconhecido para
+`/chat/completions` na `base_url` da linha; sem `base_url` própria, ia para `api.openai.com` **com
+a chave certa mandada para o host errado** — não era `NoOrgLlmKey` (a premissa original do item
+estava errada, ruling A do item 36): a chave existe, só bate na porta errada e volta HTTP 401,
+classificado PERMANENTE, sem alerta de "chave ausente".
+*O que subiu:* `DEFAULT_BASE_URLS` em `direct_providers.py` — mapa provider → host, só usado quando
+a org não gravou `base_url` própria (essa continua vencendo). Groq
+(`https://api.groq.com/openai/v1`) e DeepSeek (`https://api.deepseek.com/v1`) já falavam o dialeto
+OpenAI que `OpenAICompatibleLlm` implementa; só faltava a URL — mesma prova que o TS já fazia ao
+chamar `/chat/completions` nos dois. Gemini e o alias `google` (o TS trata as duas strings no mesmo
+`case`, `ai-providers.ts:426-427`) entram no MESMO mapa, contra o endpoint OpenAI-compatível do
+Google (`https://generativelanguage.googleapis.com/v1beta/openai`) — verificado por POST real com
+chave inválida, sem gastar credencial de lojista (evidência em
+`.superpowers/sdd/AUDITORIA-IA-2026-08-28-CHECKLIST/task-36-report.md`): o endpoint existe (400, não
+404), aceita `Authorization: Bearer` e aceita `tools` no formato OpenAI.
+*O que ficou de fora:* o adapter NATIVO do Gemini (`:generateContent`, corpo `contents`/`parts`,
+header `x-goog-api-key`, que é o que o TS de fato chama em `ai-providers.ts:246`) não foi portado —
+o item 36 escolheu o caminho OpenAI-compatível porque cabe no mapa/branch existente, sem arquivo
+novo e sem mexer na trava de fitness (`test_no_provider_network.py`); se esse endpoint alternativo
+um dia sair do ar ou perder paridade de `tools`, a escolha entre adapter nativo e bloqueio na UI
+volta a ser decisão de produto. **Bloquear a escolha do provider na UI para org em `runtime`** (a
+alternativa que o item oferecia) não foi implementada — registrada, não fechada. `ai_agents.provider`
+e `organization_api_keys.provider` seguem texto livre, sem `CHECK`/enum — a UI pode gravar qualquer
+string sem que o Python recuse.
+*Efeito na loja, resolvido:* agente configurado em `groq`, `deepseek`, `gemini` ou `google` com
+chave direta responde — vai para o host certo, no formato que já era falado.
+**Item 36, fechado nesta forma.**
 
 ### Trilha, custo e visibilidade
 
@@ -520,12 +543,12 @@ from public.ai_agents where organization_id = …`) e percorra esta lista. Nenhu
 | `ai_agent_chunks` da org | tem linhas | **30** — sem piso de relevância, e **32** se a caixa não estiver marcada |
 | `persona.{response_length,tone,language,reply_delay,role_description}` | preenchidos | **13**, **14**, **15**, **18** |
 | `temperature` / `max_tokens` | diferentes do default (0.7 / 2048) | **16** |
-| `provider` | ∈ {`gemini`, `groq`, `deepseek`} | **22** — o agente não responde. **Troque o provider antes do insert.** |
 | `ai_budgets` da org | tem linha com limite | **25** — o limite deixa de existir |
 | `ai_agent_actions` da org | tem regra ativa | **27** — as regras When/Do param |
 | `whatsapp_business_accounts` da org | mais de uma com `status='active'` | **3** e **31** — agente errado E número errado |
 | Volume de áudio/imagem no inbox da org | alto (varejo BR: quase sempre) | **11** — respostas no vazio desde a primeira hora |
 
-Três dessas mudam a decisão, não só a expectativa: `provider` fora dos suportados (22) e as duas
-linhas de pré-requisito (1 e 2) devem ser resolvidas **antes** do `insert`, não depois. Mais de uma
-conta WhatsApp ativa (3 e 31) é motivo para adiar a migração dessa org até ter dono.
+Duas dessas mudam a decisão, não só a expectativa: as duas linhas de pré-requisito (1 e 2) devem
+ser resolvidas **antes** do `insert`, não depois. Mais de uma conta WhatsApp ativa (3 e 31) é
+motivo para adiar a migração dessa org até ter dono. (`provider` fora dos suportados bloqueava até
+o item 36 fechar — `gemini`, `google`, `groq` e `deepseek` agora respondem, ver item 22 acima.)
