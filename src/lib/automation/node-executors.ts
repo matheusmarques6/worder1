@@ -237,8 +237,8 @@ const actionExecutors: Record<string, NodeExecutor> = {
               automation_run_id: runId,
               flow_id: flowId,
               node_id: node?.id || null,
-              message_body: config.message || null,
-              template_name: config.templateId || null,
+              message_body: config.message || config.bodyText || null,
+              template_name: config.templateName || config.templateId || null,
               template_params: config.templateParams || null,
               status: 'pending',
             })
@@ -254,16 +254,26 @@ const actionExecutors: Record<string, NodeExecutor> = {
         console.warn('[action_whatsapp] whatsapp_sends prep failed (proceeding):', e);
       }
 
+      // O editor de WhatsApp grava templateName (nome Meta) e o modo em
+      // messageMode; fluxos antigos gravavam templateId. Aceitar os dois
+      // — sem isso o modo template caía no ramo de texto com body vazio.
+      const templateName: string | undefined =
+        config.templateName || config.templateId || undefined
+      // Modo texto explícito vence (template que sobrou de uma troca de
+      // modo não pode reativar); legado sem messageMode segue o antigo
+      // critério "tem template → é template".
+      const isTemplateMode = !!templateName && config.messageMode !== 'text'
+
       // Onda 10 — guard opt-out (automation nunca tem override; e silencioso).
       if (organizationId && phone) {
         let tplCategory: 'MARKETING' | 'UTILITY' | 'AUTHENTICATION' | undefined
-        if (config.templateId && supabase) {
+        if (templateName && supabase) {
           try {
             const { data: tpl } = await supabase
               .from('whatsapp_templates')
               .select('category')
               .eq('organization_id', organizationId)
-              .eq('name', config.templateId)
+              .eq('name', templateName)
               .maybeSingle()
             const upper = (tpl?.category as string | undefined)?.toUpperCase()
             if (upper === 'MARKETING' || upper === 'UTILITY' || upper === 'AUTHENTICATION') {
@@ -301,17 +311,19 @@ const actionExecutors: Record<string, NodeExecutor> = {
               body: JSON.stringify({
                 messaging_product: 'whatsapp',
                 to: phone.replace(/\D/g, ''),
-                type: config.templateId ? 'template' : 'text',
-                ...(config.templateId
+                type: isTemplateMode ? 'template' : 'text',
+                ...(isTemplateMode
                   ? {
                       template: {
-                        name: config.templateId,
+                        name: templateName,
                         language: { code: config.language || 'pt_BR' },
                         components: config.templateParams || [],
                       },
                     }
                   : {
-                      text: { body: config.message },
+                      // O editor grava o texto em bodyText; message é o
+                      // legado — aceitar os dois.
+                      text: { body: config.message || config.bodyText },
                     }),
               }),
             }
@@ -1554,10 +1566,17 @@ const actionExecutors: Record<string, NodeExecutor> = {
       }
 
       try {
-        // Preparar headers
+        // Preparar headers. A UI grava headers como STRING JSON — espalhar
+        // uma string viraria chaves numéricas ('0': '{', ...). Parse antes.
+        let extraHeaders: Record<string, string> = {};
+        if (typeof config.headers === 'string') {
+          try { extraHeaders = JSON.parse(config.headers || '{}'); } catch { extraHeaders = {}; }
+        } else if (config.headers && typeof config.headers === 'object') {
+          extraHeaders = config.headers;
+        }
         const headers: Record<string, string> = {
           'Content-Type': 'application/json',
-          ...config.headers,
+          ...extraHeaders,
         };
 
         // Adicionar autenticação se houver credenciais
@@ -1672,12 +1691,20 @@ const actionExecutors: Record<string, NodeExecutor> = {
       if (!contactId || !organizationId) {
         return { status: 'error', output: null, error: 'Contato ou organização não encontrado' };
       }
+      if (!config.listId) {
+        return { status: 'error', output: null, error: 'Nenhuma lista selecionada no nó' };
+      }
       try {
-        await supabase.from('list_contacts').upsert({
+        // Supabase não lança — sem checar o error, FK quebrada ou lista
+        // apagada viravam "success" sem gravar nada.
+        const { error } = await supabase.from('list_contacts').upsert({
           list_id: config.listId,
           contact_id: contactId,
           organization_id: organizationId,
         }, { onConflict: 'list_id,contact_id' });
+        if (error) {
+          return { status: 'error', output: null, error: `Falha ao adicionar à lista: ${error.message}` };
+        }
         return { status: 'success', output: { added: true, listId: config.listId } };
       } catch (error: any) {
         return { status: 'error', output: null, error: error.message };
@@ -1690,8 +1717,14 @@ const actionExecutors: Record<string, NodeExecutor> = {
   // Aguardar resposta com timeout — marca conversa aguardando
   action_whatsapp_wait_reply: {
     async execute({ config, context, isTest }) {
+      // defaultConfig do catálogo grava timeoutMinutes; fluxos antigos,
+      // timeoutSeconds — aceitar os dois (senão era sempre 1h fixa).
+      const timeoutSeconds =
+        Number(config.timeoutSeconds) ||
+        (Number(config.timeoutMinutes) ? Number(config.timeoutMinutes) * 60 : 0) ||
+        3600;
       if (isTest) {
-        return { status: 'success', output: { waiting: true, timeout_seconds: config.timeoutSeconds || 3600 } };
+        return { status: 'success', output: { waiting: true, timeout_seconds: timeoutSeconds } };
       }
       try {
         const { supabaseAdmin } = await import('@/lib/supabase-admin');
@@ -1699,7 +1732,7 @@ const actionExecutors: Record<string, NodeExecutor> = {
         if (!conversationId) {
           return { status: 'error', output: null, error: 'conversationId missing from context' };
         }
-        const timeoutMs = (config.timeoutSeconds || 3600) * 1000;
+        const timeoutMs = timeoutSeconds * 1000;
         await supabaseAdmin
           .from('whatsapp_conversations')
           .update({
@@ -1731,11 +1764,16 @@ const actionExecutors: Record<string, NodeExecutor> = {
         if (!conversationId || !organizationId) {
           return { status: 'error', output: null, error: 'conversationId/organizationId missing' };
         }
+        // defaultConfig do catálogo grava {targetType, targetId}; fluxos
+        // antigos gravam agentId/queueId direto — aceitar os dois (sem
+        // isso a transferência ia sem destino nenhum).
+        const agentId = config.agentId || (config.targetType === 'agent' ? config.targetId : undefined);
+        const queueId = config.queueId || (config.targetType === 'queue' ? config.targetId : undefined);
         const result = await transferConversation({
           conversationId,
           organizationId,
-          toAgentId: config.agentId,
-          toQueueId: config.queueId,
+          toAgentId: agentId,
+          toQueueId: queueId,
           reason: config.reason || 'Transferido por automacao',
         });
         if (result.error) {
@@ -1965,12 +2003,31 @@ const actionExecutors: Record<string, NodeExecutor> = {
       }
       try {
         const { generateShopifyCoupon } = await import('@/lib/services/whatsapp/shopify-coupon-service');
+        // Sem credencial explícita, usa a loja da automação (o engine põe
+        // storeId no contexto) — antes o nó ia SEMPRE sem shopDomain/token.
+        let shopDomain: string | undefined = credentials?.shopDomain;
+        let accessToken: string | undefined = credentials?.accessToken;
+        if ((!shopDomain || !accessToken) && context.storeId) {
+          const { supabaseAdmin } = await import('@/lib/supabase-admin');
+          const { data: store } = await supabaseAdmin
+            .from('shopify_stores')
+            .select('shop_domain, access_token')
+            .eq('id', context.storeId)
+            .eq('is_active', true)
+            .maybeSingle();
+          shopDomain = shopDomain || store?.shop_domain;
+          accessToken = accessToken || store?.access_token;
+        }
+        if (!shopDomain || !accessToken) {
+          return { status: 'error', output: null, error: 'Sem loja Shopify conectada para gerar o cupom (automação sem loja e nó sem credencial)' };
+        }
         const result = await generateShopifyCoupon({
-          shopDomain: credentials?.shopDomain,
-          accessToken: credentials?.accessToken,
+          shopDomain,
+          accessToken,
           discountType: config.discountType || 'percentage',
           value: config.value || 10,
-          validityDays: config.validityDays || 7,
+          // O catálogo grava expiryDays; fluxos antigos, validityDays.
+          validityDays: config.validityDays || config.expiryDays || 7,
           prefix: config.prefix || 'GIFT',
           contactEmail: context.contact?.email,
         });
@@ -2016,13 +2073,19 @@ const actionExecutors: Record<string, NodeExecutor> = {
       if (!contactId || !organizationId) {
         return { status: 'error', output: null, error: 'Contato ou organização não encontrado' };
       }
+      if (!config.listId) {
+        return { status: 'error', output: null, error: 'Nenhuma lista selecionada no nó' };
+      }
       try {
-        await supabase
+        const { error } = await supabase
           .from('list_contacts')
           .delete()
           .eq('list_id', config.listId)
           .eq('contact_id', contactId)
           .eq('organization_id', organizationId);
+        if (error) {
+          return { status: 'error', output: null, error: `Falha ao remover da lista: ${error.message}` };
+        }
         return { status: 'success', output: { removed: true, listId: config.listId } };
       } catch (error: any) {
         return { status: 'error', output: null, error: error.message };
@@ -2051,7 +2114,7 @@ const conditionExecutors: Record<string, NodeExecutor> = {
 
   condition_field: {
     async execute({ config, context }) {
-      const value1 = getNestedValue(context, config.field);
+      const value1 = resolveConditionValue(context, config.field);
       const value2 = config.value;
       const operator = config.operator || 'equals';
 
@@ -2184,7 +2247,7 @@ const conditionExecutors: Record<string, NodeExecutor> = {
       const results: boolean[] = [];
 
       for (const condition of conditions) {
-        const value1 = getNestedValue(context, condition.field);
+        const value1 = resolveConditionValue(context, condition.field);
         const result = evaluateCondition(value1, condition.operator, condition.value);
         results.push(result);
       }
@@ -2415,6 +2478,49 @@ const controlExecutors: Record<string, NodeExecutor> = {
 function getNestedValue(obj: any, path: string): any {
   if (!path) return undefined;
   return path.split('.').reduce((current, key) => current?.[key], obj);
+}
+
+// Resolve um caminho de condição contra o contexto REAL de execução.
+// A UI oferece caminhos como `event.total` e `contact.first_name`, mas o
+// contexto montado pelos runners usa `trigger.data.*` e contato camelCase
+// (firstName/lastName/createdAt) — sem estes aliases quase toda opção do
+// dropdown de condição resolvia undefined e a condição caía sempre no
+// ramo "não".
+const CONTACT_FIELD_ALIASES: Record<string, string> = {
+  first_name: 'firstName',
+  last_name: 'lastName',
+  created_at: 'createdAt',
+  lifecycle_stage: 'lifecycleStage',
+  total_orders: 'totalOrders',
+  total_spent: 'totalSpent',
+  last_order_at: 'lastOrderAt',
+};
+
+function resolveConditionValue(context: any, path: string): any {
+  if (!path) return undefined;
+  // 1) caminho literal
+  let v = getNestedValue(context, path);
+  if (v !== undefined) return v;
+  // 2) event.* → trigger.data.* (mesmo alias do variable-engine)
+  if (path.startsWith('event.')) {
+    v = getNestedValue(context, `trigger.data.${path.slice('event.'.length)}`);
+    if (v !== undefined) return v;
+  }
+  // 3) contact.snake_case → contact.camelCase
+  if (path.startsWith('contact.')) {
+    const field = path.slice('contact.'.length);
+    const alias = CONTACT_FIELD_ALIASES[field];
+    if (alias) {
+      v = getNestedValue(context, `contact.${alias}`);
+      if (v !== undefined) return v;
+    }
+  }
+  // 4) campo solto → tenta no payload do gatilho
+  if (!path.includes('.')) {
+    v = getNestedValue(context, `trigger.data.${path}`);
+    if (v !== undefined) return v;
+  }
+  return undefined;
 }
 
 function evaluateCondition(value1: any, operator: string, value2: any): boolean {

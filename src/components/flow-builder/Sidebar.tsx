@@ -60,6 +60,10 @@ interface NodeItemConfig {
   isPremium?: boolean;
   hasAI?: boolean;
   defaultConfig?: Record<string, any>;
+  // Gatilho listado mas SEM produtor no backend: selecionável renderia um
+  // fluxo que nunca dispara. Fica visível (roadmap honesto) porém
+  // desabilitado com "(em breve)".
+  comingSoon?: boolean;
 }
 
 interface SectionConfig {
@@ -96,7 +100,7 @@ const TRIGGER_OPTIONS: NodeItemConfig[] = [
   { type: 'trigger_form_submitted', label: 'Formulário Enviado', description: 'Dispara quando formulário é enviado', icon: FileText, category: 'trigger', color: '#10b981' },
   { type: 'trigger_popup_subscribed', label: 'Inscrito via Popup', description: 'Dispara quando alguém se inscreve em um popup — ideal para welcome flows', icon: FileText, category: 'trigger', color: '#10b981' },
   { type: 'trigger_segment', label: 'Entrou no Segmento', description: 'Contato entrou em um segmento', icon: Users, category: 'trigger', color: '#10b981' },
-  { type: 'trigger_tag', label: 'Tag Adicionada', description: 'Dispara quando tag é adicionada', icon: Tag, category: 'trigger', color: '#10b981' },
+  { type: 'trigger_tag', label: 'Tag Adicionada', description: 'Dispara quando tag é adicionada', icon: Tag, category: 'trigger', color: '#10b981', comingSoon: true },
   { type: 'trigger_rfm_segment_change', label: 'Mudou Segmento RFM', description: 'Dispara quando contato muda de segmento RFM', icon: Users, category: 'trigger', color: '#10b981' },
   // Especiais
   { type: 'trigger_date', label: 'Data/Aniversário', description: 'Dispara em data especial', icon: Calendar, category: 'trigger', color: '#10b981' },
@@ -104,14 +108,14 @@ const TRIGGER_OPTIONS: NodeItemConfig[] = [
   { type: 'trigger_webhook', label: 'Webhook Recebido', description: 'Dispara quando webhook é recebido', icon: Webhook, category: 'trigger', color: '#10b981' },
   // CRM
   { type: 'trigger_deal_created', label: 'Deal Criado', description: 'Dispara quando deal é criado', icon: Briefcase, category: 'trigger', color: '#10b981' },
-  { type: 'trigger_deal_stage', label: 'Deal Mudou Estágio', description: 'Deal muda de estágio', icon: ArrowRight, category: 'trigger', color: '#10b981' },
+  { type: 'trigger_deal_stage', label: 'Deal Mudou Estágio', description: 'Deal muda de estágio', icon: ArrowRight, category: 'trigger', color: '#10b981', comingSoon: true },
   { type: 'trigger_deal_won', label: 'Deal Ganho', description: 'Deal marcado como ganho', icon: Trophy, category: 'trigger', color: '#10b981' },
   { type: 'trigger_deal_lost', label: 'Deal Perdido', description: 'Deal marcado como perdido', icon: XCircle, category: 'trigger', color: '#10b981' },
   // WhatsApp
-  { type: 'trigger_whatsapp', label: 'Mensagem Recebida', description: 'Mensagem WhatsApp recebida', icon: MessageSquare, category: 'trigger', color: '#10b981' },
-  { type: 'trigger_whatsapp_keyword', label: 'Keyword Detectada', description: 'Dispara quando keyword é detectada na mensagem', icon: Target, category: 'trigger', color: '#10b981' },
-  { type: 'trigger_whatsapp_first_message', label: 'Primeira Mensagem', description: 'Dispara na primeira mensagem de um contato novo', icon: MessageCircle, category: 'trigger', color: '#10b981' },
-  { type: 'trigger_ctwa_ad', label: 'Click-to-WhatsApp Ad', description: 'Conversa originada de anúncio (72h)', icon: Globe, category: 'trigger', color: '#10b981' },
+  { type: 'trigger_whatsapp', label: 'Mensagem Recebida', description: 'Mensagem WhatsApp recebida', icon: MessageSquare, category: 'trigger', color: '#10b981', comingSoon: true },
+  { type: 'trigger_whatsapp_keyword', label: 'Keyword Detectada', description: 'Dispara quando keyword é detectada na mensagem', icon: Target, category: 'trigger', color: '#10b981', comingSoon: true },
+  { type: 'trigger_whatsapp_first_message', label: 'Primeira Mensagem', description: 'Dispara na primeira mensagem de um contato novo', icon: MessageCircle, category: 'trigger', color: '#10b981', comingSoon: true },
+  { type: 'trigger_ctwa_ad', label: 'Click-to-WhatsApp Ad', description: 'Conversa originada de anúncio (72h)', icon: Globe, category: 'trigger', color: '#10b981', comingSoon: true },
 ];
 
 // Seções da biblioteca — estilo Klaviyo (Messages / Data / Logic)
@@ -171,7 +175,10 @@ interface SidebarProps {
 }
 
 export function Sidebar({ onTriggerSelect }: SidebarProps) {
-  const [selectedTrigger, setSelectedTrigger] = useState<string>('trigger_abandon');
+  // Default: checkout abandonado (caminho moderno, com filtros/frequência).
+  // O antigo default trigger_abandon depende do pipeline legado de
+  // event_logs — todo fluxo novo nascia no gatilho mais frágil.
+  const [selectedTrigger, setSelectedTrigger] = useState<string>('trigger_checkout_abandoned');
   const [isTriggerDropdownOpen, setIsTriggerDropdownOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState<string[]>(() => {
     const validIds = LIBRARY_SECTIONS.map(s => s.id);
@@ -211,7 +218,7 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
 
       if (!existingTrigger) {
         triggerAddedRef.current = true;
-        const trigger = TRIGGER_OPTIONS[0]; // Carrinho abandonado como padrão
+        const trigger = TRIGGER_OPTIONS.find(t => t.type === 'trigger_checkout_abandoned') || TRIGGER_OPTIONS[0];
 
         const triggerNode: FlowNode = {
           id: `trigger-${Date.now()}`,
@@ -258,12 +265,22 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
     setIsTriggerDropdownOpen(false);
 
     const newTrigger = TRIGGER_OPTIONS.find(t => t.type === triggerType);
-    if (!newTrigger) return;
+    if (!newTrigger || newTrigger.comingSoon) return;
 
     const currentNodes = useFlowStore.getState().nodes;
     const existingTrigger = currentNodes.find(n => n.data.category === 'trigger');
 
     if (existingTrigger) {
+      // A config ESPECÍFICA do gatilho antigo não serve pro novo — reset.
+      // Mas filtros, condições de saída e frequência são universais
+      // (TriggerFiltersConfig) e o lojista já os configurou: preservar,
+      // senão trocar de gatilho zerava as regras de re-entrada em silêncio.
+      const prevConfig = (existingTrigger.data as any)?.config || {};
+      const preserved: Record<string, any> = {};
+      for (const k of ['triggerFilters', 'audienceFilters', 'exitConditions', 'frequencyType', 'frequencyValue', 'frequencyUnit']) {
+        if (prevConfig[k] !== undefined) preserved[k] = prevConfig[k];
+      }
+
       // Update both node.type AND node.data for full sync
       useFlowStore.getState().setNodes(
         currentNodes.map(n =>
@@ -277,7 +294,7 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
                   description: newTrigger.description,
                   nodeType: newTrigger.type,
                   icon: newTrigger.icon?.displayName || 'Zap',
-                  config: {},
+                  config: preserved,
                 },
               }
             : n
@@ -416,10 +433,12 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
                     <button
                       key={trigger.type}
                       onClick={() => handleTriggerChange(trigger.type)}
+                      disabled={trigger.comingSoon}
                       className={cn(
                         'w-full flex items-center gap-2.5 px-3 py-2 text-left',
                         'hover:bg-gray-50 transition-colors',
-                        selectedTrigger === trigger.type && 'bg-blue-50'
+                        selectedTrigger === trigger.type && 'bg-blue-50',
+                        trigger.comingSoon && 'opacity-50 cursor-not-allowed hover:bg-white'
                       )}
                     >
                       <trigger.icon className="w-4 h-4 text-gray-500 shrink-0" />
@@ -429,7 +448,10 @@ export function Sidebar({ onTriggerSelect }: SidebarProps) {
                       )}>
                         {trigger.label}
                       </span>
-                      {selectedTrigger === trigger.type && (
+                      {trigger.comingSoon && (
+                        <span className="text-[10px] text-gray-400 shrink-0 ml-auto">em breve</span>
+                      )}
+                      {!trigger.comingSoon && selectedTrigger === trigger.type && (
                         <div className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0 ml-auto" />
                       )}
                     </button>

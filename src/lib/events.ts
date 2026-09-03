@@ -78,7 +78,10 @@ const EVENT_TO_TRIGGER_MAP: Record<EventType, string> = {
   [EventType.ORDER_CREATED]: 'trigger_order',
   [EventType.ORDER_PAID]: 'trigger_order_paid',
   [EventType.ORDER_FULFILLED]: 'trigger_order_fulfilled',
-  [EventType.ORDER_CANCELLED]: 'trigger_order_cancelled',
+  // O tipo que existe na paleta do builder é trigger_cancelled_order —
+  // o antigo trigger_order_cancelled não existe em lugar nenhum da UI,
+  // então o gatilho de pedido cancelado nunca disparava.
+  [EventType.ORDER_CANCELLED]: 'trigger_cancelled_order',
   [EventType.CHECKOUT_CREATED]: 'trigger_checkout',
   [EventType.CHECKOUT_UPDATED]: 'trigger_checkout',
   [EventType.CART_ABANDONED]: 'trigger_abandon',
@@ -367,39 +370,47 @@ class EventBusClass {
       return true;
     }
 
-    // Verificar cada condição configurada
-    
+    // Verificar cada condição configurada. O editor grava as chaves em
+    // camelCase (tagName, minValue, pipelineId, stageId, webhookId) e
+    // fluxos antigos/API em snake_case — aceitar as duas grafias, senão
+    // o filtro configurado na UI era silenciosamente ignorado aqui.
+
     // Tag específica
-    if (config.tag_name && payload.data.tag_name) {
-      if (config.tag_name !== payload.data.tag_name) {
+    const cfgTag = config.tag_name || config.tagName;
+    if (cfgTag && payload.data.tag_name) {
+      if (cfgTag !== payload.data.tag_name) {
         return false;
       }
     }
 
     // Estágio específico
-    if (config.stage_id && payload.data.to_stage_id) {
-      if (config.stage_id !== payload.data.to_stage_id) {
+    const cfgStage = config.stage_id || config.stageId;
+    if (cfgStage && payload.data.to_stage_id) {
+      if (cfgStage !== payload.data.to_stage_id) {
         return false;
       }
     }
 
     // Valor mínimo
-    if (config.min_value && payload.data.total_value) {
-      if (parseFloat(payload.data.total_value) < parseFloat(config.min_value)) {
+    const cfgMinValue = config.min_value ?? config.minValue;
+    if (cfgMinValue && payload.data.total_value) {
+      if (parseFloat(payload.data.total_value) < parseFloat(cfgMinValue)) {
         return false;
       }
     }
 
     // Pipeline específica
-    if (config.pipeline_id && payload.data.pipeline_id) {
-      if (config.pipeline_id !== payload.data.pipeline_id) {
+    const cfgPipeline = config.pipeline_id || config.pipelineId;
+    if (cfgPipeline && payload.data.pipeline_id) {
+      if (cfgPipeline !== payload.data.pipeline_id) {
         return false;
       }
     }
 
     // Webhook ID específico
-    if (config.webhook_id && payload.data.webhook_id) {
-      if (config.webhook_id !== payload.data.webhook_id) {
+    const cfgWebhook = config.webhook_id || config.webhookId;
+    if (cfgWebhook && payload.data.webhook_id) {
+      if (cfgWebhook !== payload.data.webhook_id) {
         return false;
       }
     }

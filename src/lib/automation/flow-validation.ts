@@ -82,11 +82,33 @@ export function validateFlow(
     })
   }
 
-  // 3. Delays com valores inválidos
+  // 3. Delays com valores inválidos. O editor grava em data.config.value/
+  // .unit (PropertiesPanel); as chaves soltas (minutes/delay/duration) são
+  // de fluxos antigos — ler só elas fazia todo delay validar como 0 e
+  // qualquer valor inválido publicar.
+  const UNIT_MINUTES: Record<string, number> = { minutes: 1, hours: 60, days: 60 * 24, weeks: 60 * 24 * 7 }
   for (const n of nodes) {
     if (!isDelayType(n.type)) continue
     const d = n.data || {}
-    const minutes = Number(d.minutes ?? d.delay ?? d.duration ?? 0)
+    const cfg = d.config || {}
+
+    // control_delay_until não tem duração: exige datetime OU time —
+    // sem nenhum dos dois o executor falha em todo run.
+    if (n.type === 'control_delay_until') {
+      if (!cfg.datetime && !cfg.time) {
+        issues.push({
+          severity: 'error',
+          code: 'DELAY_UNTIL_UNCONFIGURED',
+          nodeId: n.id,
+          message: `O nó "Aguardar até" precisa de uma data/hora ou horário do dia configurado.`,
+        })
+      }
+      continue
+    }
+
+    const rawValue = cfg.value ?? cfg.delayValue ?? d.minutes ?? d.delay ?? d.duration ?? 0
+    const unit = String(cfg.unit ?? cfg.delayUnit ?? 'minutes')
+    const minutes = Number(rawValue) * (UNIT_MINUTES[unit] || 1)
     if (!isFinite(minutes) || minutes < 0) {
       issues.push({
         severity: 'error',
@@ -140,6 +162,81 @@ export function validateFlow(
         code: 'EMAIL_TEMPLATE_REQUIRED',
         nodeId: n.id,
         message: `O email "${label}" precisa ter um template selecionado.`,
+      })
+    }
+    // Status Draft/Manual é escolha legítima (rollout em etapas), mas em
+    // runtime o executor PULA o envio sem avisar — aqui é o único lugar
+    // onde dá pra tornar isso visível antes de ativar.
+    const emailStatus = String(cfg.emailStatus || 'draft').toLowerCase()
+    if (emailStatus !== 'live') {
+      issues.push({
+        severity: 'warning',
+        code: 'EMAIL_NOT_LIVE',
+        nodeId: n.id,
+        message: `O email "${label}" está em status "${emailStatus}" e NÃO será enviado até você mudar para Live.`,
+      })
+    }
+  }
+
+  // 4b. Configs obrigatórias por tipo de nó — sem elas o nó salva vazio
+  // e só falha (ou pior, vira no-op) em produção.
+  for (const n of nodes) {
+    const cfg = n.data?.config || {}
+    const label = n.data?.label || n.type
+    const err = (code: string, message: string) =>
+      issues.push({ severity: 'error', code, nodeId: n.id, message })
+
+    switch (n.type) {
+      case 'action_tag':
+      case 'action_remove_tag':
+        if (!cfg.tagName || !String(cfg.tagName).trim()) err('TAG_NAME_REQUIRED', `O nó "${label}" precisa do nome da tag.`)
+        break
+      case 'action_webhook':
+        if (!cfg.url || !String(cfg.url).trim()) err('WEBHOOK_URL_REQUIRED', `O nó "${label}" precisa da URL do webhook.`)
+        break
+      case 'action_add_to_list':
+      case 'action_remove_from_list':
+        if (!cfg.listId) err('LIST_REQUIRED', `O nó "${label}" precisa de uma lista selecionada.`)
+        break
+      case 'action_sms':
+        if (!cfg.message && !cfg.text) err('SMS_MESSAGE_REQUIRED', `O nó "${label}" precisa da mensagem de SMS.`)
+        break
+      case 'action_whatsapp': {
+        const isTemplate = cfg.messageMode === 'template' || (!cfg.messageMode && (cfg.templateName || cfg.templateId))
+        if (isTemplate) {
+          if (!cfg.templateName && !cfg.templateId) err('WHATSAPP_TEMPLATE_REQUIRED', `O nó "${label}" está em modo template mas nenhum template foi escolhido.`)
+        } else if (!cfg.message && !cfg.bodyText) {
+          err('WHATSAPP_MESSAGE_REQUIRED', `O nó "${label}" precisa do texto da mensagem.`)
+        }
+        break
+      }
+      case 'action_move_deal':
+        if (!cfg.stageId) err('DEAL_STAGE_REQUIRED', `O nó "${label}" precisa do estágio de destino.`)
+        break
+      case 'action_ai_mission':
+        if (!cfg.eventFamily) err('AI_MISSION_EVENT_REQUIRED', `O nó "${label}" precisa da família de evento configurada.`)
+        break
+    }
+  }
+
+  // 4c. Tipos sem executor no motor: o run marca erro em todo disparo.
+  // Lista explícita (nós registrados no editor que nunca ganharam runtime).
+  const TYPES_WITHOUT_EXECUTOR = new Set([
+    'action_update_contact',
+    'control_delay_configurable',
+    'action_javascript',
+    'action_chatgpt',
+    'control_delay_condition',
+    'control_delay_date',
+    'control_delay_weekday',
+  ])
+  for (const n of nodes) {
+    if (TYPES_WITHOUT_EXECUTOR.has(n.type)) {
+      issues.push({
+        severity: 'error',
+        code: 'NODE_TYPE_UNSUPPORTED',
+        nodeId: n.id,
+        message: `O nó "${n.data?.label || n.type}" (${n.type}) não é suportado pelo motor de execução. Substitua-o por um nó equivalente.`,
       })
     }
   }

@@ -9,6 +9,7 @@ import {
   Clock, Mail, Phone, Bell, Edit, GitBranch, Zap, Send, UserMinus,
   Eye, PlusCircle, Package, Truck, Smartphone, UserCog, List,
   Shuffle, MessageCircle, FileText, MoreVertical, Activity, LogOut,
+  Target, Globe,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -50,7 +51,7 @@ const iconMap: Record<string, LucideIcon> = {
   ArrowRight, Trophy, XCircle, Calendar, Users, Webhook, MessageSquare,
   Mail, Phone, Bell, Edit, Send, UserMinus, GitBranch, Clock, Zap,
   Eye, PlusCircle, Package, Truck, Smartphone, UserCog, List,
-  Shuffle, MessageCircle, FileText, Activity,
+  Shuffle, MessageCircle, FileText, Activity, Target, Globe,
 };
 
 // ============================================
@@ -125,6 +126,10 @@ function getNodeSummary(nodeType: string, config: Record<string, any>): string |
       return config?.form_id ? `Popup: ${config.form_name || config.form_id}` : 'Qualquer popup';
     case 'trigger_form_submitted':
       return config?.form_id ? `Formulário: ${config.form_name || config.form_id}` : 'Qualquer formulário';
+    case 'trigger_segment':
+      return config?.segment_id ? `Segmento: ${config.segment_name || config.segment_id}` : 'Qualquer segmento';
+    case 'trigger_custom_event':
+      return config?.event_name ? `Evento: ${config.event_name}` : 'Qualquer evento';
     default:
       return null;
   }

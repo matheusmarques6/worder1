@@ -50,8 +50,10 @@ export async function GET(request: NextRequest) {
     // Processar eventos criados
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL;
     if (appUrl) {
-      // Chamar endpoint de processamento de eventos
-      fetch(`${appUrl}/api/cron/process-events`, {
+      // Chamar endpoint de processamento de eventos. A rota certa é a do
+      // worker — /api/cron/process-events não existe e o 404 era engolido
+      // pelo .catch, deixando os eventos de data parados em event_logs.
+      fetch(`${appUrl}/api/workers/process-events`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${cronSecret}`,

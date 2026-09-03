@@ -393,10 +393,15 @@ export class ExecutionEngine {
             }
           }
 
-          // Get credentials if needed
-          let credentials = options.credentials?.[node.data.credentialId || ''];
-          if (!credentials && node.data.credentialId) {
-            credentials = await this.getCredentials(node.data.credentialId);
+          // Get credentials if needed. A UI grava o credentialId dentro de
+          // node.data.config (PropertiesPanel → updateNodeConfig); ler só
+          // node.data.credentialId deixava TODO executor sem credencial
+          // (WhatsApp, SMS, webhook auth, cupom Shopify).
+          const credentialId =
+            (node.data.config as any)?.credentialId || node.data.credentialId || '';
+          let credentials = options.credentials?.[credentialId];
+          if (!credentials && credentialId) {
+            credentials = await this.getCredentials(credentialId);
           }
 
           // Execute the node com timeout + circuit breaker por automação

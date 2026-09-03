@@ -579,6 +579,34 @@ export function PropertiesPanel({ organizationId, automationId, storeId }: { org
               />
             )}
 
+            {/* TRIGGER: SEGMENTO — o cron de segmentos já filtra por
+                trigger_config.segment_id; sem este seletor todo fluxo de
+                segmento disparava pra QUALQUER segmento da org. */}
+            {selectedNode.data.nodeType === 'trigger_segment' && (
+              <SegmentTriggerConfig
+                config={selectedNode.data.config || {}}
+                onUpdate={handleUpdate}
+              />
+            )}
+
+            {/* TRIGGER: EVENTO CUSTOMIZADO — nome do evento que dispara.
+                Vazio = qualquer evento (compat com fluxos existentes). */}
+            {selectedNode.data.nodeType === 'trigger_custom_event' && (
+              <div className="space-y-2">
+                <label className="text-xs text-gray-500">Nome do evento</label>
+                <input
+                  type="text"
+                  value={selectedNode.data.config?.event_name || ''}
+                  onChange={(e) => handleUpdate('event_name', e.target.value)}
+                  placeholder="ex: pedido_avaliado"
+                  className="w-full px-3 py-2 rounded-lg bg-white border border-gray-200 text-sm text-gray-700 placeholder-gray-400 font-mono focus:outline-none focus:border-blue-500/50"
+                />
+                <p className="text-[10px] text-gray-400">
+                  Só dispara quando o evento enviado pela API tiver exatamente este nome. Vazio = qualquer evento.
+                </p>
+              </div>
+            )}
+
             {/* ============================== */}
             {/* GENERIC TRIGGER INFO          */}
             {/* For triggers without specific config */}
@@ -1367,6 +1395,67 @@ export function PropertiesPanel({ organizationId, automationId, storeId }: { org
                 isRemove={selectedNode.data.nodeType === 'action_remove_from_list'}
               />
             )}
+
+            {/* GERAR CUPOM SHOPIFY — estava na paleta sem NENHUM painel:
+                o nó publicava vazio e rodava com os defaults do executor. */}
+            {selectedNode.data.nodeType === 'action_shopify_coupon' && (
+              <ShopifyCouponConfig
+                config={selectedNode.data.config || {}}
+                onUpdate={handleUpdate}
+              />
+            )}
+
+            {/* AGUARDAR RESPOSTA (WhatsApp) — idem: sem painel, timeout
+                era sempre o default de 1h. */}
+            {selectedNode.data.nodeType === 'action_whatsapp_wait_reply' && (
+              <div className="space-y-2">
+                <label className="text-xs text-gray-500">Tempo máximo de espera</label>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    min="1"
+                    value={selectedNode.data.config?.timeoutMinutes ?? 60}
+                    onChange={(e) => handleUpdate('timeoutMinutes', e.target.value ? parseInt(e.target.value, 10) : 60)}
+                    className="flex-1 px-3 py-2 rounded-lg bg-white border border-gray-200 text-sm text-gray-700 focus:outline-none focus:border-blue-500/50"
+                  />
+                  <span className="px-3 py-2 text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-lg">minutos</span>
+                </div>
+                <p className="text-[10px] text-gray-400">Se o contato não responder nesse tempo, o fluxo continua.</p>
+              </div>
+            )}
+
+            {/* CONDIÇÃO KEYWORD (WhatsApp) — sem painel, a condição caía
+                sempre no ramo "Sim" (keyword vazia = qualquer mensagem). */}
+            {selectedNode.data.nodeType === 'condition_whatsapp_keyword' && (
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <label className="text-xs text-gray-500">Palavras-chave (separe por vírgula)</label>
+                  <input
+                    type="text"
+                    value={selectedNode.data.config?.keyword || ''}
+                    onChange={(e) => handleUpdate('keyword', e.target.value)}
+                    placeholder="sim, quero, aceito"
+                    className="w-full px-3 py-2 rounded-lg bg-white border border-gray-200 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:border-blue-500/50"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs text-gray-500">Modo de comparação</label>
+                  <div className="relative">
+                    <select
+                      value={selectedNode.data.config?.matchType || 'contains'}
+                      onChange={(e) => handleUpdate('matchType', e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg appearance-none bg-white border border-gray-200 text-sm text-gray-700 focus:outline-none focus:border-blue-500/50"
+                    >
+                      <option value="contains">Contém</option>
+                      <option value="equals">Igual (mensagem exata)</option>
+                      <option value="regex">Expressão regular</option>
+                    </select>
+                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                  </div>
+                  <p className="text-[10px] text-gray-400">Sem palavra-chave, qualquer mensagem cai no ramo &quot;Sim&quot;.</p>
+                </div>
+              </div>
+            )}
           </section>
 
           {/* Variables hint */}
@@ -1858,6 +1947,165 @@ function FormTriggerConfig({ config, onUpdate, storeId, popupOnly }: FormTrigger
 }
 
 // ============================================
+// SEGMENT TRIGGER CONFIG
+// Seletor "de qual segmento" — o cron detect-segment-changes filtra por
+// trigger_config.segment_id; vazio = qualquer segmento.
+// ============================================
+
+function SegmentTriggerConfig({ config, onUpdate }: {
+  config: Record<string, any>;
+  onUpdate: (key: string, value: any) => void;
+}) {
+  const [segments, setSegments] = useState<{ id: string; name: string }[]>([]);
+  const [loadingSegments, setLoadingSegments] = useState(false);
+  const [segmentsError, setSegmentsError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoadingSegments(true);
+      setSegmentsError(false);
+      try {
+        const res = await fetch('/api/segments', { cache: 'no-store' });
+        if (!res.ok) { if (!cancelled) setSegmentsError(true); return; }
+        const data = await res.json();
+        if (!cancelled) setSegments((data.segments || []).map((s: any) => ({ id: s.id, name: s.name || s.id })));
+      } catch {
+        if (!cancelled) setSegmentsError(true);
+      } finally {
+        if (!cancelled) setLoadingSegments(false);
+      }
+    })();
+    return () => { cancelled = true };
+  }, []);
+
+  const selectedMissing = config.segment_id && !segments.some((s) => s.id === config.segment_id);
+
+  return (
+    <div className="space-y-2">
+      <label className="text-xs text-gray-500">Qual segmento dispara esta automação</label>
+      <div className="relative">
+        <select
+          value={config.segment_id || ''}
+          onChange={(e) => {
+            const id = e.target.value;
+            const s = segments.find((x) => x.id === id);
+            onUpdate('segment_id', id || null);
+            onUpdate('segment_name', s?.name || null);
+          }}
+          disabled={loadingSegments}
+          className={cn(
+            'w-full px-3 py-2 rounded-lg appearance-none',
+            'bg-white border border-gray-200',
+            'text-sm text-gray-700',
+            'focus:outline-none focus:border-blue-500/50',
+            'disabled:opacity-50'
+          )}
+        >
+          <option value="">Qualquer segmento</option>
+          {selectedMissing && (
+            <option value={config.segment_id}>
+              {config.segment_name ? `${config.segment_name} (não encontrado)` : '(segmento removido)'}
+            </option>
+          )}
+          {segments.map((s) => (
+            <option key={s.id} value={s.id}>{s.name}</option>
+          ))}
+        </select>
+        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+      </div>
+      {segmentsError ? (
+        <p className="text-[10px] text-red-500">Erro ao carregar segmentos</p>
+      ) : (
+        <p className="text-[10px] text-gray-400">
+          Escolha um segmento específico ou deixe &quot;Qualquer&quot; para disparar em todos
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ============================================
+// SHOPIFY COUPON CONFIG
+// O nó "Gerar Cupom" estava na paleta sem painel — publicava vazio e
+// rodava só com os defaults do executor.
+// ============================================
+
+function ShopifyCouponConfig({ config, onUpdate }: {
+  config: Record<string, any>;
+  onUpdate: (key: string, value: any) => void;
+}) {
+  const selectCls = cn(
+    'w-full px-3 py-2 rounded-lg appearance-none',
+    'bg-white border border-gray-200',
+    'text-sm text-gray-700',
+    'focus:outline-none focus:border-blue-500/50'
+  );
+  const inputCls = cn(
+    'w-full px-3 py-2 rounded-lg',
+    'bg-white border border-gray-200',
+    'text-sm text-gray-700 placeholder-gray-400',
+    'focus:outline-none focus:border-blue-500/50'
+  );
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1.5">
+          <label className="text-xs text-gray-500">Tipo de desconto</label>
+          <div className="relative">
+            <select
+              value={config.discountType || 'percentage'}
+              onChange={(e) => onUpdate('discountType', e.target.value)}
+              className={selectCls}
+            >
+              <option value="percentage">Porcentagem (%)</option>
+              <option value="fixed_amount">Valor fixo (R$)</option>
+            </select>
+            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-xs text-gray-500">Valor</label>
+          <input
+            type="number"
+            min="1"
+            value={config.value ?? 10}
+            onChange={(e) => onUpdate('value', e.target.value ? parseFloat(e.target.value) : 10)}
+            className={inputCls}
+          />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1.5">
+          <label className="text-xs text-gray-500">Validade (dias)</label>
+          <input
+            type="number"
+            min="1"
+            value={config.validityDays ?? config.expiryDays ?? 7}
+            onChange={(e) => onUpdate('validityDays', e.target.value ? parseInt(e.target.value, 10) : 7)}
+            className={inputCls}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-xs text-gray-500">Prefixo do código</label>
+          <input
+            type="text"
+            value={config.prefix || ''}
+            onChange={(e) => onUpdate('prefix', e.target.value.toUpperCase())}
+            placeholder="GIFT"
+            className={cn(inputCls, 'font-mono uppercase')}
+          />
+        </div>
+      </div>
+      <p className="text-[10px] text-gray-400">
+        O cupom é gerado na loja Shopify da automação e fica disponível na variável{' '}
+        <code className="font-mono">{'{{ coupon.code }}'}</code>.
+      </p>
+    </div>
+  );
+}
+
+// ============================================
 // ORDER TRIGGER CONFIG
 // ============================================
 
@@ -2015,10 +2263,19 @@ function NotifyActionConfig({ config, onUpdate, organizationId }: NotifyActionCo
     if (!organizationId) return;
     setLoadingUsers(true);
     try {
-      const res = await fetch(`/api/organization/members?organizationId=${organizationId}`);
+      // /api/organization/members nunca existiu — a lista vinha sempre
+      // vazia e o alerta interno virava no-op. A rota real é
+      // /api/settings/users (organization_members + profiles).
+      const res = await fetch('/api/settings/users');
       if (res.ok) {
         const data = await res.json();
-        setUsers(data.members || []);
+        const members = (data.members || []).map((m: any) => ({
+          // O executor notifica por user_id (notifications.user_id).
+          id: m.user_id || m.id,
+          email: m.profiles?.email || m.email || '',
+          name: m.profiles?.full_name || m.profiles?.name || undefined,
+        })).filter((u: any) => u.id);
+        setUsers(members);
       }
     } catch (e) {
       console.error('Error fetching users:', e);
@@ -2199,6 +2456,31 @@ function AbandonedCartConfig({ config, onUpdate, organizationId }: AbandonedCart
           ))}
         </select>
         {storeLoadError && <p className="text-[10px] text-red-500 mt-1">Erro ao carregar lojas</p>}
+      </div>
+
+      {/* Tempo de abandono — o cron de carrinho abandonado LÊ
+          config.abandonTime/abandonUnit, mas este painel não tinha os
+          inputs: o tempo era sempre o default de 30 min. */}
+      <div className="space-y-1.5">
+        <label className="text-sm font-medium text-gray-700">Considerar abandonado após</label>
+        <div className="flex gap-2">
+          <input
+            type="number"
+            min="1"
+            value={config.abandonTime ?? 30}
+            onChange={(e) => onUpdate('abandonTime', e.target.value ? parseInt(e.target.value, 10) : 30)}
+            className={inputCls}
+          />
+          <select
+            value={config.abandonUnit || 'minutes'}
+            onChange={(e) => onUpdate('abandonUnit', e.target.value)}
+            className={selectCls}
+          >
+            <option value="minutes">minutos</option>
+            <option value="hours">horas</option>
+          </select>
+        </div>
+        <p className="text-xs text-gray-400">Tempo sem atividade no carrinho antes de disparar</p>
       </div>
 
       {/* Minimum cart value */}

@@ -150,7 +150,13 @@ class EventProcessorClass {
             p_payload: event.payload,
           });
 
-        if (!rpcError && rpcResult) {
+        // Lista NÃO-vazia. O CASE da RPC só conhece parte dos event_types
+        // (os snake_case de webhook-processor/rfm resolvem NULL e voltam
+        // []); um [] é truthy, então aceitar array vazio aqui bloqueava o
+        // fallback JS — que tem o mapa completo — pra sempre. Custo: uma
+        // query extra quando realmente não há automação, correção: todos
+        // os eventos fora do CASE voltam a disparar.
+        if (!rpcError && Array.isArray(rpcResult) && rpcResult.length > 0) {
           automations = rpcResult;
         }
       } catch {
@@ -534,10 +540,13 @@ function matchesTriggerConfig(
     }
   }
 
-  // RFM segment change (trigger_rfm_segment_change): config.from_segment / config.to_segment
+  // RFM segment change (trigger_rfm_segment_change): o defaultConfig do
+  // catálogo grava fromSegment/toSegment (camel) — aceitar as duas grafias.
   if (eventType === 'rfm_segment_change') {
-    if (config.to_segment && payload.to_segment !== config.to_segment) return false;
-    if (config.from_segment && payload.from_segment !== config.from_segment) return false;
+    const cfgTo = config.to_segment || config.toSegment;
+    const cfgFrom = config.from_segment || config.fromSegment;
+    if (cfgTo && payload.to_segment !== cfgTo) return false;
+    if (cfgFrom && payload.from_segment !== cfgFrom) return false;
   }
 
   // Back in stock (trigger_back_in_stock): config.product_id (specific product only)
