@@ -1588,10 +1588,140 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `responder.py::respond` fecha só depois de perguntar "isto vale para `toucher.py::touch` também?" —
   é essa pergunta, feita cedo, que evita a terceira vez.
 
-- [ ] **45. Paridade preview ↔ turno** `[confirmado]`
-  `runtime/.../server.py:154-156` fixa `presentation_mode="nome_funcao"` e `adaptation=()`; não aplica
-  restrições do momento; o bloco de conhecimento é concatenado fora do compilador.
-  Ação: usar os valores reais + teste de paridade (hoje não existe nenhum).
+- [x] **45. Paridade preview ↔ turno** `[confirmado]` · commits `6782036a` (extração de
+  `agent_block`), `ef1de779` (restrições do momento), `b2457a66` (a ausência do conhecimento,
+  declarada na tela) · relatório `task-45-report.md`
+  **Toda citação de linha deste item está ancorada na BASE `8f2f3faa`** — a lição do item 44:
+  reancorar sem declarar volta a mentir no commit seguinte. As linhas do texto original já tinham
+  derivado 18: `server.py:154-156` era verdade quando o item foi escrito, mas em `8f2f3faa` `:154` é
+  `load_active_version` e os dois literais moravam em **`:172`** (`presentation_mode="nome_funcao"`)
+  e **`:174`** (`adaptation=()`), empurrados para baixo pelo refactor que criou `_connection`.
+
+  **Não era escolha de desenho, era fóssil datado, e dá para provar pela hora.** `d4fbc23a`
+  (2026-08-11 14:16Z) criou `server.py` com os dois literais, quando as colunas ainda não existiam;
+  `4a009997` (20:41Z do mesmo dia) ensinou o turno a ler `presentation_mode` e `client_adaptation` e
+  tocou `responder.py`, `toucher.py`, `repository/agent.py` e um teste db — **sem passar por
+  `server.py`**. Os comentários `# 10.4:` que sobreviveram nos dois arquivos do turno marcam os
+  sites atualizados; o terceiro não tinha comentário nenhum, porque foi esquecido, não decidido.
+  A suíte inteira passava porque `tests/db/test_server.py` nunca constrói um agente com apresentação
+  diferente do default — o literal era invisível por construção.
+
+  **O dano era maior do que o item registrava.** Com o corpo que a UI de fato manda
+  (`RadialView.tsx:59` posta `{}`), dois dos cinco blocos são fantasma (ESTADO e CONVERSA), o bloco
+  CANAL sai com `window_open` sempre `True`, e o bloco AGENTE mentia em dois campos — enquanto
+  **quatro lugares** prometem por escrito "a MESMA `compile_prompt()` do turno" (`server.py:12-16`,
+  `route.ts:7-9`, `RadialView.tsx:47-49`, `core/agentes-por-evento.md:402`). O que o lojista via:
+  escolhia "discreta" ou "transparente" na aba Identidade da radial, clicava no núcleo e lia a linha
+  do modo que **não** escolheu (`prompt_compiler.py:34-38`); ligava qualquer um dos cinco toggles de
+  adaptação (`:40-50`) e o preview não mudava, o que faz o toggle parecer quebrado.
+
+  **O conserto encolheu a superfície em vez de deslocá-la (commit 1).** Havia três construções da
+  mesma dataclass de sete campos obrigatórios — 21 oportunidades de divergência calada. Viraram uma:
+  `prompt_compiler.agent_block(version, settings)`, com os tipos do repositório importados sob
+  `TYPE_CHECKING` para não atar em runtime um módulo que se anuncia puro. Errar uma chamada de
+  aridade 2 é `TypeError` na hora; errar uma das três cópias era um prompt errado que passava na
+  suíte. Duas armadilhas da extração, as duas evitadas: `language` **não** era local morto nos dois
+  sites do turno — é reusado no `JudgeContext` (`responder.py:640`, `toucher.py:427`) —, e uma
+  extração mecânica deixaria a fórmula duplicada viva 75 linhas abaixo; os call sites passaram a ler
+  `agent.language`. E `agent_block` já era nome local em `responder.py:566`, renomeado para `agent`.
+  Como a função pura **não** impede um quarto site de nascer à mão — foi exatamente assim que o bug
+  nasceu —, veio junto uma fitness por AST no molde de
+  `test_listener_connects_in_one_guarded_place.py:24-50`: `AgentBlock` é construído num módulo só em
+  `src/`. Ela não olha keywords, ordem nem linha, só conta produtores, então não é o teste de forma
+  que o item 40 condenou.
+
+  **As restrições do momento (commit 2), e a armadilha silenciosa que quase entregou nada.** O alvo
+  não é o que o nome sugere: a restrição do momento **não** vai para `ChannelBlock.constraints` —
+  ela soma ao `forbidden` da missão (`commerce/moments.py:78-86`) e sai como as linhas `Não fazer:`
+  do bloco MISSÃO (`prompt_compiler.py:188`). O turno faz dois passos depois do `merge_mission`
+  (`responder.py:518-519`, `toucher.py:272-273`); o preview fazia o merge e parava. Nenhum dado novo
+  foi exigido: `load_active_moments(conn)` não pede organização (a RLS resolve), não pede agente,
+  não pede conversa e nem relógio — o `now()` é do banco (`repository/moments.py:29`).
+  **A armadilha era o POSICIONAMENTO, não o `None`.** A conexão do listener é `autocommit=True`
+  (`server.py:104`) e `scope_to_organization` grava com `set_config(..., true)`
+  (`repository/scope.py:97-99`), que é `SET LOCAL`: um load escrito uma linha abaixo do
+  `async with conn.transaction()` correria com `current_app_organization_id()` = NULL
+  (`20260812000002:48-60`), a policy de `commercial_moments` (`20260813000005:162`) não casaria com
+  nada, e a query voltaria **zero linhas — sem erro, sem log, resposta 200, suíte verde**. O item
+  pareceria entregue e o preview diria "nenhum momento ativo" para sempre. Como nenhum teste de
+  comportamento pega isso, a garantia virou estrutural: uma terceira asserção por AST no fitness que
+  já guarda a porta do listener, afirmando que toda leitura do `_preview` mora dentro da transação
+  que escopa — conferida por mutação (mover o load uma linha para fora quebra o teste).
+  Sem momento no ar, **silêncio e nunca erro**: `resolve_moments` devolve `EMPTY_VIEW` para lista
+  vazia (`commerce/moments.py:57-58`) e `apply_moment_restrictions` devolve a missão intacta
+  (`:82-83`); sem missão ativa, nem isso — o bloco MISSÃO já é fantasma declarado, que é o que
+  `mode="preview"` existe para tolerar (`prompt_compiler.py:298-301`), e `test_server.py:154-166`
+  já afirma 200 nesse caso.
+
+  **O que passa a VARIAR NO TEMPO, dito antes que vire chamado de suporte.** As linhas `Não fazer:`
+  do momento aparecem e somem com a janela, porque `load_active_moments` filtra
+  `now() between starts_at and ends_at`. O mesmo lojista, com a mesma configuração, abre o preview
+  às 10h e vê três linhas a mais; abre às 23h01, depois de o momento expirar, e elas sumiram. Isso é
+  o momento expirando, **não** o preview apagando as regras dele. Idem, menor, no bloco AGENTE: a
+  linha de apresentação troca de texto e até cinco linhas de adaptação aparecem — é o conserto
+  funcionando, mas é conteúdo novo na tela.
+
+  **`mode` é a costura, não a divergência — e continua fora de qualquer unificação.**
+  `prompt_compiler.py:244-278` faz duas coisas opostas conforme o modo: em `preview` despeja o
+  transcript inteiro no bloco CONVERSA (`:252-256`), em `turn` despeja só as rubricas de mídia da
+  loja (`:257-278`). Empurrar `"preview"` para o turno **desfaz o item 39** (o transcript volta a ir
+  duas vezes, ~2× tokens de entrada em até 12 chamadas por turno); empurrar `"turn"` para o preview
+  apaga da tela o transcript que o lojista digitou.
+
+  **`window_open` ficou de fora, e o preview está do lado errado acompanhado.** Três valores, três
+  razões: o preview fixa `True` (`server.py:181`, e a UI nunca manda o campo); o responder começa em
+  `True` e só estreita se `state.last_inbound_at is not None` (`:577-579`); o toucher usa
+  `is not None and ...` (`:356-358`), logo `False` para quem nunca escreveu. O item 44 já julgou
+  que **quem está certo é o toucher** (linhas 1509-1517 deste checklist) — a janela de 24 h da Meta
+  está fechada se nunca houve inbound. O default permissivo do responder é logicamente errado mas
+  inalcançável em produção (`respond()` só roda a partir de inbound); **no preview ele não é
+  inalcançável, é o único caminho**. Não dá para consertar barato — sem conversa não há
+  `last_inbound_at` —, e fatorar o cálculo adotando a fórmula do responder **regride o toque**. As
+  saídas são decisão de produto (expor o knob na UI, que a rota já repassa em `route.ts:41`, ou
+  rotular o bloco CANAL como hipotético), não conserto: fica registrado aqui, sem item próprio.
+
+  **O bloco de conhecimento ficou de fora do runtime, mas a mentira do rótulo fechou hoje
+  (commit 3).** Os três impedimentos se sustentam: `serve()` não recebe `LlmPort` nenhum
+  (`server.py:202-210`, `__main__.py:91-96`), o `conversation_id` do preview é a string literal
+  `"preview"` (`:185`) que nem UUID é, e `run_tool` grava em `tool_calls` fora de qualquer
+  condicional (`tools/base.py:98-110`) — some-se a query inventada, já que `_knowledge` a monta das
+  mensagens do contato na janela pendente (`responder.py:1027-1029`), que no preview não existe.
+  Dar RAG ao preview é decisão de produto **e** ampliação da superfície de um listener que por
+  desenho só fala com Postgres: virou o **item 75**. O que dava para fazer sem dado novo era o que o
+  próprio compilador já faz com o que falta — declarar a ausência: uma linha estática na folha do
+  preview, no tom dos fantasmas. Sem ela, o botão "O que {nome} sabe" (`RadialView.tsx:132`,
+  `:143-145`) e a área "Conhecimento" da radial (`:24`) mentiam por silêncio exatamente sobre a base.
+
+  **O conserto é invisível até o item 62.** Sem `AGENTS_RUNTIME_URL` e `AGENTS_PREVIEW_TOKEN`,
+  `ai/preview-prompt/route.ts:18-27` devolve 503 e a folha cai nos fantasmas fixos de
+  `RadialView.tsx:157-164`. As duas continuam ausentes do `.env.example` (o item 62 já é dono
+  disso). Num ambiente sem elas, este item é **latente**, não ativo — o preview mente menos porque
+  não fala.
+
+  **Devolvido sem virar trabalho aqui:** `ChannelBlock.constraints` é campo morto — três produtores
+  em `src/`, todos `()` (`responder.py:596`, `toucher.py:400`, `server.py:182`), um consumidor
+  (`prompt_compiler.py:238`) e nem os testes constroem outra coisa; **candidato a deleção, não a
+  paridade**, e o dono de sobras é o item 60. O bloco ESTADO fantasma do preview virou o
+  **item 76** (três dos seus campos são de organização, não de conversa, e `core/agentes-por-evento.md:304`
+  promete o bloco como feature). O campo `ghost` que `_serialize` devolve por bloco
+  (`server.py:132`) e que a UI descarta — `PreviewBlock` (`RadialView.tsx:39`) nem o declara — virou
+  o **item 77**. E duas constantes com um valor só, `DEFAULT_EVENT` (`server.py:57`) e
+  `DISCOVERY_EVENT` (`mission_resolver.py:25`), ficam como cheiro registrado: o preview mostrar a
+  missão de descoberta é o certo para uma conversa que não existe.
+
+  **Fecha a lacuna "paridade preview↔turno" do item 63** — quem fechasse um fechava o outro.
+
+  **Prova.** `pytest -m unit`: **1208 ✓ / 2 ✗ antes, 1214 ✓ / 2 ✗ depois** (as duas falhas são o
+  item 54, cp1252 no Windows, alheias). `ruff check .` com **10 erros antes e 10 depois** (os
+  pré-existentes do item 74, não consertados aqui de propósito) e `lint-imports` 3 contratos KEPT / 0
+  broken em ambos — inclusive "only the repository layer reaches the database", que a importação de
+  `commerce.moments` e `repository.moments` no listener não quebra. `tsc --noEmit` limpo depois da
+  linha de TSX. **Sem prova executável:** `tests/db/test_server.py` e
+  `tests/db/test_responder_agent_identity.py` **não foram executados** — `-m db` e `-m pipeline`
+  penduram sem Postgres em vez de falhar. Ou seja, ninguém provou contra banco que o endpoint devolve
+  a apresentação escolhida nem que a linha `Não fazer:` do momento chega ao bloco MISSÃO pelo HTTP; o
+  que está provado aqui é a função pura, o posicionamento do load e a contagem de produtores. O
+  preview também **não foi visto na tela** (runtime não subiu, envs do item 62 não setadas).
 
 - [ ] **46. `expire_incentive_grants` sem `organization_id`** `[relatado]`
   `20260813000011:88-111` — UPDATE sem a coluna líder do único índice, rodando a cada 1s
@@ -1693,8 +1823,12 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
 - [ ] **63. Lacunas de teste** `[relatado]`
   Sem cobertura: `toucher._node_delta` com `success_criteria`/`enabled_tools`/`forbidden` (onde mora um
   bug de tipo latente — `toucher.py:92` passa tupla onde `mission_resolver.py:63` declara `str | None`);
-  paridade preview↔turno; contagem de duplicação do transcript; ciclo de vida dos clientes httpx; teto de
-  chamadas por turno; 429/5xx/timeout dos provedores; `server._read_request` malformado.
+  ~~paridade preview↔turno~~ (fechada pelo item 45: `test_agent_block_has_one_producer.py` afirma o
+  produtor único do bloco AGENTE e o mapeamento das colunas, e
+  `test_listener_connects_in_one_guarded_place.py` afirma que a leitura do preview mora dentro da
+  transação escopada — as duas em `-m unit`, sem Postgres); contagem de duplicação do transcript;
+  ciclo de vida dos clientes httpx; teto de chamadas por turno; 429/5xx/timeout dos provedores;
+  `server._read_request` malformado.
 
 - [ ] **64. Migrar cupom da Shopify de REST para GraphQL** `[proposto]` · *(descoberto no item 35)*
   `connectors/shopify.py` cria e busca cupom por três chamadas REST: `POST /price_rules.json`
@@ -1967,6 +2101,66 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   Nota lateral de ambiente, não do repositório: o `.ruff_cache` desta máquina estava corrompido
   (`wrong package cache for file`) e fazia o ruff entrar em `panic` em todo arquivo de `src/`;
   `rm -rf runtime/.ruff_cache` resolve, e nada disso aparece em CI, que roda com cache limpo.
+
+- [ ] **75. Decidir se o preview do hub mostra a base de conhecimento — e a que preço**
+  `[relatado]` · *(descoberto no item 45)*
+  Irmão do item 72, com um agravante. O bloco `# CONHECIMENTO` não é um `RenderedBlock`: o responder
+  pega `compiled.text` e cola uma string por fora (`responder.py:616-622`, o único produtor no
+  runtime), então ele não tem `kind`, não tem `source_ids`, não entra em `CompiledPrompt.blocks` e
+  **não pode aparecer no `_serialize` do preview nem por acidente** (`server.py:124-137` itera
+  `compiled.blocks`). O item 45 fechou a mentira do rótulo declarando a ausência na tela
+  (`b2457a66`), o que é honesto mas não é o conteúdo.
+  Mostrar os trechos de verdade exige quatro coisas que o `_preview` não tem, todas reconferidas:
+  um **embedder** — `_knowledge` (`responder.py:1007-1043`) chama `SearchKnowledge` com um
+  `MeteredLlm`, e `serve()` recebe só `dsn`, `host`, `port`, `preview_token`, `set_role`,
+  `health_max_age_s` (`server.py:202-210`; `__main__.py:91-96` também não passa nenhum), ou seja
+  **abrir um cliente de LLM dentro de um listener HTTP que hoje, por desenho, só fala com Postgres**
+  (`_connection` é a única porta); uma **query**, que `_knowledge` monta das mensagens do contato na
+  janela pendente (`:1027-1029`) e o preview não tem janela nenhuma — inventar qual é a pergunta é
+  produto, exatamente como no item 72; um **`conversation_id` real**, porque `run_tool` grava em
+  `tool_calls` fora de qualquer condicional (`tools/base.py:98-110`) e o preview usa a string
+  literal `"preview"` (`server.py:185`), que nem UUID é; e a **chave BYO da org**, com o metering
+  que vem junto — clique de curiosidade passaria a custar dinheiro do lojista.
+  **A saída recomendada por escrito já existe e não é outra concatenação:**
+  `core/STATUS-agentes-por-evento.md:479-480` diz "se o preview precisar exibir, expor via parâmetro
+  opcional do `compile_prompt`" — o mesmo caminho que `core/agentes-por-evento.md:468` registra na
+  linha 10.5 do plano. Acrescentar um `RenderedBlock` fantasma direto no `_serialize` é mais barato
+  (~4 linhas) mas cria um segundo lugar que sabe a forma do frame, que é o pecado que o
+  `prompt_compiler` existe para impedir. Quem decidir isto decide junto com o 72: são a mesma
+  pergunta ("com que query um caminho sem cliente falando consulta o RAG?") em dois consumidores.
+
+- [ ] **76. Decidir se o bloco ESTADO do preview morre como fantasma ou vira feature**
+  `[relatado]` · *(descoberto no item 45)*
+  `server.py:178` passa `state=None` e o compilador escreve um fantasma
+  (`prompt_compiler.py:199-205`). Mas o `StateBlock` tem oito campos de duas naturezas diferentes, e
+  o preview alcança três deles hoje: `moment_ids`, `moment_facts` e `moment_public_claim` são de
+  **organização**, não de conversa — saem do mesmo `moment_view` que o item 45 já passou a calcular
+  dentro da transação escopada do `_preview` (`ef1de779`), custo zero de dado novo, ~9 linhas. Os
+  outros cinco (`grant_id`, `grant_lines`, `ledger_lines`, `contact_facts`, `purchase_lines`) são de
+  **conversa** e são inalcançáveis: não há contato.
+  A decisão é de produto porque as duas saídas contradizem alguma coisa escrita. Mostrar só os três
+  campos de organização faz o bloco ESTADO deixar de ser fantasma e passar a ser **meia verdade** num
+  frame cuja honestidade vem de declarar a ausência inteira. Deixar como está esconde do lojista a
+  frase pública do momento que está no ar agora, que é literalmente o que
+  `core/agentes-por-evento.md:56` prometeu ("preview: o que a IA responderia hoje") e o que
+  `:304` promete pelo nome: "ESTADO — momento ativo e promessas" — hoje a UI escreve essa frase como
+  fantasma fixo do fallback (`RadialView.tsx:161`). É a fronteira geral deste preview em um caso
+  concreto: dado da organização é alcançável, dado da conversa não.
+
+- [ ] **77. O `ghost` viaja do runtime até a UI e a UI o joga fora** `[confirmado]` ·
+  *(descoberto no item 45)*
+  `_serialize` devolve `ghost` por bloco (`server.py:132`) porque a honestidade do frame depende
+  disso; o `RadialView` renderiza `kind` + `text` e mais nada (`RadialView.tsx:151-156`), e o tipo
+  `PreviewBlock` (`:39`) **nem declara o campo**. Efeito: um bloco fantasma sai na tela com a mesma
+  tipografia de um bloco real, e a única pista é a palavra "fantasma" no meio do texto corrido —
+  enquanto a folha tem uma classe `.ghost` pronta, usada nos fantasmas de fallback (`:158-164`).
+  Depois do item 45 isso pesa mais, não menos: dois dos cinco blocos são fantasma no uso real
+  (ESTADO e CONVERSA), e os três restantes passaram a ser verdadeiros de verdade — misturar os dois
+  registros na mesma tipografia é o que faz o lojista ler um esboço como se fosse o prompt.
+  Segundo achado da mesma função, cosmético: `:153-154` imprime `# {block.kind}` em inglês
+  (`AGENT`, `MISSION`) **depois de apagar** o cabeçalho em português que o compilador escreveu
+  (`# AGENTE`, `# MISSÃO` — `prompt_compiler.py:143`, `:171`). Uma linha de mapa ou parar de apagar
+  o cabeçalho resolve. Ambos são diff de TSX, sem runtime.
 
 ---
 
