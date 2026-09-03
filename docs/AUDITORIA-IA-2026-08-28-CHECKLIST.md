@@ -1348,6 +1348,40 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   falhas, nenhuma nova — nenhum teste cobria `searchDirect` nem dependia do fallback. `npx tsc --noEmit`
   limpo antes e depois. Detalhe completo em `task-43-report.md`.
 
+  **Fix round 1 (review — `task-43-review.md`). 0 Critical, 1 Important, 0 Minor.** Endereçado, e o
+  Important está **FECHADO por este fix — não virou item novo na fila**. O Important:
+  `src/app/api/ai/test/route.ts` (`handleTestRAG`) tira `organizationId` do **corpo** da requisição,
+  não de sessão. O defeito é pré-existente ao item 43, mas entrou nesta round porque o item 43
+  **mudou a consequência dele**: antes esse valor client-supplied só escolhia qual chave da OpenAI
+  debitar, agora ele é o `p_organization_id` que decide o filtro de tenancy da RPC
+  `search_agent_knowledge`. O guard da rota (`src/lib/debug-guard.ts`) abria sozinho quando
+  `NODE_ENV !== 'production'` — logo, em `next dev` qualquer chamador não-autenticado que soubesse um
+  par `agentId`/`organizationId` lia chunks de conhecimento de qualquer organização por essa rota.
+  **Correção: `assertDebugAllowed` virou fail-closed sem exceção de ambiente** — exige
+  `DEBUG_ENDPOINT_SECRET` em QUALQUER ambiente, dev incluído, mesma lição do item 25
+  (`src/lib/internal-auth.ts`): **ambiente não é credencial**. As 12 rotas que usam o guard
+  (`/api/ai/test`, `/api/ai/test/webhook`, `/api/ai/test/cloud-webhook`, `/api/debug/automation`,
+  `/api/debug/realtime-test`, e as 7 de `/api/analytics/shopify/{debug,diagnostico*,teste-threshold}`)
+  passam a responder 404 em dev sem o secret. **Deliberadamente NÃO feito:** pôr
+  `requireOrgFromAuth`/sessão em `/api/ai/test` — é rota de diagnóstico server-to-server, e duas
+  fronteiras de posse divergentes na mesma rota é pior que uma clara; a decisão está escrita no
+  comentário acima de `handleTestRAG`, junto do aviso de não acrescentar uma segunda checagem.
+  `DEBUG_ENDPOINT_SECRET` documentado no `.env.example`. Teste novo `src/lib/debug-guard.test.ts` (6
+  casos, no molde de `internal-auth.test.ts` do item 25): nega sem secret em dev e em produção, nega
+  chave errada, libera por `?debug_key=`, por `x-debug-key` e por `Authorization: Bearer` — é a trava
+  que quebra se alguém "consertar" o guard de volta para o fallback por `NODE_ENV` (verificado por
+  mutação: reintroduzir a linha derruba 2 dos 6 casos).
+  **Consequência para quem roda o repo localmente (achado, não trabalho novo):** `scripts/test-ai-system.sh`
+  e `scripts/test-commands.sh` batem em `/api/ai/test` e `/api/ai/test/webhook` por `curl` sem
+  nenhuma chave, e os `curl` de `docs/TESTES-END-TO-END.md` também — todos passam a receber 404 até
+  quem roda exportar `DEBUG_ENDPOINT_SECRET` e mandar `?debug_key=`. Nenhum caller de **código**
+  (componente, hook, worker, teste) chama essas 12 rotas: grep confirma que o único teste que as
+  cita, `src/lib/ai/__tests__/deletion-set.test.ts:269`, só procura a URL como texto para mapear
+  callers — não faz requisição. Nada em produção depende delas.
+
+  **Suíte após o fix round 1:** 1315 testes (+6), 1308 verdes, as mesmas 4 falhas pré-existentes e
+  alheias, 3 skipped. `npx tsc --noEmit` limpo antes e depois.
+
 - [ ] **44. Fatorar `_prepare_turn` entre responder e toucher** `[relatado]`
   `toucher.py:43` já importa privados do responder. As três divergências são consequência da cópia:
   não desembrulha envelope JSON (`:334` — o bug do `{"body":…}` de 17/08 segue aberto nesse caminho),

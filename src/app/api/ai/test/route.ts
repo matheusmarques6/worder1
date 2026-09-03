@@ -64,7 +64,8 @@ export async function GET(request: NextRequest) {
 // =====================================================
 
 export async function POST(request: NextRequest) {
-  // ✅ P1: mesmo guard do GET — rota de debug, não expor em produção
+  // ✅ P1: mesmo guard do GET — rota de debug, exige DEBUG_ENDPOINT_SECRET em
+  // qualquer ambiente (item 43, fix round 1: dev também)
   const blocked = assertDebugAllowed(request)
   if (blocked) return blocked
 
@@ -277,6 +278,18 @@ async function handleProcess(body: any) {
   }
 }
 
+// Rota de debug/diagnóstico (assertDebugAllowed acima, sem sessão) — os
+// handlers deste arquivo tiram `organizationId` do CORPO da requisição, por
+// desenho, não de `requireOrgFromAuth`/sessão como os caminhos de produção
+// (engine.ts, ai-chatbot-service.ts, search_knowledge.ts). Desde o item 43,
+// `organizationId` deixou de ser só "qual chave OpenAI usar" e virou o filtro
+// de tenancy da RPC search_agent_knowledge (RAGService.search ->
+// createRAGServiceForOrg) — sem sessão nesta rota, o secret exigido por
+// assertDebugAllowed (DEBUG_ENDPOINT_SECRET, agora obrigatório em TODO
+// ambiente, ver src/lib/debug-guard.ts) é a ÚNICA fronteira que impede um
+// chamador de ler chunks de conhecimento de uma organização que não é a
+// dele. Não adicionar aqui uma segunda checagem de posse — a rota é de
+// debug, e duas fronteiras divergentes é pior que uma clara.
 async function handleTestRAG(body: any) {
   const { agentId, organizationId, query, topK = 5, threshold = 0.7 } = body
 

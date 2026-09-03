@@ -41,7 +41,8 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  // ✅ P1: mesmo guard do /api/ai/test — simulador de dev, não expor em produção
+  // ✅ P1: mesmo guard do /api/ai/test — simulador, exige DEBUG_ENDPOINT_SECRET
+  // em qualquer ambiente (item 43, fix round 1: inclusive rodando em dev)
   const blocked = assertDebugAllowed(request)
   if (blocked) return blocked
 

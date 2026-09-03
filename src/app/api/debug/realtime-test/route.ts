@@ -4,7 +4,9 @@ import { assertDebugAllowed } from '@/lib/debug-guard'
 export const dynamic = 'force-dynamic';
 
 // GET /api/debug/realtime-test - Lista organizações e conversas
-// Requer DEBUG_ENDPOINT_SECRET em produção (header x-debug-key).
+// Requer DEBUG_ENDPOINT_SECRET em qualquer ambiente, dev incluído
+// (?debug_key=, header x-debug-key ou Authorization: Bearer) — item 43,
+// fix round 1.
 export async function GET(request: NextRequest) {
   const blocked = assertDebugAllowed(request)
   if (blocked) return blocked
