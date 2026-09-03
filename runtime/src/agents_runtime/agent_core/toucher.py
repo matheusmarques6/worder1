@@ -19,7 +19,7 @@ As diferenças que importam:
 
 import logging
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import timedelta
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -369,7 +369,21 @@ def build_toucher(
                         adaptation=version.adaptation_flags,
                         base_instructions=version.base_prompt or "",
                     ),
-                    mission=resolved,
+                    # Item 44: o toque NÃO passa `tools=` ao modelo — o dinheiro
+                    # dele já virou cupom antes da geração e entra no prompt
+                    # como FATO (`grant_lines` acima). Mas `resolved.tools` é a
+                    # interseção missão∩agente, e o compilador a despejava no
+                    # prompt como "Ferramentas desta situação": o toque dizia ao
+                    # modelo que ele podia emitir cupom e não lhe dava tool
+                    # nenhuma. O modelo ou ignorava, ou prometia de novo o
+                    # benefício que o prompt já dava como concedido. Zerar aqui,
+                    # e só aqui, é seguro porque no toque `resolved.tools` tem um
+                    # ÚNICO leitor, este anúncio: o cupom é dirigido por
+                    # `job.concession_request` e `CreateCoupon` não lê
+                    # `mission.tools`. O `resolved` que já foi para a tool
+                    # continua intocado, e um tool-loop futuro no toque
+                    # encontrará a lista de verdade em vez de uma mentira.
+                    mission=replace(resolved, tools=()),
                     state=StateBlock(
                         moment_ids=tuple(str(m) for m in moment_view.moment_ids),
                         moment_facts=moment_view.facts,
