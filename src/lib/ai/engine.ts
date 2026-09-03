@@ -447,7 +447,25 @@ export class AIAgentEngine {
       })
 
       // Se RPC não existe, fazer update manual (best-effort, sem .catch() inválido)
+      //
+      // Item 49, ruling D: o fallback FICA — ele perde dado incompleto, não
+      // errado (não grava `avg_response_time_ms`), e apagá-lo antes de a RPC
+      // existir no stream trocaria "degradado" por "quebrado", que é a lição
+      // do item 43. O que faltava era o erro APARECER: sem este log, a
+      // latência média do card do agente é 0 permanente e ninguém distingue
+      // "0 real" de "0 porque a RPC não existe" — o archive
+      // `20260613_agent_stats_rpcs.sql:4-9` diz com todas as letras que era
+      // por isso que os dashboards mostravam latência 0.
+      //
+      // Ruído esperado, e por desenho: `update_agent_stats` NÃO foi promovida
+      // pro stream versionado (item 49, ruling C — é território do item 67),
+      // então em base montada só das migrations este warn sai a CADA resposta
+      // de agente. É o preço de parar de mentir; não silencie de volta.
       if (rpcError) {
+        console.warn(
+          '[engine] update_agent_stats falhou, caindo no update manual (avg_response_time_ms NAO sera gravado):',
+          rpcError.message,
+        )
         this.supabase
           .from('ai_agents')
           .update({

@@ -154,11 +154,33 @@ export async function resolveConversationAiStatus(params: {
 
   if (conversation.ai_enabled === false) return blocked('ai_disabled');
 
-  const { data: agentRows } = await supabaseAdmin.rpc('get_active_agent_for_conversation', {
-    p_organization_id: organizationId,
-    p_channel_id: conversation.waba_id,
-    p_pipeline_stage_id: null,
-  });
+  // Item 49, ruling D: este destructuring descartava `error`, e `.rpc()` do
+  // supabase-js RESOLVE com {data: null, error} em vez de lançar — logo
+  // `agentRows` virava null e a linha de baixo devolvia `no_active_agent`.
+  // Erro que vira DIAGNÓSTICO PLAUSÍVEL E ERRADO: o badge afirmava "nenhum
+  // agente ativo para esta conversa" quando a verdade era "a consulta
+  // falhou". É a pior das três formas de silêncio deste item, porque mente
+  // com cara de resposta — o lojista lê a explicação errada e acredita.
+  // O conserto é deixar o erro subir: o `catch` da rota
+  // (api/whatsapp/inbox/conversations/[id]/ai-status/route.ts:53-59) já
+  // devolve 500, o cliente fica com `aiStatus = null` e o badge pinta
+  // `unknown` (bot-badge.ts:22-28) — o estado "não sei", introduzido de
+  // propósito pelo fix round 1 do item 37. Nenhum `AiBlockerReason` novo:
+  // a união tem oito membros e "a consulta falhou" não é um motivo de
+  // bloqueio, é ausência de resposta — o produto já tem casa para isso.
+  const { data: agentRows, error: agentRpcError } = await supabaseAdmin.rpc(
+    'get_active_agent_for_conversation',
+    {
+      p_organization_id: organizationId,
+      p_channel_id: conversation.waba_id,
+      p_pipeline_stage_id: null,
+    },
+  );
+  if (agentRpcError) {
+    throw new Error(
+      `get_active_agent_for_conversation falhou: ${agentRpcError.message ?? String(agentRpcError)}`,
+    );
+  }
   if (!agentRows || agentRows.length === 0) return blocked('no_active_agent');
 
   const agentId: string = agentRows[0].agent_id;

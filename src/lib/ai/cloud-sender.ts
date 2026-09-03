@@ -366,13 +366,26 @@ export async function sendHumanizedReply(
   // Primeira resposta deste agente nesta conversa => conta +1 em
   // ai_agents.total_conversations (dashboard de agentes). Best-effort:
   // RPC ausente em prod nao pode quebrar o envio que ja aconteceu.
+  //
+  // Item 49, ruling D: aqui havia um `try/catch` em volta do `.rpc()` que
+  // NUNCA disparava — `.rpc()` do supabase-js RESOLVE com {error} em vez de
+  // lancar, entao o `catch` era codigo morto e o `console.warn` nunca saia.
+  // Repeticao literal do defeito de `rag.ts`, fechado no item 43. O contador
+  // `total_conversations` parava em silencio absoluto: o card do agente
+  // mostrava zero conversa e ninguem sabia se era zero real ou RPC ausente.
+  // Best-effort continua best-effort (o envio ja aconteceu e nao se desfaz);
+  // o que muda e que a falha agora aparece em log.
+  //
+  // Ruido esperado, e por desenho: `increment_agent_conversations` NAO foi
+  // promovida pro stream versionado (item 49, ruling C — e territorio do item
+  // 67), entao em base montada so das migrations este warn sai em TODA
+  // primeira resposta por conversa. Nao "conserte" isso de volta pro silencio.
   if (!conversation.ai_agent_id) {
-    try {
-      await supabaseAdmin.rpc('increment_agent_conversations', {
-        p_agent_id: agent.id,
-      });
-    } catch (e: any) {
-      console.warn('[cloud-sender] increment_agent_conversations falhou (best-effort):', e?.message);
+    const { error } = await supabaseAdmin.rpc('increment_agent_conversations', {
+      p_agent_id: agent.id,
+    });
+    if (error) {
+      console.warn('[cloud-sender] increment_agent_conversations falhou (best-effort):', error.message);
     }
   }
 

@@ -340,3 +340,31 @@ describe('item 37 — o badge para de mentir em runtime', () => {
     expect(await ask()).toMatchObject({ willRespond: false, reason: 'max_messages' });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Item 49, ruling D — o terceiro sabor do silêncio do item 43: aqui o erro não
+// virava dado errado, virava EXPLICAÇÃO errada. `.rpc()` resolve com {error} em
+// vez de lançar, o destructuring descartava `error`, `agentRows` ficava null e
+// o badge dizia "nenhum agente ativo para esta conversa" — plausível, e falso.
+// O par de testes abaixo é a discriminação que faltava: falha e ausência não
+// podem produzir a mesma resposta.
+// ---------------------------------------------------------------------------
+describe('erro da RPC de agente ativo não vira diagnóstico (item 49)', () => {
+  it('erro da RPC sobe em vez de virar no_active_agent', async () => {
+    rpc.mockImplementationOnce(async () => ({
+      data: null,
+      error: { message: 'function public.get_active_agent_for_conversation does not exist' },
+    }));
+    // Sobe até o catch da rota /ai-status (500) → cliente fica com aiStatus
+    // null → botBadgeVariant pinta 'unknown'. Nenhum AiBlockerReason novo.
+    await expect(ask()).rejects.toThrow(/get_active_agent_for_conversation falhou/);
+  });
+
+  it('ausência de agente, sem erro, continua sendo no_active_agent', async () => {
+    db.activeAgentRows = [];
+    await expect(ask()).resolves.toMatchObject({
+      willRespond: false,
+      reason: 'no_active_agent',
+    });
+  });
+});
