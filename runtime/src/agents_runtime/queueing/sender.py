@@ -371,9 +371,15 @@ async def sender_pass(
                 # vai, e o painel some sozinho em 2 min (`AgentActivity.tsx`,
                 # STALE_AFTER_MS) deixando o silêncio que o item 47 descreve.
                 # `failed` é terminal, pinta de vermelho e FICA — que é o
-                # recado certo: ninguém vai retomar isto sozinho. Vocabulário
-                # de casa, o mesmo `step` que a falha permanente do canal já
-                # usa algumas dezenas de linhas abaixo.
+                # recado certo: ninguém vai retomar isto sozinho. É o mesmo
+                # `step` que a falha permanente do canal emite no fim desta
+                # mesma função, e reusá-lo não é economia de vocabulário: é o
+                # que faz o conserto funcionar. `isTerminalAiRunStep`
+                # (`run-steps-shared.ts:50-56`) trata passo DESCONHECIDO como
+                # não-terminal de propósito, então um valor novo — `held`,
+                # `stuck`, o que for — cairia no mesmo buraco de 2 min que
+                # estamos fechando aqui. Quem for "simplificar" isto de volta
+                # para um `step` fixo: é essa linha que você vai reabrir.
                 paused = _HOLD_DETAIL.get(hold.reason, "Envio pausado")
                 try:
                     await engine.emit_ai_run_step(

@@ -1882,8 +1882,11 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
 - [x] **47. `mark_outbox_sent` descarta o retorno — e o gêmeo `mark_outbox_failed` o descarta três
   vezes, uma delas sobre perda silenciosa de mensagem** `[confirmado]` · commits `aab27c90` +
   `5f18a2b8` · **Fix round 1** (redação e o span do hold) · commits `5eadc8f5` + `753b3865` ·
-  **Fix round 2** (o chip que o lojista lê) · relatório `task-47-report.md`, que é **gitignored**
-  (`.superpowers/sdd/.gitignore` é `*`) — por isso o que precisa sobreviver está AQUI
+  **Fix round 2** (o chip que o lojista lê) · commit `cb45b75a` · **Fix round 3** (duas frases
+  erradas: a citação fora da âncora e o grant que não bloqueia nada) · relatório
+  `task-47-report.md`, que é **gitignored** (`.superpowers/sdd/.gitignore` é `*`) — por isso o que
+  precisa sobreviver está AQUI. O rótulo do último round nunca traz sha: um commit não cita o
+  próprio hash, e o round seguinte é que o nomeia.
   **Toda citação de linha deste item está ancorada na BASE `93af12eb`.** A âncora original
   (`queueing/sender.py:224`) foi escrita contra `52e43477` e hoje aponta para linha em branco; o
   alvo real é **`sender.py:403`** (o call site) e **`engine.py:369-376`** (o wrapper que lê o
@@ -1959,15 +1962,35 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   banco registrado ou não.
   **E havia uma terceira, que é a que de fato custa — só o fix round 2 a achou.** Doze linhas acima
   do `annotate` do hold, `emit_ai_run_step(step="started", detail="… retomando em {held_for}s")`
-  (`sender.py:365-375`) disparava **sem guarda**, com o `requeued` já no escopo. As duas primeiras
+  (`sender.py:314`, bloco `:313-324`) disparava **sem guarda**, com o `requeued` já no escopo.
+  (A primeira versão desta frase citava `:365-375`, que é a numeração de `753b3865`: sob a âncora
+  desta página aquele intervalo é o bloco do CLASSIFICADOR, em volta de `annotate(outcome="failed")`
+  — site errado, não só deslocado. Corrigido no fix round 3; é a única citação que quebrou a
+  promessa de âncora nos quatro rounds.) As duas primeiras
   são mentiras **latentes**: `annotate` é no-op sem SDK OTel (`obs/telemetry.py:142-148`) e o
   Logfire está desligado no piloto. Esta é **ativa**: grava em `whatsapp_ai_run_steps` e o inbox a
   lê por Realtime (`AgentActivity.tsx`). O lojista via, na tela, *"Envio pausado: muitas falhas
   seguidas nesta conta do WhatsApp — retomando em 30s"* sobre a linha que morreu — e como `started`
   é NÃO-terminal, o painel some sozinho depois de 2 min (`STALE_AFTER_MS`), devolvendo o silêncio.
   Agora o passo é `failed` quando o reagendamento não foi registrado: terminal, vermelho, **fica na
-  tela**, e o texto diz que a resposta não sai sozinha. É o mesmo vocabulário que a falha permanente
-  do canal já usa — nenhum valor novo de `step`. **Nota obrigatória:** o atributo `outcome="sent"` hoje
+  tela**, e o texto diz que a resposta não sai sozinha. É o mesmo `step` que a falha permanente do
+  canal já emite no fim da mesma função — e **reusá-lo não é economia de vocabulário, é o que faz o
+  conserto funcionar**: `isTerminalAiRunStep` (`run-steps-shared.ts:50-56`) trata passo
+  **desconhecido** como NÃO-terminal de propósito, com o comentário explicando por quê, então um
+  valor novo (`held`, `stuck`, o que fosse) cairia exatamente no mesmo buraco de 2 min que este
+  conserto fecha. Não há `check` em `step` (`20260817000002:21` é `step text not null` e nada mais)
+  — a garantia é de comportamento, não de schema. Quem for "simplificar" isto de volta para um passo
+  fixo está reabrindo essa linha. E o raciocínio inteiro já estava escrito na UI meses antes, por
+  outra pessoa: `AgentActivity.tsx:58-60` — *"Os outros terminais SIM — sao os casos em que nenhuma
+  mensagem vai aparecer, e sem isto o silencio volta a ser inexplicado."*
+  **Achado devolvido, não consertado — o ramo BENIGNO tem o mesmo buraco de 2 min.** Com o
+  reagendamento gravado o chip segue `started`, correto, e mesmo assim um hold de 10 minutos some da
+  tela em 2 (`STALE_AFTER_MS`), deixando 8 minutos de silêncio sobre uma linha que **vai** sair. Ali
+  a promessa é **verdadeira**, então não é o defeito que o item 47 persegue, e o `STALE_AFTER_MS` é
+  rede de segurança deliberada com motivo escrito (`AgentActivity.tsx:21-26`: worker que morre no
+  meio). Fica como nota e não como item novo porque consertá-lo significa mexer na regra de
+  obsolescência do painel — decisão de quem é dono da UI do inbox, sobre um caso em que ninguém está
+  sendo enganado. **Nota obrigatória:** o atributo `outcome="sent"` hoje
   **superconta**, então o conserto vai DERRUBAR a contagem de `outcome = "sent"` em qualquer painel
   externo. A queda é a verdade aparecendo, não regressão. Nenhum consumidor do atributo existe no
   repositório (conferido em `runtime/` e `src/`), mas painel externo não está no repositório.
@@ -2702,11 +2725,18 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `internal.runtime_heartbeats` (`20260812000004:536-546`, wrapper em `engine.py:453-461`) é
   chaveada por `process_name`, e o blueprint fixa esse nome num literal
   (`render.yaml`, `AGENTS_PROCESS_NAME: agents-runtime-render`) — as duas instâncias do rollout
-  colidem na MESMA linha. E o grant fecha o argumento: `20260812000004:545` concede
-  `select, insert, update` sobre a tabela **só a `worker_role`**, enquanto o sender roda com
-  `sender_role` (`render.yaml`, `AGENTS_SENDER_SET_ROLE: sender_role`) — mesmo resolvida a colisão
-  de `process_name`, o lado que consulta não teria permissão de ler. Ela é ponto de partida, não
-  resposta: falta amarrar o batimento ao `locked_by` da linha, que é o que a saída (d) precisaria.
+  colidem na MESMA linha, e o batimento não distingue qual das duas está viva. **Essa colisão é o
+  obstáculo, e é o único** — a versão anterior desta frase dizia que o grant de
+  `runtime_heartbeats` (`20260812000004:545`, `select, insert, update` só a `worker_role`, enquanto
+  o sender roda com `sender_role`) "fecha o argumento", e isso estava **errado**:
+  `review_stale_unknown` é `security definer` (`20260812000004:481`), então o corpo dela roda com os
+  privilégios do dono e um `join` em `runtime_heartbeats` lá dentro não precisa de grant nenhum — o
+  `search_path` já inclui `internal` (`:482`). O fato do grant continua verdadeiro no escopo dele:
+  se alguém quisesse ler o batimento **direto da conexão do sender**, fora de uma função
+  `security definer`, aí sim faltaria permissão. Escrito como estava, transformava um adendo num
+  bloqueio inexistente e superprecificava a única das quatro saídas que ataca a causa. Ela segue
+  sendo ponto de partida e não resposta pelo motivo certo: falta amarrar o batimento ao `locked_by`
+  da linha, que é o que a saída (d) precisaria.
   **O que não foi verificado:** nada foi executado contra Postgres (`-m db` e `-m pipeline` penduram
   >10 min sem banco). A linha do tempo é aritmética sobre as constantes citadas, e a janela de duas
   instâncias vivas está lida no `render.yaml` (acima), mas o comportamento do Render em si não é
