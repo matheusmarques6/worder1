@@ -1,0 +1,115 @@
+-- ============================================================================
+-- Índice composto para a resolução de conversa por (org, telefone) — item 50 da
+-- auditoria de 28/08.
+--
+-- O predicado, com este texto exato, está em CINCO funções SQL do stream
+-- versionado, quatro delas com o OR de duas formas do telefone:
+--
+--   internal.mirror_outbound_to_inbox           20260813000003:242-247 (OR em :245)
+--   internal.emit_ai_run_step                   20260817000002:69-74   (OR em :72)
+--   internal.legacy_conversation_guard_state    20260901000003:62-67   (OR em :65)
+--   internal.mark_ai_handoff                    20260901000002:148-153 (OR em :151)
+--   public.ingest_inbound_message               20260817000004:112-115 (igualdade simples)
+--
+-- (20260901000002:64-70 é a versão anterior de legacy_conversation_guard_state,
+-- substituída por 20260901000003 — conta uma vez, não duas.)
+--
+--     where wcc.organization_id = p_organization_id
+--       and (wcc.wa_id = p_to_phone or wcc.wa_id = ltrim(p_to_phone, '+'))
+--     order by wcc.last_message_at desc nulls last
+--     limit 1
+--
+-- O ÍNDICE NÃO EXISTE EM FONTE NENHUMA: `grep` por `organization_id, wa_id` em
+-- todo `*.sql` do repositório volta zero — nem no stream versionado, nem em
+-- migrations-archive/, nem em sql/, nem em docs/. O mais próximo é
+-- idx_wcc_org_status (organization_id, status) — docs/ALL-MIGRATIONS-CONSOLIDATED.sql:437-438,
+-- fonte congelada: coluna líder certa, segunda coluna errada, o que dá range
+-- só por organization_id e varredura das conversas da org filtrando wa_id em
+-- memória. Não é seq scan da tabela; é seq scan DO TENANT, que numa org grande
+-- é a mesma coisa com outro nome. A única unique da tabela
+-- (waba_id, wa_id) — 20260812000001:554 — não ajuda: waba_id é a coluna líder e
+-- o predicado não a menciona, e PG 17 (supabase/config.toml:22) não tem skip
+-- scan de b-tree (entrou no 18).
+--
+-- FREQUÊNCIA — o texto original do item dizia "até 3× por envio", e isso é
+-- PISO, não teto. mirror_outbound_to_inbox é chamado DENTRO do laço de bolhas
+-- (queueing/sender.py:552, `for wamid, bubble in delivered:`, chamada em :556),
+-- então 1 bolha = 3 lookups (sender.py:419, :556, :569) e 3 bolhas = 5. Somando
+-- o turno inbound (agent_core/responder.py:350 e :385), o número realista por
+-- turno completo é ~5 — todos com o mesmo predicado, todos sem índice. Detalhe
+-- que não é óbvio: internal.emit_ai_run_step faz o lookup MESMO quando o
+-- telefone é passado pronto — o p_phone só evita a resolução
+-- conversations → channel_identities (20260817000002:52-61); o select em
+-- whatsapp_cloud_conversations roda sempre.
+--
+-- B-TREE SIMPLES, NÃO FUNCIONAL: os dois disjuntos são igualdade sobre a COLUNA
+-- NUA — o ltrim está do lado do PARÂMETRO. Dois Bitmap Index Scan sobre este
+-- mesmo índice + BitmapOr resolvem. (Conferido que não há caminho alternativo:
+-- PG 17 não transforma `col = a OR col = b` em `col = ANY(...)` — o commit que
+-- fazia isso entrou no ciclo do 17 e foi REVERTIDO, voltando só no 18.)
+-- Esta é exatamente a diferença entre este caso e o de whatsapp_opt_status, que
+-- o item 50 pedia junto e que NÃO ganha índice: lá o terceiro disjunto é
+-- ltrim(o.phone,'+') — função sobre a COLUNA (20260813000003:148).
+--
+-- SEM TERCEIRA COLUNA (last_message_at desc), e o motivo NÃO é que a igualdade
+-- seja quase-única — ela não é. A única unique da tabela é (waba_id, wa_id)
+-- (20260812000001:554), líder waba_id, e multi-WABA por org é suportado de
+-- propósito: whatsapp_business_accounts tem organization_id SEM unique
+-- (20260812000001:476-480, o único unique é phone_number_id),
+-- src/app/api/whatsapp/business-accounts/route.ts:26-36 lista várias contas por
+-- org, e wcc.store_id (20260812000001:544) existe para o caso multi-loja. Uma
+-- loja com dois números e um cliente que falou com os dois TEM DUAS LINHAS.
+-- O motivo real é outro e é mais forte: BITMAPOR NÃO PRESERVA ORDENAÇÃO. Um
+-- bitmap heap scan devolve tuplas em ordem física de página, nunca em ordem de
+-- índice; com dois disjuntos o plano é obrigatoriamente bitmap, logo o
+-- `order by last_message_at desc nulls last limit 1` paga sort/top-N COM OU SEM
+-- a terceira coluna. Ela é inútil aqui MESMO QUE a igualdade case dez linhas —
+-- e custaria bytes e uma coluna a mais no conjunto que bloqueia HOT, sendo que
+-- last_message_at é escrita a cada mensagem (20260813000003:263-268).
+--
+-- HOT: este índice não custa HOT nenhum. wa_id é escrito só em INSERT (os três
+-- call sites que o gravam são inserts — cloud/conversations/route.ts:224,
+-- cloud/messages/route.ts:429, ai/test/cloud-webhook/route.ts:147 — e não
+-- existe `update ... set wa_id` em SQL nem em TS), e organization_id nunca é
+-- atualizado. O custo é uma entrada de índice por INSERT de conversa, que é uma
+-- vez por (contato, org) na vida.
+--
+-- O GANHO É EXCLUSIVAMENTE DO RUNTIME PYTHON. Nada do src/ precisa deste
+-- índice: todos os acessos TS a whatsapp_cloud_conversations por telefone
+-- filtram por (waba_id, wa_id) — cloud/conversations/route.ts:184-185,
+-- cloud/messages/route.ts:207-208 e :419-420,
+-- lib/whatsapp/scheduled-message-sender.ts:273-274,
+-- lib/whatsapp/webhook-processor.ts:1050-1051,
+-- api/ai/test/cloud-webhook/route.ts:135-136 —, e essa é a unique que já
+-- existe. Para org NÃO migrada este índice não muda nada.
+--
+-- Sem to_regclass: whatsapp_cloud_conversations nasce no stream versionado
+-- (20260812000001:522), então o guard dos itens 0a/42/43 — que existe para
+-- tabela do app legado, nascida FORA do baseline (20260828000002:35-37) — aqui
+-- seria cargo cult e transformaria em no-op silencioso a falha de uma migration
+-- irmã (20260903000001:56-66). É o OPOSTO do ruling E do item 49 pela diferença
+-- factual de a tabela nascer, ou não, no stream.
+-- Sem CONCURRENTLY: argumento escrito em 20260903000001:53-55 e
+-- 20260828000002:28-33; nenhum dos 33 `create index` do stream o usa.
+-- Custo de deploy: o SHARE conflita com o ROW EXCLUSIVE dos UPDATE de
+-- last_message_at (20260813000003:263-268), que rodam a cada mensagem. A tabela
+-- é menor que shopify_orders (uma linha por WABA×telefone que já conversou),
+-- mas o tamanho real continua desconhecido.
+--
+-- ARMADILHA REGISTRADA, NÃO CONSERTADA AQUI: se (organization_id, wa_id) casa
+-- mais de uma linha — o caso multi-WABA acima —, as cinco funções resolvem o
+-- empate por `order by last_message_at desc limit 1`, isto é, ESCOLHEM A
+-- CONVERSA MAIS RECENTE E NÃO A DO NÚMERO CERTO. Este índice torna esse erro
+-- mais rápido, não menos errado. Item aberto no checklist (descoberto no item 50).
+--
+-- SEM PROVA EXECUTÁVEL: não há Postgres na máquina onde isto foi escrito.
+-- Nenhum EXPLAIN, nem do plano de hoje nem do depois. E há um teto de prova
+-- específico destas tabelas legadas: 20260812000001:14-17 diz que o baseline
+-- NÃO recria os índices de performance delas, e supabase/README.md:16-22 diz
+-- que migrations-archive/ e sql/ são DDL aplicado à mão e não registrado — logo
+-- o conjunto de índices que o CI vê é ESTRITAMENTE MENOR que o do banco vivo, e
+-- um `select indexname, indexdef from pg_indexes` pode matar esta migration.
+-- ============================================================================
+
+create index if not exists whatsapp_cloud_conversations_org_wa_id_idx
+    on public.whatsapp_cloud_conversations (organization_id, wa_id);
