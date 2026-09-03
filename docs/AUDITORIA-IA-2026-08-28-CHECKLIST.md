@@ -1434,10 +1434,110 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   **Suíte após o fix round 3:** 1319 testes (+1), 1312 verdes, as mesmas 4 falhas pré-existentes e
   alheias, 3 skipped. `npx tsc --noEmit` limpo.
 
-- [ ] **44. Fatorar `_prepare_turn` entre responder e toucher** `[relatado]`
-  `toucher.py:43` já importa privados do responder. As três divergências são consequência da cópia:
-  não desembrulha envelope JSON (`:334` — o bug do `{"body":…}` de 17/08 segue aberto nesse caminho),
-  não consulta conhecimento (`:309` passa `knowledge=()`), não tem tool-loop. Fatorar mata a classe.
+- [x] **44. Fatorar `_prepare_turn` entre responder e toucher** `[relatado]` · commits `a77f35ed`
+  (envelope), `f5b3bb06` (transferência), `b21d587e` (flags de entrega), `2f180bab` (anúncio de tool)
+  · relatório `task-44-report.md`
+  **O nome do item era proposta, não símbolo, e as três linhas citadas estavam obsoletas.**
+  `_prepare_turn` não existe em lugar nenhum do runtime (`grep` limpo em `src/`, `tests/`,
+  `scripts/`). As citações reancoradas: `toucher.py:43` (importa privados do responder) é hoje
+  `:54-60`; `:334` (envelope) é `:435`; `:309` (`knowledge=()`) é `:410` — os itens 40 e 41
+  inseriram linhas acima delas.
+
+  **A duplicação, medida em vez de afirmada:** 160 linhas de código idênticas entre os corpos de
+  `respond()` e `touch()`, **55,4 % do corpo de `touch`**, das quais 128 em blocos contíguos de ≥3
+  linhas. Os quatro maiores: abertura de conexão + transação de leitura (16), `run_id`+`note_step`+
+  guards (19), `compile_prompt` (26 em quatro pedaços), laço de judgements (13).
+
+  **As divergências são de dois tipos, e o item misturava os dois.** As de DESENHO são corretas e
+  não devem ser fatoradas: janela pendente (`load_pending_messages`), arbitragem missão dona ×
+  discovery, cupom materializado ANTES da geração, `version is None` que alerta em vez de levantar,
+  e `exclude_inbound_after_seq` (item 39). As de ESQUECIMENTO são a cópia que ficou pra trás — os
+  quatro bugs abaixo, todos consertados aqui.
+
+  **(a) Envelope JSON não desembrulhado no toque — consertado no PORTÃO, não no toucher.**
+  `judges/pre_send.py::guarded_reply` já era o ponto único por onde os dois produtores de fala
+  passam (`responder.py:795`, `toucher.py:437`): não recebe `conn`, é orquestrador puro, e tem 15+
+  testes unitários que rodam sem Postgres. O desembrulho mudou de dentro do `generate` do responder
+  para lá, e `unwrap_model_reply` desceu para `agent_core/llm.py`, ao lado de `strip_code_fence` —
+  é fato sobre o que ATRAVESSA a porta do modelo, não sobre quem está falando, e ficar no responder
+  foi exatamente o que deixou o toque de fora. Cobre também qualquer terceiro produtor futuro.
+  **Gravidade maior do que o item registrava:** o `p_content` do `conclude_turn` vai para a outbox
+  **e** para `messages.content`, então o envelope não desembrulhado saía literal no WhatsApp *e*
+  ficava gravado como fala do agente, voltando pelo `load_recent_transcript` no turno seguinte — o
+  modelo aprendia o formato errado com a própria saída. É o mecanismo de 17/08 por inteiro.
+
+  **(b) `transfer_to_human` com retorno descartado (`toucher.py:480`) — divergência que o item não
+  listava.** O responder guarda o booleano em `marked` e o usa no chip; o toque jogava fora. O dano
+  é de observabilidade, não de segurança: a escalada de severidade e o sufixo do título acontecem
+  DENTRO de `transfer_to_human`, então o alerta sempre saiu certo — o que se perdia era o chip do
+  inbox dizendo que a IA **não** foi desligada.
+
+  **(c) `delivery_flags` ausente no toque — divergência que o item não listava.** Todo retorno do
+  responder carrega `humanize`; `TouchDraft.content` ia sem. `queueing/sender.py` lê essa chave do
+  payload e, ausente, cai no default LIGADO nas duas metades. O lojista desligava bolhas e ritmo em
+  Adaptação → Entrega, valia nas respostas, era ignorado nos toques. `tests/db/test_toucher.py:76`
+  asserta `draft.content` por igualdade exata e foi atualizado no mesmo commit — **sem execução**
+  (ver Prova).
+
+  **(d) O prompt do toque anunciava ferramenta que ninguém passa.** `prompt_compiler.py:183-187`
+  despeja `mission.tools` (a interseção missão∩agente calculada por `merge_mission`) no prompt como
+  "Ferramentas desta situação", e o toque chama o modelo **sem `tools=`** — por desenho, porque o
+  dinheiro do toque vira cupom antes da geração e entra como FATO. O modelo ou ignorava, ou prometia
+  duas vezes o mesmo benefício. Zerado só na chamada de `compile_prompt`, porque no toque essa lista
+  tem um único leitor — o próprio anúncio: o cupom é dirigido por `job.concession_request` e
+  `CreateCoupon` não lê `mission.tools`.
+
+  **`knowledge=()` NÃO é gap — o item descrevia errado, e devolve como item novo (72).** `_knowledge`
+  monta a query exclusivamente das mensagens do contato na janela pendente
+  (`responder.py:1059-1061`) e devolve `()` se ela vier vazia. Um toque não tem janela pendente:
+  copiar a chamada seria no-op puro — e nem custo de embedding tem, porque a guarda dispara antes do
+  `run_tool`. O que existe é uma pergunta de PRODUTO (qual query um toque deveria fazer ao RAG), não
+  uma linha esquecida. Consequência de segunda ordem, real: `judges/pre_send.py:293-295` só
+  acrescenta o bloco "Base de conhecimento disponível ao agente" `if context.knowledge`, então o
+  Judge 1 do toque julga sem ele.
+
+  **Nota (não virou item): `window_open`.** `responder.py:614-616` assume `True` e só calcula se
+  `state.last_inbound_at is not None`; `toucher.py:354-357` calcula, e com `None` dá `False`. **Aqui
+  o toucher está mais certo** — a janela de 24h da Meta está fechada se nunca houve inbound, e
+  `prompt_compiler.py:233-236` renderiza "só template aprovado sai daqui" a partir disso. O default
+  permissivo do responder é logicamente errado e **inalcançável em produção**: `last_inbound_at` só
+  é escrito pelo RPC de ingestão (`20260817000004:86-103`) e `respond()` só roda a partir de
+  inbound. Latente, não vazamento. Uma fatoração ingênua que unifique nos termos do responder
+  **regride o toque** — quem mexer aqui depois precisa saber disso.
+
+  **O que NÃO foi feito, e o motivo honesto: a fatoração do preparo de ENTRADA.** Não é o custo das
+  travas de forma — elas são baratas e auto-documentadas como "ajuste o teste":
+  `test_agent_llm_closes_after_the_turn.py:180` diz literalmente isso e foi desenhado para ser
+  reapontado, e apagar a linha do `_KNOWN_SET_ROLE_DEBT` em `test_no_sql_outside_repository.py`
+  **reduz** a dívida dos itens 16/17 de dois arquivos para um. As duas somam ~15-25 linhas. O motivo
+  que sobrevive é outro: **toda a cobertura de `respond()`/`touch()` mora em `tests/db`**, que nesta
+  máquina não roda, e refatorar ~350-450 linhas do caminho quente dos dois produtores de fala sem
+  conseguir exercitá-los troca um defeito conhecido por risco desconhecido. Os riscos concretos, se
+  alguém retomar: a ordem guards → cascata BYO (`responder.py:434-436` é explícito), o `async with
+  scoped_agent_llm` que não pode escapar do escopo (item 40) nem errar o `owns` — errar fecha o
+  cliente de PLATAFORMA do Judge 1, que é por processo —, o `TurnBudget` único por turno (item 41,
+  e `test_llm_metering.py` NÃO pega um budget por finalidade), o `TouchDraft` com `moment_ids` que o
+  `worker.py:265-283` consome, e os payloads de "sem rascunho" deliberadamente diferentes nos dois.
+  Restrição não declarada em lugar nenhum: `test_llm_metering.py:246` varre `agent_core_dir.glob("*.py")`
+  — **`glob`, não `rglob`** —, então um helper compartilhado num subpacote sai da trava do `budget=`
+  em silêncio. Arquivo novo tem de nascer direto em `agent_core/`.
+
+  **O que continua vivo, dito em voz alta em vez de comemorado:** o desembrulho passou a ser único,
+  mas os outros TRÊS consertos são cópia nos dois lados — `delivery_flags` mora no RETURN de cada
+  função (e os dois retornos, `dict` vs `TouchDraft`, PRECISAM continuar diferentes: o
+  `conclude_turn` do toque depende de `moment_ids`/`mission_version_id`), o anúncio de tools mora em
+  `compile_prompt`, a montante, e a leitura do booleano da transferência mora no chip de cada um. A
+  metade de ENTRADA da classe (as ~95-110 linhas idênticas da abertura ao `compiled`) segue viva e
+  **sem item próprio** — está registrada aqui, com o número medido, de propósito: abrir item para
+  ela renumeraria uma fila que é estável por desenho.
+
+  **Prova.** `pytest -m unit`: 1205 ✓ / 2 ✗ antes, **1208 ✓ / 2 ✗ depois** (as duas falhas são o
+  item 54, cp1252 no Windows, alheias). `ruff check .` e `lint-imports` sem mudança (o ruff já tinha
+  10 erros pré-existentes na BASE, ver item 74). **Sem prova executável:** `tests/db/test_toucher.py`
+  (incluindo a linha 76 atualizada aqui), `tests/db/test_responder_guards.py` e `tests/pipeline/` não
+  rodaram — exigem Postgres, a suíte é não-skipável de propósito (`tests/db/conftest.py:1-9`) e
+  **pendura** em vez de falhar sem banco. Os efeitos de (b), (c) e (d) foram deduzidos do caminho de
+  código, não observados no banco.
 
   **Padrão observado duas vezes — `touch()` é o gêmeo que fica pra trás (nota do item 41, fix round
   1).** Item 40: `agent_core/toucher.py::build_toucher.touch` não fechava o cliente httpx do LLM do
@@ -1452,10 +1552,16 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `toucher.py::touch`); `agent_id` em `_metered` (item 37) — os dois passam `version.agent_id`
   (`responder.py:666`, `toucher.py:398,403`); `scoped_agent_llm` (item 40) — os dois, desde o fix
   round 1 daquele item; `TurnBudget` (item 41) — os dois, desde este fix round 1. `exclude_inbound_after_seq`
-  (item 39, `agent_repo.load_recent_transcript`) é a ÚNICA divergência restante, e é DELIBERADA, não
-  gap: só `responder.py::respond` tem uma janela de mensagens pendente para excluir do transcript —
-  `toucher.py::touch` não nasce de inbound, não tem essa janela, e o próprio item 39 já registrou
-  isso (`runtime/FORK.md`, seção do item 39). Recomendação para itens futuros: todo item que editar
+  (item 39, `agent_repo.load_recent_transcript`) é DELIBERADA, não gap: só `responder.py::respond`
+  tem uma janela de mensagens pendente para excluir do transcript — `toucher.py::touch` não nasce de
+  inbound, não tem essa janela, e o próprio item 39 já registrou isso (`runtime/FORK.md`, seção do
+  item 39).
+  **Correção desta execução: aquela varredura declarou `exclude_inbound_after_seq` a ÚNICA
+  divergência restante, e isso era falso.** Ela cobriu só o que os itens 35-41 tinham MUDADO em
+  `respond()`; as divergências mais antigas que nenhum item recente tocou ficaram fora do escopo da
+  pergunta — e eram quatro, todas consertadas aqui: envelope, `transfer_to_human`, `delivery_flags`
+  e o anúncio de tools. A terceira vez do padrão aconteceu, e a varredura não a viu porque olhava o
+  diff recente em vez dos dois corpos lado a lado. Recomendação para itens futuros: todo item que editar
   `responder.py::respond` fecha só depois de perguntar "isto vale para `toucher.py::touch` também?" —
   é essa pergunta, feita cedo, que evita a terceira vez.
 
@@ -1771,6 +1877,71 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   remover órfã é o item 61, não este. Conclusão por leitura de código, não por runtime: a rota não
   foi chamada de verdade para ver o JSON cross-tenant sair; a base é a ausência de
   `.eq('organization_id', …)` nas queries e a presença de `/api/debug` em `publicApiRoutes`.
+
+- [ ] **72. Decidir com que query um toque proativo consulta a base de conhecimento**
+  `[relatado]` · *(descoberto no item 44)*
+  Uma resposta reativa consulta o RAG (`responder.py:591-599` → `_knowledge` → `SearchKnowledge`) e
+  entrega os trechos ao prompt **e** ao `JudgeContext`. Um toque não consulta nada
+  (`toucher.py:410`: `knowledge=()`), e **isso não é linha esquecida**: `_knowledge` monta a query
+  exclusivamente das mensagens do contato na janela pendente (`responder.py:1059-1061`) e um toque
+  proativo não tem janela pendente — copiar a chamada devolveria `()` de qualquer jeito, sem sequer
+  gastar uma embedding (a guarda dispara antes do `run_tool`). **Não existe query para copiar; existe
+  uma query para DECIDIR**, e isso é produto, não refatoração — por isso o item 44 não a tomou.
+  Efeito para o lojista: um toque de carrinho abandonado que fale de frete, prazo ou troca o faz sem
+  a base de conhecimento que ele escreveu, enquanto uma resposta reativa sobre o mesmo assunto a
+  consulta — o toque pode contradizer a própria loja. Segunda ordem: sem `knowledge`, o Judge 1 do
+  toque também julga sem o bloco "Base de conhecimento disponível ao agente"
+  (`judges/pre_send.py:293-295`), ou seja, não tem como aferir aderência à base.
+  Duas opções, nenhuma recomendada como decisão tomada — quem decide é o dono do produto:
+  **(a) o objetivo da missão** (`resolved.objective`, mais o `delta` do nó) — é o que o toque de fato
+  vai falar, e nasce do catálogo, não do cliente; risco de ser genérico demais e trazer chunk
+  irrelevante. **(b) a cauda do transcript** (as últimas N mensagens que `load_recent_transcript` já
+  carrega) — é o contexto real daquele contato, mas num contato que nunca escreveu (o caso central do
+  toque: quem só navegou) ela é vazia e a opção degrada para o comportamento de hoje. Um híbrido
+  (objetivo, com a cauda quando existir) é possível e custa a mesma decisão. Ponto de partida
+  técnico: `responder.py:1039-1075` (a assinatura exige `pending`, teria de mudar) e
+  `toucher.py:408-413`.
+
+- [ ] **73. O toque não tem tool-loop: as tools custom do lojista não existem quando o agente toca**
+  `[relatado]` · *(descoberto no item 44)*
+  `responder.py:684-778` monta a grade de tools (`create_coupon` da interseção missão∩agente, mais as
+  custom do 10.7) e roda `MAX_TOOL_ROUNDS` rodadas com corte forçado sem tools na última.
+  `toucher.py` faz **uma** `chat.chat(...)` sem `tools=` nenhum, não importa `custom_tools_repo` e não
+  tem `run_turn_tool`. Metade disso é desenho e deve ficar: o dinheiro do toque não passa pelo modelo
+  — o `concession_request` do nó vira cupom ANTES da geração e entra no prompt como fato, e
+  `create_coupon` como tool no toque seria uma segunda porta para o mesmo dinheiro. A outra metade é
+  capacidade que falta: as tools custom do 10.7 (read-only por construção — rastreio, consulta de
+  estoque) ficam inteiramente fora do toque, **sem que nada declare isso**.
+  Efeito para o lojista: uma tool que ele ligou funciona quando o cliente pergunta e não existe
+  quando o agente toca. **Atenção ao que este item NÃO é:** o prompt nunca anunciou tool custom em
+  caminho nenhum — elas entram direto no `tool_specs` do responder (`responder.py:695-703`), sem
+  passar pela interseção de missão. O anúncio enganoso que existia era só o de `mission.tools`, e o
+  item 44 o apagou do toque (`2f180bab`); este item é sobre PASSAR as tools, não sobre anunciá-las.
+  Wirar o loop no toque é capacidade nova e tem custo real: ~45 linhas copiadas, ou ~25 se o
+  `generate` das duas funções virar fábrica compartilhada — e a prova mora em `tests/db`, que só roda
+  no CI. Não quantificado: com que frequência uma missão de toque tem tools ligadas na prática (não
+  foram inspecionados dados nem seeds).
+
+- [ ] **74. `ruff check .` está VERMELHO na branch, e é o passo de lint do CI** `[confirmado]` ·
+  *(descoberto no item 44)*
+  Medido nesta máquina em `e2d1f38a`, antes de qualquer mudança do item 44: `uv run --directory
+  runtime ruff check .` (exatamente o comando de `.github/workflows/runtime.yml:51`) devolve
+  **10 erros**, todos pré-existentes e alheios ao item 44 — a contagem é idêntica antes e depois dos
+  quatro commits. São dois arquivos: **`runtime/scripts/measure_transcript_duplication.py`** com 9
+  (um `I001` de import fora de ordem, um `E501`, e 7 `T201` — `print` é banido no `select`, e
+  `per-file-ignores` cobre `tests/**`, não `scripts/**`), entrado em `01087626` (item 39, "script de
+  medida versionado"); e **`runtime/tests/unit/test_humanize.py:286`**, um `E501` de 103 colunas,
+  entrado em `40546597` (item 38, fix round 1). Ou seja: o gate de lint do runtime está quebrado
+  desde os itens 38/39 desta própria auditoria, o que contradiz a Fase 0 ("CI verde"). **Não
+  consertado aqui** porque é trabalho de outro item e o escopo do 44 é o par responder/toucher — mas
+  é conserto de minutos (`ruff check --fix` resolve o `I001`; o `print` do script pede `T201` no
+  `per-file-ignores` para `scripts/**`, que é a decisão a tomar: um script de medida existe para
+  imprimir).
+  **Não verificado:** o estado real das execuções do workflow no GitHub — a conclusão vem de rodar o
+  comando localmente com a versão travada no `uv.lock` (ruff 0.16.1), não de olhar um run vermelho.
+  Nota lateral de ambiente, não do repositório: o `.ruff_cache` desta máquina estava corrompido
+  (`wrong package cache for file`) e fazia o ruff entrar em `panic` em todo arquivo de `src/`;
+  `rm -rf runtime/.ruff_cache` resolve, e nada disso aparece em CI, que roda com cache limpo.
 
 ---
 
