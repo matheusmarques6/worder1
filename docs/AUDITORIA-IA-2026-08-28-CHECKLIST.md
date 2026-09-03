@@ -2036,9 +2036,152 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `select status, count(*) from internal.message_outbox group by status` num banco vivo converteria
   este item inteiro de inferência em fato.
 
-- [ ] **48. Pool de conexões de verdade** `[relatado]`
-  `responder.py:263` e `toucher.py:122` abrem conexão por invocação; `server.py:90,130` por requisição
-  (`/healthz` abre e fecha a cada probe). Handshake TCP+TLS+auth por turno de LLM.
+- [x] **48. Pool de conexões de verdade — a conexão por probe do `/healthz` morreu; o lado do turno
+  fica deferido, com a condição de reabertura reescrita** `[confirmado]` · commit `beaf3074` ·
+  relatório `task-48-report.md`
+  **Toda citação de linha deste item está ancorada na BASE `cb45b75a`** — a lição do item 44:
+  reancorar sem declarar volta a mentir no commit seguinte.
+
+  **As quatro citações originais estavam tortas por uma linha, e duas delas apontavam para código que
+  não existe mais.** O off-by-one é sistemático na origem (`52e43477`, o commit da auditoria): as
+  quatro apontam para o `if set_role:`, uma abaixo do `connect` de verdade.
+
+  | o item dizia | o `connect` real em `52e43477` | hoje, em `cb45b75a` |
+  |---|---|---|
+  | `responder.py:263` | `:261` | **`responder.py:280`** |
+  | `toucher.py:122` | `:121` | **`toucher.py:151`** |
+  | `server.py:90` (dentro de `_healthz`) | `:89` | **não existe** — colapsado pelos itens 16/17 |
+  | `server.py:130` (dentro de `_preview`) | `:129` | **não existe** — idem |
+
+  Os itens 16/17 já tinham colapsado as duas bocas do listener num `_connection` só
+  (`server.py:96-110`), com `assert_rls_enforced` dentro e uma fitness proibindo a terceira
+  (`test_listener_connects_in_one_guarded_place.py`). **O item estava certo sobre o `/healthz` e
+  errado sobre "dois lugares"** — e o `/healthz` tinha ficado *mais* caro que em `52e43477`, porque a
+  guarda de RLS (um `select` contra `pg_roles`) entrou no caminho de cada probe.
+
+  **"Handshake TCP+TLS+auth por turno de LLM" também está desmentido: é por TURNO, não por chamada de
+  LLM.** O `async with` de `responder.py:280` cobre o turno inteiro — as até 8 chamadas de geração
+  (`metering.py:62`), o Judge, os tools e o `_metered` compartilham a MESMA conexão. É o mesmo exagero
+  que o ruling A do item 40 corrigiu para o cliente httpx, e ele mudava a gravidade do achado.
+
+  **O custo estava fora do turno.** Dentro do turno, ~6 a 8 round-trips de handshake contra segundos
+  de LLM é ruído. Fora dele, o `/healthz` é a única boca cuja frequência **não depende de tráfego de
+  loja**: `render.yaml:24` (`healthCheckPath`) mais as sondas de ≥2 regiões do Grafana Synthetics
+  (`docs/OBSERVABILIDADE-PLANO-V3.md:166`, `DEPLOY.md:136-137`) dão ≥3 sondadores, para sempre,
+  inclusive com o produto parado. Cada probe pagava handshake TCP+TLS+SCRAM contra o session pooler em
+  São Paulo — com o processo em Ohio (`render.yaml:22`) — mais `set role` mais a query da guarda, para
+  UMA leitura de idade de beat: ~8 a 10 round-trips de cerimônia por 1 de trabalho. Num piloto com
+  poucas lojas, essa era com folga a maior fonte de handshakes do sistema. E há o agravante que a
+  memória de operação registra: churn de conexão contra um pooler em **session mode** — onde cada
+  cliente prende um backend 1:1, sem multiplexação (`render.yaml:9-13`, `DEPLOY.md:15-17,87`,
+  `.env.piloto.example:5-8`, os quatro proibindo por escrito o transaction pooler porque `set role` é
+  por sessão) — é o perfil que acorda o circuit breaker do Supavisor.
+
+  **Feito (`beaf3074`): o `/healthz` lê por UMA conexão do processo.** Ela vem do preflight de
+  `__main__.py:89`, que antes era aberto só para provar o role e **fechado na linha seguinte**. O
+  motivo de tirá-la de lá não é economizar aquele handshake — é um por deploy —, é que ela **já nasce
+  guardada**: `app._connect` aplica o `set role`, cobra `assert_rls_enforced` e ainda passa
+  `application_name`, que o listener nunca passou (no `pg_stat_activity` as sessões do listener eram as
+  anônimas). Trocar "conexão por probe" por "conexão longeva" troca um custo por um modo de falha, e
+  as três coisas que fecham esse buraco são o conserto inteiro: **posse** (quem constrói fecha — a
+  conexão morria como local de `_serve` e ninguém a fechava; agora o `finally` fecha, depois do
+  listener); **reconexão pela porta guardada** (psycopg NÃO reconecta: uma sessão derrubada deixaria
+  `_healthz` devolvendo 503 `database unreachable` PERMANENTE, com o banco vivo — sob `healthCheckPath`
+  isso é instância insalubre para sempre, restart, crash-loop, que é o que dispara o breaker; um
+  healthz que mente "doente" é pior que um healthz caro. A reabertura passa por `app._connect`, nunca
+  por um `connect` escrito no listener: uma reconexão nua devolveria o dono do DSN, que no Supabase tem
+  BYPASSRLS sem ser superuser, e o healthz responderia 200 do mesmo jeito); e **lock em volta da
+  SEQUÊNCIA** (o lock interno do psycopg serializa statements, não sequências —
+  ler-falhar-reabrir-ler é uma sequência, e sem `asyncio.Lock` dois probes concorrentes reabrem os
+  dois, com o segundo lendo de um objeto que o primeiro fechou). **O `/internal/preview-prompt` NÃO
+  entrou**: continua abrindo a sua por requisição, via `_connection`. Ele roda `scope_to_organization`
+  dentro de `conn.transaction()`, e um `select` de healthz caindo dentro dessa transação rodaria sob o
+  `SET LOCAL app.organization_id` do preview — é endpoint administrativo, de frequência ~zero.
+  **Sem dependência nova:** `psycopg_pool` não está no `pyproject.toml` nem no `uv.lock` nem no venv, e
+  não precisou entrar.
+
+  **A pergunta de tenancy que o item escondia tem resposta, e ela é tranquilizadora: o runtime JÁ
+  reusa conexão entre organizações.** Pulse, os 2 workers e o sender atendem todas as lojas sobre a
+  mesma sessão desde sempre (`app.py:171,205,231`; `engine.py:274-275` escreve isso com todas as
+  letras). O que segura o reuso não é isolamento de conexão, é `SET LOCAL` por transação:
+  `scope_to_organization` é `set_config('app.organization_id', %s, true)` — o `true` é o `is_local`, e
+  o valor morre no fim da transação. **Conferido em `cb45b75a`: 31 sítios de produção, e os 31 estão
+  imediatamente dentro de um `async with conn.transaction():`. Zero `set_config(..., false)`, zero
+  `DISCARD`, zero `reset_session` em `runtime/src/`.** *(O número drifa a cada commit, daí o hash
+  colado; a recon do item somou 28 e enumerou 29, omitindo `repository/whatsapp_accounts.py:55` e
+  `repository/whatsapp_templates.py:52` — justamente os dois que mais reforçam a tese, com docstring
+  dizendo que escopam por dentro porque a conexão do sender nunca vem escopada por fora.)* Corolário:
+  uma leitura que escape da transação **não vaza para outra loja — ela vaza para ninguém** (achado do
+  item 45: `current_app_organization_id()` = NULL, policy não casa, zero linhas, sem erro e sem log).
+
+  **As duas armadilhas de quem for escrever o pool de verdade — as duas são contra-intuitivas:**
+  1. **`DISCARD ALL` seria O BUG, não a proteção.** `SET ROLE` é estado de **sessão**, aplicado uma vez
+     por conexão física. Um pool cujo `reset` execute `DISCARD ALL` (que inclui
+     `SET SESSION AUTHORIZATION DEFAULT` e `RESET ALL`) devolve a conexão ao dono do DSN. E o pior: a
+     guarda do item 01 rodaria no `configure` — conexão física recém-criada, role ainda aplicado — e
+     **passaria verde**; o vazamento começaria no segundo checkout, com a guarda nunca mais
+     consultada. `assert_rls_enforced` decide lendo `current_user` e `rolbypassrls`
+     (`scope.py:37-93`), que é exatamente o que o `SET ROLE` muda e o reset restaura. **Guarda verde,
+     RLS desligada.**
+  2. **`autocommit=True` é load-bearing, e o mecanismo é o savepoint.** Está nos quatro sítios de
+     `connect` (`app.py:58`, `responder.py:280`, `toucher.py:151`, `server.py:105`). Com
+     `autocommit=False`, psycopg abre transação implícita no primeiro statement e o
+     `conn.transaction()` explícito vira **SAVEPOINT** dentro dela, não `BEGIN` de topo — e **liberar
+     um savepoint não desfaz `SET LOCAL`**. O escopo de organização sobreviveria a cada bloco
+     `transaction()` de `responder.py`, `worker.py` e `tools/` até o commit externo, transformando a
+     falha silenciosa-mas-inócua do item 45 numa janela de escopo persistente. Um
+     `AsyncConnectionPool(..., kwargs={"autocommit": True})` mantém o contrato; um pool escrito sem
+     esse `kwargs` o quebra sem uma linha de aviso.
+
+  **DEFERIDO: o lado do turno (`responder.py:280`, `toucher.py:151`) — por magnitude, não por
+  precedente.** O ruling B do item 40 (`FORK.md:592-602`) recusou reusar o cliente httpx por **dois**
+  fundamentos, e só um transfere para cá: o *preço arquitetural* (pool keyed por
+  `(organização, provider, base_url, hash da api_key)`, com expiração e credencial de várias orgs em
+  memória) **não** transfere — a conexão de banco tem duas credenciais no processo inteiro, fixas por
+  env (`scope.py:29-30`); o *benefício desprezível* frente às chamadas de geração transfere inteiro. E
+  há um fato novo que aquele ruling não pesou: **session mode é argumento de capacidade, não de
+  latência** — 1 cliente : 1 backend, slot 1:1. O que sustenta o deferimento é a magnitude: ≈7 sessões
+  no pico (4 longas + até 2 de turno + 1 de probe, e a de probe some com este item), com `workers=2`
+  fixo em `app.py:98`. **Não há pressão de slot demonstrada.**
+  **Condição de reabertura, reescrita para o item 48** (a de `FORK.md:599-601` está em termos de
+  latência e não cobre o que importa aqui): reabre o lado do turno **ou** uma medida mostrando que o
+  handshake por turno é relevante frente às chamadas de geração, **ou** evidência de pressão de slot no
+  pooler / disparo do breaker do Supavisor. As duas reabrem; só a primeira estava escrita.
+  Quando reabrir, dois pools e não um (`worker_role` e `sender_role` não são intercambiáveis,
+  `DEPLOY.md:91`), e o obstáculo real é `__main__`, não `app`: a assinatura `factory(dsn)` de
+  `AGENTS_RESPONDER`/`AGENTS_TOUCHER` é contrato declarado (decisão 57) e é a peça que muda.
+
+  **ALTERNATIVA NÃO TOMADA — decisão do dono, não do executor: o `/healthz` poderia não tocar o banco.**
+  O beat que ele lê é escrito **por este mesmo processo** a cada 30 s (`app.py:186`, `config.py:76-78`).
+  Um `/healthz` que reportasse a idade do último beat em memória custaria **zero conexão, zero lock,
+  zero reconexão** — nenhum dos três buracos acima existiria — e falharia pelo motivo certo:
+  `engine.beat` não tem `try/except`, então pulse morta mata a task, o `asyncio.gather` de `app.py:245`
+  estoura e o processo cai, com o Render vendo a porta fechada. **A favor:** é a forma mais barata, e
+  hoje um soluço de banco vira 503 → restart → crash-loop → breaker, que é o dano maior. **Contra:**
+  muda o que o `/healthz` significa para o Render — readiness vira liveness —, e uma queda de banco
+  passa a ser reportada em até `health_max_age_s=180s` (`server.py`) em vez de no probe seguinte, que é
+  exatamente a tolerância que o marco já declara (`config.py:76-78`). **Não decidida aqui.**
+
+  **O que ficou sem prova executável.** Não há Postgres nesta máquina: `-m db` e `-m pipeline`
+  penduram >10 min e **não foram executados** — em particular `tests/db/test_server.py`, o único lugar
+  onde `server.serve` roda contra um banco, cuja fixture este item teve de reescrever para passar a
+  conexão do healthz e fechá-la. **Nenhum milissegundo foi medido:** toda a conta de round-trips acima
+  é aritmética sobre o código (statements por caminho) multiplicada por um RTT Ohio↔São Paulo que
+  ninguém mediu, e o intervalo de probe do Render/Synthetics não está declarado em arquivo nenhum do
+  repositório — os dois números decidem se este item era urgente ou apenas correto, e estão no painel
+  do Render. **A CI nunca exerce o pooler** (`.github/workflows/runtime.yml:37` lista `supavisor` em
+  `SUPABASE_EXCLUDE`), então nenhuma trava do repositório protegeria uma regressão específica de
+  pooler. O comportamento que a mudança introduz — reuso, reabertura única pela porta guardada, lock de
+  sequência, posse — está preso em `tests/unit/test_healthz_reuses_one_connection.py` com conexão
+  falsa, que roda em `-m unit`; o SQL continua sendo território do `-m db`.
+
+  **A fitness do item 16 NÃO esvaziou** — ao contrário do que o plano deste item previa. `_connection`
+  continua existindo porque o `/preview` continua usando, então `openers == ["_connection"]` e
+  `_KNOWN_SET_ROLE_DEBT["server.py"] == 1` seguem verdadeiros sem tocar em nada, e a linha
+  `agents_runtime.server -> psycopg` do `ignore_imports` continua necessária. O que essas asserções
+  deixaram de cobrir é o caminho novo, e por isso ganharam uma quarta irmã no mesmo arquivo: `_healthz`
+  não pode voltar a chamar `_connection`, e quem reabre a conexão longeva tem de ser o `_connect`
+  importado de `agents_runtime.app` — não um `_connect` local que não guarde nada.
 
 - [ ] **49. RPCs fora do stream versionado** `[confirmado]`
   `get_active_agent_for_conversation`, `check_agent_cooldown`,
@@ -2824,6 +2967,38 @@ você decidir se entram na fila.
 - [ ] **`supabase/.branches/` e `supabase/.temp/` não estão no `.gitignore`.**
   Aparecem no `git status` de quem rodar o stack local — e agora todo mundo deve rodar.
   *(descoberto na Fase 0)*
+
+- [ ] **A guarda de RLS do item 01 falta em 2 dos 4 sítios físicos de conexão.** `[confirmado]`
+  `responder.py:280-282` e `toucher.py:151-153` abrem a conexão do turno, aplicam `set role` atrás de
+  um `if set_role:` e **não chamam `assert_rls_enforced`** — ao contrário de `app.py:74` e
+  `server.py:109`, que cobram. O item 01 existe justamente porque "o seam por onde nascem todas as
+  conexões" tinha de ser único; aqui ele tem dois caminhos descobertos. **O que a guarda faria:**
+  recusar a conexão quando a env de role falta, quando o role ignora a RLS, ou quando a env aponta
+  para o pool errado (`scope.py:37-93`) — as três morrendo alto em vez de servir. **O que muda se ela
+  falhar:** sem a env, a conexão do turno é o dono do DSN, que no Supabase tem BYPASSRLS sem ser
+  superuser, e a camada de repositório — escrita sem `where organization_id` porque "a RLS escopa" —
+  lê cross-org calada. **A gravidade é defesa em profundidade, não buraco aberto** (a recon do item 48
+  superestimava isto na §3.3): `app._connect` lê a MESMA env (`AGENTS_WORKER_SET_ROLE`,
+  `__main__.py:123` e `responder.py:926`) e mata o processo na partida se ela faltar, então um turno
+  só rodaria como dono do DSN se `app.run` nunca tivesse rodado. **Conserto: 2 linhas**
+  (`await assert_rls_enforced(conn, WORKER_ROLE)` depois do `set role`, nos dois arquivos) — mas mexe
+  no modo de falha do caminho quente (o turno passa a poder morrer onde hoje segue), então pede round
+  próprio em vez de carona. *(descoberto no item 48)*
+
+- [ ] **`AGENTS_WORKERS` é documentada e inalcançável — o gêmeo exato do item 52.**
+  `DEPLOY.md:123` lista `AGENTS_WORKERS` entre as variáveis de tuning, mas `__main__._serve` nunca
+  passa `workers=` para `app.run`: o default `workers: int = 2` (`app.py:98`) é inescapável em
+  produção. `grep -rn "AGENTS_WORKERS" runtime/src` dá **zero**; o único `workers=` do repositório
+  está em `tests/pipeline/test_scenarios_b.py:355`. Quem tentar aliviar pressão de fila mexendo na env
+  não muda nada e não recebe aviso. Ou ler a env em `_serve`, ou tirar a linha do `DEPLOY.md` — manter
+  os dois estados é a pior opção, que é o mesmo ruling do item 52. *(descoberto no item 48)*
+
+- [ ] **Divergência `aws-0` × `aws-1` no host do pooler, em quatro arquivos de deploy.**
+  `render.yaml:10`, `runtime/DEPLOY.md:16,76` e `runtime/.env.piloto.example:8` dizem
+  `aws-0-sa-east-1.pooler.supabase.com`; a memória de operação do piloto diz **`aws-1`**. Não deu para
+  conferir contra `runtime/.env.piloto` (leitura bloqueada). Se `aws-1` é o correto, os quatro
+  arquivos que um humano copia na hora de configurar o deploy estão desatualizados — e o modo de falha
+  é um DSN que não resolve, na partida, no lugar mais caro para descobrir. *(descoberto no item 48)*
 
 ---
 
