@@ -28,14 +28,24 @@ the build if this module ever reads a model off a configuration object.
 """
 
 import json
+import logging
 import re
 import unicodedata
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 
-from agents_runtime.agent_core.llm import ChatRequest, LlmPort, Message, strip_code_fence
+from agents_runtime.agent_core.llm import (
+    ChatRequest,
+    LlmPort,
+    Message,
+    strip_code_fence,
+    unwrap_model_reply,
+)
 from agents_runtime.agent_core.metering import TurnBudgetExceeded
 from agents_runtime.evals.rubrics import Criterion, Rubric, score
+from agents_runtime.obs.telemetry import annotate
+
+logger = logging.getLogger(__name__)
 
 #: Platform-fixed (D1, decisão 79). Never per tenant.
 #: Slug DA OPENROUTER, com namespace: o adapter manda esta string crua no
@@ -296,6 +306,22 @@ class PreSendJudge:
         return "\n".join(parts)
 
 
+def _unwrapped(text: str) -> str:
+    """`unwrap_model_reply` mais o registro de que ele PRECISOU agir.
+
+    O desembrulho conserta a entrega e, exatamente por isso, esconde a
+    regressão: o modelo voltar a responder em envelope deixa de ser reprovado e
+    passa a ser invisível. Consertar calado e contar alto — o atributo é um
+    rótulo booleano, nunca o texto, então atravessa o cinto de PII de
+    `SAFE_ATTRIBUTES` sem levar conteúdo junto.
+    """
+    clean = unwrap_model_reply(text)
+    if clean != text:
+        logger.warning("resposta do modelo veio embrulhada em envelope JSON — desembrulhada")
+        annotate(reply_unwrapped=True)
+    return clean
+
+
 #: `(attempt, failed_criteria) -> draft`
 Generator = Callable[[int, tuple[str, ...]], Awaitable[str]]
 #: `(draft, context) -> judgement`
@@ -321,7 +347,18 @@ async def guarded_reply(
 
     for attempt in range(limit + 1):
         try:
-            draft = await generate(attempt, feedback)
+            # Item 44: o desembrulho do envelope JSON mora AQUI, e não dentro
+            # do `generate` de cada produtor. Era só o responder que
+            # desembrulhava; o toque (`agent_core/toucher.py`) devolvia o
+            # `answer.text` cru, então um modelo que respondesse
+            # '{"body": "Oi! Vi que ficou um tênis no seu carrinho."}' num toque
+            # entregava esse texto literal no WhatsApp do cliente — e o mesmo
+            # conteúdo era gravado em `messages.content` pelo `conclude_turn`,
+            # voltando no transcript do turno seguinte para o modelo aprender o
+            # formato errado com a própria saída (é o mecanismo de 17/08).
+            # Aplicado no ponto único por onde TODOS os produtores de fala
+            # passam, o conserto vale também para o terceiro que vier.
+            draft = _unwrapped(await generate(attempt, feedback))
 
             try:
                 judgement = await judge(draft, context)

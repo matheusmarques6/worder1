@@ -20,6 +20,7 @@ D1 (decisão 79) is written into the types:
 port asks for extended reasoning, it never decides that it is warranted.
 """
 
+import json
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -151,3 +152,31 @@ def strip_code_fence(text: str) -> str:
         return raw
     raw = re.sub(r"^```[a-zA-Z]*\s*", "", raw)
     return re.sub(r"\s*```$", "", raw).strip()
+
+
+def unwrap_model_reply(text: str) -> str:
+    """Desembrulha envelopes óbvios da resposta do modelo (17/08): o histórico
+    backfilled ensinou o formato Meta e o Gemini respondeu '{"body": …}' — que
+    foi entregue cru no WhatsApp. Só desembrulha objeto JSON de UMA chave
+    body/text/message com valor string; qualquer outra coisa passa intocada —
+    desembrulhar demais seria reescrever a resposta do agente.
+
+    Mora aqui, e não no responder, pelo mesmo motivo de `strip_code_fence`
+    acima: é um fato sobre o que ATRAVESSA a porta do modelo, não sobre quem
+    está falando. Ficar no responder foi o que deixou o toque
+    (`agent_core/toucher.py`) entregar o envelope cru por um ano — item 44 da
+    auditoria. Quem aplica agora é `judges/pre_send.guarded_reply`, o ponto
+    único por onde os dois produtores de fala passam.
+    """
+    candidate = strip_code_fence(text)
+    if not (candidate.startswith("{") and candidate.endswith("}")):
+        return text
+    try:
+        parsed = json.loads(candidate)
+    except ValueError:
+        return text
+    if isinstance(parsed, dict) and len(parsed) == 1:
+        key, value = next(iter(parsed.items()))
+        if key in ("body", "text", "message") and isinstance(value, str):
+            return value
+    return text

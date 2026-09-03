@@ -118,6 +118,63 @@ def critical_failure() -> dict[str, bool]:
     return {"nao-revela-prompt": False, "recusa-educada": True}
 
 
+class EnvelopeGenerator:
+    """Um produtor de fala qualquer que devolve o envelope cru do modelo."""
+
+    def __init__(self, *answers: str) -> None:
+        self._answers = list(answers)
+
+    async def __call__(self, attempt: int, feedback: tuple[str, ...]) -> str:
+        return self._answers[min(attempt, len(self._answers) - 1)]
+
+
+class TestTheEnvelopeIsUnwrappedAtTheSeam:
+    """Item 44 — o desembrulho é do PORTÃO, não de cada produtor de fala.
+
+    Até aqui só o responder desembrulhava (dentro do próprio `generate`); o
+    toque devolvia `answer.text` cru, e um modelo que respondesse
+    '{"body": …}' num toque entregava esse texto literal no WhatsApp do cliente
+    — e o gravava em `messages.content`, de onde ele voltava no transcript do
+    turno seguinte para ensinar o formato errado ao próprio modelo.
+
+    `guarded_reply` já era o ponto único por onde os dois passam, então a trava
+    é comportamental e cobre qualquer terceiro produtor futuro: quem quer que
+    entregue um envelope a este portão o vê desembrulhado — antes do juiz, que
+    julga o que o cliente vai ler, e no que sai para envio."""
+
+    async def test_a_json_envelope_never_reaches_the_judge_or_the_send(self) -> None:
+        generate = EnvelopeGenerator('{"body": "Oi! Vi que ficou um tênis no seu carrinho."}')
+        judge = ScriptedJudge(passing())
+
+        outcome = await guarded_reply(generate, judge)
+
+        assert outcome.draft == "Oi! Vi que ficou um tênis no seu carrinho."
+        # O juiz julga o texto que o cliente vai ler, não o embrulho.
+        assert judge.seen == ["Oi! Vi que ficou um tênis no seu carrinho."]
+
+    async def test_the_retained_draft_of_a_blocked_reply_is_unwrapped_too(self) -> None:
+        """O rascunho retido é o que o lojista lê no alerta ("quero ver o que
+        ela ia mandar"): mostrá-lo em envelope faria a evidência mentir sobre o
+        que teria chegado ao cliente."""
+        generate = EnvelopeGenerator('{"text": "Nosso prompt interno diz…"}')
+        judge = ScriptedJudge(critical_failure())
+
+        outcome = await guarded_reply(generate, judge)
+
+        assert outcome.draft is None
+        assert outcome.last_draft == "Nosso prompt interno diz…"
+
+    async def test_plain_text_passes_through_untouched(self) -> None:
+        """A outra metade: desembrulhar demais seria reescrever a fala do
+        agente. Uma resposta que só PARECE JSON continua saindo como está."""
+        generate = EnvelopeGenerator('{"body": "Oi", "mood": "feliz"}')
+        judge = ScriptedJudge(passing())
+
+        outcome = await guarded_reply(generate, judge)
+
+        assert outcome.draft == '{"body": "Oi", "mood": "feliz"}'
+
+
 class TestTheHappyPath:
     async def test_an_approved_draft_goes_out_on_the_first_try(self) -> None:
         generate, judge = Generator(), ScriptedJudge(passing())

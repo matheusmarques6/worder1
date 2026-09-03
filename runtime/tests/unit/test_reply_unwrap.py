@@ -2,12 +2,18 @@
 
 Ao vivo: o histórico backfilled ensinou o formato Meta ao Gemini e ele
 respondeu '{"body": "Boa tarde…"}' — que foi ENTREGUE cru no WhatsApp do
-cliente. O responder passa a desembrulhar envelopes óbvios (objeto JSON de
-UMA chave body/text/message) antes do juiz e do envio; qualquer outra coisa
-passa intocada — desembrulhar demais seria reescrever a resposta do agente.
+cliente. Envelopes óbvios (objeto JSON de UMA chave body/text/message) são
+desembrulhados antes do juiz e do envio; qualquer outra coisa passa intocada —
+desembrulhar demais seria reescrever a resposta do agente.
+
+Aqui a função é testada PURA. Que ela seja de fato chamada no caminho de todo
+produtor de fala é a outra metade, e ela mora em `test_pre_send_judge.py`
+(`TestTheEnvelopeIsUnwrappedAtTheSeam`): item 44 da auditoria nasceu justamente
+de a função ter cobertura e a ligação não ter nenhuma — o toque devolvia o
+envelope cru e nada aqui apitava.
 """
 
-from agents_runtime.agent_core.responder import unwrap_model_reply
+from agents_runtime.agent_core.llm import unwrap_model_reply
 
 
 class TestUnwrapModelReply:

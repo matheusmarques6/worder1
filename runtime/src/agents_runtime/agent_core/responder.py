@@ -51,7 +51,6 @@ from agents_runtime.agent_core.llm import (
     Message,
     ToolCall,
     ToolSpec,
-    strip_code_fence,
 )
 from agents_runtime.agent_core.media import (
     is_store_media_line,
@@ -112,42 +111,6 @@ from agents_runtime.tools.custom_http import CustomHttpTool, tool_spec_for
 from agents_runtime.tools.knowledge import SearchKnowledge
 
 logger = logging.getLogger(__name__)
-
-
-def unwrap_model_reply(text: str) -> str:
-    """Desembrulha envelopes óbvios da resposta do modelo (17/08): o histórico
-    backfilled ensinou o formato Meta e o Gemini respondeu '{"body": …}' — que
-    foi entregue cru no WhatsApp. Só desembrulha objeto JSON de UMA chave
-    body/text/message com valor string; qualquer outra coisa passa intocada —
-    desembrulhar demais seria reescrever a resposta do agente."""
-    candidate = strip_code_fence(text)
-    if not (candidate.startswith("{") and candidate.endswith("}")):
-        return text
-    try:
-        parsed = json.loads(candidate)
-    except ValueError:
-        return text
-    if isinstance(parsed, dict) and len(parsed) == 1:
-        key, value = next(iter(parsed.items()))
-        if key in ("body", "text", "message") and isinstance(value, str):
-            return value
-    return text
-
-
-def _unwrapped(text: str) -> str:
-    """`unwrap_model_reply` mais o registro de que ele PRECISOU agir.
-
-    O desembrulho conserta a entrega e, exatamente por isso, esconde a
-    regressão: o modelo voltar a responder em envelope deixa de ser reprovado e
-    passa a ser invisível. Consertar calado e contar alto — o atributo é um
-    rótulo booleano, nunca o texto, então atravessa o cinto de PII de
-    `SAFE_ATTRIBUTES` sem levar conteúdo junto.
-    """
-    clean = unwrap_model_reply(text)
-    if clean != text:
-        logger.warning("resposta do modelo veio embrulhada em envelope JSON — desembrulhada")
-        annotate(reply_unwrapped=True)
-    return clean
 
 
 def delivery_flags(settings: Mapping | None) -> tuple[bool, bool]:
@@ -747,7 +710,12 @@ def build_responder(
                             )
                         )
                         if not answer.tool_calls:
-                            return _unwrapped(answer.text)
+                            # Cru de propósito: o desembrulho do envelope JSON
+                            # mora em `guarded_reply` (item 44), o ponto único
+                            # por onde este `generate` e o do toque passam.
+                            # Desembrulhar aqui também seria a mesma correção
+                            # duas vezes no mesmo caminho.
+                            return answer.text
                         # A volta do loop: o pedido do modelo e a resposta da tool
                         # entram na conversa; nenhuma transação fica aberta aqui
                         # (run_tool abre e fecha as suas — ADR-6 vale no loop).
@@ -775,7 +743,7 @@ def build_responder(
                             think=gate.think,
                         )
                     )
-                    return _unwrapped(answer.text)
+                    return answer.text
 
                 await note_step("started", f"{version.name} assumiu a conversa")
 
