@@ -1879,9 +1879,107 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `select status, count(*) from public.incentive_grants group by status` num banco vivo converte
   todo o parágrafo do custo de inferência em fato.
 
-- [ ] **47. `mark_outbox_sent` descarta o retorno** `[relatado]`
-  `queueing/sender.py:224` — `false` significa "a mensagem saiu no WhatsApp e o banco não registrou".
-  Valor jogado fora, nada loga. Lease de 60s sem renovação num lote de até 50 envios com pacing.
+- [x] **47. `mark_outbox_sent` descarta o retorno — e o gêmeo `mark_outbox_failed` o descarta três
+  vezes, uma delas sobre perda silenciosa de mensagem** `[confirmado]` · commits `aab27c90` ·
+  relatório `task-47-report.md`
+  **Toda citação de linha deste item está ancorada na BASE `93af12eb`.** A âncora original
+  (`queueing/sender.py:224`) foi escrita contra `52e43477` e hoje aponta para linha em branco; o
+  alvo real é **`sender.py:403`** (o call site) e **`engine.py:369-376`** (o wrapper que lê o
+  booleano e o devolve). O alvo estava certo, só a numeração tinha drift de ~180 linhas.
+
+  **Este item mudou de veredito duas vezes, e as duas viradas importam mais que o conserto.** O
+  texto original dizia que `false` significa "a mensagem saiu no WhatsApp e o banco não registrou".
+  A recon desmentiu: seriam sempre casos benignos (o webhook do item 10 gravando `'sent'` primeiro,
+  ou a sweep gravando `'unknown'`), logo qualquer `error` seria alarme falso. A revisão de plano
+  enumerou os **seis** caminhos entre o claim e o carimbo e achou **dois que a recon não viu** —
+  `correlate_outbox_status(p_status='failed')`, que é um terceiro escritor alcançável
+  (`20260828000006:82-88` aceita `failed` vindo de `'sending'`), e a sequência
+  `sweep → review_stale_unknown → 'manual_review'` (`20260812000004:485-489`), que **ressuscita a
+  frase original do item**. Ou seja: `false` não é sempre perda **nem** sempre benigno, e trocar um
+  alarme falso por um silêncio falso seria o mesmo erro com o sinal invertido.
+
+  **O booleano não distingue os caminhos, e é isso que decide a redação do conserto.** Tudo o que
+  ele sabe é que a linha já não estava `'sending'` com o nosso token (`20260812000004:372-374`).
+  Qualquer comentário ou mensagem de log afirmando "é a corrida benigna do item 10" seria **falso**
+  em três dos quatro caminhos alcançáveis. O log escrito nomeia as possibilidades sem eleger
+  nenhuma, em `info`, pela simetria com `webhook-processor.ts:770-788` — que resolveu o mesmo
+  dilema do outro lado da casa. A simetria é de FORMA, não de classificação: lá `false` nunca é
+  perda; aqui o ramo `'manual_review'` é, e por isso ele virou o **item 79** em vez de virar um
+  `error` disparado em todo envio.
+
+  **O achado mais grave não está no `mark_outbox_sent`: está no gêmeo, em `sender.py:292`.** O
+  `where` das duas funções é idêntico (`20260812000004:401-403` e `:410-412`, contra `:372-374` —
+  o brief citava `:397-399`/`:407-409`, que são os `set`, não os `where`), o significado é oposto. No
+  carimbo de sucesso, `false` quer dizer *outro escritor já registrou a verdade*; em
+  `mark_outbox_failed`, quer dizer *o estado que eu ia gravar sumiu e o que sobra não conduz a lugar
+  nenhum*. No hold do send-guard (`transient=True`), isso é **perda silenciosa de mensagem**: o
+  `next_attempt_at` não é gravado, a linha não volta a `'pending'`, o claim só reivindica
+  `'pending'` (`20260902000002`), e — diferente de todos os outros — **nenhum webhook jamais a
+  resgata, porque nós seguramos o envio e a mensagem nunca chegou à Meta**. Não existe status para
+  correlacionar sobre um POST que não saiu. **O que o lojista vê:** uma resposta que ele acha
+  enfileirada, que nunca sai, sem erro no chat, sem erro no painel e sem retentativa; a linha
+  termina em `manual_review` como "outcome unknown", que é a legenda errada para "nós a seguramos e
+  depois a esquecemos". Por isso os quatro call sites **não** levaram o mesmo `if`: `:292` e o ramo
+  transitório de `:358` são `error`; a supressão do preflight (`:237`) e o ramo permanente de `:358`
+  são `warning`, porque neles nenhuma entrega está em jogo e o que se perde é só o MOTIVO — o
+  operador lê "outcome unknown" no lugar de "opt-out" ou "fora da janela de 24h".
+
+  **O `annotate` mentiroso era o conserto mais barato do item.** `sender.py:404` disparava
+  `annotate(outcome="sent")` **incondicionalmente**, na linha seguinte ao carimbo, sem guarda: o
+  span afirmava sucesso mesmo quando o banco recusava. **Nota obrigatória:** esse atributo hoje
+  **superconta**, então o conserto vai DERRUBAR a contagem de `outcome = "sent"` em qualquer painel
+  externo. A queda é a verdade aparecendo, não regressão. Nenhum consumidor do atributo existe no
+  repositório (conferido em `runtime/` e `src/`), mas painel externo não está no repositório.
+
+  **A lease de 60s: a aritmética confirma, a consequência que o item insinuava não existe.**
+  `send_lease = 60s` (`config.py:79-81`), sem renovação — não há `renew_outbox_lease` no schema, só
+  `internal.renew_lease` da CONVERSA (`20260812000004:149-166`), usada pelo `_keepalive` do worker.
+  Lote de 50 (`sender.py:208`), até 4 bolhas por linha com até 8s de pacing (`humanize.py:24,35`) e
+  ~12 round-trips por linha: **a lease vence entre a 7ª e a 8ª linha, e o lote inteiro leva ~8
+  minutos — oito vezes a lease.** Mas `mark_outbox_sent` **não confere `locked_until`**
+  (`20260812000004:372-374`, confirmado nas cinco versões) e o claim só pega `'pending'`, então:
+  **"lease vencida cria duplicata" é falso.** Nada devolve a linha a `'pending'` —
+  `review_stale_unknown` vai para `manual_review` e `reprocess_dead_letters` (`:494`) opera em pgmq,
+  não na outbox. Quem "consertar" acrescentando `and locked_until > now()` ao `where` **não** evita
+  duplicata nenhuma: cria uma **enxurrada de `manual_review`** sobre mensagens entregues. E a lease
+  vencida **não é decorativa**: com dois processos vivos (a janela de rollout do Render) há dano
+  real hoje, e ele é **perda**, não duplicata — a sweep do processo novo tira de `'sending'` as
+  linhas que o velho ainda entrega, e a partir daí os carimbos e os retries do velho são recusados
+  em silêncio.
+
+  **A opção de resgate de 2 linhas foi avaliada com o código na frente e ficou de fora.**
+  `internal.correlate_outbox_status` já tem `grant execute to sender_role`
+  (`20260828000006:93`) e casa `'unknown'`, então chamá-la no ramo do `false` custaria um wrapper em
+  `engine.py` e nenhuma migration. Não entrou por três motivos, na ordem do peso: **(1) ela não
+  alcança o único caminho de perda real.** Na linha do tempo do item 79 — `unknown` no minuto ~1,
+  `manual_review` no ~6, `mark_outbox_sent` no ~8 — a linha JÁ está em `manual_review` quando o
+  `false` chega, e `manual_review` não casa em nenhum ramo do `where` (`:82-88`). A revisão de plano
+  afirmou que essa chamada "mata o caminho 4"; ela mata o caminho 3. **(2) O caminho 3 já é
+  resgatado, e mais de uma vez:** `sent`, `delivered` e `read` da Meta mapeiam todos para `'sent'`
+  (`webhook-processor.ts:53-58`), então o webhook conserta a linha `unknown` em segundos, muito
+  antes dos 5 minutos de `unknown_review_after` (`config.py:88`). O resgate do sender seria
+  redundante com o do item 10 no único caso em que ele funcionaria. **(3) Custo de desenho maior que
+  o de código:** `mark_outbox_sent` e `mark_outbox_failed` são escopadas por TOKEN de propriedade;
+  `correlate_outbox_status` é escopada por `idempotency_key` e é deliberadamente cega ao token,
+  porque o webhook não tem token nenhum. Um sender que, ao ser recusado pela porta com dono, tenta a
+  porta sem dono anula na prática a própria conferência de lease — e faria isso exatamente na janela
+  de dois processos vivos que produz o `false`. Não achei um cenário concreto em que isso escreva
+  errado hoje (nada reivindica uma linha que não esteja `'pending'`), então o argumento é de
+  invariante, não de bug. **Renovação de lease (~60 linhas + migration) continua rejeitada** pelo
+  motivo que a recon já dava: não muda **nada** em `mark_outbox_sent`, cujo `where` não menciona
+  `locked_until`.
+
+  **O que ficou sem prova executável.** Não há Postgres nesta máquina: `-m db` e `-m pipeline`
+  penduram >10 min e **não foram executados** — em particular
+  `tests/db/test_outbox_claim.py:299-320` (que é o teste do `false` do lado SQL) e
+  `tests/db/test_correlate_outbox_status.py:168-190`. Todo o raciocínio sobre qual `where` casa é
+  leitura de DDL mais a regra do `found` do PL/pgSQL. O teste novo
+  (`tests/unit/test_sender_records_the_outcome.py`) prende **uma** coisa — `mark_outbox_sent` falso
+  ⇒ o span não recebe `"sent"` — e não prova que o `false` acontece, nem qual caminho o produziu.
+  A frequência relativa dos quatro caminhos continua desconhecida: contar
+  `whatsapp.webhook.correlate_channel_status_no_match` (`webhook-processor.ts:785`) e rodar
+  `select status, count(*) from internal.message_outbox group by status` num banco vivo converteria
+  este item inteiro de inferência em fato.
 
 - [ ] **48. Pool de conexões de verdade** `[relatado]`
   `responder.py:263` e `toucher.py:122` abrem conexão por invocação; `server.py:90,130` por requisição
@@ -2362,6 +2460,49 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   **Não decidido aqui:** se a saída é mover os três passos para uma task própria que não dependa de
   canal, se é aceitar o acoplamento e documentá-lo no `.env.bancada.example`, ou se a bancada
   simplesmente não deve se importar. É decisão de quem é dono do runtime, não conserto mecânico.
+
+- [ ] **79. Uma linha entregue pode ficar presa em `manual_review` para sempre — `manual_review` é
+  terminal de propósito e a correlação não o alcança** `[confirmado]` · *(descoberto no item 47)*
+  Linhas na numeração da base `93af12eb`.
+  **A linha do tempo, numa janela de rollout do Render (duas instâncias vivas):** o processo VELHO
+  claima um lote de 50 no minuto 0 e começa a entregar; a lease de 60s vence entre a 7ª e a 8ª linha
+  (`config.py:79-81`, `sender.py:208`, `humanize.py:24,35`); o processo NOVO roda a sweep-at-boot
+  (`sender.py:216`) e por volta do **minuto 1** carimba `status='unknown'` nas linhas que o velho
+  ainda está entregando (`20260812000004:438-443`); no **minuto ~6** a sua
+  `review_stale_unknown` (`sender.py:217`) escala essas linhas para `'manual_review'`, porque
+  `request_started_at` já passou de `unknown_review_after` = 5 min
+  (`20260812000004:485-489`, `config.py:88`); no **minuto ~8** o processo velho finalmente chega ao
+  `mark_outbox_sent` com o wamid na mão e leva `false`.
+  **E aí não há volta.** O `where` de `internal.correlate_outbox_status` é
+  `status in ('sending','unknown','sent')` para `failed` e `status in ('sending','unknown')` para
+  `sent` (`20260828000006:82-88`). **`manual_review` não casa em nenhum dos dois** — e isso é
+  desenho, não descuido: o item 10 fez `manual_review` terminal de propósito, com o comentário
+  escrito na própria migration (`20260828000006:34-36`, "precisa de revisão humana, não de um
+  webhook tardio"). O webhook de status da Meta chega e não move nada. A linha fica em
+  `manual_review` **para sempre**, sobre uma mensagem que **foi entregue** — e o único processo que
+  tinha a prova da entrega foi recusado em silêncio.
+  **O que se vê de cada lado.** O cliente recebeu a mensagem e não percebe nada. O operador ganha um
+  alarme de revisão manual sobre um envio que deu certo, com `last_error = 'send lease expired
+  mid-request; outcome unknown'`, e não tem como saber que deu certo sem ir olhar o WhatsApp. O
+  volume é proporcional ao tamanho do lote atrasado, não a uma linha: um lote de 50 respostas longas
+  numa janela de deploy pode produzir dezenas de revisões manuais falsas de uma vez.
+  **Por que não foi consertado no item 47.** Destravar `manual_review` exige mudar a semântica de um
+  estado que outro item tornou terminal deliberadamente — é decisão de desenho (quem pode reabrir,
+  com que evidência, sem reabrir os casos que precisam mesmo de humano), não conserto de rodapé. As
+  saídas plausíveis, nenhuma escolhida aqui: (a) o sender chamar `correlate_outbox_status` no ramo
+  do `false` — **não resolve este caso**, porque nesta linha do tempo a escalada já aconteceu, e
+  fecharia só o caminho `unknown` que o webhook já fecha; (b) acrescentar `manual_review` ao `where`
+  do lado `'sent'` da correlação, o que reabre um estado terminal para todo webhook tardio; (c) uma
+  função nova, restrita, que só o sender possa chamar quando tem wamid e recebeu `false` —
+  "eu entreguei isto, tire da revisão"; (d) impedir a causa, fazendo `review_stale_unknown` ignorar
+  linhas cujo `locked_by` ainda aponta para um sender vivo, o que exige um sinal de vida que hoje
+  não existe.
+  **O que não foi verificado:** nada foi executado contra Postgres (`-m db` e `-m pipeline` penduram
+  >10 min sem banco). A linha do tempo é aritmética sobre as constantes citadas, e a janela de duas
+  instâncias vivas é o comportamento de rollout padrão do Render — o `render.yaml` não foi lido para
+  confirmar que o serviço não está em `recreate`. Crash-loop produz a mesma janela e **acontece**
+  nesta casa. A frequência real é desconhecida: `select status, count(*) from
+  internal.message_outbox group by status` num banco vivo mede isto direto.
 
 ---
 
