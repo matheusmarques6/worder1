@@ -234,7 +234,7 @@ async def sender_pass(
                 moment_ids=send.moment_ids,
             )
             if preflight.suppressed:
-                await engine.mark_outbox_failed(
+                recorded = await engine.mark_outbox_failed(
                     conn,
                     send.outbox_id,
                     token,
@@ -242,6 +242,26 @@ async def sender_pass(
                     error=f"preflight: {preflight.verdict}",
                     retry_in=timedelta(0),
                 )
+                if not recorded:
+                    # Item 47. `false` aqui NÃO é a supressão que falhou em
+                    # segurar a mensagem — supressão é decisão, e ela já foi
+                    # tomada acima: nada sai deste `deliver()` de qualquer
+                    # jeito. O que se perde é o MOTIVO: o `failed` com
+                    # `preflight: {verdict}` não entrou, a linha continua
+                    # 'sending' e a próxima sweep a carimba com
+                    # "send lease expired mid-request; outcome unknown".
+                    # Quem abrir o painel lê "não sei o que aconteceu" no
+                    # lugar de "opt-out" ou "fora da janela de 24h", e vai
+                    # investigar uma mensagem que o sistema decidiu não
+                    # mandar, de propósito. `warning`, não `error`: nenhuma
+                    # entrega se perde, só a explicação dela.
+                    logger.warning(
+                        "supressão do preflight não registrada; o motivo se perde",
+                        extra={
+                            "outbox_id": str(send.outbox_id),
+                            "verdict": preflight.verdict,
+                        },
+                    )
                 if preflight.moment_failure:
                     # §3.3.4: falha de momento é "alerta + supressão" — o
                     # lojista precisa saber que o toque dele não está saindo.
@@ -289,7 +309,7 @@ async def sender_pass(
                 logger.warning("send-guard indisponível; envio liberado", exc_info=True)
             if hold is not None:
                 held_for = round(hold.retry_after.total_seconds())
-                await engine.mark_outbox_failed(
+                requeued = await engine.mark_outbox_failed(
                     conn,
                     send.outbox_id,
                     token,
@@ -305,6 +325,29 @@ async def sender_pass(
                     ),
                     retry_in=hold.retry_after,
                 )
+                if not requeued:
+                    # Item 47, o pior dos quatro: PERDA SILENCIOSA DE MENSAGEM.
+                    # O `transient=True` acima é o que devolve a linha para a
+                    # fila — `status='pending'` mais o `next_attempt_at` da
+                    # janela do guard. Com `false`, nada disso foi gravado: a
+                    # linha continua 'sending', a sweep a leva para 'unknown' e
+                    # a revisão para 'manual_review', e NENHUM desses estados
+                    # volta para 'pending' (o claim só reivindica 'pending').
+                    # E aqui, diferente do carimbo de sucesso, não há webhook
+                    # de resgate possível: nós SEGURAMOS o envio, a mensagem
+                    # nunca chegou à Meta, logo não existe status para
+                    # correlacionar. O lojista vê uma resposta que ele acha
+                    # enfileirada e que simplesmente nunca sai — sem erro no
+                    # chat, sem erro no painel, sem retentativa. `error` é o
+                    # único nível honesto para isso.
+                    logger.error(
+                        "envio segurado não voltou para a fila; a mensagem morre aqui",
+                        extra={
+                            "outbox_id": str(send.outbox_id),
+                            "reason": hold.reason,
+                            "held_for_s": held_for,
+                        },
+                    )
                 # Ruling V: um envio segurado por dez minutos não pode ser
                 # invisível no painel. `started` porque é NÃO-terminal e a
                 # linha VAI sair quando a janela passar — isto é atraso, não
@@ -355,16 +398,42 @@ async def sender_pass(
             )
         except Exception as error:  # the classifier is the policy
             failure = classify(error)
-            await engine.mark_outbox_failed(
+            transient = failure is not Failure.PERMANENT
+            recorded = await engine.mark_outbox_failed(
                 conn,
                 send.outbox_id,
                 token,
-                transient=failure is not Failure.PERMANENT,
+                transient=transient,
                 error=str(error)[:500],
                 retry_in=delay_for(
                     send.attempt_count, config=config, randomness=randomness
                 ),
             )
+            if not recorded and transient:
+                # Item 47: mesmo mecanismo do hold do guard — sem o `pending`
+                # e o `next_attempt_at`, a retentativa que esta falha pedia
+                # deixa de existir e ninguém a retoma. A diferença com o
+                # `:292` é que aqui a 1ª bolha CHEGOU a ser tentada, então
+                # existe a chance de um webhook de status da Meta correlacionar
+                # a linha mais tarde — chance, não garantia, e só se o POST
+                # tiver saído. `error` porque o caso provável continua sendo
+                # uma resposta que nunca é reentregue.
+                logger.error(
+                    "falha transitória não registrada; a retentativa se perde",
+                    extra={"outbox_id": str(send.outbox_id), "attempt": send.attempt_count},
+                )
+            elif not recorded:
+                # Falha permanente: a linha não fica 'failed' com o motivo, e
+                # o operador perde a única frase que explicava ao lojista por
+                # que a resposta não saiu. Não há entrega em jogo (a falha é
+                # definitiva de qualquer modo), então `warning`.
+                logger.warning(
+                    "falha permanente não registrada; o motivo se perde",
+                    extra={"outbox_id": str(send.outbox_id)},
+                )
+            # `outcome="failed"` continua verdadeiro nos dois ramos: ele
+            # descreve a TENTATIVA, que falhou de fato. O que o `false` acima
+            # nega é o registro dela, e isso agora está no log — não no span.
             annotate(outcome="failed")
             if isinstance(error, TemplateParametersMissing):
                 # Item 34, ruling B: a recusa não pode ser um sumiço. O
@@ -400,8 +469,35 @@ async def sender_pass(
 
         # O wamid da linha é o da 1ª bolha — paridade com o legado, e é
         # ele que o webhook de status correlaciona primeiro.
-        await engine.mark_outbox_sent(conn, send.outbox_id, token, delivered[0][0])
-        annotate(outcome="sent")
+        recorded = await engine.mark_outbox_sent(conn, send.outbox_id, token, delivered[0][0])
+        if not recorded:
+            # Item 47. Tudo o que este booleano sabe: a linha já não estava
+            # 'sending' com o NOSSO token. Quem a mudou, ele não diz — e não
+            # dá para deduzir daqui sem um `select` extra. As possibilidades,
+            # sem afirmar qual ocorreu: o webhook de status (item 10) já
+            # gravou 'sent' enquanto as bolhas 2..4 ainda eram ritmadas; o
+            # mesmo webhook gravou 'failed' porque a Meta recusou a 1ª bolha;
+            # a sweep de lease vencida gravou 'unknown'; ou a revisão desses
+            # 'unknown' já escalou para 'manual_review'.
+            #
+            # `info` porque o caminho de longe mais comum é o primeiro, e ele
+            # é benigno — a linha está correta, gravada por quem viu a
+            # evidência do provedor. Mesma decisão que
+            # `webhook-processor.ts:779-788` tomou para o gêmeo deste booleano
+            # do lado TS. A diferença que impede copiar a classificação sem
+            # pensar: lá `false` nunca é perda; aqui o ramo 'manual_review' É
+            # (a mensagem SAIU, e a linha fica presa sobre ela — nenhum ramo
+            # do `where` da correlação casa 'manual_review'). O booleano não
+            # separa os dois, então o nível segue o caso comum e o caso raro
+            # vira item próprio no checklist, não um `error` em todo envio.
+            logger.info(
+                "outbox já não estava 'sending' com o nosso token; o estado é de outro escritor",
+                extra={"outbox_id": str(send.outbox_id), "bubbles": len(delivered)},
+            )
+        # O span tem de dizer o que o BANCO registrou. Até aqui isto disparava
+        # sem guarda na linha seguinte ao carimbo, então `outcome="sent"`
+        # SUPERCONTA: afirmava sucesso mesmo quando o banco recusou.
+        annotate(outcome="sent" if recorded else "sent:not_recorded")
         # Espelho no inbox: CADA bolha vira uma linha, na ordem — só
         # texto (um template não tem corpo renderizado aqui, e espelhar
         # um chute mentiria para o operador).
