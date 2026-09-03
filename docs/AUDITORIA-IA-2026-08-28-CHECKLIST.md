@@ -1439,9 +1439,13 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   · relatório `task-44-report.md`
   **O nome do item era proposta, não símbolo, e as três linhas citadas estavam obsoletas.**
   `_prepare_turn` não existe em lugar nenhum do runtime (`grep` limpo em `src/`, `tests/`,
-  `scripts/`). As citações reancoradas: `toucher.py:43` (importa privados do responder) é hoje
-  `:54-60`; `:334` (envelope) é `:435`; `:309` (`knowledge=()`) é `:410` — os itens 40 e 41
-  inseriram linhas acima delas.
+  `scripts/`). **Toda citação de linha deste item está ancorada na BASE `e2d1f38a`**, e a âncora
+  está escrita em vez de subentendida de propósito: "hoje", num documento que sobrevive a commits,
+  é exatamente o defeito que esta correção existe para matar — os quatro commits do próprio item já
+  deslocaram parte destas linhas (`toucher.py:435` virou `:451`, `:410` virou `:426`,
+  `responder.py:795` virou `:763`). As três do texto original, reancoradas: `toucher.py:43`
+  (importa privados do responder) era `:54-60` em `e2d1f38a`; `:334` (envelope) era `:435`; `:309`
+  (`knowledge=()`) era `:410` — os itens 40 e 41 inseriram linhas acima delas.
 
   **A duplicação, medida em vez de afirmada:** 160 linhas de código idênticas entre os corpos de
   `respond()` e `touch()`, **55,4 % do corpo de `touch`**, das quais 128 em blocos contíguos de ≥3
@@ -1465,6 +1469,12 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   **e** para `messages.content`, então o envelope não desembrulhado saía literal no WhatsApp *e*
   ficava gravado como fala do agente, voltando pelo `load_recent_transcript` no turno seguinte — o
   modelo aprendia o formato errado com a própria saída. É o mecanismo de 17/08 por inteiro.
+  **O que a mudança de casa custou, registrado em vez de consertado:** o aviso "resposta do modelo
+  veio embrulhada em envelope JSON" passou a sair pelo logger `agents_runtime.judges.pre_send`, e
+  não mais por `agents_runtime.agent_core.responder`. Mensagem e atributo (`reply_unwrapped`, no
+  `SAFE_ATTRIBUTES`) são idênticos, mas quem tiver filtro ou alerta ancorado no NOME do logger perde
+  o evento. Não renomeamos: o logger novo é o certo para onde o código foi morar, e inventar um nome
+  estável agora seria abstração para um problema que ninguém relatou.
 
   **(b) `transfer_to_human` com retorno descartado (`toucher.py:480`) — divergência que o item não
   listava.** O responder guarda o booleano em `marked` e o usa no chip; o toque jogava fora. O dano
@@ -1499,7 +1509,8 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   **Nota (não virou item): `window_open`.** `responder.py:614-616` assume `True` e só calcula se
   `state.last_inbound_at is not None`; `toucher.py:354-357` calcula, e com `None` dá `False`. **Aqui
   o toucher está mais certo** — a janela de 24h da Meta está fechada se nunca houve inbound, e
-  `prompt_compiler.py:233-236` renderiza "só template aprovado sai daqui" a partir disso. O default
+  `prompt_compiler.py:234-236` (o ternário; a frase em si está em `:236`) renderiza "só template
+  aprovado sai daqui" a partir disso. O default
   permissivo do responder é logicamente errado e **inalcançável em produção**: `last_inbound_at` só
   é escrito pelo RPC de ingestão (`20260817000004:86-103`) e `respond()` só roda a partir de
   inbound. Latente, não vazamento. Uma fatoração ingênua que unifique nos termos do responder
@@ -1518,15 +1529,27 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   cliente de PLATAFORMA do Judge 1, que é por processo —, o `TurnBudget` único por turno (item 41,
   e `test_llm_metering.py` NÃO pega um budget por finalidade), o `TouchDraft` com `moment_ids` que o
   `worker.py:265-283` consome, e os payloads de "sem rascunho" deliberadamente diferentes nos dois.
-  Restrição não declarada em lugar nenhum: `test_llm_metering.py:246` varre `agent_core_dir.glob("*.py")`
+  Restrição não declarada em lugar nenhum: `test_llm_metering.py:250` varre `agent_core_dir.glob("*.py")`
   — **`glob`, não `rglob`** —, então um helper compartilhado num subpacote sai da trava do `budget=`
   em silêncio. Arquivo novo tem de nascer direto em `agent_core/`.
+  Duas sobras que a fatoração encontra pela frente, registradas aqui porque são precondição dela e
+  não achado solto: **(i)** `_metered` declara `job: InboundJob` (`responder.py:974`) e o toucher lhe
+  passa um `MissionTouchJob` (`toucher.py:397-400` e `:402-405`) — funciona por tipagem
+  estrutural, porque só `organization_id`/`conversation_id` são lidos, mas a assinatura mente, e é
+  o `Protocol` que essa fatoração teria de decidir ANTES de mover qualquer coisa (improvisar um
+  agora seria abstração nova para meio caminho); **(ii)** `toucher.py:141` importa
+  `default_rubrics_directory` dentro da fábrica, embora o topo já importe do mesmo módulo e não haja
+  ciclo (`responder.py` não importa `toucher`) — lixo de cópia, uma linha, zero efeito.
 
   **O que continua vivo, dito em voz alta em vez de comemorado:** o desembrulho passou a ser único,
-  mas os outros TRÊS consertos são cópia nos dois lados — `delivery_flags` mora no RETURN de cada
-  função (e os dois retornos, `dict` vs `TouchDraft`, PRECISAM continuar diferentes: o
-  `conclude_turn` do toque depende de `moment_ids`/`mission_version_id`), o anúncio de tools mora em
-  `compile_prompt`, a montante, e a leitura do booleano da transferência mora no chip de cada um. A
+  mas os outros três consertos continuam POR PRODUTOR — e não são todos a mesma coisa. **Dois são
+  cópia literal nos dois lados:** a leitura do booleano da transferência, que mora no chip de cada
+  chamador, e `delivery_flags`, que mora no RETURN de cada função (e os dois retornos, `dict` vs
+  `TouchDraft`, PRECISAM continuar diferentes: o `conclude_turn` do toque depende de
+  `moment_ids`/`mission_version_id`). **Um existe só no toque:** o `replace(resolved, tools=())`,
+  porque o responder passa a missão inteira ao compilador e deve continuar passando — o que ele
+  divide com os outros dois não é a cópia, é morar no call site e depender de o próximo produtor de
+  fala lembrar. A
   metade de ENTRADA da classe (as ~95-110 linhas idênticas da abertura ao `compiled`) segue viva e
   **sem item próprio** — está registrada aqui, com o número medido, de propósito: abrir item para
   ela renumeraria uma fila que é estável por desenho.
@@ -1932,7 +1955,9 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `per-file-ignores` cobre `tests/**`, não `scripts/**`), entrado em `01087626` (item 39, "script de
   medida versionado"); e **`runtime/tests/unit/test_humanize.py:286`**, um `E501` de 103 colunas,
   entrado em `40546597` (item 38, fix round 1). Ou seja: o gate de lint do runtime está quebrado
-  desde os itens 38/39 desta própria auditoria, o que contradiz a Fase 0 ("CI verde"). **Não
+  desde os itens 38/39 desta própria auditoria — é **regressão** do verde que a Fase 0 conquistou,
+  não contradição dela: a Fase 0 é um instantâneo datado (run `33203217236`, 28/08) e naquele dia
+  nenhum dos dois arquivos existia; os dois commits culpados são de 02/09. **Não
   consertado aqui** porque é trabalho de outro item e o escopo do 44 é o par responder/toucher — mas
   é conserto de minutos (`ruff check --fix` resolve o `I001`; o `print` do script pede `T201` no
   `per-file-ignores` para `scripts/**`, que é a decisão a tomar: um script de medida existe para
