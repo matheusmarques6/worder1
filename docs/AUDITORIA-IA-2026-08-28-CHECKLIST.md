@@ -2413,19 +2413,244 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   **É por isso que o que precisa sobreviver vai neste checklist**, que é versionado; os artefatos
   em `.superpowers/sdd/` são material de trabalho, não registro.
 
-- [ ] **50. Índices faltantes nos predicados quentes** `[relatado]`
-  `whatsapp_cloud_conversations (organization_id, wa_id)` (até 3× por envio), `whatsapp_opt_status`
-  (nenhum índice em migration alguma), `incentive_grants.coupon_code`, e `lower(email)` em
-  `shopify_orders` (o índice criado é sobre `email` puro, `20260815000001:54`).
-  **O índice de `coupon_code` tem de ser FUNCIONAL em `upper(coupon_code)`, composto com
-  `organization_id` na liderança** — nota do item 46. O predicado real é
-  `where g.organization_id = p_organization_id and upper(g.coupon_code) = upper(trim(p_coupon_code))`
-  (`20260813000011:49-50`, em `public.consume_incentive_grant`): um índice sobre `coupon_code` puro
-  **não serve**, e seria exatamente o mesmo erro que este item já aponta duas linhas acima em
-  `lower(email)` vs `shopify_orders.email`. O `trim` do lado direito não afeta a forma do índice, só
-  o valor buscado. O índice do sweep de expiração (`incentive_grants_expiry_sweep_idx`) é do item
-  46 e já está aplicado — os dois são sobre a mesma tabela, com predicados e funções diferentes, e
-  não conflitam.
+- [x] **50. Índices faltantes nos predicados quentes — duas das quatro afirmações viravam índice,
+  uma vira item novo e uma morre** `[confirmado]` · commits `54d98f3f` + `c2584b53` · relatório
+  `task-50-report.md`, que é **gitignored** (`.superpowers/sdd/.gitignore` é `*`) — por isso o que
+  precisa sobreviver está AQUI.
+  **Toda citação de linha deste item está reancorada na BASE `a6d6332d`** — a lição do item 44. O
+  texto original estava `[relatado]`, ninguém tinha conferido, e ele errava de quatro jeitos: pedia
+  índice para uma tabela que **já tem dois** (e nenhum serve), pedia índice para uma tabela onde o
+  índice **custa mais do que rende**, subestimava a frequência do primeiro caso, e enterrava o caso
+  mais forte em meia linha no fim.
+
+  **A ordem de importância do item estava invertida.** O achado mais forte é o quarto, escrito por
+  último: `lower(email)` em `shopify_orders`. É a tabela mais volumosa das quatro (um pedido por
+  venda, para sempre, sem purga, retenção nem arquivamento em migration alguma) e o predicado mais
+  quente: `load_purchase_history` dispara **duas** queries por chamada (`orders.py:116` e `:134`) e é
+  chamada em `responder.py:342` (**todo turno de resposta**), `toucher.py:185` (todo toque) e
+  `customer.py:41` (toda invocação de `get_customer_context`) — 1-2 varreduras do tenant **por
+  turno**, na tabela grande. Já o primeiro caso (`whatsapp_cloud_conversations`) é ~5 lookups por
+  turno numa tabela menor. Os dois viraram migration, nesta ordem.
+
+  **Migration 1 — `20260903000003_shopify_orders_org_email_lower_idx.sql`**, `on
+  public.shopify_orders (organization_id, lower(email)) where email is not null`. O predicado é
+  `orders.py:50-57`: `o.organization_id = ... and (o.contact_id = ... or (%(email)s::text is not
+  null and o.email is not null and lower(o.email) = lower(%(email)s::text)))`. `lower()` está sobre a
+  **coluna**, então `idx_orders_email (email)` (`20260815000001:54`) não pode servi-lo — o mesmo
+  defeito que o item 46 achou em `upper(coupon_code)`. E aqui é pior do que isolado: **o braço do
+  e-mail está num `OR`, e um braço inindexável derruba a disjunção inteira** — o planner não monta
+  `BitmapOr` com um braço que nenhum índice serve, então não adianta `idx_orders_contact` (`:53`)
+  existir; sobra bitmap por `idx_shopify_orders_org` (`:52`) e filtro em memória sobre todos os
+  pedidos da org. A forma é cópia do **único índice funcional do repositório inteiro**,
+  `contacts_org_email_lower_idx ON contacts (organization_id, lower(email)) WHERE email IS NOT NULL`
+  — `migrations-archive/20260415_event_unification_and_indexes.sql:**166-168**` (`:166` é o `CREATE
+  INDEX`, `:167` o `ON`, `:168` o `WHERE`; `:165` é o comentário `-- Contacts`, e a citação `:165-167`
+  que circulou **corta fora a cláusula parcial**, justamente o que o precedente prova — mesma lição
+  do item 44). A cláusula parcial é segura pela mesma mecânica do `status = 'issued'` do item 46: ela
+  está **literalmente** no predicado (`o.email is not null`, `orders.py:54`, mesma coluna e mesmo
+  operador), então a prova de implicação do planner, que casa por igualdade de árvore, cai no caso
+  trivial. E é necessária, porque `email` é nullable (`20260815000001:22`).
+
+  **O que o `where` parcial NÃO compra, e isto é contra-intuitivo:** não escreva que "o índice fica
+  do tamanho dos pedidos com e-mail". O **webhook**, que é o caminho quente, grava `email:
+  order.email` **cru** (`src/app/api/webhooks/shopify/route.ts:608`) e a Shopify manda `""` para
+  pedido sem e-mail — **string vazia não é NULL**, então essas linhas **entram** no índice. O caminho
+  de sync (`src/app/api/shopify/sync/route.ts:214`) normaliza com `|| null`; o webhook não. A
+  cláusula continua correta e necessária — é ela que torna a implicação trivial —, mas o argumento de
+  tamanho não vale sem um `count(*) filter` (abaixo).
+
+  **Migration 2 — `20260903000004_whatsapp_cloud_conversations_org_wa_id_idx.sql`**, b-tree simples
+  `(organization_id, wa_id)`. O índice **não existe em fonte nenhuma**: `grep` por `organization_id,
+  wa_id` em todo `*.sql` do repositório volta zero — nem stream versionado, nem `migrations-archive/`,
+  nem `sql/`, nem `docs/`. O predicado está com este texto exato em cinco funções SQL do stream:
+  `mirror_outbound_to_inbox` (`20260813000003:242-247`, o `OR` em **`:245`**),
+  `emit_ai_run_step` (`20260817000002:69-74`, `OR` em `:72`), `legacy_conversation_guard_state`
+  (`20260901000003:62-67`, `OR` em `:65`), `mark_ai_handoff` (`20260901000002:148-153`, `OR` em
+  `:151`) e `ingest_inbound_message` (`20260817000004:112-115`, igualdade simples). O mais próximo é
+  `idx_wcc_org_status (organization_id, status)` — coluna líder certa, segunda coluna errada, o que
+  dá **seq scan do tenant**, que numa org grande é seq scan com outro nome; e a única `unique` da
+  tabela, `(waba_id, wa_id)` (`20260812000001:554`), tem a liderança errada, com PG 17
+  (`supabase/config.toml:22`) sem skip scan de b-tree (entrou no 18).
+
+  **"Até 3× por envio" está errado para baixo: é piso, não teto.** `mirror_outbound_to_inbox` é
+  chamado **dentro** do laço de bolhas (`sender.py:**552**`, `for wamid, bubble in delivered:`, com a
+  chamada em `:556`), então 1 bolha = 3 lookups (`sender.py:419`, `:556`, `:569`) e 3 bolhas
+  (humanização) = 5; somando o turno inbound (`responder.py:350` e `:385`), o realista por turno é
+  ~5. E um detalhe que não é óbvio: `emit_ai_run_step` faz o lookup **mesmo com o telefone passado
+  pronto** — o `p_phone` só evita a resolução `conversations → channel_identities`
+  (`20260817000002:52-61`); o `select` na tabela roda sempre.
+
+  **Simples, não funcional — e é essa a diferença que mais engana neste item.** Os dois disjuntos são
+  igualdade sobre a **coluna nua**, com o `ltrim` do lado do **parâmetro**, então dois `Bitmap Index
+  Scan` sobre este mesmo índice mais `BitmapOr` resolvem. Conferido que não há caminho alternativo
+  mais barato: **PG 17 não transforma `col = a OR col = b` em `col = ANY(...)`** — o commit que fazia
+  isso entrou no ciclo do 17 e foi **revertido**, voltando só no 18.
+
+  **Sem a terceira coluna, e o motivo NÃO é que a igualdade seja quase-única — ela não é.** A única
+  `unique` da tabela é `(waba_id, wa_id)` (`20260812000001:554`), líder `waba_id`, **não**
+  `organization_id`, e multi-WABA por org é suportado de propósito: `whatsapp_business_accounts` tem
+  `organization_id` **sem unique** (`20260812000001:476-480`, o único unique é `phone_number_id` em
+  `:480`), `src/app/api/whatsapp/business-accounts/route.ts:26-36` lista várias contas por org com
+  filtro **opcional** por `store_id`, e `wcc.store_id` (`20260812000001:544`) existe para o caso
+  multi-loja. **Uma loja com dois números e um cliente que falou com os dois tem duas linhas.** O
+  motivo real é outro e é mais forte: **`BitmapOr` não preserva ordenação.** Um bitmap heap scan
+  devolve tuplas em ordem **física** de página, nunca em ordem de índice; com dois disjuntos o plano é
+  obrigatoriamente bitmap, logo o `order by last_message_at desc nulls last limit 1` paga sort/top-N
+  **com ou sem** a terceira coluna. `(organization_id, wa_id, last_message_at desc)` não mata sort
+  nenhum aqui — **é inútil mesmo que a igualdade case dez linhas** —, e ainda custaria bytes e uma
+  coluna a mais no conjunto que bloqueia HOT, sendo `last_message_at` escrita a cada mensagem
+  (`20260813000003:263-268`).
+
+  **O ganho da migration 2 é exclusivamente do runtime Python, e isso precisa ficar escrito.** Nada
+  do `src/` precisa dela: todos os acessos TS a `whatsapp_cloud_conversations` por telefone filtram
+  por `(waba_id, wa_id)` — `cloud/conversations/route.ts:184-185`, `cloud/messages/route.ts:207-208`
+  e `:419-420`, `scheduled-message-sender.ts:273-274`, `webhook-processor.ts:1050-1051`,
+  `ai/test/cloud-webhook/route.ts:135-136` —, e essa é a `unique` que já existe. **Para org não
+  migrada, este índice não muda nada.**
+
+  **A afirmação 2 (`whatsapp_opt_status`) está errada duas vezes, e NÃO virou índice.**
+  (1) **"Nenhum índice em migration alguma" é falso.** Existem
+  `idx_whatsapp_opt_status_lookup (organization_id, phone, status)` —
+  `migrations-archive/20260606_whatsapp_optout_compliance.sql:33-34`, cujo comentário `:32` diz
+  literalmente *"Index para hot-path do guard"*, isto é, **alguém já fez exatamente o que este item
+  pedia** — e `idx_whatsapp_opt_status_phone` UNIQUE (`sql/whatsapp-migration-final.sql:226-227`). A
+  frase defensável é "nenhum índice **no stream versionado**", e ela é consequência de uma decisão
+  explícita (`20260812000001:14-17`: o baseline **não** recria índices de performance das tabelas
+  legadas), não de esquecimento.
+  (2) **E o índice que faltaria não resolveria nada.** A linha que derruba é `20260813000003:148` —
+  `or ltrim(o.phone,'+') = ltrim(p_to_phone,'+')`, **função sobre a coluna**, dentro de um `OR`.
+  `idx_whatsapp_opt_status_lookup`, que existe e foi escrito para este guard exato, **já não o
+  serve**. Um terceiro índice com a mesma forma seria escrever pela terceira vez o índice que não
+  funciona. O conserto real é reescrever o predicado, que é mudança de função, não DDL — **item novo,
+  abaixo.**
+
+  **A prova de equivalência do guard, COM O ESCOPO — e sem o escopo ela é uma armadilha ativa neste
+  mesmo item.** Escrevendo `f(x) := ltrim(x,'+')`, os três disjuntos de `20260813000003:143-148`
+  (cópia idêntica em `20260813000007:105-110`) colapsam num só: `f` é total e determinística
+  (`ltrim(text,text)` é `IMMUTABLE`), logo `o.phone = p_to_phone` ⟹ `f(o.phone) = f(p_to_phone)`, que
+  é D3; e `f` é idempotente (o resultado não tem `+` inicial, senão o corte não teria sido o mais
+  longo), logo `o.phone = f(p_to_phone)` ⟹ `f(o.phone) = f(f(p_to_phone)) = f(p_to_phone)`, que é D3.
+  D3 ⟹ a disjunção é trivial. Vale para `+` no meio, `+` no fim, múltiplos `+` iniciais e string
+  vazia; `o.phone` é `not null` (`20260812000001:602`) e, com `p_to_phone` NULL, os três disjuntos são
+  NULL e o `exists` devolve `false` nos dois textos. Em `WHERE`, linha qualifica **iff** a condição é
+  TRUE, então a reescrita para D3 sozinho é um **no-op comprovado**, não aproximação.
+  **O ESCOPO, que não é decorativo: isto vale PORQUE D3 já está no predicado.** D3 sozinho é
+  **estritamente mais largo** que D1∨D2 — casa `o.phone = '+5511'` contra `p_to_phone = '5511'`, coisa
+  que D1 e D2 não fazem. E o predicado da **migration 2**, dois parágrafos acima, é quase idêntico na
+  aparência e **só tem D1 e D2** (`20260813000003:245`): aplicar "a mesma álgebra" lá **alargaria o
+  casamento**, justamente na tabela que decide qual conversa recebe o espelho da mensagem. **NÃO vale
+  para o predicado de `whatsapp_cloud_conversations`, que só tem dois disjuntos.**
+
+  **A afirmação 3 (`incentive_grants.coupon_code`) MORRE, e o item 46 fica intacto.** A **forma** que
+  o item descrevia está certa — `(organization_id, upper(coupon_code))`, funcional, parcial em
+  `coupon_code is not null`, pelo predicado `20260813000011:49-50`. **A necessidade não existe**, por
+  três argumentos nesta ordem de força:
+  (1) **Um** chamador de produção — `src/lib/ai/grant-consumption.ts:41`, uma vez por discount code de
+  pedido pago (o único outro `consume_incentive_grant` do repositório é
+  `runtime/tests/db/test_grant_lifecycle.py:67`) —, contra os **86.400 scans/dia** que justificaram o
+  índice do item 46 na **mesma tabela**.
+  (2) A tabela é minúscula, e isso já está provado por escrito no item 46.
+  (3) **E o índice provavelmente custa um HOT — mas com ressalva, e este é o argumento mais fraco dos
+  três, não o que decide.** `incentives.py:202-208` (`set coupon_code = %s where id = %s and
+  coupon_code is null`, de `tools/coupon.py:199`) é o que o item 46 chamou de *"a única escrita
+  frequente da tabela que ainda podia ser HOT"*. Do lado dos índices ele continua elegível — os
+  quatro índices da tabela são a PK (`20260813000005:67`), `idempotency_key` UNIQUE (`:90`),
+  `incentive_grants_reuse_idx` (`:103-104`) e `incentive_grants_expiry_sweep_idx`
+  (`20260903000001:79-81`), e `coupon_code` não está em nenhum; a tabela não tem trigger. **Mas HOT
+  tem duas condições e a segunda não está verificada:** a nova tupla precisa **caber na mesma
+  página**, `fillfactor` não é declarado em lugar nenhum do repositório (default 100) e este `UPDATE`
+  **faz a tupla crescer** (NULL → texto). Logo: *"provavelmente mata um HOT que já é frágil"*, não
+  *"mata o HOT"*. Um argumento de performance que o primeiro `EXPLAIN` derruba contamina o resto do
+  item — é a lição que o próprio 46 escreveu sobre o "com lock" exagerado.
+  **O caminho mais barato já é dívida de outro item:** o **51(b)** aponta que `coupon_code` tem 32
+  bits e não é único (colisão em ~65k grants); um `unique (organization_id, upper(coupon_code))`
+  resolveria colisão **e** predicado numa constraint só. É conserto do 51 — registrado aqui para quem
+  escrever aquele brief não duplicar índice.
+
+  **A pergunta aberta do `idx_orders_email` se responde, e a resposta muda o desenho — mas NÃO se
+  age sobre ela.** Varri o lado TS: 33 arquivos de `src/` mencionam `shopify_orders`, e **quatro**
+  filtram por `email` — `jobs/abandoned-cart.ts:183` (`.or('email.eq.…, shopify_checkout_id.eq.…')`,
+  escopado por `store_id`), `shopify/profile-enricher.ts:44` (`.ilike('email', …)`, escopado por
+  `store_id`), `ai/tools/handlers/order_status.ts:107` (`.or('email.ilike.…, customer_email.ilike.…')`,
+  escopado por org+store) e `email/campaigns/send-batch/route.ts:340`
+  (`.or('email.ilike.…, contact_id.eq.…')`). **O achado que ninguém tinha:** três dos quatro usam
+  `ILIKE`, e **`ILIKE` também não é servível por b-tree simples** — nem por `idx_orders_email
+  (email)`, nem pelo índice funcional novo (que serve `lower(email) = …`, não `ILIKE`). Sobra
+  `abandoned-cart.ts:183` como **único** leitor de igualdade sobre `email` puro em todo o
+  repositório, e mesmo esse está dentro de um `OR`. **Não derrube `idx_orders_email` assim mesmo:**
+  "nenhum leitor no repositório" não é "nenhum leitor", quem responde é
+  `pg_stat_user_indexes.idx_scan`, e derrubar índice com base em `grep` é irreversível apoiado em
+  evidência parcial. Fica a query abaixo. *(Nota lateral fora do escopo deste item, registrada porque
+  apareceu na varredura: `send-batch/route.ts:338-343` lê `shopify_orders` por `supabaseAdmin`
+  **sem nenhum filtro de `organization_id` ou `store_id`** — só o `OR` de e-mail/contato —, e
+  `supabaseAdmin` não passa por RLS. Não é índice; é escopo de tenant, e merece olhar de quem tocar
+  o item de multi-tenancy.)*
+
+  **Convenções, com a conta do `CONCURRENTLY` corrigida.** `if not exists` **sim**, regra da casa
+  (`20260903000001:79`). `to_regclass` **NÃO**: as quatro tabelas nascem no stream versionado
+  (`whatsapp_cloud_conversations` `20260812000001:522`, `whatsapp_opt_status` `:598`,
+  `incentive_grants` `20260813000005:66`, `shopify_orders` `20260815000001:17`), e guard aqui viraria
+  no-op silencioso da falha de uma migration irmã — o argumento por negação de `20260903000001:56-66`.
+  **Isto é o oposto do ruling E do item 49, e a diferença é factual, não contradição:** lá
+  (`ai_usage_logs`) a tabela **não** nasce no stream, aqui nasce; quem ler os dois seguidos vai achar
+  que se contradizem. `CONCURRENTLY` **NÃO** — e o **precedente é positivo e versionado, não uma
+  ausência**: `grep -rin concurrently supabase/migrations/` devolve **4 ocorrências**, todas
+  comentários explicando por que não usá-lo, e **duas estão no stream versionado** —
+  `20260828000002:28,33` e `20260903000001:53,70`, esta última a migration do **item 46**, que serviu
+  de molde a estas duas. E são **33** `create index` no stream, não 40 (o comentário de
+  `20260903000001:55` diz "~35", também impreciso, mas ele se protege com o "~"). Cite
+  `20260903000001:53` em vez de contar ocorrências.
+
+  **O custo do lock, com o alvo certo: é o WEBHOOK, não o sync.** A escrita quente de `shopify_orders`
+  é `src/app/api/webhooks/shopify/route.ts:601-623`, um `.upsert(…, { onConflict:
+  'store_id,shopify_order_id' })` a **cada evento** de pedido — create, updated, paid, cancelled,
+  fulfillment —, várias vezes por pedido ao longo da vida dele. Duas consequências que ninguém tinha
+  contado: **(1)** cada upsert não-HOT passa a manter uma entrada de índice a mais, custo de escrita
+  permanente; **(2)** o `SHARE` do `CREATE INDEX` bloqueia um **handler síncrono**, não um job de
+  background — handler preso atrás do lock estoura o timeout da Shopify, que **repete e eventualmente
+  desativa o webhook**. Isso é materialmente pior que "o sync para", e muda a recomendação: não é
+  "aplique de madrugada", é **"aplique com o webhook drenado ou aceite reentregas"**. Em
+  `incentive_grants` o item 46 pôde contar sub-segundo; em `shopify_orders` **ninguém sabe o
+  tamanho**, e esse é o único risco operacional real deste item. (Em
+  `whatsapp_cloud_conversations` o `SHARE` conflita com os `UPDATE` de `last_message_at`,
+  `20260813000003:263-268`, que rodam a cada mensagem.) HOT: **nenhuma das duas migrations custa
+  HOT** — `email` já é indexado por `idx_orders_email`, e `wa_id`/`organization_id` só são escritos
+  em INSERT (os três call sites são inserts: `cloud/conversations/route.ts:224`,
+  `cloud/messages/route.ts:429`, `ai/test/cloud-webhook/route.ts:147`; não existe `update … set
+  wa_id` em SQL nem em TS).
+
+  **SEM PROVA EXECUTÁVEL — nada foi aplicado e nada foi medido.** Não há Postgres nesta máquina
+  (mesmo impedimento dos itens 42, 43, 45, 46 e 49); nenhum `EXPLAIN`, nem do plano de hoje nem do
+  depois. Que hoje é scan do tenant é inferência (coluna líder ausente do predicado + ausência de
+  skip scan no PG 17, e a regra do `OR` com braço inindexável); que o planner **usará** os índices
+  novos é inferência da regra de implicação de predicado parcial e do `BitmapOr` — sólidas, mas
+  leitura. Para `shopify_orders` em particular: sob baixa seletividade e numa consulta de agregação
+  (`orders.py:116-117` faz `count/sum/min/max`), o seq scan continua podendo ganhar, e não se sabe em
+  que ponto vira. **A suíte:** `pytest -m unit` **1231 → 1233 coletados** e **1229 → 1231 passando**,
+  o delta sendo exatamente os dois casos parametrizados que `tests/unit/test_no_max_seq.py` ganha por
+  migration nova (`_scanned_files()`, `:49-50`, é `rglob("*.py")` do pacote + `glob("*.sql")` das
+  migrations: 89 `.py` + 52 `.sql` = 141 → 143; o arquivo coleta 147 → 149 com os 6 do
+  `TestTheDetectorItself`). **As mesmas 2 falhas pré-existentes antes e depois** —
+  `test_humanize.py::test_the_python_split_matches_the_legacy_ts[parágrafo longo…]` e
+  `test_secret_box_vectors.py::…[v2_utf8]`, as duas de encoding e alheias a este item, conferidas
+  rodando a suíte num worktree na âncora `a6d6332d`. `ruff check .` = **10 errors** antes e depois
+  (pré-existentes do item 74, não consertados aqui); `lint-imports` = **3 contratos kept, 0 broken**.
+  Nenhum deles olha `.sql`. TS não foi tocado, então `vitest`/`tsc` não foram rodados. `-m db` e
+  `-m pipeline` **não foram rodados**: sem Postgres eles penduram >10 min em vez de falhar
+  (`tests/db/conftest.py` é deliberadamente não-skippável e `psycopg.connect` não tem
+  `connect_timeout`).
+
+  **Teto de prova específico destas tabelas, que pode matar qualquer uma das duas migrations:**
+  `20260812000001:14-17` diz que o baseline **não** recria os índices de performance das tabelas
+  legadas, e `supabase/README.md:16-22` diz que `migrations-archive/` e `sql/` são DDL aplicado à mão
+  e **não registrado** no schema de migrations. Logo o conjunto de índices que o CI vê é
+  **estritamente menor** que o do banco vivo, e um índice "faltante" segundo `supabase/migrations/`
+  pode existir em produção há meses. **Só um banco vivo responde, e estas quatro queries convertem a
+  seção inteira de inferência em fato:**
+  1. `select indexname, indexdef from pg_indexes where tablename in ('whatsapp_cloud_conversations','whatsapp_opt_status','shopify_orders','incentive_grants');`
+  2. `select count(*)` nas quatro tabelas.
+  3. `select idx_scan from pg_stat_user_indexes where indexrelname = 'idx_orders_email';`
+  4. `select count(*) filter (where email is null), count(*) filter (where email = '') from public.shopify_orders;`
 
 - [ ] **51. Corridas remanescentes** `[relatado]`
   (a) Toque reentregue pela DLQ duplica — `worker.py:226` usa o `msg_id` do pgmq na chave, e
@@ -3290,6 +3515,73 @@ você decidir se entram na fila.
   `connect_timeout` no DSN mais um `statement_timeout` por role — o mesmo desenho do `grafana_ro` —,
   com os valores decididos com a cadência de probe do Render na mão, que ninguém mediu.
   *(descoberto no item 48; precedente e contagem corrigidos no fix round 2)*
+
+- [ ] **Numa org multi-WABA, as cinco funções escolhem a conversa MAIS RECENTE em vez da conversa do
+  NÚMERO certo** `[confirmado]` · *(descoberto no item 50)*
+  As cinco funções que resolvem conversa por telefone filtram por `(organization_id, wa_id)` e
+  desempatam com `order by wcc.last_message_at desc nulls last limit 1`:
+  `internal.mirror_outbound_to_inbox` (`20260813000003:242-247`),
+  `internal.emit_ai_run_step` (`20260817000002:69-74`),
+  `internal.legacy_conversation_guard_state` (`20260901000003:62-67`),
+  `internal.mark_ai_handoff` (`20260901000002:148-153`) e
+  `public.ingest_inbound_message` (`20260817000004:112-115`).
+  **`(organization_id, wa_id)` não é único, e é a `unique` da própria tabela que prova isso:** a
+  única restrição de unicidade de `whatsapp_cloud_conversations` é
+  `whatsapp_cloud_conversations_waba_id_wa_id_key unique (waba_id, wa_id)` —
+  `20260812000001:554` —, cuja coluna líder é `waba_id`, **não** `organization_id`. E multi-WABA por
+  org não é hipótese: `whatsapp_business_accounts` tem `organization_id` **sem unique**
+  (`20260812000001:476-480`; o único unique é `phone_number_id`, `:480`),
+  `src/app/api/whatsapp/business-accounts/route.ts:26-36` lista várias contas por org com filtro
+  **opcional** por `store_id`, `src/app/api/whatsapp/cloud/accounts/route.ts:56-76` idem (sem filtro de loja), e
+  `wcc.store_id` (`20260812000001:544`) mais `docs/whatsapp-caminho-b-multi-store.sql:33-34`
+  (`idx_wcc_org_store`) existem exatamente para o caso multi-loja.
+  **O efeito para o lojista:** uma loja com dois números de WhatsApp e um cliente que já falou com os
+  dois tem **duas linhas**, e `mirror_outbound_to_inbox` pode espelhar a mensagem na conversa do
+  **outro número** — o operador vê a resposta do agente na thread errada, e o cliente recebe pelo
+  número por onde o agente enviou, que não é necessariamente o da thread onde a conversa aparece.
+  O desempate por recência é uma heurística que nunca foi decidida como comportamento; ela é o que
+  sobrou de um `limit 1` sobre um predicado que ninguém percebeu ser ambíguo.
+  **O índice do item 50 (`c2584b53`) torna esse erro mais rápido, não menos errado** — foi por isso
+  que ele parou em `(organization_id, wa_id)` e não tentou consertar a semântica de carona. O
+  conserto certo é passar o `waba_id` (ou o `phone_number_id`) até essas funções e casar pela
+  `unique` que já existe, o que é mudança de assinatura em cinco funções e nos call sites do runtime
+  — decisão de produto antes de DDL. **Quantas orgs têm mais de um WABA hoje só o banco vivo diz:**
+  `select organization_id, count(*) from public.whatsapp_business_accounts group by 1 having count(*) > 1;`
+
+- [ ] **Reescrever o predicado do guard de opt-out para o disjunto que já o subsome — e o teste que
+  falta é NEGATIVO** `[confirmado]` · *(descoberto no item 50)*
+  Duas cópias idênticas do mesmo `where`, ambas no stream versionado:
+  `internal.sender_preflight` (`20260813000003:143-148`) e
+  `internal.moment_template_preflight` (`20260813000007:105-110`):
+  `o.phone = p_to_phone` (D1) `or o.phone = ltrim(p_to_phone,'+')` (D2)
+  `or ltrim(o.phone,'+') = ltrim(p_to_phone,'+')` (D3).
+  **D3 subsome D1 e D2** — prova por extenso no item 50 —, então reescrever os três para D3 sozinho é
+  um **no-op comprovado**, e abre a forma de índice que hoje é impossível:
+  `(organization_id, ltrim(phone,'+'), status)`. Hoje o terceiro disjunto é **função sobre a coluna**
+  dentro de um `OR` (`20260813000003:148`), e é por isso que
+  `idx_whatsapp_opt_status_lookup (organization_id, phone, status)` — que existe em
+  `migrations-archive/20260606_whatsapp_optout_compliance.sql:33-34` e foi escrito **exatamente para
+  este guard** (comentário `:32`) — já não o serve.
+  **O escopo da prova é obrigatório e não é decorativo:** ela vale **porque D3 já está no predicado**.
+  D3 sozinho é estritamente mais largo que D1∨D2 (casa `o.phone = '+5511'` contra
+  `p_to_phone = '5511'`), e o predicado de `whatsapp_cloud_conversations` (`20260813000003:245`) tem
+  **só D1 e D2** — aplicar a mesma álgebra lá **alargaria o casamento**, no lugar que decide qual
+  conversa recebe o espelho.
+  **O estado real da cobertura, para quem executar não reescrever o que já existe:**
+  `runtime/tests/db/test_sender_preflight.py:55-67` já exercita **D1** e `:69-79` já exercita **D2**
+  (grava sem `+`, consulta com `+`), mais a fábrica `create_opt_out` em `tests/db/factories.py:232-241`
+  e o caminho inteiro em `:233-255`. **Falta o D3** — nenhum caso grava com `+` e consulta sem. E o
+  mais importante: **como D3 subsome D1 e D2, esses dois testes continuam verdes sobre o predicado
+  reescrito**, isto é, **a suíte existente não distingue o predicado antigo do novo**. O teste que
+  falta de verdade não é positivo, é **NEGATIVO** — um telefone que **não** pode casar, para pegar
+  erro de digitação na reescrita (`ltrim(o.phone,'-')`, coluna trocada, `+` virando `%`).
+  **Por que foi adiado, com o fundamento honesto:** *não* é "dano regulatório" — a reescrita é
+  provadamente no-op, então o risco é de digitação, não de lógica, e argumentar risco inflado só
+  enfraquece o item. Os motivos reais são **(i)** o ganho é **100% inverificável sem `EXPLAIN`**: a
+  tabela pode ter `idx_whatsapp_opt_status_lookup` em produção e ser minúscula, e aí o índice
+  funcional não paga nem o DDL; e **(ii)** o item 49 registrou que **nenhuma migration `20260902*`
+  nem `20260903*` jamais foi aplicada por CI algum**. Mexer em duas funções de compliance nesse
+  estado é a troca que os itens 47 e 48 recusaram.
 
 ---
 
