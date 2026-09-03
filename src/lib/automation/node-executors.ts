@@ -527,23 +527,38 @@ const actionExecutors: Record<string, NodeExecutor> = {
           // Shared guard (see @/lib/email/consent) — blocks boolean false AND
           // the TEXT states pending/denied/... so double-opt-in 'pending'
           // contacts don't get the welcome flow before they confirm.
-          const { isEmailBlocked } = await import('@/lib/email/consent');
-          const isInvalid = !!consentRow && isEmailBlocked(consentRow.email_consent, consentRow.status);
+          //
+          // O alcance é definido pelo sending threshold da automação
+          // (Omnisend): 'subscribed' (padrão, = comportamento de sempre),
+          // 'nonSubscribed' (alcança quem nunca optou — recuperação de
+          // carrinho) ou 'all' (transacional). Bounce/denúncia/inválido
+          // ficam bloqueados em qualquer nível.
+          const { isEmailBlockedForThreshold, normalizeThreshold } = await import('@/lib/email/consent');
+          const emailThreshold = normalizeThreshold(
+            (context as any)?.sendingThresholds?.email
+          );
+          const isInvalid = !!consentRow && isEmailBlockedForThreshold(
+            consentRow.email_consent,
+            consentRow.status,
+            emailThreshold
+          );
           if (isInvalid) {
-            console.log('[action_email] ⊘ skipped — email marked invalid', {
+            console.log('[action_email] ⊘ skipped — email bloqueado pelo threshold', {
               nodeId: node?.id,
               contactEmail: email,
               emailConsent: consentRow?.email_consent,
               contactStatus: consentRow?.status,
+              threshold: emailThreshold,
             });
             return {
               status: 'success',
               output: {
                 sent: false,
                 skipped: true,
-                reason: `Email marcado como inválido (status=${consentRow?.status || 'opt-out'}). Flow continua nos próximos nodes.`,
+                reason: `Email não permitido para este contato (status=${consentRow?.status || 'opt-out'}, alcance=${emailThreshold}). Flow continua nos próximos nodes.`,
                 contactStatus: consentRow?.status,
                 emailConsent: consentRow?.email_consent,
+                threshold: emailThreshold,
               },
             };
           }
@@ -1082,6 +1097,43 @@ const actionExecutors: Record<string, NodeExecutor> = {
       const smsBody = (config.message || config.text || '').trim();
       if (!smsBody) {
         return { status: 'error', output: null, error: 'Mensagem de SMS vazia' };
+      }
+
+      // Sending threshold do canal SMS (Omnisend). Default 'all' = sem
+      // filtro, exatamente como este nó sempre se comportou; apertar para
+      // 'subscribed'/'nonSubscribed' é escolha explícita do lojista na UI
+      // do gatilho. Bounce/denúncia/inválido bloqueiam em qualquer nível.
+      {
+        const organizationId = (context as any).organizationId || (context as any).organization_id;
+        const contactId = (context.contact as any)?.id;
+        const rawThreshold = (context as any)?.sendingThresholds?.sms;
+        if (rawThreshold && organizationId && contactId && supabase) {
+          try {
+            const { isSmsBlockedForThreshold, normalizeThreshold } = await import('@/lib/email/consent');
+            const smsThreshold = normalizeThreshold(rawThreshold);
+            const { data: row } = await supabase
+              .from('contacts')
+              .select('sms_consent, status')
+              .eq('id', contactId)
+              .maybeSingle();
+            if (row && isSmsBlockedForThreshold(row.sms_consent, row.status, smsThreshold)) {
+              console.log('[action_sms] ⊘ skipped — SMS bloqueado pelo threshold', {
+                nodeId: node?.id, contactId, threshold: smsThreshold, status: row.status,
+              });
+              return {
+                status: 'success',
+                output: {
+                  sent: false,
+                  skipped: true,
+                  reason: `SMS não permitido para este contato (alcance=${smsThreshold}). Flow continua nos próximos nodes.`,
+                  threshold: smsThreshold,
+                },
+              };
+            }
+          } catch (e) {
+            console.warn('[action_sms] threshold check failed (proceeding):', e);
+          }
+        }
       }
 
       // Pre-create the send row so attribution finds it even before

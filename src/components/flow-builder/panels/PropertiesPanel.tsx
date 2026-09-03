@@ -3337,6 +3337,33 @@ function FilterLogicToggle({ value, onChange }: {
   );
 }
 
+// Alcance de envio por canal (sendingThresholds da Omnisend).
+function SendingThresholdSelect({ label, value, onChange, inputCls, hint }: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  inputCls: string;
+  hint?: string;
+}) {
+  const descriptions: Record<string, string> = {
+    subscribed: 'Somente quem deu consentimento',
+    nonSubscribed: 'Inclui quem nunca optou (ex.: deixou o e-mail no checkout)',
+    all: 'Inclui quem se descadastrou — apenas transacional',
+  };
+  return (
+    <div className="space-y-1">
+      <label className="text-xs font-medium text-gray-700">{label}</label>
+      <select value={value} onChange={(e) => onChange(e.target.value)} className={inputCls}>
+        <option value="subscribed">Apenas inscritos</option>
+        <option value="nonSubscribed">Inscritos + não inscritos</option>
+        <option value="all">Todos os contatos</option>
+      </select>
+      <p className="text-[10px] text-gray-400">{descriptions[value] || descriptions.subscribed}</p>
+      {hint && <p className="text-[10px] text-gray-400">{hint}</p>}
+    </div>
+  );
+}
+
 function TriggerFiltersConfig({ config, onUpdate, triggerType }: {
   config: Record<string, any>;
   onUpdate: (key: string, value: any) => void;
@@ -3382,6 +3409,9 @@ function TriggerFiltersConfig({ config, onUpdate, triggerType }: {
   const removeAudienceFilter = (idx: number) => {
     onUpdate('audienceFilters', audienceFilters.filter((_, i) => i !== idx));
   };
+
+  // Sending thresholds (Omnisend) — alcance do envio por canal.
+  const sendingThresholds: Record<string, string> = config.sendingThresholds || {};
 
   // Exit Conditions
   const exitConditions: ExitCondition[] = config.exitConditions || [];
@@ -3535,6 +3565,43 @@ function TriggerFiltersConfig({ config, onUpdate, triggerType }: {
             </button>
           </div>
         ))}
+      </div>
+
+      <hr className="border-gray-200" />
+
+      {/* ---- SENDING THRESHOLDS (Omnisend style) ---- */}
+      <div>
+        <h4 className="text-sm font-semibold text-gray-900 mb-2">Quem pode receber</h4>
+        <p className="text-xs text-gray-500 mb-3">
+          Até onde o envio deste fluxo alcança, por canal. Contatos com bounce definitivo
+          ou denúncia de spam nunca recebem, em nenhuma opção.
+        </p>
+
+        <div className="space-y-3">
+          <SendingThresholdSelect
+            label="E-mail"
+            value={sendingThresholds.email || 'subscribed'}
+            onChange={(v) => onUpdate('sendingThresholds', { ...sendingThresholds, email: v })}
+            inputCls={inputCls}
+          />
+          <SendingThresholdSelect
+            label="SMS"
+            value={sendingThresholds.sms || 'all'}
+            onChange={(v) => onUpdate('sendingThresholds', { ...sendingThresholds, sms: v })}
+            inputCls={inputCls}
+            hint="O SMS começa sem filtro para não interromper fluxos já ativos — recomendamos mudar para “Apenas inscritos”."
+          />
+        </div>
+
+        {(sendingThresholds.email === 'all' || sendingThresholds.sms === 'all') && (
+          <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded">
+            <p className="text-[10.5px] text-amber-800 leading-relaxed">
+              <strong>“Todos” inclui quem se descadastrou.</strong> Use apenas em mensagens
+              transacionais (confirmação de pedido, rastreio). Em mensagens promocionais isso
+              viola o pedido de descadastro do contato.
+            </p>
+          </div>
+        )}
       </div>
 
       <hr className="border-gray-200" />

@@ -145,6 +145,17 @@ export class ExecutionEngine {
       (context as any).organizationId = options.organizationId;
     }
 
+    // Sending thresholds (modelo Omnisend): quão longe cada canal alcança
+    // nesta automação. Fica no nó de gatilho (é uma decisão do FLUXO, não
+    // de uma mensagem isolada) e é hasteado para o contexto uma vez, do
+    // mesmo jeito que o storeId — os executores de e-mail e SMS leem daqui.
+    if (!(context as any).sendingThresholds) {
+      const th = (triggerNode?.data?.config as any)?.sendingThresholds;
+      if (th && typeof th === 'object') {
+        (context as any).sendingThresholds = th;
+      }
+    }
+
     // Backfill storeId onto the context so EVERY downstream reader sees it —
     // most importantly the email node, which resolves the STORE's sender
     // identity (getEmailProviderForOrg(org, storeId)) from context.storeId.
