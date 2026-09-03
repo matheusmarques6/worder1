@@ -1510,8 +1510,8 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `state.last_inbound_at is not None`; `toucher.py:354-357` calcula, e com `None` dá `False`. **Aqui
   o toucher está mais certo** — a janela de 24h da Meta está fechada se nunca houve inbound, e
   `prompt_compiler.py:234-236` (o ternário; a frase em si está em `:236`) renderiza "só template
-  aprovado sai daqui" a partir disso. O default
-  permissivo do responder é logicamente errado e **inalcançável em produção**: `last_inbound_at` só
+  aprovado sai daqui" a partir disso. O default permissivo do responder é logicamente errado e
+  **inalcançável em produção**: `last_inbound_at` só
   é escrito pelo RPC de ingestão (`20260817000004:86-103`) e `respond()` só roda a partir de
   inbound. Latente, não vazamento. Uma fatoração ingênua que unifique nos termos do responder
   **regride o toque** — quem mexer aqui depois precisa saber disso.
@@ -1549,8 +1549,8 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `moment_ids`/`mission_version_id`). **Um existe só no toque:** o `replace(resolved, tools=())`,
   porque o responder passa a missão inteira ao compilador e deve continuar passando — o que ele
   divide com os outros dois não é a cópia, é morar no call site e depender de o próximo produtor de
-  fala lembrar. A
-  metade de ENTRADA da classe (as ~95-110 linhas idênticas da abertura ao `compiled`) segue viva e
+  fala lembrar. A metade de ENTRADA da classe (as ~95-110 linhas idênticas da abertura ao
+  `compiled`) segue viva e
   **sem item próprio** — está registrada aqui, com o número medido, de propósito: abrir item para
   ela renumeraria uma fila que é estável por desenho.
 
