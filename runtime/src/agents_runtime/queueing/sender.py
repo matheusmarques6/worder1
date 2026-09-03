@@ -344,10 +344,9 @@ async def sender_pass(
                     # de resgate possível: nós SEGURAMOS o envio, a mensagem
                     # nunca chegou à Meta nesta tentativa, logo não existe
                     # status para correlacionar. O lojista vê uma resposta que
-                    # ele acha
-                    # enfileirada e que simplesmente nunca sai — sem erro no
-                    # chat, sem erro no painel, sem retentativa. `error` é o
-                    # único nível honesto para isso.
+                    # ele acha enfileirada e que simplesmente nunca sai, e o
+                    # chip do inbox logo abaixo passa a dizer isso em vez de
+                    # prometer retomada. `error` é o único nível honesto aqui.
                     logger.error(
                         "envio segurado não voltou para a fila; a mensagem morre aqui",
                         extra={
@@ -357,19 +356,36 @@ async def sender_pass(
                         },
                     )
                 # Ruling V: um envio segurado por dez minutos não pode ser
-                # invisível no painel. `started` porque é NÃO-terminal e a
-                # linha VAI sair quando a janela passar — isto é atraso, não
-                # silêncio, e é o mesmo precedente que o item 31 abriu para a
-                # degradação de mídia. Adereço de UI, nunca motivo de falha.
+                # invisível no painel — isto é atraso, não silêncio, e é o
+                # mesmo precedente que o item 31 abriu para a degradação de
+                # mídia. Adereço de UI, nunca motivo de falha.
+                #
+                # Item 47, fix round 2: o passo depende do `requeued`, e esta é
+                # a mentira que MAIS custa das que o item achou. As outras eram
+                # de span — `annotate` é no-op sem SDK OTel, e o Logfire está
+                # desligado no piloto, então elas são latentes. Esta grava no
+                # banco (`whatsapp_ai_run_steps`) e o inbox a lê por Realtime:
+                # é a única coisa que a pessoa que atende vê sobre esta linha.
+                # `started` é NÃO-terminal e promete que a linha VAI sair
+                # quando a janela passar; com o reagendamento recusado ela não
+                # vai, e o painel some sozinho em 2 min (`AgentActivity.tsx`,
+                # STALE_AFTER_MS) deixando o silêncio que o item 47 descreve.
+                # `failed` é terminal, pinta de vermelho e FICA — que é o
+                # recado certo: ninguém vai retomar isto sozinho. Vocabulário
+                # de casa, o mesmo `step` que a falha permanente do canal já
+                # usa algumas dezenas de linhas abaixo.
+                paused = _HOLD_DETAIL.get(hold.reason, "Envio pausado")
                 try:
                     await engine.emit_ai_run_step(
                         conn,
                         organization_id=send.organization_id,
                         run_id=uuid.uuid4(),
-                        step="started",
+                        step="started" if requeued else "failed",
                         detail=(
-                            f"{_HOLD_DETAIL.get(hold.reason, 'Envio pausado')}"
-                            f" — retomando em {held_for}s"
+                            f"{paused} — retomando em {held_for}s"
+                            if requeued
+                            else f"{paused} — e o reagendamento não foi"
+                            " registrado: esta resposta não sai sozinha"
                         ),
                         phone=send.to_phone_e164,
                     )
@@ -379,11 +395,11 @@ async def sender_pass(
                 # quando a janela passar". Com `requeued` falso essa promessa é
                 # exatamente a mentira que o `outcome="sent"` incondicional era,
                 # só que sobre o caso grave em vez do benigno — o span diria
-                # "atraso" sobre a linha que morre. O `suppressed:` do preflight
-                # e o `failed:` do classificador não precisam do mesmo cuidado:
-                # eles descrevem o que o SENDER fez, e continuam verdadeiros
-                # tenha o banco registrado ou não. Este descreve o que a linha
-                # VAI fazer, e é o registro que decide isso.
+                # "atraso" sobre a linha que morre. O `suppressed:{verdict}` do
+                # preflight e o `failed` seco do classificador não precisam do
+                # mesmo cuidado: eles descrevem o que o SENDER fez, e continuam
+                # verdadeiros tenha o banco registrado ou não. Este descreve o
+                # que a linha VAI fazer, e é o registro que decide isso.
                 annotate(
                     outcome=f"held:{hold.reason}" if requeued
                     else f"held:{hold.reason}:not_requeued"

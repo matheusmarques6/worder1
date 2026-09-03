@@ -1880,8 +1880,10 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   todo o parágrafo do custo de inferência em fato.
 
 - [x] **47. `mark_outbox_sent` descarta o retorno — e o gêmeo `mark_outbox_failed` o descarta três
-  vezes, uma delas sobre perda silenciosa de mensagem** `[confirmado]` · commits `aab27c90` ·
-  relatório `task-47-report.md`
+  vezes, uma delas sobre perda silenciosa de mensagem** `[confirmado]` · commits `aab27c90` +
+  `5f18a2b8` · **Fix round 1** (redação e o span do hold) · commits `5eadc8f5` + `753b3865` ·
+  **Fix round 2** (o chip que o lojista lê) · relatório `task-47-report.md`, que é **gitignored**
+  (`.superpowers/sdd/.gitignore` é `*`) — por isso o que precisa sobreviver está AQUI
   **Toda citação de linha deste item está ancorada na BASE `93af12eb`.** A âncora original
   (`queueing/sender.py:224`) foi escrita contra `52e43477` e hoje aponta para linha em branco; o
   alvo real é **`sender.py:403`** (o call site) e **`engine.py:369-376`** (o wrapper que lê o
@@ -1924,10 +1926,10 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   isso praticamente inalcançável e não muda o nível.) E o argumento fecha com um fato de schema, não
   com uma dedução sobre percurso: **dos treze `update internal.message_outbox` das migrations, o
   único que escreve `'pending'` é o ramo transitório desta mesma função** — o que acabou de falhar.
-  **O que o lojista vê:** uma resposta que ele acha
-  enfileirada, que nunca sai, sem erro no chat, sem erro no painel e sem retentativa; a linha
-  termina em `manual_review` como "outcome unknown", que é a legenda errada para "nós a seguramos e
-  depois a esquecemos". Por isso os quatro call sites **não** levaram o mesmo `if`: `:292` e o ramo
+  **O que o lojista via, e o que passa a ver:** uma resposta que ele acha enfileirada, que nunca
+  sai, sem erro no chat e sem retentativa; a linha termina em `manual_review` como "outcome
+  unknown", que é a legenda errada para "nós a seguramos e depois a esquecemos". A parte "sem erro
+  no painel" era **pior do que sem erro** e só o fix round 2 achou: ver o chip, abaixo. Por isso os quatro call sites **não** levaram o mesmo `if`: `:292` e o ramo
   transitório de `:358` são `error`; a supressão do preflight (`:237`) e o ramo permanente de `:358`
   são `warning`, porque neles nenhuma entrega está em jogo e o que se perde é só o MOTIVO — o
   operador lê outra coisa no lugar de "opt-out" ou "fora da janela de 24h". **Um caso do `:358` que
@@ -1952,9 +1954,20 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   logo depois do `mark_outbox_failed` cujo `false` é a perda silenciosa acima. `held:` não descreve
   o que o sender fez — **promete o que a linha VAI fazer**, "pausado, volta quando a janela passar".
   Com o registro recusado ela não volta, e o span estava dizendo "atraso" sobre a linha que morre.
-  O `suppressed:` do preflight (`:255`) e o `failed:` do classificador (`:368`) ficaram como estão
-  pelo motivo oposto: descrevem a decisão do SENDER, e continuam verdadeiros tenha o banco
-  registrado ou não. **Nota obrigatória:** o atributo `outcome="sent"` hoje
+  O `suppressed:{verdict}` do preflight (`:255`) e o `failed` seco do classificador (`:368`) ficaram
+  como estão pelo motivo oposto: descrevem a decisão do SENDER, e continuam verdadeiros tenha o
+  banco registrado ou não.
+  **E havia uma terceira, que é a que de fato custa — só o fix round 2 a achou.** Doze linhas acima
+  do `annotate` do hold, `emit_ai_run_step(step="started", detail="… retomando em {held_for}s")`
+  (`sender.py:365-375`) disparava **sem guarda**, com o `requeued` já no escopo. As duas primeiras
+  são mentiras **latentes**: `annotate` é no-op sem SDK OTel (`obs/telemetry.py:142-148`) e o
+  Logfire está desligado no piloto. Esta é **ativa**: grava em `whatsapp_ai_run_steps` e o inbox a
+  lê por Realtime (`AgentActivity.tsx`). O lojista via, na tela, *"Envio pausado: muitas falhas
+  seguidas nesta conta do WhatsApp — retomando em 30s"* sobre a linha que morreu — e como `started`
+  é NÃO-terminal, o painel some sozinho depois de 2 min (`STALE_AFTER_MS`), devolvendo o silêncio.
+  Agora o passo é `failed` quando o reagendamento não foi registrado: terminal, vermelho, **fica na
+  tela**, e o texto diz que a resposta não sai sozinha. É o mesmo vocabulário que a falha permanente
+  do canal já usa — nenhum valor novo de `step`. **Nota obrigatória:** o atributo `outcome="sent"` hoje
   **superconta**, então o conserto vai DERRUBAR a contagem de `outcome = "sent"` em qualquer painel
   externo. A queda é a verdade aparecendo, não regressão. Nenhum consumidor do atributo existe no
   repositório (conferido em `runtime/` e `src/`), mas painel externo não está no repositório.
@@ -1985,8 +1998,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   (`:82-87`). Vale registrar o estreitamento: `review_stale_unknown` mede `request_started_at`, que
   é do minuto 0, então as linhas alcançadas entre o minuto ~1 e o ~5 levam `false` ainda em
   `'unknown'`, e para ELAS a chamada funcionaria. Quem cobre essas é o motivo (2). **(2) O caminho 3
-  já é
-  resgatado, e mais de uma vez:** `sent`, `delivered` e `read` da Meta mapeiam todos para `'sent'`
+  já é resgatado, e mais de uma vez:** `sent`, `delivered` e `read` da Meta mapeiam todos para `'sent'`
   (`webhook-processor.ts:53-58`), então o webhook conserta a linha `unknown` em segundos, muito
   antes dos 5 minutos de `unknown_review_after` (`config.py:88`). O resgate do sender seria
   redundante com o do item 10 no único caso em que ele funcionaria. **(3) Custo de desenho maior que
@@ -2004,9 +2016,21 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   penduram >10 min e **não foram executados** — em particular
   `tests/db/test_outbox_claim.py:299-320` (que é o teste do `false` do lado SQL) e
   `tests/db/test_correlate_outbox_status.py:167-188`. Todo o raciocínio sobre qual `where` casa é
-  leitura de DDL mais a regra do `found` do PL/pgSQL. O teste novo
-  (`tests/unit/test_sender_records_the_outcome.py`) prende **uma** coisa — `mark_outbox_sent` falso
-  ⇒ o span não recebe `"sent"` — e não prova que o `false` acontece, nem qual caminho o produziu.
+  leitura de DDL mais a regra do `found` do PL/pgSQL.
+  **O que o teste novo (`tests/unit/test_sender_records_the_outcome.py`) prende, exato:** seis casos
+  em três pares, sobre dois sites — carimbo recusado ⇒ o span não recebe `"sent"`; hold sem
+  reagendamento ⇒ o span não diz só `held:`; e hold sem reagendamento ⇒ o chip do inbox é `failed`
+  terminal, não `started` prometendo retomada. Cada par tem o caminho feliz junto, para a asserção
+  não passar por vacuidade. **E há uma evidência executável do achado-título, que até o fix round 1
+  não existia:** o ramo `error` do `:292` — a perda silenciosa — **roda de verdade** numa passada do
+  `sender_pass`, e não só na leitura de DDL. Reproduz com
+  `uv run --directory runtime pytest tests/unit/test_sender_records_the_outcome.py -k refused_requeue
+  --log-cli-level=ERROR`, que imprime `ERROR agents_runtime.queueing.sender … envio segurado não
+  voltou para a fila; a mensagem morre aqui`. **O que isso NÃO prova, e a distinção é o item
+  inteiro:** que `mark_outbox_failed` devolve `false` em produção. O `false` do teste vem de
+  `monkeypatch`. A premissa (*o `false` acontece*) segue sendo leitura; a consequência (*se
+  acontecer, este código roda, loga e muda o chip*) agora é execução. Os logs do `:237` e do `:358`
+  continuam sem teste que os observe.
   A frequência relativa dos quatro caminhos continua desconhecida: contar
   `whatsapp.webhook.correlate_channel_status_no_match` (`webhook-processor.ts:785`) e rodar
   `select status, count(*) from internal.message_outbox group by status` num banco vivo converteria
@@ -2535,8 +2559,11 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `internal.runtime_heartbeats` (`20260812000004:536-546`, wrapper em `engine.py:453-461`) é
   chaveada por `process_name`, e o blueprint fixa esse nome num literal
   (`render.yaml`, `AGENTS_PROCESS_NAME: agents-runtime-render`) — as duas instâncias do rollout
-  colidem na MESMA linha. Ela é ponto de partida, não resposta: falta amarrar o batimento ao
-  `locked_by` da linha, que é o que a saída (d) precisaria.
+  colidem na MESMA linha. E o grant fecha o argumento: `20260812000004:545` concede
+  `select, insert, update` sobre a tabela **só a `worker_role`**, enquanto o sender roda com
+  `sender_role` (`render.yaml`, `AGENTS_SENDER_SET_ROLE: sender_role`) — mesmo resolvida a colisão
+  de `process_name`, o lado que consulta não teria permissão de ler. Ela é ponto de partida, não
+  resposta: falta amarrar o batimento ao `locked_by` da linha, que é o que a saída (d) precisaria.
   **O que não foi verificado:** nada foi executado contra Postgres (`-m db` e `-m pipeline` penduram
   >10 min sem banco). A linha do tempo é aritmética sobre as constantes citadas, e a janela de duas
   instâncias vivas está lida no `render.yaml` (acima), mas o comportamento do Render em si não é

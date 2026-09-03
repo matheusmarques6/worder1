@@ -84,6 +84,7 @@ async def _run_held_pass(monkeypatch: pytest.MonkeyPatch, *, requeued: bool) -> 
     chamou de pior dos quatro. Aqui a linha é WhatsApp de verdade, porque é o
     preflight e o guard que estão no caminho."""
     annotations: list[dict] = []
+    chips: list[dict] = []
     send = _a_claimed_send(channel_type="whatsapp")
 
     async def _noop(*args, **kwargs):
@@ -108,7 +109,11 @@ async def _run_held_pass(monkeypatch: pytest.MonkeyPatch, *, requeued: bool) -> 
     monkeypatch.setattr(engine, "sender_preflight", _preflight)
     monkeypatch.setattr(engine, "send_guard_check", _hold)
     monkeypatch.setattr(engine, "mark_outbox_failed", _mark_failed)
-    monkeypatch.setattr(engine, "emit_ai_run_step", _noop)
+    async def _chip(conn, **kwargs):
+        chips.append(kwargs)
+        return True
+
+    monkeypatch.setattr(engine, "emit_ai_run_step", _chip)
     monkeypatch.setattr(sender_module, "annotate", lambda **kw: annotations.append(kw))
 
     await sender_module.sender_pass(
@@ -117,7 +122,7 @@ async def _run_held_pass(monkeypatch: pytest.MonkeyPatch, *, requeued: bool) -> 
         config=QueueingConfig(humanize_delays=False),
         randomness=SystemRandomness(),
     )
-    return annotations
+    return annotations, chips
 
 
 class TestTheSpanTellsWhatTheDatabaseRecorded:
@@ -145,13 +150,39 @@ class TestAHeldSendThatNeverRequeuedIsNotAnnotatedAsMerelyHeld:
     async def test_a_refused_requeue_shows_in_the_outcome(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        annotations = await _run_held_pass(monkeypatch, requeued=False)
+        annotations, _ = await _run_held_pass(monkeypatch, requeued=False)
 
         assert annotations == [{"outcome": "held:circuit_open:not_requeued"}]
 
     async def test_a_real_hold_still_says_only_held(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        annotations = await _run_held_pass(monkeypatch, requeued=True)
+        annotations, _ = await _run_held_pass(monkeypatch, requeued=True)
 
         assert annotations == [{"outcome": "held:circuit_open"}]
+
+
+class TestTheChipTheMerchantReadsDoesNotPromiseAReturnThatWontHappen:
+    """O chip do inbox (`whatsapp_ai_run_steps`, lido por Realtime) é a única
+    coisa que a pessoa que atende vê sobre esta linha, e diferente do span ele
+    grava no banco de verdade. Com o reagendamento recusado, "retomando em Ns"
+    é promessa falsa: `started` é não-terminal, o painel some sozinho em 2 min
+    e o silêncio do item 47 volta. `failed` é terminal, fica na tela e diz o
+    que aconteceu."""
+
+    async def test_a_refused_requeue_shows_a_terminal_chip(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _, chips = await _run_held_pass(monkeypatch, requeued=False)
+
+        assert [chip["step"] for chip in chips] == ["failed"]
+        assert "retomando" not in chips[0]["detail"]
+        assert "não sai sozinha" in chips[0]["detail"]
+
+    async def test_a_real_hold_still_promises_the_return(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _, chips = await _run_held_pass(monkeypatch, requeued=True)
+
+        assert [chip["step"] for chip in chips] == ["started"]
+        assert "retomando em 30s" in chips[0]["detail"]
