@@ -1382,6 +1382,35 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   **Suíte após o fix round 1:** 1315 testes (+6), 1308 verdes, as mesmas 4 falhas pré-existentes e
   alheias, 3 skipped. `npx tsc --noEmit` limpo antes e depois.
 
+  **Fix round 2 (re-review — `task-43-fix-re-review.md`). 0 Critical, 2 Important, 3 Minor.** O
+  Important 1 e os três Minor entraram; o Important 2 virou o **item 71** da fila, não trabalho.
+  **Important 1: as duas recusas do guard eram distinguíveis** — sem segredo o corpo do 404 dizia
+  `"Debug endpoints disabled. Set DEBUG_ENDPOINT_SECRET env var to enable…"`, com chave errada dizia
+  `{"error":"Not found"}`. Um chamador sem credencial separava "rota de debug existe e está com o
+  segredo desconfigurado" de "existe e minha chave está errada", e o 404 deixava de ser o disfarce
+  que se propunha a ser. Isso contradizia **a decisão já registrada do item 25** (`:426-429`: *o
+  motivo da recusa fica no log do servidor, não na resposta*) — o mesmo item que o round 1 dizia
+  seguir: seguia a metade "ambiente não é credencial" e desfazia a outra metade. Agora as duas
+  recusas devolvem o **mesmo 404 genérico byte a byte**, e a dica de qual env falta vai para
+  `console.error`, no molde exato de `internal-auth.ts:23-29` — quem roda `next dev` sem a env lê o
+  motivo no terminal. **Minor 1: comparação em tempo constante** — `provided !== secret` saía no
+  primeiro byte diferente; passa a usar `verifyBearerToken` (`src/lib/webhook-security.ts:120`), o
+  mesmo helper que `internal-auth.ts:33` usa desde o item 25, que checa comprimento antes do
+  `crypto.timingSafeEqual` e não lança. Nenhum comparador novo foi escrito; a extração dos três
+  canais (`?debug_key=`, `x-debug-key`, `Authorization: Bearer`) continua onde estava e o helper só
+  compara. **Minor 2: buracos do teste fechados** — `src/lib/debug-guard.test.ts` vai de 6 para 9
+  casos: segredo setado-e-vazio, `?debug_key=` vazio, chave errada pelo canal `Bearer` (o único cujo
+  negativo não era testado), um positivo com `NODE_ENV='production'` (a independência de ambiente só
+  estava provada no sentido "nega") e o caso novo que prende os **dois corpos de 404 como idênticos**
+  — é ele que impede o Important 1 de voltar. Verificado por mutação: reintroduzir o bypass por
+  `NODE_ENV` derruba 4 dos 9; devolver a dica de configuração ao corpo do 404 derruba 1 dos 9.
+  **Minor 3: a contradição no item 62** — aquele item listava `DEBUG_ENDPOINT_SECRET` entre as envs
+  "lidas em código e ausentes do `.env.example`", afirmação que o round 1 tornou falsa ao documentar
+  a env; a linha foi corrigida lá.
+
+  **Suíte após o fix round 2:** 1318 testes (+3 sobre o round 1), 1311 verdes, as mesmas 4 falhas
+  pré-existentes e alheias, 3 skipped. `npx tsc --noEmit` limpo antes e depois.
+
 - [ ] **44. Fatorar `_prepare_turn` entre responder e toucher** `[relatado]`
   `toucher.py:43` já importa privados do responder. As três divergências são consequência da cópia:
   não desembrulha envelope JSON (`:334` — o bug do `{"body":…}` de 17/08 segue aberto nesse caminho),
@@ -1502,7 +1531,10 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
 - [ ] **62. Env drift** `[confirmado]`
   Lidas em código e ausentes do `.env.example`: `AGENTS_RUNTIME_URL` e `AGENTS_PREVIEW_TOKEN`
   (`src/app/api/ai/preview-prompt/route.ts:16-17` — sem elas o preview do hub devolve 503 e o botão
-  morre), `WHATSAPP_AI_DEBOUNCE_SECONDS`, `OPENAI_API_KEY`, `SLACK_WEBHOOK_URL`, `DEBUG_ENDPOINT_SECRET`.
+  morre), `WHATSAPP_AI_DEBOUNCE_SECONDS`, `OPENAI_API_KEY`, `SLACK_WEBHOOK_URL`.
+  ~~`DEBUG_ENDPOINT_SECRET`~~ saiu desta lista: o fix round 1 do item 43 acrescentou a env ao
+  `.env.example:47-54`, com a nota de que ela passou a ser exigida em qualquer ambiente. As demais
+  continuam ausentes.
   Ausentes dos `runtime/.env.*.example`: `AGENTS_LOGFIRE_TOKEN`, `AGENTS_PLATFORM_LLM_ENABLED`,
   `AGENTS_HUMANIZE_DELAYS`, `AGENTS_RUBRICS_DIR` e os knobs de fila.
 
@@ -1682,6 +1714,40 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `authenticated`, o buraco pode seguir aberto na base viva até essa migration ser aplicada lá, ou até
   alguém confirmar e revogar manualmente. YAGNI: não criar script de reconciliação de produção sem um
   dono definindo se/quando as migrations promovidas nesta auditoria são aplicadas fora do CI.
+
+- [ ] **71. `/api/debug` — a décima terceira rota de debug, com o mesmo fail-open que o item 43
+  fechou nas outras doze, e leitura cross-tenant sem sessão** `[confirmado]` ·
+  *(descoberto no item 43, fix round 2)*
+  `src/app/api/debug/route.ts:12-16` tem uma cópia inline de `isAuthorized` com **exatamente** a linha
+  que o fix round 1 do item 43 apagou do guard compartilhado: `if (!IS_PRODUCTION) return true`. Ela
+  não usa `assertDebugAllowed` (usa `DEBUG_ROUTE_SECRET`, outra env, sem relação com
+  `DEBUG_ENDPOINT_SECRET`), então **não foi alcançada pelo fix**: o registro do item 43 diz que "as 12
+  rotas passam a responder 404 em dev", e isso é verdade — mas não quer dizer que a superfície de
+  debug esteja fechada, porque esta décima terceira, chamada literalmente `/api/debug`, continua
+  aberta em `next dev`.
+  O agravante é a carga. A rota está em `publicApiRoutes` (`src/middleware.ts:20`), ou seja, o
+  middleware não pede sessão nenhuma; ela nunca chama `getAuthClient()`; e lê **sem filtro de
+  organização**: `shopify_stores.select('*')` (`:53`), contas do Klaviyo (`:158-170`), `organizations`
+  (`:186`), `whatsapp_conversations.select('*')` (`:192`), `whatsapp_accounts` (`:240`). O JSON de
+  resposta (`:252-274`) devolve domínios e nomes de todas as lojas de todas as organizações, os
+  `id`/`organization_id` das contas Klaviyo, os itens crus de `whatsapp_accounts`, amostras de pedidos
+  e um `tokenPreview` (10 primeiros caracteres do `access_token` da Shopify) por loja. Em `next dev`
+  isso é leitura cross-tenant sem autenticação nenhuma — mesma classe do Important que o item 43
+  fechou, com carga pior. Pior ainda em conjunto com `src/middleware.ts:214`, que deixa passar
+  qualquer requisição com o cookie literal `sb-access-token=dev-access-token`. Em produção continua
+  fechada (sem `DEBUG_ROUTE_SECRET`, recusa).
+  `src/app/api/shopify/debug/route.ts:8-12` tem a **mesma cópia inline** do fail-open, mas é
+  inofensiva: logo abaixo ela exige `getAuthClient()` e filtra por `auth.user.organization_id`. Fica
+  registrada aqui porque é a segunda metade da duplicação — o conserto óbvio e mínimo é trocar as
+  duas `isAuthorized` inline por `assertDebugAllowed`, que some com a duplicação e com o fail-open de
+  uma vez.
+  **NÃO corrigido no item 43 (nem no fix round 1, nem no round 2), de propósito:** é rota que o item
+  43 nunca tocou, o brief das duas rounds escopou o guard compartilhado e os comentários das rotas
+  que o usam, e achado fora de escopo vira registro, não trabalho. Mexer em `/api/debug` muda uma
+  rota de produto que ninguém desta fila revisou — a decisão é do dono. **Também não apagar a rota:**
+  remover órfã é o item 61, não este. Conclusão por leitura de código, não por runtime: a rota não
+  foi chamada de verdade para ver o JSON cross-tenant sair; a base é a ausência de
+  `.eq('organization_id', …)` nas queries e a presença de `/api/debug` em `publicApiRoutes`.
 
 ---
 
