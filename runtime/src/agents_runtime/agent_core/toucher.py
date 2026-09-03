@@ -53,6 +53,7 @@ from agents_runtime.agent_core.providers import (
 )
 from agents_runtime.agent_core.responder import (
     TRANSCRIPT_LIMIT,
+    UNMIRRORED_DETAIL,
     _as_chat,
     _metered,
     default_turn_llm_call_limit,
@@ -477,7 +478,7 @@ def build_toucher(
                 # responder — marca o handoff, abre o alerta, não envia.
                 topic = resolve_blocked_topic(version.settings, outcome.draft)
                 if topic is not None:
-                    await transfer_to_human(
+                    marked = await transfer_to_human(
                         conn,
                         organization_id=job.organization_id,
                         conversation_id=job.conversation_id,
@@ -491,7 +492,18 @@ def build_toucher(
                             "draft": outcome.draft,
                         },
                     )
-                    await note_step("transferred", f"Assunto proibido no toque (“{topic}”)")
+                    # Item 44: o booleano é lido aqui como no responder. O
+                    # alerta já sai certo dos dois lados (a escalada de
+                    # severidade e o sufixo do título moram DENTRO de
+                    # `transfer_to_human`); o que se perdia era só o chip —
+                    # quem opera o inbox lia "transferido" e ia embora, sem
+                    # saber que a IA continuou ligada nessa conversa porque
+                    # não há espelho onde escrever a marca.
+                    await note_step(
+                        "transferred",
+                        f"Assunto proibido no toque (“{topic}”)"
+                        + ("" if marked else UNMIRRORED_DETAIL),
+                    )
                     return TouchDraft(None, (), mission_version_id)
 
                 return TouchDraft(
