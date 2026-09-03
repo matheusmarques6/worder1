@@ -144,10 +144,27 @@ class HealthConnection:
       DSN — que no Supabase tem BYPASSRLS sem ser superuser.
 
     · **Lock em volta da SEQUÊNCIA.** O lock interno do psycopg serializa
-      statements, não sequências: sem este `asyncio.Lock`, dois probes
-      concorrentes poderiam reabrir a conexão em cima um do outro, e o segundo
-      leria de um objeto que o primeiro acabou de fechar. Ler-falhar-reabrir-ler
-      é uma sequência, e é ela que precisa ser atômica.
+      statements, não sequências, e `ler-falhar-reabrir-ler` é uma sequência.
+      **O dano medido de não ter o lock** (mutação sobre o teste vizinho): três
+      probes concorrentes numa conexão caída reabrem TRÊS vezes — três
+      handshakes onde devia haver um, e duas sessões órfãs que ninguém fecha,
+      penduradas no mesmo pooler que este item veio poupar. Só isso já sustenta
+      o lock. *Há um segundo dano possível, que não foi observado nem quebrando
+      o código e por isso vai escrito como o que é — raciocínio sobre a fonte,
+      não medida:* a leitura da retentativa está fora do `try`, então sem o lock
+      um probe poderia ficar suspenso nela enquanto outro reabre e fecha a
+      conexão que ele segurava.
+
+    Uma consequência do lock que o operador precisa saber: os probes agora
+    ENFILEIRAM. Nenhuma leitura tem timeout (não há `connect_timeout` nem
+    `statement_timeout` em lugar nenhum de `runtime/src`), então um socket
+    pendurado segura todos os probes, e não só o dele como antes. Visto de fora
+    dá no mesmo — o Render não recebe resposta dos dois jeitos —, mas o
+    acoplamento é novo. Por que não há um `asyncio.wait_for` aqui: ele
+    converteria "banco lento" em 503, que é exatamente a mentira "doente" que
+    este item existe para não contar, e o buraco de timeout é do processo
+    inteiro (pulse, workers e sender penduram igual), não do healthz. Está
+    registrado no item 48 com os dois lados, e como achado próprio.
 
     O `/internal/preview-prompt` NÃO entra aqui: continua abrindo a sua por
     requisição, via `_connection`. Ele roda `scope_to_organization` dentro de

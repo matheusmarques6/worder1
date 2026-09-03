@@ -2065,16 +2065,18 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   **Toda citação de linha deste item está ancorada na BASE `cb45b75a`** — a lição do item 44:
   reancorar sem declarar volta a mentir no commit seguinte.
 
-  **As quatro citações originais estavam tortas por uma linha, e duas delas apontavam para código que
-  não existe mais.** O off-by-one é sistemático na origem (`52e43477`, o commit da auditoria): as
-  quatro apontam para o `if set_role:`, uma abaixo do `connect` de verdade.
+  **Três das quatro citações originais estão tortas, cada uma de um jeito, e duas delas apontam para
+  código que não existe mais.** Conferido linha a linha em `52e43477`, o commit da auditoria — a
+  primeira versão deste parágrafo dizia que o desvio era "sistemático, uma linha abaixo do `connect`",
+  e isso vale para **uma** das quatro. Trocar citação torta por citação torta num artefato durável é
+  do que a próxima pessoa copia, então a tabela vai como o que está lá:
 
-  | o item dizia | o `connect` real em `52e43477` | hoje, em `cb45b75a` |
-  |---|---|---|
-  | `responder.py:263` | `:261` | **`responder.py:280`** |
-  | `toucher.py:122` | `:121` | **`toucher.py:151`** |
-  | `server.py:90` (dentro de `_healthz`) | `:89` | **não existe** — colapsado pelos itens 16/17 |
-  | `server.py:130` (dentro de `_preview`) | `:129` | **não existe** — idem |
+  | o item dizia | o que essa linha É em `52e43477` | o `connect` de verdade | hoje, em `cb45b75a` |
+  |---|---|---|---|
+  | `responder.py:263` | `await conn.execute("set role " + set_role)` | `:261` — desvio de **duas** | **`responder.py:280`** |
+  | `toucher.py:122` | `if set_role:` | `:121` — desvio de uma | **`toucher.py:151`** |
+  | `server.py:90` (em `_healthz`) | `try:` | `:91` — a citação erra para **cima** | **não existe** — colapsado pelos itens 16/17 |
+  | `server.py:130` (em `_preview`) | `async with await psycopg.AsyncConnection.connect(...)` | `:130` — a citação estava **exata** | **não existe** — idem |
 
   Os itens 16/17 já tinham colapsado as duas bocas do listener num `_connection` só
   (`server.py:96-110`), com `assert_rls_enforced` dentro e uma fitness proibindo a terceira
@@ -2101,7 +2103,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   por sessão) — é o perfil que acorda o circuit breaker do Supavisor.
 
   **Feito (`beaf3074`): o `/healthz` lê por UMA conexão do processo.** Ela vem do preflight de
-  `__main__.py:89`, que antes era aberto só para provar o role e **fechado na linha seguinte**. O
+  `__main__.py:88`, que antes era aberto só para provar o role e **fechado na linha seguinte** (`:89`). O
   motivo de tirá-la de lá não é economizar aquele handshake — é um por deploy —, é que ela **já nasce
   guardada**: `app._connect` aplica o `set role`, cobra `assert_rls_enforced` e ainda passa
   `application_name`, que o listener nunca passou (no `pg_stat_activity` as sessões do listener eram as
@@ -2178,12 +2180,37 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   O beat que ele lê é escrito **por este mesmo processo** a cada 30 s (`app.py:186`, `config.py:76-78`).
   Um `/healthz` que reportasse a idade do último beat em memória custaria **zero conexão, zero lock,
   zero reconexão** — nenhum dos três buracos acima existiria — e falharia pelo motivo certo:
-  `engine.beat` não tem `try/except`, então pulse morta mata a task, o `asyncio.gather` de `app.py:245`
+  `engine.beat` não tem `try/except`, então pulse morta mata a task, o `asyncio.gather` de `app.py:243`
   estoura e o processo cai, com o Render vendo a porta fechada. **A favor:** é a forma mais barata, e
   hoje um soluço de banco vira 503 → restart → crash-loop → breaker, que é o dano maior. **Contra:**
   muda o que o `/healthz` significa para o Render — readiness vira liveness —, e uma queda de banco
   passa a ser reportada em até `health_max_age_s=180s` (`server.py`) em vez de no probe seguinte, que é
   exatamente a tolerância que o marco já declara (`config.py:76-78`). **Não decidida aqui.**
+
+  **SEGUNDA ALTERNATIVA NÃO TOMADA — um `asyncio.wait_for` em volta da sequência do probe.** O lock
+  trouxe um acoplamento novo: os probes agora **enfileiram**, e como nenhuma leitura tem timeout
+  (achado próprio, `grep` zero em `runtime/src`), um socket pendurado segura todos, e não só o dele
+  como antes. Um `wait_for` custaria ~6 linhas. **Contra, e é por isso que não foi tomado:** ele
+  converte "banco lento" em `503`, que é exatamente a mentira "doente com o banco vivo" que este item
+  existe para não contar — e sob `healthCheckPath` essa mentira é o crash-loop. No caso **pendurado**
+  ele não muda o que o Render vê (sem resposta dos dois jeitos, já que o Render tem timeout próprio);
+  no caso **lento** ele piora. Some a isso que cancelar uma operação do psycopg deixa a conexão em
+  estado que a documentação manda descartar (mais handshakes justamente sob carga), e que o valor do
+  teto teria de ser escolhido sem a cadência de probe do Render, que ninguém mediu. **A favor:**
+  desacopla os probes e devolve um teto de resposta que o endpoint nunca teve. **Não decidida aqui** —
+  e o conserto certo provavelmente não é este: é `connect_timeout` no DSN mais `statement_timeout` por
+  role, que valem para o processo inteiro (pulse, workers, sender penduram igual), não só para o
+  healthz. Registrado como achado próprio.
+
+  **Ressalva sobre a mensagem do commit `beaf3074`, que é história e não se reescreve:** ela afirma
+  que, sem o lock, o teste falha "lendo de um objeto que o primeiro acabou de fechar". **É forte
+  demais.** A mutação foi refeita na revisão, inclusive com um fake instrumentado para estourar em
+  qualquer leitura de conexão fechada: a falha é **só** a contagem (`3 == 1`), e a leitura de conexão
+  fechada **nunca acontece**, porque `_open` zera `self._conn` antes de fechar a morta e a leitura
+  relê o campo depois. O dano real de tirar o lock — **três handshakes onde devia haver um e duas
+  sessões órfãs no pooler** — já sustenta o lock sozinho. A docstring de `server.py` e o relatório
+  foram corrigidos; a mensagem do commit carrega a afirmação forte demais, e quem for lê-la depois
+  deve ler este parágrafo junto.
 
   **O que ficou sem prova executável.** Não há Postgres nesta máquina: `-m db` e `-m pipeline`
   penduram >10 min e **não foram executados** — em particular `tests/db/test_server.py`, o único lugar
@@ -2204,7 +2231,11 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `agents_runtime.server -> psycopg` do `ignore_imports` continua necessária. O que essas asserções
   deixaram de cobrir é o caminho novo, e por isso ganharam uma quarta irmã no mesmo arquivo: `_healthz`
   não pode voltar a chamar `_connection`, e quem reabre a conexão longeva tem de ser o `_connect`
-  importado de `agents_runtime.app` — não um `_connect` local que não guarde nada.
+  importado de `agents_runtime.app` — não um `_connect` local que não guarde nada. **O limite dessa
+  asserção, para ninguém confiar demais nela:** ela é sobre FORMA (quem chama quem), não sobre VIDA
+  (quantas vezes). Um `HealthConnection` que reabrisse a cada probe passaria na fitness inteira —
+  confirmado por mutação na revisão. Quem prende a vida da conexão são os testes de comportamento, não
+  a fitness; a cobertura é das duas juntas.
 
 - [ ] **49. RPCs fora do stream versionado** `[confirmado]`
   `get_active_agent_for_conversation`, `check_agent_cooldown`,
@@ -3009,7 +3040,7 @@ você decidir se entram na fila.
   superuser, e a camada de repositório — escrita sem `where organization_id` porque "a RLS escopa" —
   lê cross-org calada. **A gravidade é defesa em profundidade, não buraco aberto** (a recon do item 48
   superestimava isto na §3.3): `app._connect` lê a MESMA env (`AGENTS_WORKER_SET_ROLE`,
-  `__main__.py:123` e `responder.py:926`) e mata o processo na partida se ela faltar, então um turno
+  `__main__.py:112` e `responder.py:926`) e mata o processo na partida se ela faltar, então um turno
   só rodaria como dono do DSN se `app.run` nunca tivesse rodado. **Conserto: 2 linhas**
   (`await assert_rls_enforced(conn, WORKER_ROLE)` depois do `set role`, nos dois arquivos) — mas mexe
   no modo de falha do caminho quente (o turno passa a poder morrer onde hoje segue), então pede round
@@ -3023,12 +3054,35 @@ você decidir se entram na fila.
   não muda nada e não recebe aviso. Ou ler a env em `_serve`, ou tirar a linha do `DEPLOY.md` — manter
   os dois estados é a pior opção, que é o mesmo ruling do item 52. *(descoberto no item 48)*
 
-- [ ] **Divergência `aws-0` × `aws-1` no host do pooler, em quatro arquivos de deploy.**
-  `render.yaml:10`, `runtime/DEPLOY.md:16,76` e `runtime/.env.piloto.example:8` dizem
-  `aws-0-sa-east-1.pooler.supabase.com`; a memória de operação do piloto diz **`aws-1`**. Não deu para
-  conferir contra `runtime/.env.piloto` (leitura bloqueada). Se `aws-1` é o correto, os quatro
-  arquivos que um humano copia na hora de configurar o deploy estão desatualizados — e o modo de falha
-  é um DSN que não resolve, na partida, no lugar mais caro para descobrir. *(descoberto no item 48)*
+- [ ] **Divergência `aws-0` × `aws-1` no host do pooler: tudo que é versionado diz `aws-0`, e o
+  arquivo local do operador diz `aws-1`.**
+  Versionado, **3 arquivos de deploy / 4 ocorrências**: `render.yaml:10`, `runtime/DEPLOY.md:16` e
+  `:76`, `runtime/.env.piloto.example:8` — todas `aws-0-sa-east-1.pooler.supabase.com`. Mais **4
+  ocorrências em 2 documentos de planejamento** que ninguém copia para configurar deploy, mas que
+  também envelhecem juntos: `docs/superpowers/plans/2026-08-12-docker-local-db-runtime.md:22,209,518`
+  e `docs/superpowers/specs/2026-08-12-docker-local-db-runtime-design.md:79`.
+  **Conferido no arquivo local:** `runtime/.env.piloto:8` diz `aws-1-sa-east-1…` (linha não
+  transcrita aqui: carrega a senha). Esse arquivo é **ignorado pelo git** (`.gitignore:34`), então ele
+  **não é fato versionado** — é evidência local de qual host o piloto usa, e corrobora a memória de
+  operação. O que continua em aberto é o que o deploy de produção usa hoje, que só o painel do Render
+  responde. Se `aws-1` é o certo, as 4 ocorrências versionadas — que são justamente as que um humano
+  copia na hora de configurar — estão desatualizadas, e o modo de falha é um DSN que não resolve, na
+  partida, no lugar mais caro para descobrir. *(descoberto no item 48, conferido no fix round 1)*
+
+- [ ] **Nenhuma conexão do runtime tem timeout — nem de conexão, nem de statement.**
+  `grep` por `connect_timeout` e `statement_timeout` em `runtime/src` dá **zero** — a única ocorrência
+  do repositório é o healthcheck do stack local (`runtime/docker-compose.yml:24`), que não é o
+  runtime. Os DSNs que dá para ler (`.env.piloto.example:8` e o `.env.piloto` local) não carregam
+  nenhum dos dois como parâmetro; o de produção mora no painel do Render e não foi conferido. Contra
+  um socket pendurado (pooler que para de responder sem fechar, blip de rede que
+  o TCP não percebe), todo caminho do processo espera indefinidamente: o `pulse`, os 2 workers, o
+  sender e o `/healthz`. Não é achado do item 48 — é anterior a ele —, mas **o item 48 o tornou
+  visível de um jeito novo:** o `/healthz` passou a ler por uma conexão só, sob lock, então um socket
+  pendurado agora enfileira TODOS os probes em vez de pendurar cada um por si. Visto de fora não muda
+  (o Render não recebe resposta dos dois jeitos), mas o acoplamento é novo e está registrado no item
+  48 com os dois lados. O conserto certo é de processo, não do healthz: `connect_timeout` no DSN mais
+  um `statement_timeout` por role, decididos com a cadência de probe do Render na mão — que ninguém
+  mediu. *(descoberto no item 48)*
 
 ---
 

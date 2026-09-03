@@ -110,10 +110,14 @@ class TestTheHealthzConnectionIsOnePerProcess:
         """O lock protege a SEQUÊNCIA, não o statement.
 
         O lock interno do psycopg serializa statements. Sem o `asyncio.Lock`
-        desta classe, dois sondadores que chegam juntos numa conexão caída
-        entram os dois no ramo de reabertura: duas sessões novas contra o
-        pooler, e a segunda leitura rodando sobre um objeto que o outro probe
-        acabou de fechar.
+        desta classe, os três sondadores que chegam juntos numa conexão caída
+        entram os três no ramo de reabertura: TRÊS handshakes onde devia haver
+        um, e duas sessões órfãs — `_conn` guarda só a última, e ninguém fecha
+        as outras duas, que ficam penduradas no pooler que este item veio
+        poupar. É isso, e só isso, que a remoção do lock produz: conferido por
+        mutação, inclusive com um fake instrumentado para estourar se alguém
+        lesse de conexão fechada — a exceção nunca dispara, porque `_open` zera
+        `self._conn` antes de fechar a morta e a leitura relê o campo depois.
         """
         health = server.HealthConnection(DSN, "worker_role", FakeConnection(alive=False))
 
@@ -131,9 +135,18 @@ class TestTheHealthzConnectionIsOnePerProcess:
         """Posse: o `finally` de `__main__` fecha a conexão ATUAL, não a original."""
         health = server.HealthConnection(DSN, "worker_role", FakeConnection(alive=False))
         await health.beat_age_seconds()
+        reaberta = health._conn
 
         await health.aclose()
 
+        # As duas metades, porque uma sem a outra passa com `aclose` quebrado:
+        # um `aclose` que só fizesse `self._conn = None` satisfaria a segunda
+        # asserção inteira e deixaria a sessão pendurada no pooler para sempre.
+        assert reaberta.closed, (
+            "`aclose()` não fechou a conexão — o processo desligaria deixando a "
+            "sessão do healthz pendurada no pooler, que é o buraco de posse que "
+            "este item veio fechar."
+        )
         assert health._conn is None
         # A segunda leitura depois do fechamento reabre em vez de estourar: o
         # objeto fechado não fica guardado como se estivesse vivo.

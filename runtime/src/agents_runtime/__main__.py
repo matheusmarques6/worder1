@@ -80,32 +80,37 @@ async def _serve(dsn: str) -> None:
     http_server = None
     health = None
     port_spec = os.environ.get("AGENTS_HTTP_PORT", "").strip()
-    if port_spec:
-        # Preflight ANTES do primeiro socket: o listener abre conexão própria e
-        # atende requisições antes de qualquer `_connect`, então sem isto um
-        # processo com a env de role errada (ou sem env) subia e servia — o
-        # preview escopando uma conexão do dono do DSN. Morrer na partida é a
-        # única resposta útil; servir 503 para sempre não é.
-        preflight = await _connect(dsn, os.environ.get("AGENTS_WORKER_SET_ROLE"), WORKER_ROLE)
-
-        # Item 48: o preflight deixa de ser jogado fora e vira A conexão do
-        # `/healthz`. Não é economia de handshake — é UM por deploy —, é que ela
-        # já nasce guardada: `_connect` aplica o `set role`, cobra
-        # `assert_rls_enforced` e ainda passa `application_name`, que o listener
-        # não passava. A partir daqui o processo é dono dela: o `finally` abaixo
-        # fecha, depois do listener, para nenhum probe em voo achar conexão
-        # fechada.
-        health = server.HealthConnection(
-            dsn, os.environ.get("AGENTS_WORKER_SET_ROLE"), preflight
-        )
-        http_server = await server.serve(
-            dsn,
-            port=int(port_spec),
-            health=health,
-            preview_token=os.environ.get("AGENTS_PREVIEW_TOKEN") or None,
-            set_role=os.environ.get("AGENTS_WORKER_SET_ROLE"),
-        )
+    # O `try` abre ANTES da montagem do listener, e não só em volta do `run`:
+    # entre abrir o preflight e o `serve` devolver há duas linhas onde uma falha
+    # (porta ocupada, por exemplo) deixaria a conexão do healthz aberta e sem
+    # dono. É sujeira de partida — o processo morre logo atrás —, mas é uma
+    # sessão pendurada no pooler a cada tentativa de subir.
     try:
+        if port_spec:
+            # Preflight ANTES do primeiro socket: o listener abre conexão própria e
+            # atende requisições antes de qualquer `_connect`, então sem isto um
+            # processo com a env de role errada (ou sem env) subia e servia — o
+            # preview escopando uma conexão do dono do DSN. Morrer na partida é a
+            # única resposta útil; servir 503 para sempre não é.
+            preflight = await _connect(dsn, os.environ.get("AGENTS_WORKER_SET_ROLE"), WORKER_ROLE)
+
+            # Item 48: o preflight deixa de ser jogado fora e vira A conexão do
+            # `/healthz`. Não é economia de handshake — é UM por deploy —, é que ela
+            # já nasce guardada: `_connect` aplica o `set role`, cobra
+            # `assert_rls_enforced` e ainda passa `application_name`, que o listener
+            # não passava. A partir daqui o processo é dono dela: o `finally` abaixo
+            # fecha, depois do listener, para nenhum probe em voo achar conexão
+            # fechada.
+            health = server.HealthConnection(
+                dsn, os.environ.get("AGENTS_WORKER_SET_ROLE"), preflight
+            )
+            http_server = await server.serve(
+                dsn,
+                port=int(port_spec),
+                health=health,
+                preview_token=os.environ.get("AGENTS_PREVIEW_TOKEN") or None,
+                set_role=os.environ.get("AGENTS_WORKER_SET_ROLE"),
+            )
         await run(
             dsn,
             stop=stop,
