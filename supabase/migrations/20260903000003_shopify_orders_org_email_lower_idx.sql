@@ -1,0 +1,108 @@
+-- ============================================================================
+-- Índice funcional parcial para o elo por e-mail do histórico de compras —
+-- item 50 da auditoria de 28/08. É o achado mais forte do item, e no texto
+-- original estava escrito por último, em meia linha.
+--
+-- O predicado (repository/orders.py:50-57, constante _LINKED):
+--
+--     o.organization_id = %(organization_id)s
+--     and ( o.contact_id = %(contact_id)s
+--           or (%(email)s::text is not null and o.email is not null
+--               and lower(o.email) = lower(%(email)s::text)) )
+--
+-- lower() está sobre a COLUNA, então idx_orders_email (email) —
+-- 20260815000001:54 — não pode servi-lo, exatamente o mesmo defeito que o item
+-- 46 encontrou em upper(coupon_code). E aqui o defeito é pior do que parece
+-- isolado: o braço do e-mail está num OR com o.contact_id = ..., e UM BRAÇO
+-- ININDEXÁVEL DERRUBA A DISJUNÇÃO INTEIRA — o planner não monta BitmapOr com um
+-- braço que nenhum índice serve, então não adianta idx_orders_contact
+-- (20260815000001:53) existir. Sobra bitmap por idx_shopify_orders_org (:52) e
+-- filtro em memória sobre TODOS os pedidos da org.
+--
+-- Frequência, que é o que decide: load_purchase_history dispara DUAS queries
+-- por chamada (repository/orders.py:116 e :134) e é chamada em
+-- agent_core/responder.py:342 (TODO turno de resposta), agent_core/toucher.py:185
+-- (todo toque) e tools/customer.py:41 (toda invocação de get_customer_context).
+-- Isto é 1-2 varreduras do tenant POR TURNO, na tabela mais volumosa das quatro
+-- do item: um pedido por venda, para sempre, sem purga, retenção nem
+-- arquivamento em migration alguma.
+--
+-- A FORMA é cópia do precedente da casa, e é o único índice funcional do
+-- repositório inteiro: contacts_org_email_lower_idx ON contacts
+-- (organization_id, lower(email)) WHERE email IS NOT NULL —
+-- migrations-archive/20260415_event_unification_and_indexes.sql:166-168 (:166 é
+-- o CREATE INDEX, :167 o ON, :168 o WHERE; :165 é o comentário "-- Contacts").
+-- A cláusula parcial é parte do precedente, não enfeite.
+--
+-- POR QUE O `where email is not null` É SEGURO: mesma mecânica do
+-- status = 'issued' do item 46. A cláusula do índice está LITERALMENTE no
+-- predicado — `o.email is not null`, orders.py:54, mesma coluna, mesmo operador
+-- —, então a prova de implicação do planner (predicate_implied_by, que casa por
+-- igualdade de árvore) cai no caso trivial, sem precisar de teoria nenhuma.
+-- E é necessária: email é nullable (20260815000001:22).
+-- O `%(email)s::text is not null` do mesmo braço é cláusula sem Var — não casa
+-- coluna alguma do índice e cai no recheck; não impede a indexação do braço.
+--
+-- O QUE A CLÁUSULA PARCIAL NÃO COMPRA: não escreva que "o índice fica do
+-- tamanho dos pedidos com e-mail". O webhook, que é o caminho quente, grava
+-- `email: order.email` CRU (src/app/api/webhooks/shopify/route.ts:608) e a
+-- Shopify manda "" para pedido sem e-mail — string vazia NÃO é NULL, e essas
+-- linhas ENTRAM no índice. (O caminho de sync,
+-- src/app/api/shopify/sync/route.ts:214, normaliza com `|| null`; o webhook
+-- não.) Quanto isso pesa, só um banco vivo diz:
+--   select count(*) filter (where email is null),
+--          count(*) filter (where email = '')
+--     from public.shopify_orders;
+--
+-- Sem to_regclass: o guard dos itens 0a/42/43 existe para tabela do app legado,
+-- que nasce FORA do baseline que o CI aplica (o motivo está escrito em
+-- 20260828000002:35-37). shopify_orders nasce no próprio stream versionado
+-- (20260815000001:17), então aqui o guard seria cargo cult e, pior,
+-- transformaria em no-op silencioso a falha de uma migration irmã — o argumento
+-- por negação de 20260903000001:56-66. ISTO É O OPOSTO DO RULING E DO ITEM 49,
+-- e a diferença é factual, não contradição: lá (ai_usage_logs) a tabela NÃO
+-- nasce no stream, aqui nasce.
+--
+-- Sem CONCURRENTLY: migration do Supabase roda em transação e CONCURRENTLY não
+-- pode rodar dentro de uma. O argumento está escrito por extenso em
+-- 20260903000001:53-55 (item 46, a migration que serve de molde a esta) e em
+-- 20260828000002:28-33; as quatro menções de CONCURRENTLY no stream versionado
+-- são todas comentários explicando por que NÃO usá-lo, e nenhum dos 33
+-- `create index` do stream o usa.
+--
+-- CUSTO DE DEPLOY — e aqui o alvo é o WEBHOOK, não o sync. A escrita quente de
+-- shopify_orders é src/app/api/webhooks/shopify/route.ts:601-623, um
+-- `.upsert(..., { onConflict: 'store_id,shopify_order_id' })` a CADA evento de
+-- pedido (create, updated, paid, cancelled, fulfillment), isto é, várias vezes
+-- por pedido ao longo da vida dele. Duas consequências:
+--   (1) cada upsert não-HOT passa a manter uma entrada de índice a mais — custo
+--       de escrita permanente, pequeno mas real;
+--   (2) o SHARE do CREATE INDEX bloqueia um HANDLER SÍNCRONO, não um job de
+--       background. Handler preso atrás do lock estoura o timeout da Shopify,
+--       que REPETE e eventualmente DESATIVA o webhook. Por isso a recomendação
+--       não é "aplique de madrugada": é APLIQUE COM O WEBHOOK DRENADO OU ACEITE
+--       REENTREGAS. Em incentive_grants o item 46 pôde contar sub-segundo; aqui
+--       NINGUÉM SABE O TAMANHO DA TABELA, e este é o único risco operacional
+--       real do item 50.
+--
+-- HOT: este índice não custa HOT nenhum. Um UPDATE que toque `email` já é
+-- não-HOT hoje, porque idx_orders_email (email) (20260815000001:54) já existe;
+-- o índice funcional não acrescenta atributo algum ao conjunto que bloqueia
+-- HOT. O que muda é manutenção de entrada, não elegibilidade.
+--
+-- idx_orders_email (email) NÃO É DERRUBADO AQUI, de propósito: "nenhum leitor
+-- no repositório" não é "nenhum leitor", e derrubar índice com base em grep é
+-- irreversível apoiado em evidência parcial. Quem responde é
+-- pg_stat_user_indexes.idx_scan. Ver o item 50 no checklist.
+--
+-- SEM PROVA EXECUTÁVEL: não há Postgres na máquina onde isto foi escrito.
+-- Nenhum EXPLAIN foi rodado — nem do plano de hoje nem do plano depois. Que
+-- este índice SERÁ usado é inferência: sob baixa seletividade (um contato com
+-- metade dos pedidos da org) e numa consulta de agregação (orders.py:116-117
+-- faz count/sum/min/max) o seq scan continua podendo ganhar, e não se sabe em
+-- que ponto ele vira.
+-- ============================================================================
+
+create index if not exists shopify_orders_org_email_lower_idx
+    on public.shopify_orders (organization_id, lower(email))
+    where email is not null;
