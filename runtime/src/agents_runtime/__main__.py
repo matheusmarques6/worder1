@@ -78,6 +78,7 @@ async def _serve(dsn: str) -> None:
     # roda `app.run` sem ele, e um processo sem porta configurada continua
     # sendo só o laço.
     http_server = None
+    health = None
     port_spec = os.environ.get("AGENTS_HTTP_PORT", "").strip()
     if port_spec:
         # Preflight ANTES do primeiro socket: o listener abre conexão própria e
@@ -86,11 +87,21 @@ async def _serve(dsn: str) -> None:
         # preview escopando uma conexão do dono do DSN. Morrer na partida é a
         # única resposta útil; servir 503 para sempre não é.
         preflight = await _connect(dsn, os.environ.get("AGENTS_WORKER_SET_ROLE"), WORKER_ROLE)
-        await preflight.close()
 
+        # Item 48: o preflight deixa de ser jogado fora e vira A conexão do
+        # `/healthz`. Não é economia de handshake — é UM por deploy —, é que ela
+        # já nasce guardada: `_connect` aplica o `set role`, cobra
+        # `assert_rls_enforced` e ainda passa `application_name`, que o listener
+        # não passava. A partir daqui o processo é dono dela: o `finally` abaixo
+        # fecha, depois do listener, para nenhum probe em voo achar conexão
+        # fechada.
+        health = server.HealthConnection(
+            dsn, os.environ.get("AGENTS_WORKER_SET_ROLE"), preflight
+        )
         http_server = await server.serve(
             dsn,
             port=int(port_spec),
+            health=health,
             preview_token=os.environ.get("AGENTS_PREVIEW_TOKEN") or None,
             set_role=os.environ.get("AGENTS_WORKER_SET_ROLE"),
         )
@@ -116,6 +127,11 @@ async def _serve(dsn: str) -> None:
         if http_server is not None:
             http_server.close()
             await http_server.wait_closed()
+        # Só depois que o listener parou de aceitar: fechar antes deixaria um
+        # probe em voo lendo de uma conexão fechada e respondendo 503 no
+        # caminho de saída — mentira sobre um processo que está só desligando.
+        if health is not None:
+            await health.aclose()
 
 
 def main() -> None:

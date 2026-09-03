@@ -61,9 +61,17 @@ async def _request(
 
 @pytest.fixture
 async def listener(dsn: str):
-    """Um server em porta efêmera, com preview ligado, papel de worker."""
+    """Um server em porta efêmera, com preview ligado, papel de worker.
+
+    Item 48: a conexão do healthz é de quem constrói o listener, não do
+    listener. Em produção ela vem do preflight de `__main__._serve`; aqui nasce
+    vazia (o primeiro probe abre, pela mesma `app._connect`) e é fechada no
+    `finally` — a fixture é dona dela, exatamente como o processo é lá.
+    """
+    health = server.HealthConnection(dsn, "worker_role")
     srv = await server.serve(
-        dsn, host="127.0.0.1", port=0, preview_token=TOKEN, set_role="worker_role"
+        dsn, host="127.0.0.1", port=0, health=health,
+        preview_token=TOKEN, set_role="worker_role",
     )
     port = srv.sockets[0].getsockname()[1]
     try:
@@ -71,6 +79,7 @@ async def listener(dsn: str):
     finally:
         srv.close()
         await srv.wait_closed()
+        await health.aclose()
 
 
 class TestHealthz:
@@ -105,8 +114,10 @@ class TestPreviewRefusals:
     async def test_without_a_configured_token_the_endpoint_does_not_exist(
         self, dsn: str
     ) -> None:
+        health = server.HealthConnection(dsn, "worker_role")
         srv = await server.serve(
-            dsn, host="127.0.0.1", port=0, preview_token=None, set_role="worker_role"
+            dsn, host="127.0.0.1", port=0, health=health,
+            preview_token=None, set_role="worker_role",
         )
         port = srv.sockets[0].getsockname()[1]
         try:
@@ -117,6 +128,7 @@ class TestPreviewRefusals:
         finally:
             srv.close()
             await srv.wait_closed()
+            await health.aclose()
         assert status == 404
 
     async def test_a_wrong_token_is_refused(self, listener: int) -> None:
