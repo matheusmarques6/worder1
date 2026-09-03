@@ -608,21 +608,42 @@ export class ExecutionEngine {
     nodeResults: Record<string, NodeExecutionResult>
   ): void {
     const nodeEdges = workflow.edges.filter(e => e.source === nodeId);
-    const skippedTargets = new Set<string>();
-    
-    for (const edge of nodeEdges) {
-      // Check if this edge matches the selected branch
+    const matchesBranch = (edge: { sourceHandle?: string | null }): boolean => {
       const edgeHandle = edge.sourceHandle || 'default';
-      const matches = edgeHandle === selectedBranch || 
-                     edgeHandle === `output-${selectedBranch}` ||
-                     (selectedBranch === 'true' && edgeHandle === 'yes') ||
-                     (selectedBranch === 'false' && edgeHandle === 'no');
-      
-      if (!matches) {
+      return edgeHandle === selectedBranch ||
+        edgeHandle === `output-${selectedBranch}` ||
+        (selectedBranch === 'true' && edgeHandle === 'yes') ||
+        (selectedBranch === 'false' && edgeHandle === 'no');
+    };
+
+    // Fluxo legado: condição cujas saídas foram salvas SEM sourceHandle.
+    // Nenhuma aresta casaria o ramo e o fluxo inteiro seria pulado —
+    // pior que executar os dois lados. Sem handles, não há o que rotear.
+    const hasAnyHandle = nodeEdges.some(e => !!e.sourceHandle);
+    if (!hasAnyHandle) {
+      console.warn(`[ExecutionEngine] Condição "${nodeId}" tem saídas sem handle (fluxo legado) — nenhum ramo será pulado. Reconecte os ramos Sim/Não no editor.`);
+      return;
+    }
+
+    const skippedTargets = new Set<string>();
+    const keptTargets = new Set<string>();
+
+    for (const edge of nodeEdges) {
+      if (matchesBranch(edge)) {
+        keptTargets.add(edge.target);
+        this.collectDescendants(workflow, edge.target, keptTargets);
+      } else {
         skippedTargets.add(edge.target);
         this.collectDescendants(workflow, edge.target, skippedTargets);
       }
     }
+
+    // Um nó alcançado pelo ramo VENCEDOR nunca é pulado, mesmo que o ramo
+    // perdedor também chegue nele. Sem esta subtração, todo fluxo em que
+    // os dois lados de uma condição voltam a se encontrar (padrão de
+    // convergência: "sim"/"não" → mesmo e-mail final) tinha o nó de
+    // reencontro — e tudo depois dele — marcado como pulado.
+    for (const kept of keptTargets) skippedTargets.delete(kept);
 
     // Mark as skipped
     for (const targetId of skippedTargets) {

@@ -3312,6 +3312,31 @@ interface ExitCondition {
   value?: string;
 }
 
+// Conector lógico entre as linhas de filtro (E / OU) — equivalente ao
+// logicalOperator dos filterGroups da Omnisend. Só aparece a partir da
+// 2ª linha, quando a escolha passa a fazer diferença.
+function FilterLogicToggle({ value, onChange }: {
+  value: string;
+  onChange: (v: 'and' | 'or') => void;
+}) {
+  const isOr = String(value).toLowerCase() === 'or';
+  const btn = (active: boolean) => cn(
+    'px-2 py-0.5 text-[10px] font-semibold rounded transition-colors',
+    active ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-700'
+  );
+  return (
+    <div className="flex items-center gap-2 mt-1">
+      <div className="flex items-center gap-0.5 bg-gray-100 rounded p-0.5">
+        <button type="button" onClick={() => onChange('and')} className={btn(!isOr)}>E</button>
+        <button type="button" onClick={() => onChange('or')} className={btn(isOr)}>OU</button>
+      </div>
+      <span className="text-[10px] text-gray-400">
+        {isOr ? 'Basta uma condição ser verdadeira' : 'Todas as condições precisam ser verdadeiras'}
+      </span>
+    </div>
+  );
+}
+
 function TriggerFiltersConfig({ config, onUpdate, triggerType }: {
   config: Record<string, any>;
   onUpdate: (key: string, value: any) => void;
@@ -3440,6 +3465,12 @@ function TriggerFiltersConfig({ config, onUpdate, triggerType }: {
         {triggerFilters.length === 0 && (
           <p className="text-xs text-gray-400">Nenhum filtro aplicado.</p>
         )}
+        {triggerFilters.length > 1 && (
+          <FilterLogicToggle
+            value={config.triggerFiltersLogic || 'and'}
+            onChange={(v) => onUpdate('triggerFiltersLogic', v)}
+          />
+        )}
         {triggerFilters.map((filter, idx) => (
           <div key={idx} className="flex gap-1.5 items-start mt-2">
             <div className="flex-1 space-y-1.5">
@@ -3477,6 +3508,12 @@ function TriggerFiltersConfig({ config, onUpdate, triggerType }: {
         <p className="text-xs text-gray-500 mb-3">Limitar o fluxo por condicoes do perfil do contato.</p>
         {audienceFilters.length === 0 && (
           <p className="text-xs text-gray-400">Nenhum filtro de perfil aplicado.</p>
+        )}
+        {audienceFilters.length > 1 && (
+          <FilterLogicToggle
+            value={config.audienceFiltersLogic || 'and'}
+            onChange={(v) => onUpdate('audienceFiltersLogic', v)}
+          />
         )}
         {audienceFilters.map((filter, idx) => (
           <div key={idx} className="flex gap-1.5 items-start mt-2">

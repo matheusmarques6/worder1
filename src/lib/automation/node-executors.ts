@@ -2225,15 +2225,21 @@ const conditionExecutors: Record<string, NodeExecutor> = {
 
       let acc = 0;
       let chosen = variants[0];
-      for (const v of variants) {
-        acc += Math.max(0, Number(v.weight || 1));
-        if (bucket <= acc) { chosen = v; break; }
+      let chosenIndex = 0;
+      for (let i = 0; i < variants.length; i++) {
+        acc += Math.max(0, Number(variants[i].weight || 1));
+        if (bucket <= acc) { chosen = variants[i]; chosenIndex = i; break; }
       }
 
+      // O card do nó só expõe os handles 'true'/'false' (BaseNode), então
+      // devolver o NOME da variante como branch não casava com handle
+      // nenhum e o markSkippedBranches descartava os DOIS ramos — o fluxo
+      // morria no randomizer. Primeira variante → 'true', demais → 'false';
+      // o nome real continua no output para o histórico.
       return {
         status: 'success',
-        output: { variant: chosen.name, bucket, totalWeight },
-        branch: chosen.name,
+        output: { variant: chosen.name, variantIndex: chosenIndex, bucket, totalWeight },
+        branch: chosenIndex === 0 ? 'true' : 'false',
       };
     },
   },

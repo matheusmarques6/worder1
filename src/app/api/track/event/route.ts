@@ -720,6 +720,18 @@ export async function POST(request: NextRequest) {
         const pageUrl = enrichedProperties.page_url || enrichedProperties.url || 'unknown';
         const dayBucket = new Date().toISOString().slice(0, 10);
         triggerIdempotencyKey = `trigger:viewed_page:${contactId}:${pageUrl}:${dayBucket}`;
+      } else if (triggerType === 'trigger_order') {
+        // Mesma chave do webhook Shopify (`trigger:placed_order:<id>`) e do
+        // EventBus: o pedido chega por três caminhos e só o primeiro cria
+        // run — antes o contato entrava três vezes no mesmo fluxo.
+        const pixelOrderId =
+          enrichedProperties.order_id ||
+          enrichedProperties.orderId ||
+          enrichedProperties.checkout_id ||
+          enrichedProperties.checkoutId;
+        if (pixelOrderId) {
+          triggerIdempotencyKey = `trigger:placed_order:${pixelOrderId}`;
+        }
       } else if (triggerType === 'trigger_active_on_site' && contactId) {
         // Klaviyo Active on Site: 1x per session per contact. Without
         // session-level dedup the same browsing session re-triggers on

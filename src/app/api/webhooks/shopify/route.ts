@@ -426,13 +426,19 @@ async function processCustomerCreated(store: ShopifyStoreConfig, customer: any) 
     console.error('[Shopify Webhook] CDP event creation failed (customer):', cdpError);
   }
 
-  // Emitir evento para automações
+  // Emitir evento para automações.
+  // store_id é OBRIGATÓRIO aqui: sem ele o match fica org-wide e um
+  // cliente novo da loja A entrava nos welcome flows de TODAS as lojas
+  // da organização (vazamento cross-loja). O CUSTOMER_CREATED logo
+  // abaixo já carregava a loja via _webhook_dispatch_meta; este, que é
+  // o que alimenta as automações, não carregava.
   await EventBus.emit(EventType.CONTACT_CREATED, {
     organization_id: store.organization_id,
     contact_id: contact?.id,
     email: customer.email,
     phone: customer.phone,
     data: {
+      store_id: store.id,
       first_name: customer.first_name,
       last_name: customer.last_name,
       accepts_marketing: customer.accepts_marketing,

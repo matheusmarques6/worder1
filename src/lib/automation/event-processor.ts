@@ -5,7 +5,6 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { enqueueAutomationRun, enqueueAutomationStep, calculateDelaySeconds } from '../queue';
-import { shouldIncludeAutomationForStore } from './trigger-dispatcher';
 
 // ============================================
 // TYPES
@@ -136,94 +135,44 @@ class EventProcessorClass {
           ? eventStoreIdRaw
           : null;
 
-      // Try RPC first, fallback to direct query
-      let automations: Array<{ automation_id: string; automation_name: string; trigger_type: string }> | null = null;
+      // 2. Disparo via dispatchTrigger — o MESMO motor do caminho moderno.
+      // Antes este path fazia seu próprio match (RPC find_matching_automations
+      // com um CASE incompleto, mais uma query de fallback) e criava os runs
+      // à mão, ignorando audience_filters, trigger_filters, frequency_config
+      // e idempotência. Delegar remove a dependência da RPC (que só existe
+      // em migrations-archive) e devolve a esses gatilhos os filtros e a
+      // regra de re-entrada configurados no editor.
+      const { dispatchTrigger } = await import('./trigger-dispatcher');
+      const dispatch = await dispatchTrigger({
+        organizationId: event.organization_id,
+        triggerType,
+        triggerData: event.payload || {},
+        contactId: event.contact_id || null,
+        dealId: event.deal_id || null,
+        storeId: eventStoreId,
+        // Condições legadas por event_type (keyword, segmento, RFM, produto)
+        // seguem valendo dentro do pipeline unificado.
+        matchConfig: (cfg) => matchesTriggerConfig(event.event_type, cfg, event.payload),
+        // Reprocessar a mesma linha de event_logs não pode enrolar o
+        // contato duas vezes.
+        idempotencyKey: `event_log:${event.id}`,
+      });
 
-      try {
-        // A RPC lê p_payload->>'storeId'/'store_id' e store-escopa pela coluna
-        // automations.store_id (ver migration 20260620_*). Passamos o payload
-        // do evento — que já carrega o store id (garantido pelos produtores).
-        const { data: rpcResult, error: rpcError } = await supabase
-          .rpc('find_matching_automations', {
-            p_organization_id: event.organization_id,
-            p_event_type: event.event_type,
-            p_payload: event.payload,
-          });
+      console.log(`[EventProcessor] ${dispatch.runsCreated} run(s) created for event ${event.event_type}`);
 
-        // Lista NÃO-vazia. O CASE da RPC só conhece parte dos event_types
-        // (os snake_case de webhook-processor/rfm resolvem NULL e voltam
-        // []); um [] é truthy, então aceitar array vazio aqui bloqueava o
-        // fallback JS — que tem o mapa completo — pra sempre. Custo: uma
-        // query extra quando realmente não há automação, correção: todos
-        // os eventos fora do CASE voltam a disparar.
-        if (!rpcError && Array.isArray(rpcResult) && rpcResult.length > 0) {
-          automations = rpcResult;
-        }
-      } catch {
-        // RPC not available, use direct query
-      }
-
-      if (!automations) {
-        // Fallback: direct query for active automations with matching trigger type
-        let directQuery = supabase
-          .from('automations')
-          .select('id, name, trigger_type, store_id')
-          .eq('organization_id', event.organization_id)
-          .eq('status', 'active')
-          .eq('trigger_type', triggerType);
-        if (eventStoreId) {
-          // store-específico OU org-wide (NULL) — espelha o path moderno.
-          directQuery = directQuery.or(`store_id.eq.${eventStoreId},store_id.is.null`);
-        }
-        const { data: directResult, error: directError } = await directQuery;
-
-        if (directError) {
-          console.error('[EventProcessor] Error finding automations:', directError);
-          throw directError;
-        }
-
-        // Defense-in-depth em JS (no-op quando não há loja no evento).
-        automations = (directResult || [])
-          .filter(a => shouldIncludeAutomationForStore((a as any).store_id, eventStoreId))
-          .map(a => ({
-            automation_id: a.id,
-            automation_name: a.name,
-            trigger_type: a.trigger_type,
-          }));
-      }
-
-      // 2b. Filtrar automações por trigger_config (keyword match, segment match etc.)
-      const filteredAutomations: typeof automations = [];
-      for (const a of (automations || [])) {
-        // Buscar trigger_config da automação
-        const { data: autoDetail } = await supabase
-          .from('automations')
-          .select('trigger_config')
-          .eq('id', a.automation_id)
-          .single();
-        const cfg = (autoDetail?.trigger_config || {}) as Record<string, any>;
-
-        if (matchesTriggerConfig(event.event_type, cfg, event.payload)) {
-          filteredAutomations.push(a);
-        }
-      }
-
-      console.log(`[EventProcessor] Found ${filteredAutomations.length} automations for event ${event.event_type} (after config filter)`);
-
-      // 3. Criar runs para cada automação
-      for (const automation of filteredAutomations) {
+      // 3. Enfileirar os runs criados para execução imediata (o cron
+      // process-runs os pegaria depois; enfileirar preserva a latência).
+      for (const runId of dispatch.runIds) {
         try {
-          const runId = await this.createAndQueueRun(
-            automation.automation_id,
-            event
-          );
-          
-          if (runId) {
-            result.runIds.push(runId);
-            result.automationsTriggered++;
+          const messageId = await enqueueAutomationRun(runId);
+          if (!messageId) {
+            // Sem QStash: dispara direto, sem aguardar (o cron cobre falha).
+            this.triggerDirectExecution(runId);
           }
+          result.runIds.push(runId);
+          result.automationsTriggered++;
         } catch (error: any) {
-          console.error(`[EventProcessor] Error creating run for automation ${automation.automation_id}:`, error);
+          console.error(`[EventProcessor] Error enqueueing run ${runId}:`, error);
         }
       }
 
@@ -295,93 +244,6 @@ class EventProcessorClass {
     }
 
     return { processed, errors, results };
-  }
-
-  /**
-   * Cria um automation_run e enfileira para execução
-   */
-  private async createAndQueueRun(
-    automationId: string,
-    event: EventRecord
-  ): Promise<string | null> {
-    const supabase = this.getSupabase();
-
-    // Buscar a automação para pegar os nodes/edges
-    const { data: automation, error: autoError } = await supabase
-      .from('automations')
-      .select('*')
-      .eq('id', automationId)
-      .single();
-
-    if (autoError || !automation) {
-      throw new Error(`Automation not found: ${automationId}`);
-    }
-
-    // ⚠️ CRITICAL: Double-check if automation is still active
-    // (could have been deactivated between find_matching_automations and now)
-    if (automation.status !== 'active') {
-      console.log(`[EventProcessor] Automation ${automationId} is no longer active (status: ${automation.status}), skipping`);
-      return null;
-    }
-
-    // Criar contexto inicial
-    // NOTE: automation_runs não tem coluna store_id nesta schema, então o
-    // store id é atribuído via metadata.store_id. O gate anti-vazamento real
-    // acontece no match acima; isto é só atribuição/auditoria.
-    const eventStoreId: string | null =
-      (event.payload?.storeId as string) || (event.payload?.store_id as string) || null;
-    const initialContext = {
-      organization_id: event.organization_id,
-      automation_id: automationId,
-      automation_name: automation.name,
-      contact_id: event.contact_id,
-      deal_id: event.deal_id,
-      store_id: eventStoreId,
-      trigger_type: automation.trigger_type,
-      trigger_data: event.payload,
-      triggered_at: new Date().toISOString(),
-      event_id: event.id,
-    };
-
-    // Criar o run
-    const { data: run, error: runError } = await supabase
-      .from('automation_runs')
-      .insert({
-        automation_id: automationId,
-        contact_id: event.contact_id || null,
-        status: 'pending',
-        metadata: initialContext,
-        trigger_event_id: event.id,
-        started_at: new Date().toISOString(),
-      })
-      .select()
-      .single();
-
-    if (runError) {
-      throw runError;
-    }
-
-    console.log(`[EventProcessor] Created run ${run.id} for automation ${automationId}`);
-
-    // Enfileirar para execução
-    console.log(`[EventProcessor] Enqueueing run ${run.id}...`);
-    console.log(`[EventProcessor] QSTASH_TOKEN configured: ${!!process.env.QSTASH_TOKEN}`);
-    console.log(`[EventProcessor] APP_URL: ${process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL}`);
-    
-    const messageId = await enqueueAutomationRun(run.id);
-    
-    console.log(`[EventProcessor] QStash messageId: ${messageId || 'null - using fallback'}`);
-    
-    if (!messageId) {
-      // Fallback: executar diretamente se QStash não disponível
-      console.log(`[EventProcessor] QStash not available, triggering direct execution`);
-      // Não aguardar para não bloquear, o cron vai pegar se falhar
-      this.triggerDirectExecution(run.id);
-    } else {
-      console.log(`[EventProcessor] Run ${run.id} enqueued successfully with messageId: ${messageId}`);
-    }
-
-    return run.id;
   }
 
   /**
