@@ -37,9 +37,11 @@ from agents_runtime.agent_core.prompt_compiler import (
     agent_block,
     compile_prompt,
 )
+from agents_runtime.commerce.moments import apply_moment_restrictions, resolve_moments
 from agents_runtime.repository import agent as agent_repo
 from agents_runtime.repository import engine as engine_repo
 from agents_runtime.repository import missions as missions_repo
+from agents_runtime.repository import moments as moments_repo
 from agents_runtime.repository.scope import (
     WORKER_ROLE,
     assert_rls_enforced,
@@ -153,6 +155,15 @@ async def _preview(dsn: str, *, set_role: str | None, body: dict[str, Any]) -> b
             settings = await agent_repo.load_tenant_policy(conn, organization_id=organization_id)
             version = await agent_repo.load_active_version(conn, organization_id=organization_id)
             mission = await missions_repo.load_active_mission(conn, event_type=event_type)
+            # DENTRO da transação, e isso não é preciosismo de estilo: a
+            # conexão é `autocommit=True` e `scope_to_organization` grava com
+            # `set_config(..., true)` — SET LOCAL, que morre no fim da
+            # transação. Um load de momentos escrito uma linha abaixo do
+            # `async with` cairia com `current_app_organization_id()` = NULL, a
+            # policy de `commercial_moments` não casaria com nada e a query
+            # voltaria ZERO LINHAS: sem erro, sem log, verde na suíte inteira,
+            # e o preview dizendo "nenhum momento ativo" para sempre.
+            active_moments = await moments_repo.load_active_moments(conn)
 
     if version is None:
         return _response(422, {"error": "a organização não tem versão de agente ativa"})
@@ -162,6 +173,20 @@ async def _preview(dsn: str, *, set_role: str | None, body: dict[str, Any]) -> b
         if mission is not None
         else None
     )
+    if resolved is not None:
+        # Item 45: os mesmos dois passos do turno (`responder.py`,
+        # `toucher.py`) — a restrição do momento vigente NÃO vai para
+        # `ChannelBlock.constraints`, ela soma ao `forbidden` da missão e sai
+        # como as linhas `Não fazer:` do bloco MISSÃO. Sem isso, o lojista via
+        # no preview uma missão sem as regras que a promoção do dia impõe.
+        # Sem momento no ar, silêncio e nunca erro: `resolve_moments` devolve
+        # EMPTY_VIEW para lista vazia e `apply_moment_restrictions` devolve a
+        # missão intacta. Sem missão ativa, nem isso — o bloco MISSÃO já é um
+        # fantasma declarado, que é o que `mode="preview"` existe para tolerar.
+        resolved = apply_moment_restrictions(
+            resolved,
+            resolve_moments(active_moments, promote=resolved.promote_moment),
+        )
     compiled = compile_prompt(
         # Item 45: o preview montava o bloco do agente à mão e ficou dois
         # commits atrás do turno — `presentation_mode` era o literal
