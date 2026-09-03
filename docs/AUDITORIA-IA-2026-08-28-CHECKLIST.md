@@ -1397,8 +1397,9 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   primeiro byte diferente; passa a usar `verifyBearerToken` (`src/lib/webhook-security.ts:120`), o
   mesmo helper que `internal-auth.ts:33` usa desde o item 25, que checa comprimento antes do
   `crypto.timingSafeEqual` e não lança. Nenhum comparador novo foi escrito; a extração dos três
-  canais (`?debug_key=`, `x-debug-key`, `Authorization: Bearer`) continua onde estava e o helper só
-  compara. **Minor 2: buracos do teste fechados** — `src/lib/debug-guard.test.ts` vai de 6 para 9
+  canais (`?debug_key=`, `x-debug-key`, `Authorization: Bearer`) continua onde estava — mas o helper
+  tira um SEGUNDO prefixo `Bearer ` literal do que recebe, e o efeito está declarado no código
+  (round 3). **Minor 2: buracos do teste fechados** — `src/lib/debug-guard.test.ts` vai de 6 para 9
   casos: segredo setado-e-vazio, `?debug_key=` vazio, chave errada pelo canal `Bearer` (o único cujo
   negativo não era testado), um positivo com `NODE_ENV='production'` (a independência de ambiente só
   estava provada no sentido "nega") e o caso novo que prende os **dois corpos de 404 como idênticos**
@@ -1410,6 +1411,28 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
 
   **Suíte após o fix round 2:** 1318 testes (+3 sobre o round 1), 1311 verdes, as mesmas 4 falhas
   pré-existentes e alheias, 3 skipped. `npx tsc --noEmit` limpo antes e depois.
+
+  **Fix round 3 (re-review do round 2 — `task-43-fix-re-review-2.md`). 0 Critical, 0 Important, 3
+  Minor — o item fecha aqui.** A revisora confirmou que as duas recusas são a MESMA expressão (a
+  closure `deny()`, chamada nos dois pontos), não duas cópias que hoje coincidem; que o
+  `console.error` não vaza para a resposta (as 12 rotas são runtime Node, nenhuma declara
+  `runtime='edge'`); e que `verifyBearerToken` trata vazio/`null` e comprimentos diferentes antes do
+  `timingSafeEqual`, sem lançar. Os três Minor: **(1) o alias do reúso vale nos três canais, não em
+  um** — como o helper tira um segundo prefixo `Bearer ` literal, `?debug_key=Bearer <s>`,
+  `x-debug-key: Bearer <s>` e `Authorization: Bearer Bearer <s>` também valem como o segredo (e
+  `bearer <s>` minúsculo NÃO vale, porque o helper é case-sensitive); não afrouxa nada — quem manda
+  isso já tem o segredo — e agora está escrito no comentário de `debug-guard.ts`, que descrevia só
+  um canal. **(2) o `console.error` não estava preso por teste**: o spy do `beforeEach` silenciava e
+  nenhum caso afirmava a chamada, então apagar o log deixava a suíte verde e a recusa virava um 404
+  mudo — tirar o motivo da resposta só é aceitável porque ele aparece no terminal de quem roda `next
+  dev`, e agora há um caso que quebra se essa metade sumir. **(3) registrado, não consertado: as
+  duas recusas são idênticas em conteúdo e distinguíveis em TEMPO** — o caminho sem segredo retorna
+  antes do `new URL`, da leitura dos headers e do `timingSafeEqual`. Vaza estado de configuração, não
+  o segredo, e fechar exigiria trabalho inútil deliberado (dormir ou comparar à toa); fica declarado
+  em vez de escondido.
+
+  **Suíte após o fix round 3:** 1319 testes (+1), 1312 verdes, as mesmas 4 falhas pré-existentes e
+  alheias, 3 skipped. `npx tsc --noEmit` limpo.
 
 - [ ] **44. Fatorar `_prepare_turn` entre responder e toucher** `[relatado]`
   `toucher.py:43` já importa privados do responder. As três divergências são consequência da cópia:

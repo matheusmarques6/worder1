@@ -47,6 +47,17 @@ describe('assertDebugAllowed', () => {
     expect(assertDebugAllowed(req())?.status).toBe(404)
   })
 
+  it('a dica de configuração vai para o log do servidor, já que não vai no corpo', () => {
+    // A outra metade da decisão do item 25: tirar o motivo da resposta só é
+    // aceitável porque quem roda `next dev` descobre a env no terminal. Sem
+    // esta asserção, apagar o console.error não quebraria teste nenhum e a
+    // recusa viraria um 404 mudo, indepurável.
+    assertDebugAllowed(req())
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining('DEBUG_ENDPOINT_SECRET')
+    )
+  })
+
   it('nega com segredo configurado mas vazio (DEBUG_ENDPOINT_SECRET=)', () => {
     process.env.DEBUG_ENDPOINT_SECRET = ''
     expect(assertDebugAllowed(req())?.status).toBe(404)

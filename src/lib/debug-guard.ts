@@ -66,8 +66,13 @@ export function assertDebugAllowed(req: NextRequest): NextResponse | null {
 
   // Comparação em tempo constante: reaproveita verifyBearerToken (o mesmo
   // helper que internal-auth.ts usa desde o item 25 — checa comprimento antes
-  // do crypto.timingSafeEqual e não lança) em vez de reimplementar. O prefixo
-  // `Bearer ` já saiu acima, então aqui o helper só compara.
+  // do crypto.timingSafeEqual e não lança) em vez de reimplementar. Efeito
+  // colateral aceito do reúso, nos TRÊS canais: o helper tira um segundo
+  // prefixo `Bearer ` literal do que recebe, então `?debug_key=Bearer <s>`,
+  // `x-debug-key: Bearer <s>` e `Authorization: Bearer Bearer <s>` também
+  // valem como o segredo (o helper é case-sensitive; `bearer <s>` não vale).
+  // Não afrouxa nada — quem manda isso já tem o segredo — e é o preço de não
+  // escrever um comparador próprio.
   if (!verifyBearerToken(provided ?? null, secret)) return deny();
 
   return null;
