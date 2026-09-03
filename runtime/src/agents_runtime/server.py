@@ -149,22 +149,27 @@ class HealthConnection:
       probes concorrentes numa conexão caída reabrem TRÊS vezes — três
       handshakes onde devia haver um, e duas sessões órfãs que ninguém fecha,
       penduradas no mesmo pooler que este item veio poupar. Só isso já sustenta
-      o lock. *Há um segundo dano possível, que não foi observado nem quebrando
-      o código e por isso vai escrito como o que é — raciocínio sobre a fonte,
-      não medida:* a leitura da retentativa está fora do `try`, então sem o lock
-      um probe poderia ficar suspenso nela enquanto outro reabre e fecha a
-      conexão que ele segurava.
+      o lock. *E há um segundo dano, reproduzido depois em harness com conexão
+      falsa e escalonamento escolhido a dedo — o mecanismo é alcançável em
+      asyncio; a frequência dele contra psycopg e um pooler de verdade continua
+      não medida:* a leitura da retentativa está **fora do `try`**, então sem o
+      lock um probe fica suspenso nela enquanto outro reabre e fecha a conexão
+      que ele segurava, e a exceção sobe como 503 com o banco vivo.
 
     Uma consequência do lock que o operador precisa saber: os probes agora
-    ENFILEIRAM. Nenhuma leitura tem timeout (não há `connect_timeout` nem
-    `statement_timeout` em lugar nenhum de `runtime/src`), então um socket
-    pendurado segura todos os probes, e não só o dele como antes. Visto de fora
-    dá no mesmo — o Render não recebe resposta dos dois jeitos —, mas o
-    acoplamento é novo. Por que não há um `asyncio.wait_for` aqui: ele
-    converteria "banco lento" em 503, que é exatamente a mentira "doente" que
-    este item existe para não contar, e o buraco de timeout é do processo
-    inteiro (pulse, workers e sender penduram igual), não do healthz. Está
-    registrado no item 48 com os dois lados, e como achado próprio.
+    ENFILEIRAM. Nenhum caminho de banco do processo tem teto — nenhum DSN do
+    repositório carrega `connect_timeout`, nenhum role tem `statement_timeout`,
+    e o único `asyncio.wait_for` deste módulo é o do parse HTTP —, então um
+    socket pendurado segura todos os probes, e não só o dele como antes. Por que
+    não há um `wait_for` aqui: ele converteria "banco lento" em 503, que é
+    exatamente a mentira "doente" que este item existe para não contar, e o
+    buraco de timeout é do processo inteiro (pulse, workers e sender penduram
+    igual), não do healthz — consertar só esta boca deixaria os irmãos
+    pendurando. *A favor dele, para quem for reabrir a decisão:* o teto
+    desenfileiraria os probes, que é justamente o acoplamento acima. Está
+    registrado no item 48 com os dois lados, e como achado próprio — que tem
+    precedente escrito no repositório (`OBSERVABILIDADE-PLANO-V3.md:250` já
+    manda `ALTER ROLE … SET statement_timeout` para o role do Grafana).
 
     O `/internal/preview-prompt` NÃO entra aqui: continua abrindo a sua por
     requisição, via `_connection`. Ele roda `scope_to_organization` dentro de

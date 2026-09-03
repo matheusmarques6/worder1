@@ -2188,19 +2188,28 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   exatamente a tolerância que o marco já declara (`config.py:76-78`). **Não decidida aqui.**
 
   **SEGUNDA ALTERNATIVA NÃO TOMADA — um `asyncio.wait_for` em volta da sequência do probe.** O lock
-  trouxe um acoplamento novo: os probes agora **enfileiram**, e como nenhuma leitura tem timeout
-  (achado próprio, `grep` zero em `runtime/src`), um socket pendurado segura todos, e não só o dele
-  como antes. Um `wait_for` custaria ~6 linhas. **Contra, e é por isso que não foi tomado:** ele
-  converte "banco lento" em `503`, que é exatamente a mentira "doente com o banco vivo" que este item
-  existe para não contar — e sob `healthCheckPath` essa mentira é o crash-loop. No caso **pendurado**
-  ele não muda o que o Render vê (sem resposta dos dois jeitos, já que o Render tem timeout próprio);
-  no caso **lento** ele piora. Some a isso que cancelar uma operação do psycopg deixa a conexão em
-  estado que a documentação manda descartar (mais handshakes justamente sob carga), e que o valor do
-  teto teria de ser escolhido sem a cadência de probe do Render, que ninguém mediu. **A favor:**
-  desacopla os probes e devolve um teto de resposta que o endpoint nunca teve. **Não decidida aqui** —
+  trouxe um acoplamento novo: os probes agora **enfileiram**, e como nenhum caminho de banco do
+  processo tem teto (achado próprio: nenhum DSN legível carrega `connect_timeout`, nenhum role tem
+  `statement_timeout`, e o único `wait_for` do listener é o do parse HTTP), um socket pendurado segura
+  todos, e não só o dele como antes. Um `wait_for` custaria ~6 linhas.
+  **A favor — e o lado forte é exatamente o acoplamento acima, que a primeira versão deste parágrafo
+  omitia:** o teto **desenfileiraria os probes**, porque o cancelamento libera o lock ao desenrolar;
+  um socket pendurado deixaria de segurar os outros. E devolveria um teto de resposta que o endpoint
+  nunca teve.
+  **Contra, e é por isso que não foi tomado:** ele converte "banco lento" em `503`, que é exatamente a
+  mentira "doente com o banco vivo" que este item existe para não contar — e sob `healthCheckPath`
+  essa mentira é o crash-loop. No caso **pendurado** ele não muda o que aquele probe devolve (nada,
+  dos dois jeitos — *presumindo que a sonda do Render tenha timeout próprio: isso é conhecimento de
+  plataforma, NÃO fato deste repositório; `render.yaml` declara o `healthCheckPath` e nenhum knob de
+  timeout*); no caso **lento** ele piora. Some a isso que cancelar uma operação do psycopg deixa a
+  conexão em estado que a documentação do psycopg manda descartar (*documentação, não fato deste
+  repositório* — mais handshakes justamente sob carga), e que o valor do teto teria de ser escolhido
+  sem a cadência de probe do Render, que ninguém mediu. **Não decidida aqui** —
   e o conserto certo provavelmente não é este: é `connect_timeout` no DSN mais `statement_timeout` por
   role, que valem para o processo inteiro (pulse, workers, sender penduram igual), não só para o
-  healthz. Registrado como achado próprio.
+  healthz — e que **já têm precedente escrito nesta casa**, em
+  `docs/OBSERVABILIDADE-PLANO-V3.md:250` (`ALTER ROLE grafana_ro SET statement_timeout = '10s'`,
+  obrigatório antes do primeiro painel). Registrado como achado próprio.
 
   **Ressalva sobre a mensagem do commit `beaf3074`, que é história e não se reescreve:** ela afirma
   que, sem o lock, o teste falha "lendo de um objeto que o primeiro acabou de fechar". **É forte
@@ -2211,6 +2220,13 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   sessões órfãs no pooler** — já sustenta o lock sozinho. A docstring de `server.py` e o relatório
   foram corrigidos; a mensagem do commit carrega a afirmação forte demais, e quem for lê-la depois
   deve ler este parágrafo junto.
+  *Nota do fix round 2, na direção oposta:* o mecanismo em si **não** era invenção. A re-review
+  montou harness com o lock removido e o escalonamento escolhido a dedo e o **reproduziu** —
+  `probe 0: RuntimeError('LEU DE c2, FECHADA POR OUTRO PROBE')`, com o probe A suspenso na leitura da
+  retentativa (que está fora do `try`) enquanto B reabre e fecha a conexão que ele segurava; com o
+  lock, os dois respondem. O que estava errado era atribuí-lo à mutação do teste vizinho, que não o
+  produz. Ele é alcançável em asyncio; **com que frequência ocorreria contra psycopg e um pooler de
+  verdade continua não medido.**
 
   **O que ficou sem prova executável.** Não há Postgres nesta máquina: `-m db` e `-m pipeline`
   penduram >10 min e **não foram executados** — em particular `tests/db/test_server.py`, o único lugar
@@ -3070,19 +3086,31 @@ você decidir se entram na fila.
   partida, no lugar mais caro para descobrir. *(descoberto no item 48, conferido no fix round 1)*
 
 - [ ] **Nenhuma conexão do runtime tem timeout — nem de conexão, nem de statement.**
-  `grep` por `connect_timeout` e `statement_timeout` em `runtime/src` dá **zero** — a única ocorrência
-  do repositório é o healthcheck do stack local (`runtime/docker-compose.yml:24`), que não é o
-  runtime. Os DSNs que dá para ler (`.env.piloto.example:8` e o `.env.piloto` local) não carregam
-  nenhum dos dois como parâmetro; o de produção mora no painel do Render e não foi conferido. Contra
-  um socket pendurado (pooler que para de responder sem fechar, blip de rede que
-  o TCP não percebe), todo caminho do processo espera indefinidamente: o `pulse`, os 2 workers, o
-  sender e o `/healthz`. Não é achado do item 48 — é anterior a ele —, mas **o item 48 o tornou
-  visível de um jeito novo:** o `/healthz` passou a ler por uma conexão só, sob lock, então um socket
-  pendurado agora enfileira TODOS os probes em vez de pendurar cada um por si. Visto de fora não muda
-  (o Render não recebe resposta dos dois jeitos), mas o acoplamento é novo e está registrado no item
-  48 com os dois lados. O conserto certo é de processo, não do healthz: `connect_timeout` no DSN mais
-  um `statement_timeout` por role, decididos com a cadência de probe do Render na mão — que ninguém
-  mediu. *(descoberto no item 48)*
+  **Nenhum código de `runtime/src` pede teto**, e a afirmação vai escrita assim de propósito: um
+  `grep` cru por `connect_timeout`/`statement_timeout` em `runtime/src` **não** dá mais zero, porque a
+  docstring de `HealthConnection` cita as duas palavras — o que se sustenta é o fato, não o comando.
+  O fato: nenhum DSN legível do repositório carrega o parâmetro (`.env.piloto.example:8` e o
+  `.env.piloto` local não carregam nenhum; o de produção mora no painel do Render e não foi
+  conferido), nenhum role do runtime tem `statement_timeout`, e o único `asyncio.wait_for` do processo
+  é o do parse HTTP do listener — **nenhum em caminho de banco**. As ocorrências versionadas de
+  timeout são **três**, e nenhuma alcança o runtime: `runtime/docker-compose.yml:24` e
+  `docs/superpowers/plans/2026-08-12-docker-local-db-runtime.md:74` são o mesmo healthcheck do stack
+  local, espelhado.
+  **A terceira é precedente, e é o que fortalece este achado:**
+  `docs/OBSERVABILIDADE-PLANO-V3.md:250` já manda `ALTER ROLE grafana_ro SET statement_timeout =
+  '10s'` — *"um painel nunca segura conexão"* —, entre os requisitos obrigatórios antes do primeiro
+  painel. **O padrão que este achado propõe já foi decidido e escrito nesta casa**, para o role de
+  leitura do Grafana; os roles do runtime, que seguram conexão de verdade, simplesmente nunca o
+  receberam.
+  Contra um socket pendurado (pooler que para de responder sem fechar, blip de rede que o TCP não
+  percebe), todo caminho do processo espera indefinidamente: o `pulse`, os 2 workers, o sender e o
+  `/healthz`. Não é achado do item 48 — é anterior a ele —, mas **o item 48 o tornou visível de um
+  jeito novo:** o `/healthz` passou a ler por uma conexão só, sob lock, então um socket pendurado
+  agora enfileira TODOS os probes em vez de pendurar cada um por si. O acoplamento é novo e está
+  registrado no item 48 com os dois lados. O conserto certo é de processo, não do healthz:
+  `connect_timeout` no DSN mais um `statement_timeout` por role — o mesmo desenho do `grafana_ro` —,
+  com os valores decididos com a cadência de probe do Render na mão, que ninguém mediu.
+  *(descoberto no item 48; precedente e contagem corrigidos no fix round 2)*
 
 ---
 
