@@ -45,17 +45,24 @@ def _functions(tree: ast.Module) -> list[ast.AsyncFunctionDef | ast.FunctionDef]
     ]
 
 
+def _called_name(node: ast.AST) -> str | None:
+    """O nome invocado por uma Call — atributo (`repo.load_x`) OU nome nu
+    (`load_x`). As duas formas existem em `server.py` (`:40` importa
+    `resolve_moments` por nome nu), então um detector que só olhe uma delas
+    enxerga metade do arquivo que guarda."""
+    if not isinstance(node, ast.Call):
+        return None
+    target = node.func
+    if isinstance(target, ast.Attribute):
+        return target.attr
+    if isinstance(target, ast.Name):
+        return target.id
+    return None
+
+
 def _calls(function: ast.AST, name: str) -> bool:
     """Se `name` é chamado em qualquer lugar do corpo — atributo ou nome nu."""
-    for node in ast.walk(function):
-        if not isinstance(node, ast.Call):
-            continue
-        target = node.func
-        if isinstance(target, ast.Attribute) and target.attr == name:
-            return True
-        if isinstance(target, ast.Name) and target.id == name:
-            return True
-    return False
+    return any(_called_name(node) == name for node in ast.walk(function))
 
 
 class TestTheListenerHasOneDoorToTheDatabase:
@@ -101,11 +108,10 @@ class TestTheListenerHasOneDoorToTheDatabase:
         inside = {id(node) for node in ast.walk(scoped)}
 
         strays = [
-            node.func.attr
+            name
             for node in ast.walk(preview)
-            if isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and node.func.attr.startswith("load_")
+            if (name := _called_name(node))
+            and name.startswith("load_")
             and id(node) not in inside
         ]
         assert strays == [], (

@@ -1609,7 +1609,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   **O dano era maior do que o item registrava.** Com o corpo que a UI de fato manda
   (`RadialView.tsx:59` posta `{}`), dois dos cinco blocos são fantasma (ESTADO e CONVERSA), o bloco
   CANAL sai com `window_open` sempre `True`, e o bloco AGENTE mentia em dois campos — enquanto
-  **quatro lugares** prometem por escrito "a MESMA `compile_prompt()` do turno" (`server.py:12-16`,
+  **quatro lugares** prometem por escrito "a MESMA `compile_prompt()` do turno" (`server.py:10-14`,
   `route.ts:7-9`, `RadialView.tsx:47-49`, `core/agentes-por-evento.md:402`). O que o lojista via:
   escolhia "discreta" ou "transparente" na aba Identidade da radial, clicava no núcleo e lia a linha
   do modo que **não** escolheu (`prompt_compiler.py:34-38`); ligava qualquer um dos cinco toggles de
@@ -1636,9 +1636,9 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   do bloco MISSÃO (`prompt_compiler.py:188`). O turno faz dois passos depois do `merge_mission`
   (`responder.py:518-519`, `toucher.py:272-273`); o preview fazia o merge e parava. Nenhum dado novo
   foi exigido: `load_active_moments(conn)` não pede organização (a RLS resolve), não pede agente,
-  não pede conversa e nem relógio — o `now()` é do banco (`repository/moments.py:29`).
+  não pede conversa e nem relógio — o `now()` é do banco (`repository/moments.py:30`).
   **A armadilha era o POSICIONAMENTO, não o `None`.** A conexão do listener é `autocommit=True`
-  (`server.py:104`) e `scope_to_organization` grava com `set_config(..., true)`
+  (`server.py:103`) e `scope_to_organization` grava com `set_config(..., true)`
   (`repository/scope.py:97-99`), que é `SET LOCAL`: um load escrito uma linha abaixo do
   `async with conn.transaction()` correria com `current_app_organization_id()` = NULL
   (`20260812000002:48-60`), a policy de `commercial_moments` (`20260813000005:162`) não casaria com
@@ -1647,9 +1647,18 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   comportamento pega isso, a garantia virou estrutural: uma terceira asserção por AST no fitness que
   já guarda a porta do listener, afirmando que toda leitura do `_preview` mora dentro da transação
   que escopa — conferida por mutação (mover o load uma linha para fora quebra o teste).
+  **A primeira versão dessa asserção enxergava metade do arquivo que guarda, e a review pegou.** O
+  detector filtrava `isinstance(node.func, ast.Attribute)`, então só via chamada qualificada
+  (`moments_repo.load_active_moments`); a MESMA fuga escrita com import de nome nu
+  (`from …repository.moments import load_active_moments`) passava verde. Não era estilo hipotético:
+  `server.py:40` já importa `resolve_moments`/`apply_moment_restrictions` por nome nu. O `_calls()`
+  do próprio arquivo já tratava os dois casos desde o item 1-ter-b — o conserto foi extrair
+  `_called_name()` e usá-lo nos dois lugares, o que **encurtou** o `_calls` de nove linhas para uma.
+  Refeita nas duas formas: mutante por atributo e mutante por nome nu, os dois agora devolvem
+  `strays == ['load_active_moments']`; com o detector antigo, o de nome nu devolvia `[]`.
   Sem momento no ar, **silêncio e nunca erro**: `resolve_moments` devolve `EMPTY_VIEW` para lista
-  vazia (`commerce/moments.py:57-58`) e `apply_moment_restrictions` devolve a missão intacta
-  (`:82-83`); sem missão ativa, nem isso — o bloco MISSÃO já é fantasma declarado, que é o que
+  vazia (`commerce/moments.py:58-59`) e `apply_moment_restrictions` devolve a missão intacta
+  (`:81-82`); sem missão ativa, nem isso — o bloco MISSÃO já é fantasma declarado, que é o que
   `mode="preview"` existe para tolerar (`prompt_compiler.py:298-301`), e `test_server.py:154-166`
   já afirma 200 nesse caso.
 
@@ -1705,18 +1714,31 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   **item 76** (três dos seus campos são de organização, não de conversa, e `core/agentes-por-evento.md:304`
   promete o bloco como feature). O campo `ghost` que `_serialize` devolve por bloco
   (`server.py:132`) e que a UI descarta — `PreviewBlock` (`RadialView.tsx:39`) nem o declara — virou
-  o **item 77**. E duas constantes com um valor só, `DEFAULT_EVENT` (`server.py:57`) e
+  o **item 77**. E duas constantes com um valor só, `DEFAULT_EVENT` (`server.py:55`) e
   `DISCOVERY_EVENT` (`mission_resolver.py:25`), ficam como cheiro registrado: o preview mostrar a
   missão de descoberta é o certo para uma conversa que não existe.
 
   **Fecha a lacuna "paridade preview↔turno" do item 63** — quem fechasse um fechava o outro.
 
   **Prova.** `pytest -m unit`: **1208 ✓ / 2 ✗ antes, 1214 ✓ / 2 ✗ depois** (as duas falhas são o
-  item 54, cp1252 no Windows, alheias). `ruff check .` com **10 erros antes e 10 depois** (os
-  pré-existentes do item 74, não consertados aqui de propósito) e `lint-imports` 3 contratos KEPT / 0
-  broken em ambos — inclusive "only the repository layer reaches the database", que a importação de
-  `commerce.moments` e `repository.moments` no listener não quebra. `tsc --noEmit` limpo depois da
-  linha de TSX. **Sem prova executável:** `tests/db/test_server.py` e
+  item 54, cp1252 no Windows, alheias). O "antes" foi **remedido em worktree sobre `8f2f3faa`** no
+  fix round 1, porque a review notou que a conta não fechava: o diff traz +5 testes escritos à mão
+  (4 em `test_agent_block_has_one_producer.py`, 1 em `test_listener_…`), e 1208 + 5 = 1213. O sexto
+  é gerado: `test_no_provider_network.py` parametriza sobre os arquivos de `tests/`, então **todo
+  arquivo de teste novo cria um caso a mais lá** (`…[unit/test_agent_block_has_one_producer.py]`,
+  confirmado por `diff` dos `--collect-only` das duas árvores). Os dois números estavam certos; o que
+  faltava era a reconciliação. `ruff check .` com **10 erros antes e 10 depois** (os pré-existentes
+  do item 74, não consertados aqui de propósito) e `lint-imports` 3 contratos KEPT / 0 broken em
+  ambos — mas **isso não é prova de que o `TYPE_CHECKING` do `prompt_compiler` segurou nada**: o
+  contrato "only the repository layer reaches the database" proíbe `psycopg` **direto**, tem
+  `allow_indirect_imports = "true"` (`pyproject.toml:157`) e já isenta `agents_runtime.server ->
+  psycopg` por nome (`:170`), então nem um import de `repository.agent` em tempo de execução dentro
+  do compilador o quebraria. O que de fato segura o par são duas coisas conferidas à mão: as
+  anotações da assinatura são **strings**, logo nada é avaliado em import time nem em call time; e
+  **não há ciclo** — `repository/agent.py` importa `agent_core.guards/media/prompt/think_gate` e
+  nunca `prompt_compiler`. O `TYPE_CHECKING` aqui é escolha de pureza, não quebra-ciclo, e é isso
+  que a docstring do código diz. `tsc --noEmit` limpo depois da linha de TSX.
+  **Sem prova executável:** `tests/db/test_server.py` e
   `tests/db/test_responder_agent_identity.py` **não foram executados** — `-m db` e `-m pipeline`
   penduram sem Postgres em vez de falhar. Ou seja, ninguém provou contra banco que o endpoint devolve
   a apresentação escolhida nem que a linha `Não fazer:` do momento chega ao bloco MISSÃO pelo HTTP; o
@@ -2152,8 +2174,15 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `_serialize` devolve `ghost` por bloco (`server.py:132`) porque a honestidade do frame depende
   disso; o `RadialView` renderiza `kind` + `text` e mais nada (`RadialView.tsx:151-156`), e o tipo
   `PreviewBlock` (`:39`) **nem declara o campo**. Efeito: um bloco fantasma sai na tela com a mesma
-  tipografia de um bloco real, e a única pista é a palavra "fantasma" no meio do texto corrido —
-  enquanto a folha tem uma classe `.ghost` pronta, usada nos fantasmas de fallback (`:158-164`).
+  tipografia de um bloco real, e a única pista é a palavra "fantasma" no meio do texto corrido.
+  **E é pior do que "a UI descarta o campo", achado do fix round 1 do item 45: a classe `.ghost` não
+  existe em CSS nenhum do repositório.** `grep` por `ghost` em `src/app/globals.css`,
+  `src/styles/agents-theme.css` e no resto do CSS só acha `.btn-ghost` (`agents-theme.css:75-76`,
+  `globals.css:163`), que é botão. Ou seja, o `className="ghost"` dos fantasmas de fallback
+  (`RadialView.tsx:158-164`) e o da linha nova do conhecimento (`:172-174`) **não pintam nada**: a
+  distinção visual entre fantasma e bloco real não foi perdida no `_serialize`, ela nunca existiu.
+  Consequência para quem pegar este item: não há "classe pronta para aplicar" — escrever a regra CSS
+  vem primeiro, e **como o fantasma aparece é decisão do dono da tela**, não conserto mecânico.
   Depois do item 45 isso pesa mais, não menos: dois dos cinco blocos são fantasma no uso real
   (ESTADO e CONVERSA), e os três restantes passaram a ser verdadeiros de verdade — misturar os dois
   registros na mesma tipografia é o que faz o lojista ler um esboço como se fosse o prompt.
