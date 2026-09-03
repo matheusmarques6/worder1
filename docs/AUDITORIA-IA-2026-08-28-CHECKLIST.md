@@ -1745,9 +1745,124 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   que está provado aqui é a função pura, o posicionamento do load e a contagem de produtores. O
   preview também **não foi visto na tela** (runtime não subiu, envs do item 62 não setadas).
 
-- [ ] **46. `expire_incentive_grants` sem `organization_id`** `[relatado]`
-  `20260813000011:88-111` — UPDATE sem a coluna líder do único índice, rodando a cada 1s
-  (`config.py:74`). Seq scan com lock, para sempre.
+- [x] **46. `expire_incentive_grants` varre a tabela inteira a cada segundo — faltava índice no
+  predicado do sweep** `[confirmado]` · commits `5d332706` · relatório `task-46-report.md`
+  **Toda citação de linha deste item está ancorada na BASE `d4cfecf4`** — a lição do item 44. Duas
+  citações do texto original estavam tortas por uma linha e vão corrigidas aqui: a função é
+  `20260813000011:88-110` (`:88` é o `create function`, `:110` é o `$$;`; `:111` é linha em branco e
+  `:112-113` são o `revoke`/`grant`), e a coluna `status` é `20260813000005:83-84`.
+
+  **O título antigo ("sem `organization_id`") descrevia um sintoma como se fosse a doença, e a
+  correção que ele sugeria seria regressão.** A função é cross-org **por desenho**, irmã exata de
+  `internal.sweep_outbox_unknown` (`20260812000004:431`) e do coalescer do item 09 — que o próprio
+  checklist descreve como "SECURITY DEFINER cross-org". Três provas: quem a chama é uma conexão só,
+  do processo sender, na qual `app.organization_id` **nunca** é setado (`app.py:231`); `sender_role`
+  **não tem grant nenhum sobre a tabela** — `20260813000005:149-150` concede `incentive_grants` a
+  `worker_role` e `authenticated`, e o único acesso do sender é o `grant execute` da RPC
+  (`20260813000011:113`), ou seja ele fisicamente não conseguiria escopar por org nem que quisesse;
+  e o `security definer` (`20260813000011:91`) existe justamente porque `sender_role` é
+  `nobypassrls` (`20260812000002:26`). Escopar exigiria o sender listar as orgs vivas e disparar N
+  chamadas por segundo, desmontando a atomicidade do CTE que grava grant e ledger na mesma
+  statement. **A correção é o índice**, e o padrão da casa já dizia isso: sweep cross-org ganha
+  índice sobre o predicado do sweep, sem organização — `message_outbox_claim_idx (status,
+  next_attempt_at)` (`20260812000003:107`), `conversations_pending_idx (pending_response_at)`
+  (`:63`). `incentive_grants` foi a tabela que ficou de fora do padrão.
+
+  **O fato, esse se confirma inteiro.** O predicado do sweep é `status = 'issued' and validity_until
+  <= now()` (`20260813000011:97-98`); `organization_id` só aparece no `returning` (`:99`) e no
+  insert do ledger (`:104`). O único índice composto da tabela é `incentive_grants_reuse_idx
+  (organization_id, contact_id, status, validity_until)` (`20260813000005:103-104`) — e a coluna
+  **líder** é a que o predicado não menciona. PG 17 (`supabase/config.toml:22`) não tem skip scan de
+  b-tree, que entrou no 18, então esse índice não pode servir de range aqui. A frequência também se
+  confirma: `sender_poll = 1s` (`config.py:74`), o sweep é o terceiro passo do housekeeping
+  (`queueing/sender.py:216-218`) que roda **antes** de reivindicar o lote, e o laço é
+  `sender_pass` + `sleep` (`app.py:236-239`), não timer de período fixo — teto de **86.400
+  varreduras/dia**, atingido justamente no caso **ocioso**, quando não há nada a fazer. A ironia:
+  quanto mais parado o sistema, mais vezes o scan inútil roda.
+
+  **Duas correções de gravidade no texto antigo, nas duas direções.** "Com lock" era **exagero**: o
+  `UPDATE` toma `ROW EXCLUSIVE`, que não conflita com `SELECT` nem com outro DML, e no caso ocioso
+  nenhuma tupla casa, logo nenhuma linha é travada. O que dói é CPU e churn de buffer, não
+  contenção — e exagero em achado de performance é o que faz o próximo leitor desconfiar do resto.
+  Já **"para sempre" é pior do que o texto sugeria**: não há purga, retenção nem arquivamento de
+  `incentive_grants` em migration alguma (linhas só saem por cascade de `organizations`/`contacts`,
+  isto é, no purge LGPD), então `consumed`, `expired` e `revoked` ficam na tabela para sempre e são
+  relidos 86.400×/dia para sempre. O custo é **O(histórico total de grants emitidos)**, não
+  O(grants vencendo agora). Hoje é **latente** — a tabela é presumivelmente minúscula, porque só o
+  offer_engine escreve nela e há reuso antes de emissão (`incentives.py:122-152`) mais
+  `idempotency_key` UNIQUE (`20260813000005:88-90`) — e vira ativo quando o volume subir.
+
+  **O conserto: um índice parcial, com a cláusula escrita literalmente igual à do predicado.**
+  `20260903000001_incentive_grants_expiry_sweep_idx.sql` — `on public.incentive_grants
+  (validity_until) where status = 'issued'`. `status` é `text` com CHECK (`20260813000005:83-84`),
+  não enum: sem cast, sem opclass exótica, e sem a armadilha do `upper()` que o item 50 tem. Com a
+  cláusula idêntica a uma das duas do `where` da função, a prova de implicação do planner cai no
+  caso trivial e sobra `validity_until` como range puro. Parcial **de propósito**: `'issued'` é o
+  estado transitório (toda linha acaba em `consumed`/`expired`/`revoked`, `20260813000005:83-84`) e
+  sai do índice na primeira transição, então o índice fica do tamanho dos grants **vivos** — é
+  exatamente isso que quebra o crescimento monotônico que é a causa real. As alternativas e por que
+  perdem: `(status, validity_until)` cheio cresce com o histórico inteiro e recria a causa;
+  `(status, validity_until) where status='issued'` é estritamente pior que a parcial, porque a
+  coluna líder é constante dentro do índice — bytes e comparação de graça.
+
+  **A justificativa do HOT, que é a parte que ninguém consegue refazer depois sem banco.** A objeção
+  correta ao índice parcial seria "ele mata o HOT update". Não mata: **o HOT já estava morto desde
+  13/08**. `status` **já** é coluna-chave de `incentive_grants_reuse_idx` (`20260813000005:104`), e
+  HOT exige que a nova versão da tupla não toque coluna alguma usada por índice — logo toda
+  transição de estado desta tabela (`issued`→`expired` em `20260813000011:96`, `issued`→`consumed`
+  em `:73-76`) **já é não-HOT hoje**, com ou sem o índice novo. O que o índice parcial acrescenta é
+  **uma** manutenção de entrada por *ciclo de vida* do grant — entra no insert (`status` nasce
+  `'issued'` por default, `20260813000005:83`) e sai na primeira transição —, não uma por UPDATE. A
+  troca é essa manutenção contra O(histórico) por passada, 86.400 passadas/dia: não é conta
+  apertada, é ordem de grandeza.
+
+  **Sem `to_regclass` e sem `CONCURRENTLY`, e o argumento é por negação.** `CONCURRENTLY` não cabe:
+  migration do Supabase roda em transação (`20260828000002:28-33`), e **nenhum** dos ~35
+  `create index` do stream o usa — é a regra da casa, não uma exceção. O guard `to_regclass` dos
+  itens 0a/42/43 existe para tabela do app **legado**, que nasce fora do baseline que o CI aplica, e
+  o motivo está escrito em `20260828000002:35-37`; `incentive_grants` nasce no próprio stream
+  versionado (`20260813000005:66`) e `grep` acha exatamente dois arquivos `.sql` que a mencionam, os
+  dois em `supabase/migrations/` — nada em `sql/`, nada em `_archive/`. Aqui o guard seria cargo
+  cult e, pior, transformaria em no-op silencioso a falha de uma migration irmã. Vale registrar a
+  fraqueza do argumento: **não existe neste repositório precedente positivo** de índice acrescentado
+  por migration posterior a tabela nascida no stream — todos os casos de "índice em migration
+  posterior" são tabelas legadas. O que sustenta a decisão é a ausência do motivo do guard, não um
+  caso igual.
+
+  **O custo de deploy, que é a única coisa que alguém sente:** `CREATE INDEX` não-concurrent toma
+  `SHARE`, que **conflita** com o `ROW EXCLUSIVE` do sweep de 1s e com o consumo de cupom
+  (`20260813000011:73-76`). Aplicar a migration com o runtime de pé faz a criação entrar na fila de
+  lock e segurar as escritas que chegarem atrás dela. Sub-segundo no tamanho de hoje, e não é motivo
+  para `CONCURRENTLY`.
+
+  **A alternativa mais barata, registrada e NÃO tomada.** O sweep não tem requisito de latência:
+  `find_reusable_grant` (`incentives.py:141`) e `valid_grants_for_contact` (`:167`) já filtram
+  `validity_until > now()` **em SQL**, então grant vencido nunca vaza para a boca do agente
+  independentemente do `status` gravado; e `grep` por `'expired'` em `runtime/src` acha **um único
+  hit, numa docstring** (`engine.py:258`) — nada no runtime lê esse estado, e o app Next não toca a
+  tabela. O único consumidor real é a linha do ledger no bloco ESTADO do prompt
+  (`incentives.py:212-227`, chamado em `responder.py:337`). Rodar o sweep a cada 60 passadas em vez
+  de a cada uma cortaria o scan **60×, com zero DDL**. **Não foi feito, e não deve ser feito de
+  carona**: com o índice, a frequência deixa de importar para o scan, e o throttle é mudança de
+  comportamento visível (atrasa a linha do ledger em até 60s) que quebraria
+  `test_the_sender_housekeeping_expires_without_a_human`
+  (`tests/db/test_grant_lifecycle.py:148-170`), o qual assere o efeito **na primeira** `sender_pass`
+  — um teste que ninguém pode rodar nesta máquina para confirmar o conserto.
+
+  **Sem prova executável — nenhum `EXPLAIN` foi rodado, nem antes nem depois.** Não há Postgres
+  nesta máquina. Que hoje é seq scan é **inferência** (predicado sem a coluna líder do único índice
+  composto, `20260813000005:104`, mais a ausência de skip scan de b-tree no PG 17,
+  `supabase/config.toml:22`); que o índice novo **será** usado é inferência da regra de implicação
+  de predicado parcial — sólida porque a cláusula é idêntica, mas leitura, não medição. Sob backlog
+  grande (quase todo grant vivo já vencido) o planner pode preferir seq scan, o que estaria certo,
+  porque aí há trabalho real; não se sabe em qual seletividade ele vira. **Nenhum teste mudou**: a
+  cobertura é `tests/db/test_grant_lifecycle.py:148-182`, marcada `db` e fora do `-m unit`
+  (`pyproject.toml:51`), e índice não muda resultado, só plano — `-m db` e `-m pipeline` penduram
+  >10 min sem Postgres e não foram executados. `ruff` e `lint-imports` **não se aplicam** a um
+  commit de `.sql` mais markdown; não foram rodados por ritual. **O tamanho real da tabela em
+  produção continua desconhecido** — zero seeds, zero medições no repo. Um
+  `select status, count(*) from public.incentive_grants group by status` num banco vivo converte
+  todo o parágrafo do custo de inferência em fato.
 
 - [ ] **47. `mark_outbox_sent` descarta o retorno** `[relatado]`
   `queueing/sender.py:224` — `false` significa "a mensagem saiu no WhatsApp e o banco não registrou".
@@ -1773,6 +1888,15 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `whatsapp_cloud_conversations (organization_id, wa_id)` (até 3× por envio), `whatsapp_opt_status`
   (nenhum índice em migration alguma), `incentive_grants.coupon_code`, e `lower(email)` em
   `shopify_orders` (o índice criado é sobre `email` puro, `20260815000001:54`).
+  **O índice de `coupon_code` tem de ser FUNCIONAL em `upper(coupon_code)`, composto com
+  `organization_id` na liderança** — nota do item 46. O predicado real é
+  `where g.organization_id = p_organization_id and upper(g.coupon_code) = upper(trim(p_coupon_code))`
+  (`20260813000011:49-50`, em `public.consume_incentive_grant`): um índice sobre `coupon_code` puro
+  **não serve**, e seria exatamente o mesmo erro que este item já aponta duas linhas acima em
+  `lower(email)` vs `shopify_orders.email`. O `trim` do lado direito não afeta a forma do índice, só
+  o valor buscado. O índice do sweep de expiração (`incentive_grants_expiry_sweep_idx`) é do item
+  46 e já está aplicado — os dois são sobre a mesma tabela, com predicados e funções diferentes, e
+  não conflitam.
 
 - [ ] **51. Corridas remanescentes** `[relatado]`
   (a) Toque reentregue pela DLQ duplica — `worker.py:226` usa o `msg_id` do pgmq na chave, e
@@ -2190,6 +2314,39 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   (`AGENT`, `MISSION`) **depois de apagar** o cabeçalho em português que o compilador escreveu
   (`# AGENTE`, `# MISSÃO` — `prompt_compiler.py:143`, `:171`). Uma linha de mapa ou parar de apagar
   o cabeçalho resolve. Ambos são diff de TSX, sem runtime.
+
+- [ ] **78. Todo o housekeeping do banco vive dentro da task do canal — sem `AGENTS_CHANNEL`, os
+  três passos morrem juntos** `[relatado]` · *(descoberto no item 46)*
+  `app.py:230` — `if channel is not None:` é o que cria a task `sender`, e é dentro dela que roda o
+  bloco de housekeeping inteiro (`queueing/sender.py:216-218`): `sweep_outbox_unknown`,
+  `review_stale_unknown` e `expire_incentive_grants`. Num deploy sem canal, **nenhum dos três roda**
+  — não é só a expiração de grants, que foi como o achado apareceu. O cheiro fica mais nítido assim:
+  expiração de grant é housekeeping de banco e não tem nada a ver com existir um adapter de canal;
+  está acoplada a ele só por morar na mesma task, e o comentário que justifica o acoplamento
+  (`app.py:227-229`) fala do **envio** ("a sender with nowhere to send would either spin or lie"),
+  não do housekeeping.
+  **Força do achado — latente em produção, real por contrato na bancada.** O blueprint de produção
+  **fixa** o canal: `render.yaml:34-35` põe `AGENTS_CHANNEL:
+  agents_runtime.channels.cloud_api:from_env` como valor literal no repositório, ao lado de
+  `DEPLOY_ENV: production` (`:43-44`) — não é `sync: false` e não depende de alguém lembrar. E o
+  modo **sem** canal não é caminho de teste: é a **bancada**, um modo de deploy real com
+  `.env.example` próprio e seção no DEPLOY.md, onde a ausência é **contrato escrito**
+  (`runtime/.env.bancada.example:4` — "CONTRATO: este modo NÃO tem AGENTS_CHANNEL";
+  `runtime/DEPLOY.md:59` — "nunca adicionar `AGENTS_CHANNEL` ao `.env.bancada`"). A ausência é
+  estado válido por desenho, em contraste deliberado com `AGENTS_RESPONDER`, que `raise` se faltar
+  (`__main__.py:37-38` escreve o contraste; `:48-53` é o `raise`; `_channel_from_env` em `:60-61`).
+  Por isso nasce `[relatado]` e não `[confirmado]`: **não há deploy de produção nesse estado**, e
+  dizer o contrário seria mentira.
+  **O que se perde de fato, para calibrar a gravidade:** nenhum grant vencido vaza para o cliente em
+  modo algum — `find_reusable_grant` (`repository/incentives.py:141`) e `valid_grants_for_contact`
+  (`:167`) filtram `validity_until > now()` em SQL. O prejuízo é a **história**: numa bancada
+  rodando sobre espelho de dados reais, grants vencidos ficam presos em `'issued'` para sempre, o
+  ledger fica sem as entradas `'expired'`, e as linhas `sending` de um sender morto nunca viram
+  `unknown` nem sobem para revisão humana. O estado do espelho diverge do que o mesmo banco teria em
+  produção — justamente no modo cujo propósito é observar o comportamento real com segurança.
+  **Não decidido aqui:** se a saída é mover os três passos para uma task própria que não dependa de
+  canal, se é aceitar o acoplamento e documentá-lo no `.env.bancada.example`, ou se a bancada
+  simplesmente não deve se importar. É decisão de quem é dono do runtime, não conserto mecânico.
 
 ---
 
