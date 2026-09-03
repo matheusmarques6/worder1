@@ -73,10 +73,10 @@ from agents_runtime.agent_core.mission_resolver import (
     merge_mission,
 )
 from agents_runtime.agent_core.prompt_compiler import (
-    AgentBlock,
     ChannelBlock,
     ConversationBlock,
     StateBlock,
+    agent_block,
     compile_prompt,
 )
 from agents_runtime.agent_core.providers import NoOrgLlmKey, resolve_agent_llm, scoped_agent_llm
@@ -561,24 +561,12 @@ def build_responder(
                     knowledge_limit,
                 )
 
-                persona = version.persona or {}
-                language = str(persona.get("language") or settings.primary_language)
-                agent_block = AgentBlock(
-                    agent_id=str(version.agent_id or version.id),
-                    name=version.name,
-                    tone=str(persona.get("tone") or "friendly"),
-                    language=language,
-                    # 10.4: as colunas que a radial escreve, lidas de verdade.
-                    presentation_mode=version.presentation_mode,
-                    guidelines=tuple(persona.get("guidelines") or ()),
-                    adaptation=version.adaptation_flags,
-                    base_instructions=version.base_prompt or "",
-                )
+                agent = agent_block(version, settings)
                 window_open = True
                 if state.last_inbound_at is not None:
                     window_open = clock.now() - state.last_inbound_at < timedelta(hours=24)
                 compiled = compile_prompt(
-                    agent=agent_block,
+                    agent=agent,
                     mission=resolved,
                     state=StateBlock(
                         moment_ids=tuple(str(m) for m in moment_view.moment_ids),
@@ -637,7 +625,11 @@ def build_responder(
                 context = JudgeContext(
                     conversation=tuple(f"{message.author}: {message.text}" for message in pending),
                     knowledge=tuple(knowledge),
-                    language=language,
+                    # A língua do juiz é a MESMA do bloco do agente — lida de
+                    # volta dele, não recalculada: duas cópias da fórmula
+                    # `persona["language"] or settings.primary_language` são o
+                    # fóssil que este item existe para matar.
+                    language=agent.language,
                     never_say_ai=True,
                 )
 

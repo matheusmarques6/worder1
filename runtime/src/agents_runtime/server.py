@@ -31,10 +31,10 @@ import psycopg
 
 from agents_runtime.agent_core.mission_resolver import merge_mission
 from agents_runtime.agent_core.prompt_compiler import (
-    AgentBlock,
     ChannelBlock,
     CompiledPrompt,
     ConversationBlock,
+    agent_block,
     compile_prompt,
 )
 from agents_runtime.repository import agent as agent_repo
@@ -162,18 +162,13 @@ async def _preview(dsn: str, *, set_role: str | None, body: dict[str, Any]) -> b
         if mission is not None
         else None
     )
-    persona = version.persona or {}
     compiled = compile_prompt(
-        agent=AgentBlock(
-            agent_id=str(version.agent_id or version.id),
-            name=version.name,
-            tone=str(persona.get("tone") or "friendly"),
-            language=str(persona.get("language") or settings.primary_language),
-            presentation_mode="nome_funcao",
-            guidelines=tuple(persona.get("guidelines") or ()),
-            adaptation=(),
-            base_instructions=version.base_prompt or "",
-        ),
+        # Item 45: o preview montava o bloco do agente à mão e ficou dois
+        # commits atrás do turno — `presentation_mode` era o literal
+        # "nome_funcao" e `adaptation` era `()`. O lojista via no preview a
+        # linha de apresentação que não escolheu e nunca via os toggles de
+        # adaptação. Agora é a mesma função que o turno chama.
+        agent=agent_block(version, settings),
         mission=resolved,
         state=None,
         channel=ChannelBlock(

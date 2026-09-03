@@ -40,10 +40,10 @@ from agents_runtime.agent_core.mission_resolver import (
     merge_mission,
 )
 from agents_runtime.agent_core.prompt_compiler import (
-    AgentBlock,
     ChannelBlock,
     ConversationBlock,
     StateBlock,
+    agent_block,
     compile_prompt,
 )
 from agents_runtime.agent_core.providers import (
@@ -351,24 +351,13 @@ def build_toucher(
                     # Negado ou provedor caído: o toque segue SEM benefício — a
                     # negativa já é ledger, e prometer sem cupom seria mentira.
 
-                persona = version.persona or {}
-                language = str(persona.get("language") or settings.primary_language)
+                agent = agent_block(version, settings)
                 window_open = (
                     state.last_inbound_at is not None
                     and clock.now() - state.last_inbound_at < timedelta(hours=24)
                 )
                 compiled = compile_prompt(
-                    agent=AgentBlock(
-                        agent_id=str(version.agent_id or version.id),
-                        name=version.name,
-                        tone=str(persona.get("tone") or "friendly"),
-                        language=language,
-                        # 10.4: mesmas colunas da radial no toque outbound.
-                        presentation_mode=version.presentation_mode,
-                        guidelines=tuple(persona.get("guidelines") or ()),
-                        adaptation=version.adaptation_flags,
-                        base_instructions=version.base_prompt or "",
-                    ),
+                    agent=agent,
                     # Item 44: o toque NÃO passa `tools=` ao modelo — o dinheiro
                     # dele já virou cupom antes da geração e entra no prompt
                     # como FATO (`grant_lines` acima). Mas `resolved.tools` é a
@@ -424,7 +413,9 @@ def build_toucher(
                 context = JudgeContext(
                     conversation=tuple(f"{m.author}: {m.text}" for m in transcript[-5:]),
                     knowledge=(),
-                    language=language,
+                    # Lida de volta do bloco do agente, não recalculada — uma
+                    # fórmula só para a língua em todo o runtime (item 45).
+                    language=agent.language,
                     never_say_ai=True,
                 )
                 conversation = _as_chat(transcript)

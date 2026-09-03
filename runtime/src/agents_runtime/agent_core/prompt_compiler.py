@@ -21,10 +21,18 @@ relógio, sem I/O, sem LLM — momento e ledger chegam resolvidos no StateBlock.
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from agents_runtime.agent_core.media import is_store_media_line
 from agents_runtime.agent_core.mission_resolver import ResolvedMission
 from agents_runtime.agent_core.think_gate import PendingMessage
+
+if TYPE_CHECKING:  # pragma: no cover
+    # Só para a assinatura de `agent_block()`. Importar `repository.agent` em
+    # tempo de execução ataria este módulo — que se anuncia puro, sem I/O — ao
+    # schema do banco. Sob TYPE_CHECKING o nome existe para o type checker e
+    # some do import graph.
+    from agents_runtime.repository.agent import ActiveVersion, TenantSettings
 
 AI_DISCLOSURE_LINE = (
     "Se perguntarem se você é uma IA ou um robô, confirme com naturalidade — "
@@ -62,6 +70,41 @@ class AgentBlock:
     guidelines: tuple[str, ...]
     adaptation: tuple[str, ...]
     base_instructions: str = ""
+
+
+def agent_block(version: "ActiveVersion", settings: "TenantSettings") -> AgentBlock:
+    """O ÚNICO produtor de `AgentBlock` no runtime (item 45).
+
+    Eram três construções da mesma dataclass de sete campos obrigatórios —
+    `responder.respond`, `toucher.touch` e o `_preview` do listener — e a do
+    preview ficou para trás: nasceu (`d4fbc23a`) quando as colunas
+    `presentation_mode` e `client_adaptation` ainda não existiam, e o commit que
+    ensinou o turno a lê-las (`4a009997`, seis horas depois) não passou por
+    `server.py`. Resultado para o lojista: ele escolhia "discreta" na aba
+    Identidade da radial, clicava no núcleo para ver o prompt e lia a linha do
+    modo que NÃO tinha escolhido; os cinco toggles de adaptação não apareciam
+    nunca, o que faz o toggle parecer quebrado.
+
+    Vinte e uma oportunidades de divergência calada (três sites, sete campos
+    obrigatórios cada) viram uma.
+    Errar uma chamada de aridade 2 é `TypeError` na hora; errar uma das três
+    cópias era um prompt errado que passava na suíte inteira. A fitness
+    `test_agent_block_has_one_producer.py` afirma que continua sendo um lugar
+    só — a função pura sozinha não impede um quarto site de nascer à mão, que é
+    exatamente como este bug nasceu.
+    """
+    persona = version.persona or {}
+    return AgentBlock(
+        agent_id=str(version.agent_id or version.id),
+        name=version.name,
+        tone=str(persona.get("tone") or "friendly"),
+        language=str(persona.get("language") or settings.primary_language),
+        # 10.4: as colunas que a radial escreve, lidas de verdade.
+        presentation_mode=version.presentation_mode,
+        guidelines=tuple(persona.get("guidelines") or ()),
+        adaptation=version.adaptation_flags,
+        base_instructions=version.base_prompt or "",
+    )
 
 
 @dataclass(frozen=True)
