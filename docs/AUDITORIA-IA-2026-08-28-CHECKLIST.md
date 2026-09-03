@@ -1815,6 +1815,21 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `'issued'` por default, `20260813000005:83`) e sai na primeira transição —, não uma por UPDATE. A
   troca é essa manutenção contra O(histórico) por passada, 86.400 passadas/dia: não é conta
   apertada, é ordem de grandeza.
+  **E o argumento é mais forte do que isso, em três pontos que o review achou e que ficam escritos
+  aqui porque ninguém consegue refazê-los depois sem banco.** (1) Não é só `status`:
+  `validity_until`, a coluna-**chave** do índice novo, **também já é chave** do `reuse_idx` (quarta
+  posição, `20260813000005:104`). As duas colunas que o índice novo torna hot-blocking já eram
+  hot-blocking desde 13/08 — ele acrescenta **zero** atributos ao conjunto que bloqueia HOT. (2)
+  **Nenhum caminho do repositório grava `'issued'` por UPDATE**: os dois únicos writes de `status`
+  são `'expired'` (`20260813000011:96`) e `'consumed'` (`:75`), e `'issued'` só chega à linha pelo
+  `default` da coluna (`20260813000005:83`). Logo **entrar no índice parcial é sempre INSERT**, e
+  INSERT não tem HOT a perder — HOT é propriedade de `heap_update`. A frase "entra no insert e sai
+  na primeira transição" é literal, não aproximação. (3) Há um **terceiro** caminho de UPDATE nesta
+  tabela, e ele confirma a tese em vez de ameaçá-la: `record_coupon_code`
+  (`repository/incentives.py:198-209`) grava `coupon_code` numa linha que está **dentro** do índice
+  parcial, e `coupon_code` não é chave nem predicado de índice algum — esse UPDATE é HOT-elegível
+  **antes e depois** deste commit. É a única escrita frequente da tabela que ainda podia ser HOT, e
+  ela continua podendo.
 
   **Sem `to_regclass` e sem `CONCURRENTLY`, e o argumento é por negação.** `CONCURRENTLY` não cabe:
   migration do Supabase roda em transação (`20260828000002:28-33`), e **nenhum** dos ~35
@@ -2328,7 +2343,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   **Força do achado — latente em produção, real por contrato na bancada.** O blueprint de produção
   **fixa** o canal: `render.yaml:34-35` põe `AGENTS_CHANNEL:
   agents_runtime.channels.cloud_api:from_env` como valor literal no repositório, ao lado de
-  `DEPLOY_ENV: production` (`:43-44`) — não é `sync: false` e não depende de alguém lembrar. E o
+  `DEPLOY_ENV: production` (`:44-45`) — não é `sync: false` e não depende de alguém lembrar. E o
   modo **sem** canal não é caminho de teste: é a **bancada**, um modo de deploy real com
   `.env.example` próprio e seção no DEPLOY.md, onde a ausência é **contrato escrito**
   (`runtime/.env.bancada.example:4` — "CONTRATO: este modo NÃO tem AGENTS_CHANNEL";
