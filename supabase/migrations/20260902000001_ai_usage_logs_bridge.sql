@@ -52,8 +52,49 @@ alter table internal.llm_calls
 -- --------------------------------------------------------------------------
 -- 2. O worker passa a escrever também em ai_usage_logs (a trilha do
 --    lojista) — hoje só o service-role TS grava lá.
+--
+--    Item 49, ruling E — por que este `grant` virou bloco guardado, e por que
+--    esta migration foi editada NO LUGAR em vez de corrigida por uma migration
+--    nova. `ai_usage_logs` NÃO nasce em `supabase/migrations/`: não há um
+--    `create table` sequer para ela no stream inteiro, a tabela vem de setup
+--    fora de banda. E `grant` não aceita `IF EXISTS` — sobre relação
+--    inexistente o Postgres levanta `42P01` e o `supabase start` do CI
+--    (`.github/workflows/runtime.yml:99`, job `tests-db`, que é BLOQUEANTE:
+--    o cabeçalho `:5-6` ainda diz "informativo/continue-on-error", mas essa
+--    chave não existe mais no arquivo) aborta AQUI, em `000001`, antes de
+--    qualquer migration posterior rodar. Uma migration nova não alcança um
+--    erro que acontece antes dela: por isso o conserto tinha de ser neste
+--    arquivo.
+--
+--    Editar migration já commitada é normalmente proibido — o histórico de
+--    quem já aplicou passa a divergir do texto. Aqui não há esse histórico:
+--    este arquivo entrou em `3e2a4462` e NUNCA foi empurrado nem aplicado
+--    (`git branch -r --contains 3e2a4462` volta vazio; a branch está 122
+--    commits à frente do origin; o último run de CI, 2026-09-01, foi sobre
+--    `f0196638`, anterior a ele). Nenhuma base em lugar nenhum tem esta
+--    migration aplicada — corrigir no lugar é reescrever texto que ninguém
+--    leu ainda.
+--
+--    Molde: o mesmo `to_regclass('public.ai_usage_logs')` que
+--    `20260902000003:75-79` (item 42) já usa sobre esta mesma tabela. Numa
+--    base sem ela, a subida do banco deixa de morrer e só emite aviso. O que
+--    isso NÃO conserta: o trigger do passo 3 continua sendo criado, e um
+--    `insert` em `internal.llm_calls` numa base sem `ai_usage_logs` continua
+--    falhando dentro do corpo da função — falha de execução, não de DDL, e é
+--    o comportamento correto (gravar chamada sem espelhá-la esconderia gasto
+--    do lojista). O guard só impede que a AUSÊNCIA da tabela derrube a
+--    montagem do schema.
 -- --------------------------------------------------------------------------
-grant insert on public.ai_usage_logs to worker_role;
+do $guard$
+begin
+    if to_regclass('public.ai_usage_logs') is null then
+        raise notice 'ai_usage_logs ausente — pulando grant de insert para worker_role (item 37, guardado pelo item 49)';
+        return;
+    end if;
+
+    grant insert on public.ai_usage_logs to worker_role;
+end
+$guard$;
 
 -- --------------------------------------------------------------------------
 -- 3. O espelho: uma linha em internal.llm_calls concluída vira uma linha em
