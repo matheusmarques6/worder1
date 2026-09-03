@@ -2253,17 +2253,137 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   confirmado por mutação na revisão. Quem prende a vida da conexão são os testes de comportamento, não
   a fitness; a cobertura é das duas juntas.
 
-- [ ] **49. RPCs fora do stream versionado** `[confirmado]`
+- [x] **49. RPCs fora do stream versionado** `[confirmado]` · commits `004788fd` (guarda o `grant` que
+  derrubaria o CI), `ade5ceda` (promove a RPC), `f903a43c` (tira os três silêncios)
+  **Todas as citações deste item estão ancoradas em `2c7a3909`**, o HEAD no despacho.
+
+  **O item encolheu de seis funções para UMA promoção.** O texto original listava
   `get_active_agent_for_conversation`, `check_agent_cooldown`,
-  `count_agent_messages_in_conversation` não estão em `supabase/migrations/`. Há definições em `sql/`,
-  fora do que o CI aplica — inclusive **três variantes de `get_active_agent_for_conversation` com shapes
-  diferentes**. Mais `update_agent_stats`, `increment_agent_conversations` e `ai_monthly_cost_usd` só em
-  `migrations-archive/`.
-  **`search_agent_knowledge` saiu daqui — promovida pelo item 43**
-  (`20260902000004_search_agent_knowledge_org_scoped.sql`), escopada por `organization_id` além de
-  `agent_id`. As quatro definições antigas em `sql/` (nenhuma escopada por organização, uma delas com
-  `GRANT` para `authenticated` sem `SECURITY DEFINER` nem RLS que sustente isso) ficaram registradas
-  como achado de segurança separado no item 70.
+  `count_agent_messages_in_conversation`, `update_agent_stats`, `increment_agent_conversations` e
+  `ai_monthly_cost_usd`. Quase todo o trabalho deste item foi decidir o que **não** promover:
+
+  - **`get_active_agent_for_conversation` — promovida**, em
+    `supabase/migrations/20260903000002_get_active_agent_for_conversation_versioned.sql`. Era a única
+    com chamador de produção viva: `cloud-runner.ts:428` (o motor legado do canal Cloud, que decide se
+    o agente responde) e `conversation-ai-status.ts:157` (o badge "Bot Ativo/Off" do cabeçalho do
+    chat). **Promover não é copiar** — nenhuma das três variantes de `sql/` entrou como está: a de
+    `sql/ai-agents-rpc-functions.sql:12-52` é `SECURITY DEFINER` **sem `search_path` fixo**
+    (sequestrável), e as de `sql/ai-agents-functions.sql:100-139` e
+    `sql/ai-agents-stored-procedures.sql:47-85` dão `GRANT ... TO authenticated` (`:236`, `:323`)
+    **sem `SECURITY DEFINER`** sobre uma `ai_agents` que nasce **sem RLS** no stream — enumeração
+    cross-tenant da configuração de agente; registrado no item 70, que já é o balde desse formato.
+    Nenhuma das três fazia `REVOKE ... FROM PUBLIC`, então o `GRANT ... TO service_role` da primeira
+    não restringia nada, só somava. **Este item NÃO é o item 43 no ponto do escopo:** as três já
+    filtravam `organization_id`, e o predicado de seleção foi preservado palavra por palavra.
+    A versão promovida é `SECURITY DEFINER` + `SET search_path = public` + `REVOKE` de
+    `PUBLIC`/`anon`/`authenticated` + `GRANT` só `service_role`, dentro de bloco guardado por
+    `to_regclass('public.ai_agents')`, no molde de `20260902000004` (item 43).
+    **Assinatura promovida, que é contrato de PostgREST e não estilo:**
+    `get_active_agent_for_conversation(p_organization_id uuid, p_channel_id uuid DEFAULT NULL,
+    p_pipeline_stage_id uuid DEFAULT NULL) RETURNS TABLE (agent_id uuid, agent_name text)`. Os cinco
+    chamadores passam os três parâmetros **por nome** (`cloud-runner.ts:430-432`,
+    `conversation-ai-status.ts:158-160`, `test/route.ts:517-519`, `test/webhook/route.ts:351-353`,
+    `whatsapp-integration.ts:70-72`) — renomear um quebraria as cinco **sem erro de compilação**.
+    O `RETURNS` encolheu para a interseção consumida: nenhum dos cinco lê `priority`, `provider` ou
+    `model` (os vivos buscam o agente completo em `ai_agents` logo depois, e é de lá que
+    `provider`/`model` saem). Encolher exigiu `DROP FUNCTION IF EXISTS ...(uuid, uuid, uuid)` antes do
+    `CREATE`, e **um `DROP` só cobre as três** — mesma lista de tipos, `DROP` casa por tipo e ignora
+    `DEFAULT`.
+    **`service_role` sozinho não quebra rota nenhuma:** os cinco são server-side com service role,
+    conferido **por import**, não por pasta — quatro usam `supabaseAdmin`, o quinto
+    (`whatsapp-integration.ts:68`) usa `getSupabase()`, wrapper de uma linha de `getSupabaseAdmin`;
+    `src/lib/supabase-admin.ts:40,49` monta o cliente com `SUPABASE_SERVICE_ROLE_KEY` e `:18-24`
+    **lança se importado no browser**. Zero Edge Function, zero componente de cliente, zero Python
+    (o runtime resolve o agente com SQL inline em `repository/agent.py:117-134`).
+    **Não há tipagem gerada neste repositório** — `supabaseAdmin` é `SupabaseClient` sem genérico
+    `Database` (`supabase-admin.ts:66`), zero `createClient<Database>` em `src/`, sem `Functions` em
+    `src/lib/supabase.ts`: `.rpc()` devolve `any`. É isso que torna o encolhimento do shape seguro
+    **e** o que faria um erro passar batido — a prova aqui é a leitura dos cinco consumos, não o `tsc`.
+
+  - **`check_agent_cooldown` e `count_agent_messages_in_conversation` — lixo, e a decisão foi tomada
+    agora em vez de esperar o item 58.** Chamador único (`whatsapp-integration.ts:95,108`), no arquivo
+    de 250 linhas que o **item 58** apaga, atrás de uma rota de debug
+    (`api/ai/test/webhook/route.ts:366`) que responde 404 sem `DEBUG_ENDPOINT_SECRET` desde o fix
+    round 1 do item 43. O próprio repositório já as declarou legadas por escrito
+    (`supabase/migrations-archive/whatsapp-cloud-ai-enable.sql:7-14`: *"não servem para o canal
+    Cloud"*), substituídas por helpers TS (`cloud-runner.ts:500-556`) e Python
+    (`guards.py:191,307`). E escopá-las por organização é **insanável hoje**: as variantes que leem
+    `whatsapp_messages` batem numa tabela **sem coluna `organization_id`**, e as que leem
+    `ai_usage_logs` batem numa tabela que **o stream não cria**. Versionar agora seria versionar para
+    o item 58 apagar. **Divergência de comportamento registrada de passagem:**
+    `sql/ai-agents-rpc-functions.sql:61-102` lê `cooldown_after_transfer` para uma variável em
+    `:74-78` e **nunca a usa** — essa variante não checa cooldown nenhum, só um intervalo fixo de 5 s.
+    Não é divergência de estilo, é de o que a função responde.
+
+  - **`update_agent_stats` e `increment_agent_conversations` — não entram: são território do item
+    67.** Promovê-las versionaria capacidade que o motor novo não usa — nenhum arquivo em `runtime/`
+    chama qualquer uma das duas, então para org migrada os contadores continuam congelados com ou sem
+    migration. **O silêncio delas, esse, entrou** (ver abaixo).
+
+  - **`ai_monthly_cost_usd` — já promovida pelo item 42**
+    (`20260902000003_ai_usage_logs_cost_usd_unknown.sql:102-125`), com `organization_id` no `WHERE`,
+    `SECURITY DEFINER`, `search_path` fixo, `REVOKE` dos três papéis e `GRANT` só `service_role`.
+    A frase original deste item, que a listava como pendente em `migrations-archive/`, estava
+    **obsoleta** e foi corrigida aqui.
+
+  - **`search_agent_knowledge` — promovida pelo item 43**
+    (`20260902000004_search_agent_knowledge_org_scoped.sql`), escopada por `organization_id` além de
+    `agent_id`; as quatro definições antigas de `sql/` ficaram no item 70.
+
+  **Os três silêncios (commit `f903a43c`) — é isso que explica por que ninguém percebeu que as RPCs
+  sumiram.** `.rpc()` do supabase-js **resolve** com `{error}` em vez de lançar, e os três estavam
+  escritos como se lançasse: (1) `conversation-ai-status.ts:157` descartava `error` e devolvia
+  `no_active_agent` — erro virando **diagnóstico plausível e errado**, o badge afirmando ao lojista
+  "nenhum agente ativo" quando a verdade era "a consulta falhou"; agora `throw`, que cai no `catch`
+  da rota (`.../ai-status/route.ts:53-59`, 500) e faz o badge pintar `unknown`
+  (`bot-badge.ts:22-28`), o estado "não sei" do item 37 — **sem `AiBlockerReason` novo**, porque
+  "a consulta falhou" não é motivo de bloqueio e um nono membro na união arrastaria labels, detail,
+  teste e UI. (2) `cloud-sender.ts:370-377` era a repetição **literal** do defeito de `rag.ts`: um
+  `try/catch` que nunca disparava e um `console.warn` que nunca saía, com `total_conversations`
+  parando em silêncio absoluto. (3) `engine.ts:449-458` — **o fallback fica** (perde dado incompleto,
+  não errado: não grava `avg_response_time_ms`, que é por que os dashboards mostravam latência 0,
+  `20260613_agent_stats_rpcs.sql:4-9`); o que faltava era o erro aparecer.
+  **Consequência a registrar, porque é por desenho e não regressão:** como as duas de estatística
+  **não** foram promovidas, em base montada só do stream os avisos de (2) e (3) são **recorrentes** —
+  (3) a cada resposta de agente, (2) a cada primeira resposta por conversa. Está escrito nos três
+  comentários para ninguém "consertar" o log de volta para o silêncio.
+  **Achado que só apareceu ao tirar o silêncio:** o dublê de `@/lib/supabase-admin` em
+  `cloud-sender.test.ts` **não tinha `rpc`**, e o `try/catch` morto engolia o
+  `TypeError: supabaseAdmin.rpc is not a function` exatamente como engoliria um erro real — quatro
+  testes de "envia normalmente" atravessavam a chamada estourando, verdes. O dublê ganhou `rpc`.
+
+  **Achado do ruling E — o mais urgente do item, e não era sobre promoção (commit `004788fd`).**
+  `supabase/migrations/20260902000001_ai_usage_logs_bridge.sql:56` fazia
+  `grant insert on public.ai_usage_logs to worker_role` **fora de qualquer bloco guardado**, e
+  `ai_usage_logs` **não nasce em `supabase/migrations/`** (não há um `create table` para ela no stream
+  inteiro). `grant` não aceita `IF EXISTS`: sobre relação inexistente o Postgres levanta `42P01` e o
+  `supabase start` do job `tests-db` (`.github/workflows/runtime.yml:99`) aborta. **O primeiro `git
+  push` desta branch derrubaria o CI.**
+  **Por que ainda não apareceu, e o que isso significa para o resto da fila:** o CI **nunca viu** essa
+  migration. O último run de `runtime.yml` foi em **2026-09-01**, sobre `f0196638`; a migration entrou
+  em `3e2a4462`; e a branch local está **122 commits à frente do origin**
+  (`git branch -r --contains 3e2a4462` volta vazio). **Nenhuma migration da família `20260902*` — as
+  dos itens 37, 42 e 43 — nem a `20260903*` jamais foi aplicada por CI algum: a fila inteira desta
+  auditoria está sem prova de que as migrations sequer aplicam.**
+  **Por que o conserto editou `000001` no lugar, em vez de vir numa migration nova:** a falha
+  acontece **em** `000001`, antes de qualquer migration posterior rodar — migration nova não alcança
+  um erro anterior a ela. Editar migration já commitada normalmente é proibido porque o estado de
+  quem já aplicou passa a divergir do texto; aqui não existe esse histórico (nunca empurrada, nunca
+  aplicada, sem Postgres onde pudesse ter sido), então é reescrever texto que ninguém leu. A linha
+  virou bloco `to_regclass('public.ai_usage_logs')`, molde de `20260902000003:75-79`.
+  **Nota de leitura:** o cabeçalho de `runtime.yml:5-6` ainda diz que `tests-db` é
+  "INFORMATIVO (continue-on-error)" — está **obsoleto**; o bloco do job (`:79-83`) diz bloqueante e
+  não existe chave `continue-on-error` no arquivo. Ninguém deve se apoiar no cabeçalho.
+
+  **Ruling F — sem Postgres nesta máquina: nenhuma das duas migrations foi aplicada nem testada, só
+  lidas por inspeção** (mesmo impedimento dos itens 42, 43, 45 e 46). A suíte que importa aqui é a do
+  TS: `npx vitest run` **antes** 1319 testes / 1312 verdes / 4 falhas pré-existentes e alheias
+  (3 de timezone em `reports-utils`, 1 de fixture de PDF em `file-extractor.integration`);
+  **depois** 1321 / 1314 / as **mesmas 4**, nenhuma nova. `npx tsc --noEmit` limpo antes e depois.
+  Python não foi tocado (`pytest -m db`/`-m pipeline` penduram >10 min sem banco e não foram rodados);
+  a única prova Python conferida foi `runtime/tests/unit/test_ai_usage_logs_bridge.py` (8 verdes),
+  porque ele lê o texto de `000001` e a edição do ruling E podia quebrá-lo. Detalhe completo em
+  `task-49-report.md`.
 
 - [ ] **50. Índices faltantes nos predicados quentes** `[relatado]`
   `whatsapp_cloud_conversations (organization_id, wa_id)` (até 3× por envio), `whatsapp_opt_status`
@@ -2414,7 +2534,12 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `update_agent_stats(p_agent_id, p_tokens, p_response_time)` e
   `increment_agent_conversations(p_agent_id)` são funções SQL definidas só em
   `supabase/migrations-archive/20260613_agent_stats_rpcs.sql` — fora do que o CI aplica, mesmo achado
-  do item 49 — e atualizam `ai_agents.total_messages`, `.total_tokens_used`, `.avg_response_time_ms`
+  do item 49, **e o item 49 decidiu deliberadamente NÃO promovê-las**: versioná-las entregaria
+  capacidade que o motor novo não usa (nenhum arquivo em `runtime/` chama qualquer uma das duas), sem
+  mover uma linha do que este item pede. O que o item 49 fez foi **tornar a ausência audível** — os
+  dois chamadores agora logam quando a RPC falha, em vez de degradar em silêncio; em base montada só
+  do stream esse aviso é recorrente, por desenho. Elas atualizam
+  `ai_agents.total_messages`, `.total_tokens_used`, `.avg_response_time_ms`
   e `.total_conversations`. Hoje só têm um chamador cada, e é sempre o motor TS:
   `update_agent_stats` só em `src/lib/ai/engine.ts:443`; `increment_agent_conversations` só em
   `src/lib/ai/cloud-sender.ts:371`. Nenhum arquivo em `runtime/` chama qualquer um dos dois. O
@@ -2527,6 +2652,30 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `authenticated`, o buraco pode seguir aberto na base viva até essa migration ser aplicada lá, ou até
   alguém confirmar e revogar manualmente. YAGNI: não criar script de reconciliação de produção sem um
   dono definindo se/quando as migrations promovidas nesta auditoria são aplicadas fora do CI.
+
+  **Acrescentado pelo item 49 — o mesmo formato, em `get_active_agent_for_conversation`.** Duas das
+  três variantes fora do stream dão `GRANT EXECUTE ... TO authenticated`
+  (`sql/ai-agents-functions.sql:236`, `sql/ai-agents-stored-procedures.sql:323`) **sem
+  `SECURITY DEFINER`**, e `public.ai_agents` também nasce **sem RLS** neste stream (a tabela é criada
+  em `20260812000001_agents_baseline_prereqs.sql:653-672`; não há `enable row level security` nem
+  `create policy` sobre ela em migration alguma — só em `migrations-archive/001_enable_rls.sql`). Se
+  uma dessas duas foi a aplicada em produção, qualquer usuário autenticado chama a função passando o
+  `p_organization_id` que quiser e recebe `agent_id`/`agent_name` (e, na variante de
+  `ai-agents-functions.sql`, também `provider` e `model`) do agente ativo de **qualquer** organização
+  — não é leitura de conteúdo de conhecimento como acima, é **enumeração cross-tenant da configuração
+  de agente**. A terceira variante (`sql/ai-agents-rpc-functions.sql:12-52`) é `SECURITY DEFINER`
+  **sem `SET search_path`**, e nenhuma das três faz `REVOKE ... FROM PUBLIC`.
+  **Pior, e é escrita, não leitura:** `sql/ai-agents-functions.sql:235` dá `authenticated` a
+  `update_agent_stats` (`:62-94`, também sem `SECURITY DEFINER`), que faz `UPDATE ai_agents` — um
+  usuário autenticado que soubesse um `agent_id` alheio inflaria `total_messages`/`total_tokens_used`
+  de outra loja. Não vaza dado; corrompe contador, e corromperia dinheiro se algum dia houver cobrança
+  ou alerta em cima dele.
+  O item 49 promoveu a versão correta de `get_active_agent_for_conversation`
+  (`20260903000002_get_active_agent_for_conversation_versioned.sql`, com `DROP FUNCTION IF EXISTS`
+  das três) e isso fecha o stream — **mas, exatamente como acima, o que está em `sql/` continua lá e
+  pode ter sido aplicado em produção fora deste repositório.** Mesma conclusão e mesmo YAGNI: sem um
+  dono definindo se/quando essas migrations são aplicadas fora do CI, não se inventa script de
+  reconciliação.
 
 - [ ] **71. `/api/debug` — a décima terceira rota de debug, com o mesmo fail-open que o item 43
   fechou nas outras doze, e leitura cross-tenant sem sessão** `[confirmado]` ·
