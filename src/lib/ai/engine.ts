@@ -448,10 +448,14 @@ export class AIAgentEngine {
 
       // Se RPC não existe, fazer update manual (best-effort, sem .catch() inválido)
       //
-      // Item 49, ruling D: o fallback FICA — ele perde dado incompleto, não
-      // errado (não grava `avg_response_time_ms`), e apagá-lo antes de a RPC
-      // existir no stream trocaria "degradado" por "quebrado", que é a lição
-      // do item 43. O que faltava era o erro APARECER: sem este log, a
+      // Item 49, ruling D: o fallback FICA, mas ele é pior do que "incompleto".
+      // Não grava `avg_response_time_ms` E é read-modify-write — o `+ 1` logo
+      // abaixo soma sobre o valor lido em memória, sem `set x = x + n`, então
+      // sob concorrência ele PERDE atualizações e o contador fica errado, não
+      // só defasado. É a corrida que o archive `20260613_agent_stats_rpcs.sql:6`
+      // nomeia. Fica mesmo assim porque é o degradado que já existia, e apagá-lo
+      // antes de a RPC existir no stream trocaria "degradado" por "quebrado",
+      // que é a lição do item 43. O que faltava era o erro APARECER: sem este log, a
       // latência média do card do agente é 0 permanente e ninguém distingue
       // "0 real" de "0 porque a RPC não existe" — o archive
       // `20260613_agent_stats_rpcs.sql:4-9` diz com todas as letras que era

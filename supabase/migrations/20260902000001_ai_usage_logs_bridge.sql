@@ -69,9 +69,9 @@ alter table internal.llm_calls
 --    Editar migration já commitada é normalmente proibido — o histórico de
 --    quem já aplicou passa a divergir do texto. Aqui não há esse histórico:
 --    este arquivo entrou em `3e2a4462` e NUNCA foi empurrado nem aplicado
---    (`git branch -r --contains 3e2a4462` volta vazio; a branch está 122
---    commits à frente do origin; o último run de CI, 2026-09-01, foi sobre
---    `f0196638`, anterior a ele). Nenhuma base em lugar nenhum tem esta
+--    (`git branch -r --contains 3e2a4462` volta vazio; a branch local está
+--    à frente do origin, que parou em `f0196638`, de 2026-09-01, anterior a
+--    ele). Nenhuma base em lugar nenhum tem esta
 --    migration aplicada — corrigir no lugar é reescrever texto que ninguém
 --    leu ainda.
 --

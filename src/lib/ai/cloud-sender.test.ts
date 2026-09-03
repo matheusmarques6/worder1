@@ -24,12 +24,14 @@ vi.mock('@/lib/whatsapp/account-loader', () => ({
   getAccessToken: () => 'tok',
 }))
 
-// `rpc` faltava neste dublê e o teste passava assim mesmo: o `try/catch` morto
-// que envolvia `increment_agent_conversations` (item 49, ruling D) engolia o
-// `TypeError: supabaseAdmin.rpc is not a function` do mesmo jeito que engoliria
-// um erro real da RPC. Quatro testes de "envia normalmente" atravessavam a
-// chamada estourando, sem que ninguém visse. Tirado o silêncio, o dublê tem de
-// oferecer o que o cliente de produção sempre teve.
+// `rpc` faltava neste dublê e quatro testes de "envia normalmente" passavam
+// assim mesmo, com a chamada de `increment_agent_conversations` estourando.
+// O que o `try/catch` morto (item 49, ruling D) apagava não era o erro — era a
+// DIFERENÇA entre os dois modos de falha: um erro real da RPC não passa pelo
+// `catch` (`.rpc()` resolve com `{error}`, é a premissa do item) e não imprimia
+// nada; o `TypeError` passava e imprimia um warn indistinguível do warn de uma
+// RPC caída. Não era silêncio, era ruído que ninguém leu. Tirado o silêncio, o
+// dublê tem de oferecer o que o cliente de produção sempre teve.
 vi.mock('@/lib/supabase-admin', () => ({
   supabaseAdmin: {
     from: vi.fn(() => ({

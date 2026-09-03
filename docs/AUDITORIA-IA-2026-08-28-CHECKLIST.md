@@ -2281,7 +2281,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
     **Assinatura promovida, que é contrato de PostgREST e não estilo:**
     `get_active_agent_for_conversation(p_organization_id uuid, p_channel_id uuid DEFAULT NULL,
     p_pipeline_stage_id uuid DEFAULT NULL) RETURNS TABLE (agent_id uuid, agent_name text)`. Os cinco
-    chamadores passam os três parâmetros **por nome** (`cloud-runner.ts:430-432`,
+    chamadores passam os três parâmetros **por nome** (`cloud-runner.ts:431-433`,
     `conversation-ai-status.ts:158-160`, `test/route.ts:517-519`, `test/webhook/route.ts:351-353`,
     `whatsapp-integration.ts:70-72`) — renomear um quebraria as cinco **sem erro de compilação**.
     O `RETURNS` encolheu para a interseção consumida: nenhum dos cinco lê `priority`, `provider` ou
@@ -2312,7 +2312,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
     `ai_usage_logs` batem numa tabela que **o stream não cria**. Versionar agora seria versionar para
     o item 58 apagar. **Divergência de comportamento registrada de passagem:**
     `sql/ai-agents-rpc-functions.sql:61-102` lê `cooldown_after_transfer` para uma variável em
-    `:74-78` e **nunca a usa** — essa variante não checa cooldown nenhum, só um intervalo fixo de 5 s.
+    `:75-79` e **nunca a usa** — essa variante não checa cooldown nenhum, só um intervalo fixo de 5 s.
     Não é divergência de estilo, é de o que a função responde.
 
   - **`update_agent_stats` e `increment_agent_conversations` — não entram: são território do item
@@ -2340,17 +2340,35 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   "a consulta falhou" não é motivo de bloqueio e um nono membro na união arrastaria labels, detail,
   teste e UI. (2) `cloud-sender.ts:370-377` era a repetição **literal** do defeito de `rag.ts`: um
   `try/catch` que nunca disparava e um `console.warn` que nunca saía, com `total_conversations`
-  parando em silêncio absoluto. (3) `engine.ts:449-458` — **o fallback fica** (perde dado incompleto,
-  não errado: não grava `avg_response_time_ms`, que é por que os dashboards mostravam latência 0,
-  `20260613_agent_stats_rpcs.sql:4-9`); o que faltava era o erro aparecer.
+  parando em silêncio absoluto. (3) `engine.ts:449-458` — **o fallback fica, mas ele é pior que
+  "incompleto"**: além de não gravar `avg_response_time_ms` (que é por que os dashboards mostravam
+  latência 0), ele é **read-modify-write** — `engine.ts:472-473` soma `this.agent.total_messages + 1`
+  sobre o valor lido em memória, sem `set x = x + n` —, então sob concorrência ele **perde
+  atualizações e o contador fica errado**, não só defasado. O archive nomeia a corrida com todas as
+  letras (`20260613_agent_stats_rpcs.sql:6`: *"O fallback e read-modify-write (race)"*). Fica assim
+  mesmo porque é o degradado que já existia, e apagá-lo antes de a RPC existir troca degradado por
+  quebrado; o que faltava era o erro aparecer.
+  **Correção do fix round:** a versão anterior deste item, o comentário de `engine.ts` e a mensagem
+  de `f903a43c` diziam *"perde dado incompleto, não errado"* — contradito pela própria faixa que
+  citavam. A decisão de manter o fallback continua certa; a razão declarada estava errada, e a
+  mensagem de commit não pode ser reescrita, então fica corrigida aqui.
   **Consequência a registrar, porque é por desenho e não regressão:** como as duas de estatística
   **não** foram promovidas, em base montada só do stream os avisos de (2) e (3) são **recorrentes** —
   (3) a cada resposta de agente, (2) a cada primeira resposta por conversa. Está escrito nos três
   comentários para ninguém "consertar" o log de volta para o silêncio.
   **Achado que só apareceu ao tirar o silêncio:** o dublê de `@/lib/supabase-admin` em
-  `cloud-sender.test.ts` **não tinha `rpc`**, e o `try/catch` morto engolia o
-  `TypeError: supabaseAdmin.rpc is not a function` exatamente como engoliria um erro real — quatro
-  testes de "envia normalmente" atravessavam a chamada estourando, verdes. O dublê ganhou `rpc`.
+  `cloud-sender.test.ts` **não tinha `rpc`**, e quatro testes de "envia normalmente" atravessavam a
+  chamada estourando, verdes. O dublê ganhou `rpc`.
+  **O que o `catch` morto realmente apagava não era o erro, era a diferença entre dois modos de
+  falha** (corrigido no fix round, e verificado por mutação nos dois sentidos pela revisão da
+  execução): um erro real da RPC **não** passa pelo `catch` — `.rpc()` resolve com `{error}`, que é a
+  premissa deste item inteiro — e não imprimia nada; o `TypeError` **passava** e imprimia. Rodando a
+  suíte antes de `f903a43c`: **10 verdes**, com quatro `[cloud-sender] increment_agent_conversations
+  falhou (best-effort): ...rpc is not a function` em stderr. Depois de `f903a43c`, com o dublê ainda
+  sem `rpc`: **4 falhas**. Ou seja, não era silêncio — era um warn indistinguível do warn de uma RPC
+  caída, saindo em toda rodada de CI que passou por esse arquivo, e que ninguém leu. A versão
+  anterior deste item e o comentário do teste diziam "exatamente como engoliria um erro real" e "sem
+  que ninguém visse": os dois estavam invertidos.
 
   **Achado do ruling E — o mais urgente do item, e não era sobre promoção (commit `004788fd`).**
   `supabase/migrations/20260902000001_ai_usage_logs_bridge.sql:56` fazia
@@ -2384,6 +2402,16 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   a única prova Python conferida foi `runtime/tests/unit/test_ai_usage_logs_bridge.py` (8 verdes),
   porque ele lê o texto de `000001` e a edição do ruling E podia quebrá-lo. Detalhe completo em
   `task-49-report.md`.
+
+  **Nota de processo, válida para a fila inteira e não só para este item:**
+  `.superpowers/sdd/.gitignore` é uma linha, `*` — **toda a árvore de artefatos desta auditoria é
+  ignorada pelo git**. Recon, brief, revisão de plano, relatório e revisão de execução de todos os
+  itens nunca apareceram em `git status`, `git log` ou diff nenhum, e **nenhum deles jamais foi ou
+  poderia ter sido commitado**. Consequência prática: "o relatório não foi escrito" é um **falso
+  negativo estrutural** — quem revisar pelo diff tem de listar o diretório na mão. Este item quase
+  foi fechado sob essa premissa errada (o `task-49-report.md`, 281 linhas, existia o tempo todo).
+  **É por isso que o que precisa sobreviver vai neste checklist**, que é versionado; os artefatos
+  em `.superpowers/sdd/` são material de trabalho, não registro.
 
 - [ ] **50. Índices faltantes nos predicados quentes** `[relatado]`
   `whatsapp_cloud_conversations (organization_id, wa_id)` (até 3× por envio), `whatsapp_opt_status`
@@ -2542,7 +2570,9 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `ai_agents.total_messages`, `.total_tokens_used`, `.avg_response_time_ms`
   e `.total_conversations`. Hoje só têm um chamador cada, e é sempre o motor TS:
   `update_agent_stats` só em `src/lib/ai/engine.ts:443`; `increment_agent_conversations` só em
-  `src/lib/ai/cloud-sender.ts:371`. Nenhum arquivo em `runtime/` chama qualquer um dos dois. O
+  `src/lib/ai/cloud-sender.ts:384` (era `:371` antes de `f903a43c`; **este item não declara âncora**,
+  e as duas citações desta linha se movem a cada edição de `cloud-sender.ts`).
+  Nenhum arquivo em `runtime/` chama qualquer um dos dois. O
   carimbo de `ai_agent_id` tem o mesmo buraco: em `whatsapp_cloud_messages` só é gravado pelo motor
   TS (`cloud-sender.ts:333,362`); em `whatsapp_cloud_conversations`, só pela rota manual
   `[id]/bot` (toggle humano). A função que o runtime usa para espelhar cada envio,
