@@ -73,7 +73,14 @@ class TestTheDraft:
             _job(org, thread, delta={"objective": "lembrar do frete grátis de hoje"})
         )
 
-        assert draft.content == {"text": "Oi Joana! Vi que ficou um tênis no seu carrinho."}
+        # Item 44: o `humanize` entrou aqui — o toque passou a carregar as flags
+        # de entrega da loja, como o responder já fazia (a forma é a mesma de
+        # `test_responder_tool_loop.py`). A igualdade exata fica de propósito:
+        # é ela que percebe uma chave a mais ou a menos indo para a outbox.
+        assert draft.content == {
+            "text": "Oi Joana! Vi que ficou um tênis no seu carrinho.",
+            "humanize": {"split": True, "rhythm": True},
+        }
         assert draft.mission_version_id is not None
         system = llm.asked[0].messages[0].content
         assert "lembrar do frete grátis de hoje" in system  # o delta venceu

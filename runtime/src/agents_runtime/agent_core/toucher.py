@@ -57,6 +57,7 @@ from agents_runtime.agent_core.responder import (
     _as_chat,
     _metered,
     default_turn_llm_call_limit,
+    delivery_flags,
     transfer_to_human,
 )
 from agents_runtime.clock import Clock, SystemClock
@@ -506,8 +507,16 @@ def build_toucher(
                     )
                     return TouchDraft(None, (), mission_version_id)
 
+                # As flags de entrega viajam COM o envio, como no responder: o
+                # `content` do rascunho vira `payload` da outbox, e o sender lê
+                # `humanize` de lá (`queueing/sender.py`). Sem elas o toque caía
+                # no default LIGADO — o lojista desligava "dividir em bolhas" e
+                # "ritmo de digitação" na órbita → Adaptação → Entrega, valia
+                # nas respostas e era ignorado nos toques. Configuração salva
+                # que não faz nada é pior que configuração ausente (item 30).
+                split, rhythm = delivery_flags(version.settings)
                 return TouchDraft(
-                    content={"text": outcome.draft},
+                    content={"text": outcome.draft, "humanize": {"split": split, "rhythm": rhythm}},
                     moment_ids=moment_view.moment_ids,
                     mission_version_id=mission_version_id,
                 )
