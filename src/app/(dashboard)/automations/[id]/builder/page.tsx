@@ -105,10 +105,15 @@ export default function AutomationBuilderPage() {
         automationId={automation.id}
         automationName={automation.name}
         automationStatus={automation.status}
+        automationStoreId={automation.store_id || undefined}
         initialNodes={automation.nodes || []}
         initialEdges={automation.edges || []}
         onSave={handleSave}
         onBack={handleBack}
+        // Sem organizationId os selects dependentes de org (lojas,
+        // listas, pipelines, popups) ficavam vazios nesta rota — o
+        // overlay de /automations sempre passou; aqui faltava.
+        organizationId={automation.organization_id || undefined}
       />
     </div>
   )

@@ -119,6 +119,12 @@ function getNodeSummary(nodeType: string, config: Record<string, any>): string |
       return config?.tagName || null;
     case 'control_exit':
       return config?.reason ? `Sair: ${config.reason}` : 'Contato sai do fluxo';
+    // O card do gatilho mostra QUAL popup/formulário foi escolhido —
+    // sem isso o lojista só descobre abrindo o painel de config.
+    case 'trigger_popup_subscribed':
+      return config?.form_id ? `Popup: ${config.form_name || config.form_id}` : 'Qualquer popup';
+    case 'trigger_form_submitted':
+      return config?.form_id ? `Formulário: ${config.form_name || config.form_id}` : 'Qualquer formulário';
     default:
       return null;
   }

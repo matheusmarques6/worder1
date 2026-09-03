@@ -259,7 +259,7 @@ export function FlowBuilder({
           {/* Left panel: Sidebar OR Properties Panel (Klaviyo style) */}
           {!isFullscreen && (
             showPropertiesPanel ? (
-              <PropertiesPanel organizationId={organizationId} automationId={savedAutomationId} />
+              <PropertiesPanel organizationId={organizationId} automationId={savedAutomationId} storeId={automationStoreId} />
             ) : (
               <Sidebar />
             )

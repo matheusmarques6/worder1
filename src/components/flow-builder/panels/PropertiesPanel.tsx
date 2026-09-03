@@ -28,7 +28,7 @@ interface Pipeline {
 // PROPERTIES PANEL
 // ============================================
 
-export function PropertiesPanel({ organizationId, automationId }: { organizationId?: string; automationId?: string }) {
+export function PropertiesPanel({ organizationId, automationId, storeId }: { organizationId?: string; automationId?: string; storeId?: string }) {
   const selectedNode = useSelectedNode();
   const selectNode = useFlowStore((state) => state.selectNode);
   const updateNode = useFlowStore((state) => state.updateNode);
@@ -561,6 +561,22 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                   />
                 </div>
               </>
+            )}
+
+            {/* ============================== */}
+            {/* TRIGGER: POPUP SUBSCRIBED / FORM SUBMITTED */}
+            {/* Seletor de popup/formulário (estilo Omnisend: o gatilho */}
+            {/* de inscrição filtra por formulário de origem). O motor  */}
+            {/* já lê trigger_config.form_id — faltava a UI gravar.     */}
+            {/* ============================== */}
+            {(selectedNode.data.nodeType === 'trigger_popup_subscribed' ||
+              selectedNode.data.nodeType === 'trigger_form_submitted') && (
+              <FormTriggerConfig
+                config={selectedNode.data.config || {}}
+                onUpdate={handleUpdate}
+                storeId={storeId}
+                popupOnly={selectedNode.data.nodeType === 'trigger_popup_subscribed'}
+              />
             )}
 
             {/* ============================== */}
@@ -1724,6 +1740,118 @@ function FilterConditionsEditor({
             Adicione pelo menos uma condição para o filtro funcionar
           </p>
         </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================
+// FORM/POPUP TRIGGER CONFIG
+// Seletor "de qual popup/formulário" pros gatilhos de inscrição —
+// mesmo modelo da Omnisend (trigger de signup filtra pelo formulário
+// de origem). Grava trigger_config.form_id (a chave que o dispatcher
+// compara no submit) + form_name pro resumo do nó. Vazio = qualquer.
+// ============================================
+
+// Mesmo gate do runtime (submit/route.ts): só estes form_types disparam
+// trigger_popup_subscribed.
+const VISUAL_POPUP_TYPES = ['popup', 'flyout', 'banner', 'fullpage'];
+
+interface FormTriggerConfigProps {
+  config: Record<string, any>;
+  onUpdate: (key: string, value: any) => void;
+  storeId?: string;
+  popupOnly: boolean;
+}
+
+function FormTriggerConfig({ config, onUpdate, storeId, popupOnly }: FormTriggerConfigProps) {
+  const [forms, setForms] = useState<{ id: string; name: string; form_type: string; status: string }[]>([]);
+  const [loadingForms, setLoadingForms] = useState(false);
+  const [formsError, setFormsError] = useState(false);
+
+  const noun = popupOnly ? 'popup' : 'formulário';
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoadingForms(true);
+      setFormsError(false);
+      try {
+        // Sem storeId o endpoint devolve só os globais (store_id null) —
+        // comportamento correto: popups de outra loja não devem aparecer.
+        const qs = storeId ? `?storeId=${encodeURIComponent(storeId)}` : '';
+        const res = await fetch(`/api/forms${qs}`, { cache: 'no-store' });
+        if (!res.ok) { if (!cancelled) setFormsError(true); return; }
+        const data = await res.json();
+        const list = (data.forms || []).filter((f: any) =>
+          popupOnly ? VISUAL_POPUP_TYPES.includes(f.form_type) : true
+        );
+        if (!cancelled) setForms(list);
+      } catch {
+        if (!cancelled) setFormsError(true);
+      } finally {
+        if (!cancelled) setLoadingForms(false);
+      }
+    })();
+    return () => { cancelled = true };
+  }, [storeId, popupOnly]);
+
+  // Popup escolhido antes e apagado/da outra loja: manter selecionável
+  // pra não trocar silenciosamente o gatilho pra "qualquer" ao abrir.
+  const selectedMissing = config.form_id && !forms.some((f) => f.id === config.form_id);
+
+  return (
+    <div className="space-y-2">
+      <label className="text-xs text-gray-500">
+        {popupOnly ? 'Qual popup dispara esta automação' : 'Qual formulário dispara esta automação'}
+      </label>
+      <div className="relative">
+        <select
+          value={config.form_id || ''}
+          onChange={(e) => {
+            const id = e.target.value;
+            const f = forms.find((x) => x.id === id);
+            // Uma escrita só: handleUpdate faz merge por chave e duas
+            // chamadas seguidas usam snapshots distintos sem problema,
+            // mas o par form_id/form_name deve ficar sempre consistente.
+            onUpdate('form_id', id || null);
+            onUpdate('form_name', f?.name || null);
+          }}
+          disabled={loadingForms}
+          className={cn(
+            'w-full px-3 py-2 rounded-lg appearance-none',
+            'bg-white border border-gray-200',
+            'text-sm text-gray-700',
+            'focus:outline-none focus:border-blue-500/50',
+            'disabled:opacity-50'
+          )}
+        >
+          <option value="">{popupOnly ? 'Qualquer popup' : 'Qualquer formulário'}</option>
+          {selectedMissing && (
+            <option value={config.form_id}>
+              {config.form_name ? `${config.form_name} (não encontrado)` : `(${noun} removido)`}
+            </option>
+          )}
+          {forms.map((f) => (
+            <option key={f.id} value={f.id}>
+              {f.name || f.id}{f.status !== 'published' ? ' (rascunho)' : ''}
+            </option>
+          ))}
+        </select>
+        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+      </div>
+      {formsError ? (
+        <p className="text-[10px] text-red-500">Erro ao carregar {noun}s</p>
+      ) : loadingForms ? (
+        <p className="text-[10px] text-gray-400">Carregando {noun}s…</p>
+      ) : forms.length === 0 && !selectedMissing ? (
+        <p className="text-[10px] text-gray-400">
+          Nenhum {noun} encontrado nesta loja — crie um em Formulários &amp; Popups.
+        </p>
+      ) : (
+        <p className="text-[10px] text-gray-400">
+          Escolha um {noun} específico ou deixe &quot;Qualquer&quot; para disparar com todos
+        </p>
       )}
     </div>
   );
