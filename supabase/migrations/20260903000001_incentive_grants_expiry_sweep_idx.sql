@@ -1,0 +1,81 @@
+-- ============================================================================
+-- Índice parcial para o sweep de expiração de grants — item 46 da auditoria
+-- de 28/08.
+--
+-- O achado: internal.expire_incentive_grants() (20260813000011:88-110) varre
+-- public.incentive_grants inteira a cada passada do housekeeping do sender
+-- (queueing/sender.py:218, sender_poll = 1s em config.py:74) — teto de 86.400
+-- varreduras por dia, e o teto é atingido justamente no caso OCIOSO, quando o
+-- outbox está vazio e a passada não tem mais nada a fazer. O predicado do
+-- sweep é `status = 'issued' and validity_until <= now()`
+-- (20260813000011:97-98), e o único índice composto da tabela é
+-- incentive_grants_reuse_idx (organization_id, contact_id, status,
+-- validity_until) — 20260813000005:103-104 — cuja coluna LÍDER,
+-- organization_id, não aparece no predicado. PG 17 (supabase/config.toml:22)
+-- não tem skip scan de b-tree (entrou no 18), então o índice existente não
+-- serve como range para esse predicado e sobra o seq scan.
+--
+-- O que dói de verdade não é lock: o UPDATE toma ROW EXCLUSIVE, que não
+-- conflita com SELECT nem com outro DML, e no caso ocioso nenhuma tupla casa,
+-- logo nenhuma linha é travada. O que dói é CPU e churn de buffer — e o custo
+-- é O(histórico total de grants), não O(grants vencendo): a tabela não tem
+-- purga, retenção nem arquivamento em migration alguma, então 'consumed',
+-- 'expired' e 'revoked' ficam nela para sempre e são relidos para sempre.
+--
+-- POR QUE PARCIAL EM status = 'issued', e não (status, validity_until) cheio:
+-- 'issued' é o estado transitório — toda linha acaba em consumed/expired/
+-- revoked (20260813000005:83-84) e SAI do índice. O índice fica do tamanho dos
+-- grants VIVOS, não do histórico, o que quebra exatamente o crescimento
+-- monotônico que é a causa real do item; um índice cheio cresceria junto com a
+-- tabela e recriaria o problema. A forma (status, validity_until) where
+-- status='issued' é estritamente pior que esta: a coluna líder seria constante
+-- dentro do índice — bytes e comparação de graça.
+--
+-- A cláusula é escrita LITERALMENTE igual a uma das duas do where da função:
+-- mesmo operador, mesmo literal minúsculo entre aspas simples, mesma coluna.
+-- status é `text` com CHECK (20260813000005:83-84), não enum — sem cast, sem
+-- opclass exótica, sem a armadilha do upper() que o item 50 tem. Com a
+-- cláusula idêntica, a prova de implicação do planner cai no caso trivial e
+-- sobra validity_until como range puro. Nada de `status::text`, nada de
+-- `status in ('issued')`, nada de alias: qualquer enfeite muda a árvore que
+-- essa prova compara.
+--
+-- Custo na escrita: nenhum benefício de HOT é perdido, porque não havia
+-- nenhum. `status` JÁ é coluna-chave de incentive_grants_reuse_idx
+-- (20260813000005:104) desde 13/08, e HOT exige que a nova versão da tupla não
+-- toque coluna alguma usada por índice — logo toda transição de estado desta
+-- tabela (issued→expired em :96, issued→consumed em 20260813000011:73-76) já é
+-- não-HOT hoje. O que este índice acrescenta é UMA manutenção de entrada por
+-- CICLO DE VIDA do grant (entra no insert, sai na primeira transição), não uma
+-- por UPDATE, num volume que é "descontos concedidos". A troca é essa
+-- manutenção contra O(histórico) por passada, 86.400 passadas/dia.
+--
+-- Sem CONCURRENTLY: migration do Supabase roda em transação e CONCURRENTLY não
+-- pode rodar dentro de uma (mesma razão de 20260828000002:28-33); nenhum dos
+-- ~35 `create index` do stream o usa. Sem to_regclass: o guard dos itens
+-- 0a/42/43 existe para tabela do app legado, que nasce FORA do baseline que o
+-- CI aplica (o motivo está escrito em 20260828000002:35-37). incentive_grants
+-- nasce no próprio stream versionado (20260813000005:66) e não tem DDL sombra
+-- em sql/ nem em migrations-archive/, então aqui o guard seria cargo cult — e
+-- pior: transformaria em no-op silencioso a falha de uma migration irmã. O
+-- argumento é POR NEGAÇÃO, e vale dizer: não existe neste repositório um
+-- precedente positivo de índice acrescentado por migration posterior a tabela
+-- nascida no stream; o que sustenta a decisão é a ausência do motivo do guard,
+-- não um caso igual.
+--
+-- Custo de deploy, a única coisa que se sente: CREATE INDEX não-concurrent
+-- toma SHARE, que CONFLITA com o ROW EXCLUSIVE do sweep de 1s e com o consumo
+-- de cupom (20260813000011:73-76). Aplicar com o runtime de pé faz a criação
+-- entrar na fila de lock e segurar as escritas que chegarem atrás dela.
+-- Sub-segundo no tamanho de hoje, e não é motivo para CONCURRENTLY.
+--
+-- SEM PROVA EXECUTÁVEL: não há Postgres na máquina onde isto foi escrito.
+-- Nenhum EXPLAIN foi rodado — nem do plano de hoje (o seq scan é inferência do
+-- DDL + regras do planner do PG 17) nem do plano depois deste índice (que o
+-- planner o usará é inferência da regra de implicação de predicado parcial,
+-- sólida porque a cláusula é idêntica, mas leitura, não medição).
+-- ============================================================================
+
+create index if not exists incentive_grants_expiry_sweep_idx
+    on public.incentive_grants (validity_until)
+    where status = 'issued';
