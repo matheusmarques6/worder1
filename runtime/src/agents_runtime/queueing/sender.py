@@ -247,14 +247,17 @@ async def sender_pass(
                     # segurar a mensagem — supressão é decisão, e ela já foi
                     # tomada acima: nada sai deste `deliver()` de qualquer
                     # jeito. O que se perde é o MOTIVO: o `failed` com
-                    # `preflight: {verdict}` não entrou, a linha continua
-                    # 'sending' e a próxima sweep a carimba com
-                    # "send lease expired mid-request; outcome unknown".
-                    # Quem abrir o painel lê "não sei o que aconteceu" no
-                    # lugar de "opt-out" ou "fora da janela de 24h", e vai
-                    # investigar uma mensagem que o sistema decidiu não
-                    # mandar, de propósito. `warning`, não `error`: nenhuma
-                    # entrega se perde, só a explicação dela.
+                    # `preflight: {verdict}` não entrou. Onde a linha ficou, o
+                    # booleano não diz — só diz que ela já NÃO está 'sending'
+                    # com o nosso token, e nenhum escritor a deixaria assim
+                    # (o claim só sai de 'pending'), então ela está em
+                    # 'unknown', 'manual_review', 'sent' ou 'failed', com o
+                    # `last_error` de quem chegou antes de nós. Em qualquer um
+                    # deles, quem abrir o painel lê outra coisa no lugar de
+                    # "opt-out" ou "fora da janela de 24h", e vai investigar
+                    # uma mensagem que o sistema decidiu não mandar, de
+                    # propósito. `warning`, não `error`: nenhuma entrega se
+                    # perde, só a explicação dela.
                     logger.warning(
                         "supressão do preflight não registrada; o motivo se perde",
                         extra={
@@ -329,14 +332,19 @@ async def sender_pass(
                     # Item 47, o pior dos quatro: PERDA SILENCIOSA DE MENSAGEM.
                     # O `transient=True` acima é o que devolve a linha para a
                     # fila — `status='pending'` mais o `next_attempt_at` da
-                    # janela do guard. Com `false`, nada disso foi gravado: a
-                    # linha continua 'sending', a sweep a leva para 'unknown' e
-                    # a revisão para 'manual_review', e NENHUM desses estados
-                    # volta para 'pending' (o claim só reivindica 'pending').
+                    # janela do guard. Com `false`, nada disso foi gravado, e a
+                    # linha já não está 'sending' com o nosso token — os
+                    # estados que sobram para ela são 'unknown',
+                    # 'manual_review', 'sent' ou 'failed', e NENHUM deles volta
+                    # para 'pending'. Isso não é dedução sobre um percurso: dos
+                    # treze `update internal.message_outbox` das migrations, o
+                    # único que escreve 'pending' é o ramo transitório desta
+                    # mesma função — o que acabou de falhar.
                     # E aqui, diferente do carimbo de sucesso, não há webhook
                     # de resgate possível: nós SEGURAMOS o envio, a mensagem
-                    # nunca chegou à Meta, logo não existe status para
-                    # correlacionar. O lojista vê uma resposta que ele acha
+                    # nunca chegou à Meta nesta tentativa, logo não existe
+                    # status para correlacionar. O lojista vê uma resposta que
+                    # ele acha
                     # enfileirada e que simplesmente nunca sai — sem erro no
                     # chat, sem erro no painel, sem retentativa. `error` é o
                     # único nível honesto para isso.
@@ -367,7 +375,19 @@ async def sender_pass(
                     )
                 except psycopg.Error:
                     pass
-                annotate(outcome=f"held:{hold.reason}")
+                # `held:` é uma promessa de NÃO-terminalidade: "pausado, volta
+                # quando a janela passar". Com `requeued` falso essa promessa é
+                # exatamente a mentira que o `outcome="sent"` incondicional era,
+                # só que sobre o caso grave em vez do benigno — o span diria
+                # "atraso" sobre a linha que morre. O `suppressed:` do preflight
+                # e o `failed:` do classificador não precisam do mesmo cuidado:
+                # eles descrevem o que o SENDER fez, e continuam verdadeiros
+                # tenha o banco registrado ou não. Este descreve o que a linha
+                # VAI fazer, e é o registro que decide isso.
+                annotate(
+                    outcome=f"held:{hold.reason}" if requeued
+                    else f"held:{hold.reason}:not_requeued"
+                )
                 return
 
         # Chip de progresso no chat (pedido 17/08) — adereço de UI, nunca
@@ -480,16 +500,21 @@ async def sender_pass(
             # a sweep de lease vencida gravou 'unknown'; ou a revisão desses
             # 'unknown' já escalou para 'manual_review'.
             #
-            # `info` porque o caminho de longe mais comum é o primeiro, e ele
-            # é benigno — a linha está correta, gravada por quem viu a
-            # evidência do provedor. Mesma decisão que
-            # `webhook-processor.ts:779-788` tomou para o gêmeo deste booleano
-            # do lado TS. A diferença que impede copiar a classificação sem
-            # pensar: lá `false` nunca é perda; aqui o ramo 'manual_review' É
-            # (a mensagem SAIU, e a linha fica presa sobre ela — nenhum ramo
-            # do `where` da correlação casa 'manual_review'). O booleano não
-            # separa os dois, então o nível segue o caso comum e o caso raro
-            # vira item próprio no checklist, não um `error` em todo envio.
+            # `info` pelo DANO de cada caminho, não pela frequência deles —
+            # que ninguém aqui mediu. Em três dos quatro a linha ficou com uma
+            # verdade melhor do que a nossa: 'sent'/'failed' gravados por quem
+            # viu a evidência da Meta, ou 'unknown', que é o estado honesto do
+            # ADR-8 e que o webhook resgata. Só o quarto é perda, e ele tem
+            # item próprio no checklist. `error` em todo envio para alarmar
+            # sobre estados corretos seria o alarme falso que o item 47 quase
+            # criou. Mesma decisão que `webhook-processor.ts:779-788` tomou
+            # para o gêmeo deste booleano do lado TS — a diferença que impede
+            # copiar a classificação sem pensar é que lá `false` NUNCA é perda
+            # e aqui um dos ramos é.
+            #
+            # Isto é revisável: contar quantos `false` caem em cada estado num
+            # banco vivo é o que diria se o nível certo é `debug` (se o caminho
+            # benigno domina) ou se o item 79 é rotina e não cauda.
             logger.info(
                 "outbox já não estava 'sending' com o nosso token; o estado é de outro escritor",
                 extra={"outbox_id": str(send.outbox_id), "bubbles": len(delivered)},

@@ -19,6 +19,7 @@ carimbo, que é o que está sob teste.
 """
 
 import uuid
+from datetime import timedelta
 
 import pytest
 
@@ -26,6 +27,7 @@ from agents_runtime.config import QueueingConfig
 from agents_runtime.queueing import sender as sender_module
 from agents_runtime.randomness import SystemRandomness
 from agents_runtime.repository import engine
+from agents_runtime.repository.engine import PreflightVerdict, SendGuardHold
 from agents_runtime.repository.outbox import ClaimedSend
 
 
@@ -34,12 +36,12 @@ class FakeChannel:
         return "wamid-1"
 
 
-def _a_claimed_send() -> ClaimedSend:
+def _a_claimed_send(channel_type: str = "email") -> ClaimedSend:
     return ClaimedSend(
         outbox_id=uuid.uuid4(),
         organization_id=uuid.uuid4(),
-        channel_type="email",
-        channel_external_id="",
+        channel_type=channel_type,
+        channel_external_id="1163",
         to_phone_e164="+5538988887777",
         payload={"text": "Uma bolha só."},
         idempotency_key="k-47",
@@ -77,6 +79,47 @@ async def _run_pass(monkeypatch: pytest.MonkeyPatch, *, recorded: bool) -> list[
     return annotations
 
 
+async def _run_held_pass(monkeypatch: pytest.MonkeyPatch, *, requeued: bool) -> list[dict]:
+    """A mesma passada, parando no hold do send-guard — o site que o item 47
+    chamou de pior dos quatro. Aqui a linha é WhatsApp de verdade, porque é o
+    preflight e o guard que estão no caminho."""
+    annotations: list[dict] = []
+    send = _a_claimed_send(channel_type="whatsapp")
+
+    async def _noop(*args, **kwargs):
+        return 0
+
+    async def _claim(*args, **kwargs):
+        return [send]
+
+    async def _preflight(*args, **kwargs):
+        return PreflightVerdict(verdict="ok", template_name=None, template_language=None)
+
+    async def _hold(*args, **kwargs):
+        return SendGuardHold(reason="circuit_open", retry_after=timedelta(seconds=30))
+
+    async def _mark_failed(*args, **kwargs):
+        return requeued
+
+    monkeypatch.setattr(engine, "sweep_outbox_unknown", _noop)
+    monkeypatch.setattr(engine, "review_stale_unknown", _noop)
+    monkeypatch.setattr(engine, "expire_incentive_grants", _noop)
+    monkeypatch.setattr(engine, "claim_outbox_batch", _claim)
+    monkeypatch.setattr(engine, "sender_preflight", _preflight)
+    monkeypatch.setattr(engine, "send_guard_check", _hold)
+    monkeypatch.setattr(engine, "mark_outbox_failed", _mark_failed)
+    monkeypatch.setattr(engine, "emit_ai_run_step", _noop)
+    monkeypatch.setattr(sender_module, "annotate", lambda **kw: annotations.append(kw))
+
+    await sender_module.sender_pass(
+        object(),
+        FakeChannel(),
+        config=QueueingConfig(humanize_delays=False),
+        randomness=SystemRandomness(),
+    )
+    return annotations
+
+
 class TestTheSpanTellsWhatTheDatabaseRecorded:
     async def test_a_refused_stamp_is_not_annotated_as_sent(
         self, monkeypatch: pytest.MonkeyPatch
@@ -91,3 +134,24 @@ class TestTheSpanTellsWhatTheDatabaseRecorded:
         annotations = await _run_pass(monkeypatch, recorded=True)
 
         assert annotations == [{"outcome": "sent"}]
+
+
+class TestAHeldSendThatNeverRequeuedIsNotAnnotatedAsMerelyHeld:
+    """`held:` promete que a linha VOLTA quando a janela do guard passar.
+    Quando o `mark_outbox_failed(transient=True)` é recusado, ela não volta —
+    e o span não pode continuar prometendo. Mesmo defeito e mesmo molde do
+    `outcome="sent"` incondicional, no site grave em vez do benigno."""
+
+    async def test_a_refused_requeue_shows_in_the_outcome(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        annotations = await _run_held_pass(monkeypatch, requeued=False)
+
+        assert annotations == [{"outcome": "held:circuit_open:not_requeued"}]
+
+    async def test_a_real_hold_still_says_only_held(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        annotations = await _run_held_pass(monkeypatch, requeued=True)
+
+        assert annotations == [{"outcome": "held:circuit_open"}]
