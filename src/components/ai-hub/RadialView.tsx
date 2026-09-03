@@ -162,6 +162,16 @@ export default function RadialView({ hub, onChange, organizationId, agentId }: R
                   <div><span className="ghost">· CANAL — janela e restrições do WhatsApp</span>{'\n\n'}</div>
                 </>
               )}
+              {/* Item 45: o bloco CONHECIMENTO não sai da compile_prompt() — o
+                  responder o anexa ao frame no turno, depois de uma busca
+                  vetorial feita com a pergunta do cliente. Aqui não há
+                  pergunta, então ele não entra. Declarar a ausência é o mesmo
+                  desenho dos fantasmas do compilador; sem esta linha o rótulo
+                  "O que {nome} sabe" mente por silêncio justamente sobre a
+                  base de conhecimento. */}
+              <div><span className="ghost">
+                · CONHECIMENTO — buscado na hora da conversa, com a pergunta do cliente; não entra neste preview
+              </span></div>
             </div>
             {/* Juízes e Motor FORA do box (§4.4-6): não são prompt, são regime */}
             <div style={{ display: 'flex', gap: 8, padding: '10px 14px', borderTop: '1px solid var(--border)', flexWrap: 'wrap' }}>
