@@ -1076,7 +1076,10 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `llm` de plataforma do Judge 1. **Reancorado pelo item 52 (commit `9e184ab3`):** quando este item
   fechou, essa garantia era **acidente** — `owns` era `True` fixo nos dois call sites, e só valia
   porque ninguém passava `platform` para o degrau 3. O item 52 fez `resolve_agent_llm` devolver a
-  posse junto com o port (`ResolvedAgentLlm.built_here`), e a frase acima passou a ser **estrutural**. Nenhum gerenciador de ciclo de vida entre turnos, nenhum registro
+  posse junto com o port (`ResolvedAgentLlm.built_here`), e a frase acima passou a ser
+  **estrutural** — com uma ressalva honesta: a decisão de posse ganhou teste em `-m unit`, mas o
+  **repasse** dela nos dois call sites continua sem teste, porque `respond()`/`touch()` só rodam com
+  Postgres. Nenhum gerenciador de ciclo de vida entre turnos, nenhum registro
   global, nenhum pool — só um `finally` (por trás de um `@asynccontextmanager`) que cobre o corpo
   inteiro do turno, todo `return` intermediário incluído.
 
@@ -2963,6 +2966,13 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   (`test_provider_cascade.py`, degrau 3 desligado e ligado, com um sentinela). Ou seja: inalcançável
   **em produção**, plenamente alcançável e coberto em `-m unit`. **Não é código morto — é capacidade
   não entregue.** Apagar o parâmetro derrubaria dois testes verdes.
+  **Os números acima são da âncora `8ca87d70`** — depois deste item são 10 chamadas e 3 testes, e a
+  frase deixa de valer no presente se alguém a reler sem a âncora.
+  **E a correção que decidiu a forma do conserto foi aritmética:** o brief v1 recusou mudar a
+  assinatura alegando que ela mexeria nas 8 chamadas; a revisão de plano contou **6** — as duas de
+  `pytest.raises` descartam o retorno e não quebram. Com o número certo, o seam único deixou de ser
+  caro, e foi ele que tornou a posse testável em `-m unit`. Registrado porque é a segunda vez nesta
+  fila que uma contagem inflada quase escolheu a solução pior (a primeira foi o item 48).
 
   **A escolha binária do achado é falsa; a decisão tem quatro partes.**
   1. **Não ligar** o degrau (não passar `platform`). Hoje isso seria um bug, não uma ativação — ver
@@ -3124,6 +3134,12 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   transação escopada — as duas em `-m unit`, sem Postgres); contagem de duplicação do transcript;
   ciclo de vida dos clientes httpx; teto de chamadas por turno; 429/5xx/timeout dos provedores;
   `server._read_request` malformado.
+  **Acrescentado pelo item 52 (revisão da execução, `2ee8c2f2`):** `agent_llm_from_org_keys` tem
+  **zero ocorrências em `runtime/tests/`** — nenhum tier chega nele, nem com Postgres. O bloco
+  inteiro é inalcançável por teste, e não é só a fiação da posse do item 52: ficam sem cobertura
+  também a cascata D4 em contexto real e a **emissão do alerta `no_org_llm_key`**, que aparece em
+  teste apenas dentro de uma docstring. É o vão mais fundo desta lista, porque não se fecha com
+  banco — precisa de um teste que exercite a função.
 
 - [ ] **64. Migrar cupom da Shopify de REST para GraphQL** `[proposto]` · *(descoberto no item 35)*
   `connectors/shopify.py` cria e busca cupom por três chamadas REST: `POST /price_rules.json`
@@ -4036,7 +4052,7 @@ você decidir se entram na fila.
   no modo de falha do caminho quente (o turno passa a poder morrer onde hoje segue), então pede round
   próprio em vez de carona. *(descoberto no item 48)*
 
-- [ ] **`AGENTS_WORKERS` é documentada e inalcançável — o gêmeo exato do item 52.**
+- [ ] **`AGENTS_WORKERS` é documentada e inalcançável — o gêmeo INVERSO do item 52.**
   `DEPLOY.md:123` lista `AGENTS_WORKERS` entre as variáveis de tuning, mas `__main__._serve` nunca
   passa `workers=` para `app.run`: o default `workers: int = 2` (`app.py:98`) é inescapável em
   produção. `grep -rn "AGENTS_WORKERS" runtime/src` dá **zero**; o único `workers=` do repositório

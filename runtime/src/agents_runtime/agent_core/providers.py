@@ -1,8 +1,10 @@
 """A cascata de chaves de LLM (D4) — BYO-only por decisão do usuário.
 
 Ordem: (1) chave DIRETA da org para o provider do agente → (2) chave
-OpenRouter da org → (3) default da plataforma, ATRÁS de
-`AGENTS_PLATFORM_LLM_ENABLED` e DESLIGADO por padrão (PENDENTE-1 resolvido
+OpenRouter da org → (3) default da plataforma, atrás de DUAS condições —
+`AGENTS_PLATFORM_LLM_ENABLED` ligada E um `platform` entregue pelo chamador,
+que nenhum call site de produção entrega hoje —, DESLIGADO por padrão
+(PENDENTE-1 resolvido
 como BYO-only: sem chave da org o agente não ativa — alerta `no_org_llm_key`
 e o toque morre; a tela Budget é informativa).
 

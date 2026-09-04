@@ -529,11 +529,16 @@ def build_responder(
             owns_agent_llm = False
             if agent_llm_from_org_keys:
                 try:
-                    agent_llm, owns_agent_llm = resolve_agent_llm(
+                    resolved = resolve_agent_llm(
                         key_rows,
                         agent_provider=version.provider,
                         base_secret=base_secret,
                     )
+                    # Por atributo, não por desempacotamento posicional: sem
+                    # type checker no repositório, trocar a ordem dos dois
+                    # passaria silencioso e fecharia o cliente de plataforma.
+                    agent_llm = resolved.port
+                    owns_agent_llm = resolved.built_here
                 except NoOrgLlmKey as reason:
                     async with conn.transaction():
                         await scope_to_organization(conn, job.organization_id)
