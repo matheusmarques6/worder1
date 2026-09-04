@@ -129,7 +129,6 @@ class ChannelBlock:
 
     channel: str
     window_open: bool
-    constraints: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -278,7 +277,6 @@ def _channel_block(channel: ChannelBlock | None) -> RenderedBlock:
         if channel.window_open
         else "Janela de 24h fechada: só template aprovado sai daqui.",
     ]
-    lines.extend(channel.constraints)
     return RenderedBlock(
         kind="CHANNEL", text="\n".join(lines), source_ids={"channel": channel.channel}
     )

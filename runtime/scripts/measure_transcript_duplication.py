@@ -68,7 +68,7 @@ STATE = StateBlock(
     contact_facts=(("nome", "Ana"), ("cidade", "Sao Paulo")),
 )
 
-CHANNEL = ChannelBlock(channel="whatsapp", window_open=True, constraints=())
+CHANNEL = ChannelBlock(channel="whatsapp", window_open=True)
 
 # 17 mensagens de histórico "mais antigo" + 3 pendentes = 20 = TRANSCRIPT_LIMIT
 # exato — o caso comum descrito na recon: a conversa inteira cabe no limite,

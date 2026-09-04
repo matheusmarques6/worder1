@@ -391,7 +391,6 @@ def build_toucher(
                     channel=ChannelBlock(
                         channel=job.preferred_channel,
                         window_open=window_open,
-                        constraints=(),
                     ),
                     conversation=ConversationBlock(
                         conversation_id=str(job.conversation_id),

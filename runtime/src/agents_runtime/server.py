@@ -293,10 +293,12 @@ async def _preview(dsn: str, *, set_role: str | None, body: dict[str, Any]) -> b
     )
     if resolved is not None:
         # Item 45: os mesmos dois passos do turno (`responder.py`,
-        # `toucher.py`) — a restrição do momento vigente NÃO vai para
-        # `ChannelBlock.constraints`, ela soma ao `forbidden` da missão e sai
-        # como as linhas `Não fazer:` do bloco MISSÃO. Sem isso, o lojista via
-        # no preview uma missão sem as regras que a promoção do dia impõe.
+        # `toucher.py`) — a restrição do momento vigente soma ao `forbidden` da
+        # missão e sai como as linhas `Não fazer:` do bloco MISSÃO. Sem isso, o
+        # lojista via no preview uma missão sem as regras que a promoção do dia
+        # impõe. (O destino recusado na época era `ChannelBlock.constraints`; o
+        # item 60 apagou o campo por ser morto — a decisão continua valendo, o
+        # que deixou de existir foi a alternativa recusada.)
         # Sem momento no ar, silêncio e nunca erro: `resolve_moments` devolve
         # EMPTY_VIEW para lista vazia e `apply_moment_restrictions` devolve a
         # missão intacta. Sem missão ativa, nem isso — o bloco MISSÃO já é um
@@ -317,7 +319,6 @@ async def _preview(dsn: str, *, set_role: str | None, body: dict[str, Any]) -> b
         channel=ChannelBlock(
             channel=str(body.get("channel") or "whatsapp"),
             window_open=bool(body.get("window_open", True)),
-            constraints=(),
         ),
         conversation=(
             ConversationBlock(conversation_id="preview", transcript=transcript)

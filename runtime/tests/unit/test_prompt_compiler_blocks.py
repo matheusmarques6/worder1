@@ -77,7 +77,7 @@ def a_state_block(**overrides) -> StateBlock:
 
 
 def a_channel_block() -> ChannelBlock:
-    return ChannelBlock(channel="whatsapp", window_open=True, constraints=())
+    return ChannelBlock(channel="whatsapp", window_open=True)
 
 
 def a_conversation_block() -> ConversationBlock:

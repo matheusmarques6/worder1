@@ -589,7 +589,6 @@ def build_responder(
                     channel=ChannelBlock(
                         channel=state.last_channel or "whatsapp",
                         window_open=window_open,
-                        constraints=(),
                     ),
                     conversation=ConversationBlock(
                         conversation_id=str(job.conversation_id),
