@@ -149,26 +149,43 @@ export async function DELETE(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { storage_path, id } = body;
+    const { storage_path, storage_paths, id } = body;
 
-    const path = storage_path || id;
-    if (!path || typeof path !== 'string') {
+    // Um ou vários: `storage_paths` (lista) ou o `storage_path`/`id`
+    // antigo. A seleção múltipla da biblioteca manda a lista.
+    const pedidos: string[] = Array.isArray(storage_paths)
+      ? storage_paths
+      : [storage_path || id];
+    const paths = pedidos.filter((p): p is string => typeof p === 'string' && p.length > 0);
+    if (paths.length === 0) {
       return NextResponse.json({ error: 'storage_path required' }, { status: 400 });
     }
+    if (paths.length > 200) {
+      return NextResponse.json({ error: 'Máximo de 200 arquivos por vez' }, { status: 400 });
+    }
 
-    // Security: ensure the path belongs to the user's org
-    if (!path.startsWith(orgId + '/')) {
+    // Segurança: TODOS os caminhos precisam ser da organização. Um
+    // único caminho de fora derruba o pedido inteiro — nada de apagar
+    // os "bons" e ignorar o intruso em silêncio.
+    const fora = paths.find((p) => !p.startsWith(orgId + '/') || p.includes('..'));
+    if (fora) {
       return NextResponse.json({ error: 'Sem permissão' }, { status: 403 });
     }
 
-    const { error } = await supabaseAdmin.storage.from(BUCKET).remove([path]);
+    const { data, error } = await supabaseAdmin.storage.from(BUCKET).remove(paths);
 
     if (error) {
       console.error('[Media] Delete error:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true });
+    // O storage devolve o que de fato removeu; o resto (já apagado,
+    // caminho errado) volta como falha para a tela não fingir sucesso.
+    const removidos = new Set((data || []).map((f: any) => f?.name).filter(Boolean));
+    const deleted = paths.filter((p) => removidos.has(p));
+    const failed = paths.filter((p) => !removidos.has(p));
+
+    return NextResponse.json({ success: failed.length === 0, deleted, failed });
   } catch (e: any) {
     console.error('[Media] DELETE Error:', e);
     return NextResponse.json({ error: e.message }, { status: 500 });

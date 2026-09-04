@@ -13,6 +13,7 @@
 // =============================================
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError } from '@/lib/api-utils';
+import { normalizePublicHost } from '@/lib/shopify/store-url';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { ensureFreshToken } from '@/lib/shopify/ensure-fresh-token';
 
@@ -156,12 +157,27 @@ export async function POST(request: NextRequest) {
           'X-Shopify-Access-Token': store.access_token,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ query: `{ shop { myshopifyDomain } }` }),
+        body: JSON.stringify({ query: `{ shop { myshopifyDomain primaryDomain { host } } }` }),
       }
     );
     if (canonRes.ok) {
       const j = await canonRes.json();
       const canonical = (j.data?.shop?.myshopifyDomain || '').toLowerCase() || null;
+      // Domínio principal PÚBLICO (drgroot.com) — a fonte de {{store_url}}.
+      // Reconsultado aqui porque install-extras roda na conexão e no
+      // "Reinstalar tudo": é o momento em que a loja acaba de ser ligada
+      // ou o lojista acabou de mexer nela.
+      const primaryHost = normalizePublicHost(j.data?.shop?.primaryDomain?.host) || null;
+      if (primaryHost && primaryHost !== store.primary_domain) {
+        const { error: pdErr } = await supabase
+          .from('shopify_stores')
+          .update({ primary_domain: primaryHost, primary_domain_checked_at: new Date().toISOString() })
+          .eq('id', store.id);
+        if (!pdErr) store.primary_domain = primaryHost;
+      } else if (primaryHost) {
+        await supabase.from('shopify_stores')
+          .update({ primary_domain_checked_at: new Date().toISOString() }).eq('id', store.id);
+      }
       const typed = String(store.shop_domain || '').toLowerCase();
       if (canonical && canonical !== typed) {
         const existingAliases: string[] = Array.isArray(store.shop_domain_aliases) ? store.shop_domain_aliases : [];

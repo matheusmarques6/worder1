@@ -124,7 +124,18 @@ export async function POST(request: NextRequest) {
     }
     store = refreshed.store;
 
-    console.log(`[Sync] Store: ${store.shop_name} (${store.shop_domain}), syncType=${syncType}, type=${store.connection_type || 'oauth'}`);
+    // Reconsulta o domínio principal a cada sincronização. É o que faz
+    // {{store_url}} acompanhar a troca de domínio da loja sem ninguém
+    // editar template. Melhor esforço: a sync não pode falhar por isto.
+    try {
+      const { refreshPrimaryDomain } = await import('@/lib/shopify/store-url');
+      const primary = await refreshPrimaryDomain(supabase, store);
+      if (primary) store.primary_domain = primary;
+    } catch (err) {
+      console.warn('[Sync] refresh do domínio principal falhou:', err);
+    }
+
+    console.log(`[Sync] Store: ${store.shop_name} (${store.shop_domain} → ${store.primary_domain || 'sem domínio principal'}), syncType=${syncType}, type=${store.connection_type || 'oauth'}`);
 
     // Historical sync (every order ever) → Shopify Bulk Operations.
     // This is the only path that scales to 10k+ orders inside a single

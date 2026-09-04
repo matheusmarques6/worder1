@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient, getAuthClient, authError } from '@/lib/api-utils';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { SupabaseClient } from '@supabase/supabase-js';
+import { normalizePublicHost, publicStoreHost } from '@/lib/shopify/store-url';
 import { isTombstoneStore } from '@/lib/stores/placeholder';
 export const dynamic = 'force-dynamic';
 
@@ -85,6 +86,11 @@ export async function POST(request: NextRequest) {
           access_token: accessToken.trim(),
           api_secret: apiSecret?.trim() || null,
           shop_email: shopData.email,
+          // shop.json traz `domain` = domínio principal público (o que o
+          // cliente vê) e `myshopify_domain` = host da API. {{store_url}}
+          // sai do primeiro.
+          primary_domain: normalizePublicHost(shopData.domain) || null,
+          primary_domain_checked_at: new Date().toISOString(),
           currency: shopData.currency,
           timezone: shopData.timezone,
           is_active: true,
@@ -117,6 +123,8 @@ export async function POST(request: NextRequest) {
         shop_domain: shopDomain,
         shop_name: name,
         shop_email: shopData.email,
+        primary_domain: normalizePublicHost(shopData.domain) || null,
+        primary_domain_checked_at: new Date().toISOString(),
         access_token: accessToken.trim(),
         api_secret: apiSecret?.trim() || null,
         currency: shopData.currency,
@@ -245,6 +253,9 @@ export async function GET(request: NextRequest) {
         shop_name: s.shop_name,
         domain: s.shop_domain,
         shop_domain: s.shop_domain,
+        // Host que o cliente vê — o que {{store_url}} usa.
+        publicDomain: publicStoreHost(s) || null,
+        primary_domain: s.primary_domain || null,
         email: s.shop_email,
         shop_email: s.shop_email,
         currency: s.currency,

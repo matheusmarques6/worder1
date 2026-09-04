@@ -9,6 +9,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { publicStoreUrl } from '@/lib/shopify/store-url';
 import { sendBatchEmails } from '@/lib/email/resend';
 import { isEmailBlocked } from '@/lib/email/consent';
 import {
@@ -148,7 +149,7 @@ export async function POST(req: NextRequest) {
       // {{store_phone}} eram oferecidas no editor e nunca resolviam.
       const { data: store, error: storeErr } = await supabaseAdmin
         .from('shopify_stores')
-        .select('shop_name, shop_domain, shop_email, shop_phone')
+        .select('shop_name, shop_domain, primary_domain, shop_email, shop_phone')
         .eq('id', campaign.store_id)
         .maybeSingle();
       if (storeErr) {
@@ -156,7 +157,10 @@ export async function POST(req: NextRequest) {
       }
       if (store) {
         storeName = store.shop_name || '';
-        storeUrl = store.shop_domain ? `https://${store.shop_domain}` : '';
+        // O domínio PRINCIPAL (drgroot.com), não o *.myshopify.com da
+        // API. Se o lojista trocar o domínio, a sincronização atualiza a
+        // coluna e a variável acompanha sem ninguém editar template.
+        storeUrl = publicStoreUrl(store);
         storeEmail = store.shop_email || '';
         storePhone = store.shop_phone || '';
       }

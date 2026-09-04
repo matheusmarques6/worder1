@@ -20,6 +20,7 @@
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
+import { publicStoreUrl } from '@/lib/shopify/store-url';
 
 export async function GET(
   request: NextRequest,
@@ -87,23 +88,26 @@ async function resolveStoreFallback(emailSendId: string): Promise<string> {
       if (campaign?.store_id) {
         const { data: store } = await supabaseAdmin
           .from('shopify_stores')
-          .select('domain')
+          .select('shop_domain, primary_domain')
           .eq('id', campaign.store_id)
           .maybeSingle();
-        if (store?.domain) return `https://${store.domain}`;
+        // A coluna é shop_domain — pedir `domain` fazia o PostgREST devolver
+        // erro e este fallback NUNCA funcionava: todo clique sem destino caía
+        // em worder.com.br. E o host certo para o cliente é o principal.
+        { const url = publicStoreUrl(store); if (url) return url; }
       }
     }
     // Sem store na campanha — tenta primeira loja ativa da org.
     if (send?.organization_id) {
       const { data: store } = await supabaseAdmin
         .from('shopify_stores')
-        .select('domain')
+        .select('shop_domain, primary_domain')
         .eq('organization_id', send.organization_id)
         .eq('is_active', true)
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
-      if (store?.domain) return `https://${store.domain}`;
+      { const url = publicStoreUrl(store); if (url) return url; }
     }
   } catch (err) {
     console.error('[ClickTracker] resolveStoreFallback failed:', err);
