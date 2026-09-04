@@ -539,11 +539,15 @@ function SenderConfig({
     if (!pendingSync) return
     setSyncing(true)
     try {
+      // Só as automações DESTA loja. Sem a loja a rota recusa — antes
+      // varria a organização inteira e reescrevia o remetente das lojas
+      // irmãs.
       const res = await fetch('/api/email/sync-defaults', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...pendingSync,
+          storeId,
           onlyEmpty: scope === 'empty',
         }),
       })

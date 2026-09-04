@@ -23,23 +23,39 @@ export async function POST(req: NextRequest) {
     }
 
     const auth = await getAuthClient()
-    let fromEmail = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev'
-    let senderName = 'Worder'
-    let organizationId: string | null = null
+    if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const organizationId: string = auth.user.organization_id
 
-    if (auth) {
-      organizationId = auth.user.organization_id
-      try {
-        const { getOrgSender } = await import('@/lib/email/sender')
-        const sender = await getOrgSender(auth.user.organization_id)
-        fromEmail = sender.fromEmail
-        senderName = sender.senderName
-      } catch { /* fallback */ }
-    }
+    // A LOJA do teste: a que o editor mandou, ou a única da organização.
+    // O remetente, o {{store_name}} e o reply-to saem dela. Antes o teste
+    // usava o remetente da organização — numa organização com várias
+    // lojas, a identidade de outra loja.
+    let storeId: string | null = null
+    let storeRow: { id: string; shop_name: string | null; shop_email: string | null; shop_domain: string | null; primary_domain: string | null } | null = null
+    try {
+      const { getSupabaseAdmin } = await import('@/lib/supabase-admin')
+      const admin = getSupabaseAdmin()
+      const { data: memberships } = await admin.from('organization_members').select('organization_id').eq('user_id', auth.user.id)
+      const orgIds = [...new Set([organizationId, ...((memberships || []).map((m: any) => m.organization_id))])]
+      const { pickStore } = await import('@/lib/stores/pick-store')
+      const picked = await pickStore<any>(admin, {
+        orgIds, storeId: body.storeId || body.store_id || null,
+        select: 'id, organization_id, shop_name, shop_email, shop_domain, primary_domain',
+      })
+      if (picked.store) { storeRow = picked.store; storeId = picked.store.id }
+    } catch { /* sem loja: segue com o remetente neutro/organização */ }
 
-    const from = `${senderName} <${fromEmail}>`
+    const { getStoreSender } = await import('@/lib/email/sender')
+    const sender = await getStoreSender(storeRow ? ((storeRow as any).organization_id || organizationId) : organizationId, storeId)
+    const fromEmail = sender.fromEmail
+    const senderName = sender.senderName
+    const replyTo = sender.replyTo
+
+    const from = sender.from
     const { getAppBaseUrl } = await import('@/lib/app-url')
     const appUrl = getAppBaseUrl()
+    const { publicStoreUrl } = await import('@/lib/shopify/store-url')
+    const storeUrl = publicStoreUrl(storeRow) || 'https://example.com'
 
     // Sample merge data so {{ first_name }}, {{ store_name }} etc.
     // resolve in the test instead of leaking into the inbox as raw
@@ -55,9 +71,9 @@ export async function POST(req: NextRequest) {
       full_name: 'Cliente Teste',
       email: testEmail,
       phone: '',
-      store_name: senderName,
-      store_url: 'https://example.com',
-      store_email: fromEmail,
+      store_name: storeRow?.shop_name || senderName,
+      store_url: storeUrl,
+      store_email: storeRow?.shop_email || replyTo || fromEmail,
       coupon_code: 'TESTE10',
       coupon_expiry: '31/12/2026',
       checkout_url: 'https://example.com/checkout',
@@ -144,9 +160,10 @@ export async function POST(req: NextRequest) {
       contactId: undefined,
       orgId: organizationId || undefined,
       campaignId: undefined,
+      storeId: storeId || undefined,
     })
 
-    const unsubUrl = buildUnsubscribeUrl(testSendId, appUrl, undefined, organizationId || undefined)
+    const unsubUrl = buildUnsubscribeUrl(testSendId, appUrl, undefined, organizationId || undefined, undefined, storeId || undefined)
     const listUnsubHeaders = buildListUnsubscribeHeaders(unsubUrl)
 
     const { Resend } = await import('resend')
@@ -158,6 +175,7 @@ export async function POST(req: NextRequest) {
       subject: `[TESTE] ${finalSubject}`,
       html: finalHtml,
       headers: listUnsubHeaders,
+      ...(replyTo ? { replyTo } : {}),
     })
 
     if (error) {
@@ -174,7 +192,15 @@ export async function POST(req: NextRequest) {
       }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true, id: data?.id, from })
+    return NextResponse.json({
+      success: true,
+      id: data?.id,
+      from,
+      senderSource: sender.source,
+      hint: sender.source === 'platform' && storeId
+        ? 'Esta loja ainda não tem remetente configurado. Defina em Configurações → E-mail & Domínios para enviar com a identidade dela.'
+        : undefined,
+    })
   } catch (error: any) {
     console.error('[EmailTest] Error:', error)
     return NextResponse.json({ error: error.message || 'Erro interno' }, { status: 500 })

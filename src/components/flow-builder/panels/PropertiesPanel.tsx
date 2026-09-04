@@ -2739,8 +2739,11 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
           }
         } catch { /* non-blocking — fall through to org default */ }
       }
-      // 2) Org-level fallback for whatever is STILL empty
-      if (need.senderName || need.senderEmail) {
+      // 2) Org-level fallback for whatever is STILL empty — SÓ para fluxos
+      //    sem loja. Num fluxo de loja, o padrão da organização é a
+      //    identidade de outra loja; o campo fica vazio e o envio usa a
+      //    identidade da própria loja (getEmailProviderForOrg com storeId).
+      if (!storeId && (need.senderName || need.senderEmail)) {
         try {
           const r = await fetch('/api/settings/organization');
           const d = await r.json();

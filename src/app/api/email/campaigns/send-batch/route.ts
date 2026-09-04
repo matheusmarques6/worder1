@@ -501,6 +501,7 @@ export async function POST(req: NextRequest) {
           contactId: contact.id,
           orgId: organizationId,
           campaignId: campaign_id,
+          storeId: campaign.store_id || undefined,
         });
         // escape:false — subject is text/plain (no &amp; in the inbox).
         let finalSubject = renderMergeTags(subjectSource, mergeData, { escape: false });
@@ -536,7 +537,7 @@ export async function POST(req: NextRequest) {
         // contact — the placeholder '?token=unsub' was a no-op that
         // wouldn't have processed any clicks.
         const { buildUnsubscribeUrl, buildListUnsubscribeHeaders } = await import('@/lib/email/render');
-        const unsubUrl = buildUnsubscribeUrl(emailSend.id, baseUrl, contact.id, organizationId, campaign_id || undefined);
+        const unsubUrl = buildUnsubscribeUrl(emailSend.id, baseUrl, contact.id, organizationId, campaign_id || undefined, campaign.store_id || undefined);
         const antiSpamHeaders: Record<string, string> = {
           ...buildListUnsubscribeHeaders(unsubUrl),
           'Precedence': 'bulk',

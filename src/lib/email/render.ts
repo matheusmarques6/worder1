@@ -321,12 +321,14 @@ export function buildUnsubscribeUrl(
   baseUrl: string,
   contactId?: string,
   orgId?: string,
-  campaignId?: string
+  campaignId?: string,
+  /** Loja do envio — a página de preferências mostra a marca DELA. */
+  storeId?: string
 ): string {
   if (contactId && orgId) {
     try {
       const { signUnsubscribeToken } = require('@/lib/email/unsubscribe-token');
-      const token = signUnsubscribeToken({ contactId, orgId, campaignId });
+      const token = signUnsubscribeToken({ contactId, orgId, campaignId, storeId });
       return `${baseUrl}/unsubscribe?token=${token}`;
     } catch {
       return `${baseUrl}/api/unsubscribe/${emailSendId}`;
@@ -343,12 +345,13 @@ export function buildPreferencesUrl(
   baseUrl: string,
   contactId?: string,
   orgId?: string,
-  campaignId?: string
+  campaignId?: string,
+  storeId?: string
 ): string | null {
   if (!contactId || !orgId) return null;
   try {
     const { signUnsubscribeToken } = require('@/lib/email/unsubscribe-token');
-    const token = signUnsubscribeToken({ contactId, orgId, campaignId });
+    const token = signUnsubscribeToken({ contactId, orgId, campaignId, storeId });
     return `${baseUrl}/preferencias?token=${token}`;
   } catch {
     return null;
@@ -381,10 +384,11 @@ export function addUnsubscribeLink(
   baseUrl: string,
   contactId?: string,
   orgId?: string,
-  campaignId?: string
+  campaignId?: string,
+  storeId?: string
 ): string {
-  const unsubUrl = buildUnsubscribeUrl(emailSendId, baseUrl, contactId, orgId, campaignId);
-  const prefsUrl = buildPreferencesUrl(baseUrl, contactId, orgId, campaignId);
+  const unsubUrl = buildUnsubscribeUrl(emailSendId, baseUrl, contactId, orgId, campaignId, storeId);
+  const prefsUrl = buildPreferencesUrl(baseUrl, contactId, orgId, campaignId, storeId);
 
   // If the template already has a footer with an unsubscribe link (custom
   // footer block, custom CAN-SPAM section), avoid double-appending. Detect
@@ -1185,6 +1189,7 @@ export function prepareEmailHtml({
   contactId,
   orgId,
   campaignId,
+  storeId,
 }: {
   html: string;
   mergeData: Record<string, string>;
@@ -1193,6 +1198,8 @@ export function prepareEmailHtml({
   contactId?: string;
   orgId?: string;
   campaignId?: string;
+  /** Loja do envio — vai no token de descadastro/preferências. */
+  storeId?: string;
 }): string {
   let result = html;
 
@@ -1240,7 +1247,7 @@ export function prepareEmailHtml({
   result = rewriteImagesForEmail(result, { width: 600, quality: 80 });
 
   // 2. Add unsubscribe link with HMAC token (before tracking rewrites)
-  result = addUnsubscribeLink(result, emailSendId, baseUrl, contactId, orgId, campaignId);
+  result = addUnsubscribeLink(result, emailSendId, baseUrl, contactId, orgId, campaignId, storeId);
 
   // 3. Rewrite URLs for click tracking
   result = rewriteUrlsForTracking(result, emailSendId, baseUrl);

@@ -1018,8 +1018,10 @@ export async function POST(
         const baseUrl = getAppBaseUrl()
         const confirmUrl = `${baseUrl}/api/public/confirm-opt-in?token=${encodeURIComponent(token)}`
 
+        // Remetente DA LOJA do formulário — o e-mail de confirmação de um
+        // popup da Medicube não pode sair como a loja irmã.
         const { getEmailProviderForOrg } = await import('@/lib/email/providers')
-        const { provider, config } = await getEmailProviderForOrg(form.organization_id)
+        const { provider, config } = await getEmailProviderForOrg(form.organization_id, (form as any).store_id || null)
         const fromEmail = config.defaultFrom || 'onboarding@resend.dev'
         const senderName = config.defaultSenderName || 'Worder'
         const subject = `Confirme sua inscrição`

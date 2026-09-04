@@ -844,10 +844,12 @@ const actionExecutors: Record<string, NodeExecutor> = {
         // '' lets sendCampaignEmail fall back to config.defaultSenderName
         // (the store's name), not the generic context store / 'Worder'.
         const runStoreId = (context as any).storeId || null;
-        const senderName = config.senderName
-          || (runStoreId ? '' : ((context as any).store?.name || 'Worder'));
-        const senderEmail = config.senderEmail
-          || (runStoreId ? '' : (credentials?.defaultFrom || 'noreply@example.com'));
+        // Sem remetente no nó, fica vazio e sendCampaignEmail resolve a
+        // identidade certa: a loja do fluxo ou, num fluxo da organização
+        // inteira, a loja do contato. O fallback antigo aqui
+        // ('noreply@example.com' / nome da organização) furava essa regra.
+        const senderName = config.senderName || '';
+        const senderEmail = config.senderEmail || '';
 
         // 4. Send via the full campaign pipeline so automation emails
         //    get the same tracking as campaigns (open pixel, click

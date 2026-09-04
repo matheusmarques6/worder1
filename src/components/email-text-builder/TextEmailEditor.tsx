@@ -788,6 +788,7 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
           isOpen={showSendTest}
           onClose={() => setShowSendTest(false)}
           defaultSubject={subject || name}
+          storeId={flowContext?.storeId || storeId || null}
           html={renderTextEmailToHtml(
             (editor?.getJSON() as TextDoc) || initial.doc,
             { preheader: previewText || undefined },

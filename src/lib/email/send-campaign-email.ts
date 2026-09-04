@@ -246,7 +246,7 @@ export async function sendCampaignEmail({
     // três metades (html, assunto, texto) — é o que faz o caminho
     // configurado em Integrações valer no envio real.
     const { loadTagMapping } = await import('@/lib/merge-tags/load-mapping');
-    const tagMapping = eventData ? await loadTagMapping(organizationId, storeId) : undefined;
+    const tagMapping = eventData ? await loadTagMapping(organizationId, sendStoreId) : undefined;
 
     if (eventData) {
       const { resolveTriggerSmartTags } = await import('@/lib/email/merge-tags');
@@ -267,7 +267,7 @@ export async function sendCampaignEmail({
     let trackingBaseUrl = baseUrl;
     try {
       const { getTrackingBaseUrl } = await import('@/lib/email/tracking-url');
-      trackingBaseUrl = await getTrackingBaseUrl(organizationId, storeId || null);
+      trackingBaseUrl = await getTrackingBaseUrl(organizationId, sendStoreId || null);
     } catch { /* mantém o baseUrl do caller */ }
 
     const finalHtml = prepareEmailHtml({
@@ -275,6 +275,11 @@ export async function sendCampaignEmail({
       mergeData,
       emailSendId,
       baseUrl: trackingBaseUrl,
+      contactId: resolvedContactId || undefined,
+      orgId: organizationId,
+      campaignId: campaignId || undefined,
+      // A página de preferências mostra a marca DESTA loja.
+      storeId: sendStoreId || undefined,
     });
 
     // 4. Render subject merge tags — the subject must go through the SAME
@@ -292,8 +297,10 @@ export async function sendCampaignEmail({
     const finalSubject = renderMergeTags(subjectSrc, mergeData, { escape: false });
 
     // 5. Send via the org's configured provider (defaults to Resend).
-    // The factory caches per-org so we don't hit the DB on every send.
-    const { provider, config } = await getEmailProviderForOrg(organizationId, storeId);
+    // Identidade da LOJA do envio: a do fluxo/campanha ou, num fluxo da
+    // organização inteira, a do contato — o cliente é de uma loja e o
+    // e-mail chega assinado por ela, nunca pela loja irmã.
+    const { provider, config } = await getEmailProviderForOrg(organizationId, sendStoreId);
     const effectiveFrom = fromEmail || config.defaultFrom || 'onboarding@resend.dev';
     const effectiveSenderName = senderName || config.defaultSenderName;
 
@@ -306,7 +313,7 @@ export async function sendCampaignEmail({
     const { buildUnsubscribeUrl, buildListUnsubscribeHeaders } = await import('@/lib/email/render');
     // Mesmo host dos demais links de tracking — o List-Unsubscribe do
     // header e o link do rodapé precisam apontar pro mesmo lugar.
-    const unsubUrl = buildUnsubscribeUrl(emailSendId, trackingBaseUrl, resolvedContactId || undefined, organizationId, campaignId || undefined);
+    const unsubUrl = buildUnsubscribeUrl(emailSendId, trackingBaseUrl, resolvedContactId || undefined, organizationId, campaignId || undefined, sendStoreId || undefined);
     const listUnsubHeaders = buildListUnsubscribeHeaders(unsubUrl);
 
     // Plain-text alternative — when caller supplied one (text-based

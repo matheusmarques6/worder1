@@ -327,9 +327,11 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: 'Resend not configured' }, { status: 500 });
         }
 
-        // Buscar remetente da org
-        const { getOrgSender } = await import('@/lib/email/sender');
-        const sender = await getOrgSender(organizationId);
+        // Remetente DA LOJA do fluxo (nome, e-mail, reply-to). Antes era o
+        // da organização — e numa organização com várias lojas isso é a
+        // identidade de outra loja: o teste da Medicube saiu como "Based".
+        const { getStoreSender } = await import('@/lib/email/sender');
+        const sender = await getStoreSender(organizationId, testStore.id || requestedStoreId);
 
         const res = await fetch('https://api.resend.com/emails', {
           method: 'POST',
@@ -350,7 +352,15 @@ export async function POST(request: NextRequest) {
             from: sender.from,
           }, { status: 500 });
         }
-        return NextResponse.json({ sent: true, from: sender.from });
+        return NextResponse.json({
+          sent: true,
+          from: sender.from,
+          senderSource: sender.source,
+          // A tela avisa quando a loja ainda não tem remetente próprio.
+          hint: sender.source === 'platform'
+            ? 'Esta loja ainda não tem remetente configurado. Defina em Configurações → E-mail & Domínios para enviar com a identidade dela.'
+            : undefined,
+        });
       } catch (err: any) {
         return NextResponse.json({ error: err.message }, { status: 500 });
       }

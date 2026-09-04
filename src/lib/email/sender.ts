@@ -2,17 +2,51 @@
 // WORDER: Resolve sender for email sending
 // /src/lib/email/sender.ts
 //
-// Busca o remetente configurado da organização.
-// Fallback: onboarding@resend.dev (sempre funciona no Resend).
+// getStoreSender — remetente DA LOJA (o que todo envio com loja usa).
+// getOrgSender   — remetente da organização, só para envios sem loja.
+//
+// A regra de quem vence (loja → organização só com uma loja → neutro)
+// mora em getEmailProviderForOrg; aqui só se dá a forma "Nome <email>".
 // =============================================
 
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { getEmailProviderForOrg, platformFallbackFrom, type SenderSource } from '@/lib/email/providers'
 
 export interface SenderInfo {
   from: string      // "Nome <email@dominio>"
   fromEmail: string // "email@dominio"
   senderName: string
   replyTo?: string
+  /** De onde veio: 'store' (própria), 'org' (organização com uma loja) ou 'platform' (neutro). */
+  source?: SenderSource
+}
+
+function formatFrom(senderName: string, fromEmail: string): string {
+  return senderName ? `${senderName} <${fromEmail}>` : fromEmail
+}
+
+/**
+ * Remetente da loja. Sem storeId, cai no da organização — que numa
+ * organização com várias lojas é a identidade de UMA delas; por isso
+ * todo caminho de envio deve passar a loja.
+ */
+export async function getStoreSender(orgId: string, storeId?: string | null): Promise<SenderInfo> {
+  if (!storeId) return getOrgSender(orgId)
+  try {
+    const { config } = await getEmailProviderForOrg(orgId, storeId)
+    const fromEmail = config.defaultFrom || platformFallbackFrom()
+    const senderName = config.defaultSenderName || 'Worder'
+    return {
+      from: formatFrom(senderName, fromEmail),
+      fromEmail,
+      senderName,
+      replyTo: config.defaultReplyTo || undefined,
+      source: ((config as any).senderSource as SenderSource) || 'platform',
+    }
+  } catch {
+    const fallback = platformFallbackFrom()
+    return { from: `Worder <${fallback}>`, fromEmail: fallback, senderName: 'Worder', source: 'platform' }
+  }
 }
 
 /**
@@ -34,19 +68,21 @@ export async function getOrgSender(orgId: string): Promise<SenderInfo> {
 
     if (senderEmail) {
       return {
-        from: `${senderName} <${senderEmail}>`,
+        from: formatFrom(senderName, senderEmail),
         fromEmail: senderEmail,
         senderName,
         replyTo,
+        source: 'org',
       }
     }
   } catch { /* fallback */ }
 
   // Fallback
-  const fallback = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev'
+  const fallback = platformFallbackFrom()
   return {
     from: `Worder <${fallback}>`,
     fromEmail: fallback,
     senderName: 'Worder',
+    source: 'platform',
   }
 }

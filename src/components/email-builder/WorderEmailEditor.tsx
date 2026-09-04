@@ -2192,6 +2192,7 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
           return h
         })()}
         defaultSubject={templateName}
+        storeId={previewStoreIdRef.current}
       />
 
       {/* ── Merge Tag Picker Modal ── */}
