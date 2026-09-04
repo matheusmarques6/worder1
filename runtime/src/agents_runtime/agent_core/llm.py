@@ -2,8 +2,8 @@
 
 `arquitetura §3` gives `agent_core` the LLM, so the port lives here and not in a
 module of its own. What arrives at a call site is always this Protocol, never an
-adapter: the eval harness (S3) drives a scripted stand-in through it, the
-responder (S9) drives the real one, and neither knows the difference.
+adapter: the responder (S9) drives the real one and the tests drive scripted
+stand-ins through it, and neither knows the difference.
 
 D1 (decisão 79) is written into the types:
 

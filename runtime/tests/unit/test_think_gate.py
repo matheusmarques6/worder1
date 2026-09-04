@@ -5,9 +5,8 @@ single reply. The gate decides, BEFORE the model is called, whether the pending
 input deserves it — a "oi" does not, a complaint with three questions does.
 
 It is a pure function returning a decision AND its reason. The reason is data,
-not a log line: the eval harness (S3) and the cost analysis (S10) both need to
-say why a conversation took the expensive path, and a string produced by a
-`print` would reach neither.
+not a log line: the cost analysis (S10) needs to say why a conversation took the
+expensive path, and a string produced by a `print` would never reach it.
 
 Definition fixed with Bruno on 2026-08-03 — no canonical doc defined it, only
 named it (arquitetura §3, testes-e-cicd §2).

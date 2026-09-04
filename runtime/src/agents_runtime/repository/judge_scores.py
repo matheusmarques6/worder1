@@ -9,9 +9,9 @@ outbound message has not been written yet (it is created inside the FASE 3
 transaction), and for a blocked draft it never will be. The conversation is the
 link that always exists.
 
-The eval trail writes to the same table from `repository/evals.py`, with
-`kind = 'post_hoc'` and an `eval_run_id`. Two writers, two concerns: one scores
-a version against a pack, this one decided whether a message left the outbox.
+The CHECK on `kind` also offers `post_hoc`, for scores an eval run would write.
+Nothing writes those today: item 57 of the audit deleted the eval persistence
+layer with the harness it served. This module is the table's only writer.
 """
 
 from uuid import UUID

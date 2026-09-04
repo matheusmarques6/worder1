@@ -3,7 +3,7 @@
 Extended reasoning costs tokens and latency on every reply, so the decision is
 made before the model is called, from the pending input alone. Pure: no clock,
 no randomness, no I/O — the same messages always produce the same decision,
-which is what lets the eval harness compare two agent versions at all.
+which is what makes two agent versions comparable at all.
 
 The decision carries its reason as DATA. "Why did this conversation take the
 expensive path?" is a question S10's cost analysis asks routinely, and an

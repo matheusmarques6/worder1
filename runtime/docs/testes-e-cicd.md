@@ -132,6 +132,14 @@ Sem simulações internas: as jornadas integram contas e ambientes externos de t
 | **Exercícios de restauração** | caminho PITR/projeto novo e caminho pg_dump; valida Vault legível e senhas de roles; mede o RTO real | os dois caminhos concluídos; segredo do Vault lido após a restauração; RTO registrado | trimestral |
 | **Fumaça de produção** | verificação de integridade do runtime; evento sintético via `ingest_webhook`; envio real a número interno; leitura de segredo | tudo verde em ≤ 5 min | após todo deploy em produção |
 
+> **Estado dos evals de IA (item 57 da auditoria, `dd51029b`):** a linha acima descreve o ritual, não
+> o que existe. O runner (`evals/harness.py`) e a persistência (`repository/evals.py`) foram
+> **apagados** — nunca tiveram rota, handler nem script, e estavam inalterados desde o fork. O que
+> continua na árvore é o que tem consumidor: as 4 rubricas, lidas do disco a cada turno pelo Judge 1,
+> e o pack de 12 cenários com a trava de rastreabilidade RF (`tests/unit/test_pack_traceability.py`).
+> Os 12 casos adversariais são **especificação versionada**, não trava executada. Quem for instrumentar
+> o portão escreve o runner de novo, e o custo real está medido no item 57.
+
 **Critérios quantitativos da suíte de carga (aprovação exige todos):**
 1. Perda de eventos = **0**; duplicidade de envio = 0 sem passar por `manual_review`.
 2. Latência de processamento inbound (fim do debounce → gravação na outbox): **p95 ≤ 2 min, p99 ≤ 5 min** durante a rajada.
@@ -161,6 +169,9 @@ Estes valores são a linha de base inicial; ajustes exigem atualização deste d
 | **Trimestral** | 2 exercícios de restauração | auditoria; falha = incidente | ~meio dia | projeto de staging descartável |
 | **Release em produção** (gatilho manual) | checklist do §6.2 + deploy do §6.3 + fumaça de produção | **Sim** | ~15 min | produção |
 | **Por versão de agente** (ativação) | eval harness ≥ limite mínimo + gate duplo humano | **Sim — versão não ativa sem pontuação** | minutos | staging/produção (chat simulado) |
+
+> O portão de ativação continua declarado bloqueante aqui e reservado por RNF-022, mas **não está
+> instrumentado**: o harness foi apagado pelo item 57 da auditoria. Ver a nota do §5.
 
 ### 6.2 Gate de release para produção (checklist automatizado)
 1. `main` verde nas suítes bloqueantes (unit, db, rls, pipeline) **no commit candidato**.
