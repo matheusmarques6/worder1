@@ -118,8 +118,15 @@ def resolve_agent_llm(
     base_secret: str | None,
     platform: LlmPort | None = None,
 ) -> ResolvedAgentLlm:
-    """A cascata inteira. `platform` só entra quando o degrau (3) estiver
-    ligado por config — hoje é stub desligado (BYO-only)."""
+    """A cascata inteira. O degrau (3) exige DUAS condições, não uma:
+    `AGENTS_PLATFORM_LLM_ENABLED` ligada E um `platform` vindo do chamador.
+    A flag é necessária e NÃO suficiente — quem governa de fato é o
+    argumento, e nenhum call site de produção o passa hoje
+    (`responder.py::respond`, `toucher.py::touch`), então ligar só a env não
+    tem efeito nenhum. Também não é stub: o caminho por trás do degrau está
+    completo (cliente `OpenRouterLlm`, credencial `AGENTS_OPENROUTER_API_KEY`,
+    modelo carregado no request) — o que falta é o argumento, parado de
+    propósito enquanto o BYO-only valer (item 52)."""
     choice = select_provider_key(rows, agent_provider=agent_provider)
     if choice is not None:
         decoded = decode_stored_key(choice.api_key, base_secret=base_secret)
