@@ -141,16 +141,24 @@ export async function POST(req: NextRequest) {
     let storeEmail = '';
     let storePhone = '';
     if (campaign.store_id) {
-      const { data: store } = await supabaseAdmin
+      // As colunas são shop_*, não name/domain/email/phone. Pedir os
+      // nomes errados fazia o PostgREST devolver erro, store vinha
+      // null e as QUATRO variáveis de loja saíam vazias em toda
+      // campanha — {{store_name}}, {{store_url}}, {{store_email}} e
+      // {{store_phone}} eram oferecidas no editor e nunca resolviam.
+      const { data: store, error: storeErr } = await supabaseAdmin
         .from('shopify_stores')
-        .select('name, domain, email, phone')
+        .select('shop_name, shop_domain, shop_email, shop_phone')
         .eq('id', campaign.store_id)
-        .single();
+        .maybeSingle();
+      if (storeErr) {
+        console.error('[SendBatch] falha ao ler a loja para as merge tags:', storeErr);
+      }
       if (store) {
-        storeName = store.name || '';
-        storeUrl = store.domain ? `https://${store.domain}` : '';
-        storeEmail = store.email || '';
-        storePhone = store.phone || '';
+        storeName = store.shop_name || '';
+        storeUrl = store.shop_domain ? `https://${store.shop_domain}` : '';
+        storeEmail = store.shop_email || '';
+        storePhone = store.shop_phone || '';
       }
     }
 

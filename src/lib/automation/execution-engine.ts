@@ -171,13 +171,27 @@ export class ExecutionEngine {
     // the app domain). Single choke point for EVERY runner — some context
     // builders only set storeId, not store.domain. variableEngine +
     // node-executors + resolveCartBlocks all read context.store?.domain.
-    if (!(context as any)?.store?.domain) {
+    // Antes só o domínio era anexado, então {{store_name}} lia
+    // context.store.name — que nunca existia — e saía VAZIO em todo
+    // e-mail de automação; {{store_email}} e {{store_phone}} nem
+    // chegavam ao mergeData. As três eram oferecidas no editor e
+    // nenhuma funcionava. Agora vem a identidade inteira, uma vez por
+    // execução.
+    if (!(context as any)?.store?.domain || !(context as any)?.store?.name) {
       const storeId = (context as any)?.storeId || (options as any)?.storeId;
       if (storeId) {
         try {
-          const { resolveStoreShopDomain } = await import('./store-host');
-          const domain = await resolveStoreShopDomain(this.supabase, storeId);
-          if (domain) (context as any).store = { ...((context as any).store || {}), domain };
+          const { resolveStoreIdentity } = await import('./store-host');
+          const identity = await resolveStoreIdentity(this.supabase, storeId);
+          if (identity.domain || identity.name) {
+            (context as any).store = {
+              ...((context as any).store || {}),
+              domain: identity.domain || (context as any).store?.domain,
+              name: identity.name || (context as any).store?.name,
+              email: identity.email || (context as any).store?.email,
+              phone: identity.phone || (context as any).store?.phone,
+            };
+          }
         } catch { /* non-fatal: falls back to event-derived host */ }
       }
     }

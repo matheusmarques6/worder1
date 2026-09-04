@@ -24,22 +24,35 @@ import {
   escapeHtmlValue,
 } from '@/lib/email/merge-tags';
 import { normalizeHost, getShopDomain, absolutizeSiteUrl } from '@/lib/email/trigger-cta';
+import { PLATFORM_TAGS, EVENT_TAGS } from '@/lib/merge-tags/catalog';
 
 // The 29 canonical un-prefixed tags ({{ CheckoutURL }}, {{ Customer.Email }},
 // {{ Items[0].ProductName }}, ...). The engine resolves these against
 // trigger.data (then .raw / .properties) so they work in EVERY channel the
 // engine powers — email, WhatsApp, SMS. This is the product's universal-tags
 // goal: one tag vocabulary, all channels.
-const CANONICAL_PATH_SET = new Set(CANONICAL_TRIGGER_PATHS);
+// Whitelist histórica + catálogo novo. As variáveis novas (SKU,
+// variante, transportadora) passam a resolver também em WhatsApp e SMS,
+// não só no e-mail — a promessa é um vocabulário só para todos os canais.
+const CANONICAL_PATH_SET = new Set([
+  ...CANONICAL_TRIGGER_PATHS,
+  ...EVENT_TAGS.map((t) => t.tag),
+]);
 
 // Flat email tags ({{ first_name }}, {{ checkout_url }}, {{ store_name }},
 // ...) that renderMergeTags resolves DOWNSTREAM from the full mergeData
 // (contact flat fields, store, custom). The engine's context can't resolve
 // these — leave them intact instead of consuming to '' so the email
 // pipeline still gets its shot.
-const FLAT_EMAIL_TAG_SET = new Set(
-  MERGE_TAGS.map((t) => t.tag).filter((tag) => !tag.includes('.'))
-);
+// União com o catálogo novo: a lista antiga continua valendo (templates
+// já escritos) e toda variável de PLATAFORMA do catálogo entra junto,
+// para o motor não consumir a '' uma tag que o renderizador do e-mail
+// resolveria logo depois. Sem a união, uma variável nova do catálogo
+// chegaria vazia na caixa de entrada.
+const FLAT_EMAIL_TAG_SET = new Set([
+  ...MERGE_TAGS.map((t) => t.tag).filter((tag) => !tag.includes('.')),
+  ...PLATFORM_TAGS.map((t) => t.tag),
+]);
 
 // Smart tags ({{ trigger.link }}, {{ trigger.first_item_* }}, ...) with
 // multi-source fallbacks (CheckoutURL > AbandonedCheckoutURL > ProductURL

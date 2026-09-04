@@ -869,6 +869,10 @@ const actionExecutors: Record<string, NodeExecutor> = {
           total_spent: String(contact?.totalSpent ?? contact?.total_spent ?? 0),
           store_name: (context as any)?.store?.name || '',
           store_url: (context as any)?.store?.domain ? `https://${(context as any).store.domain}` : '',
+          // Faltavam no mergeData: eram oferecidas no editor e chegavam
+          // em branco na caixa de entrada.
+          store_email: (context as any)?.store?.email || '',
+          store_phone: (context as any)?.store?.phone || '',
         };
         // Flatten event/trigger data into merge tags as event.*
         if (triggerProps && typeof triggerProps === 'object') {
