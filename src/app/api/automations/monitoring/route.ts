@@ -16,10 +16,27 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(_req: NextRequest) {
+export async function GET(req: NextRequest) {
   const auth = await getAuthClient()
   if (!auth) return authError()
   const orgId = auth.user.organization_id
+
+  // A página manda a loja selecionada; a rota ignorava e mostrava as
+  // execuções da organização inteira. automation_runs não tem store_id,
+  // então o recorte é pelas automações da loja.
+  const storeId = req.nextUrl.searchParams.get('storeId') || req.nextUrl.searchParams.get('store_id')
+  let storeAutomationIds: string[] | null = null
+  if (storeId) {
+    const { validateStoreAccess } = await import('@/lib/api-utils')
+    const access = await validateStoreAccess(auth.supabase as any, orgId, storeId, auth.user.id)
+    if (!access.valid) return NextResponse.json({ error: access.error }, { status: access.status || 403 })
+    const { data: storeAutomations } = await supabaseAdmin
+      .from('automations')
+      .select('id')
+      .eq('organization_id', orgId)
+      .eq('store_id', storeId)
+    storeAutomationIds = (storeAutomations || []).map((a: any) => a.id)
+  }
 
   const now = new Date()
   const day = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString()
@@ -27,12 +44,17 @@ export async function GET(_req: NextRequest) {
 
   try {
     // Runs nas últimas 24h agrupados por status + automation
-    const { data: recentRuns } = await supabaseAdmin
+    let runsQuery = supabaseAdmin
       .from('automation_runs')
       .select('id, automation_id, status, last_error, created_at, started_at, completed_at')
       .eq('organization_id', orgId)
       .gte('created_at', day)
       .limit(10000)
+    if (storeAutomationIds) {
+      // Loja sem automações: nada a mostrar, sem consultar em vão.
+      runsQuery = runsQuery.in('automation_id', storeAutomationIds.length ? storeAutomationIds : ['00000000-0000-0000-0000-000000000000'])
+    }
+    const { data: recentRuns } = await runsQuery
 
     const runs = recentRuns || []
 
@@ -124,11 +146,13 @@ export async function GET(_req: NextRequest) {
       activeAutomations: 0,
     }
 
-    const { count: active } = await supabaseAdmin
+    let activeQuery = supabaseAdmin
       .from('automations')
       .select('id', { count: 'exact', head: true })
       .eq('organization_id', orgId)
       .eq('status', 'active')
+    if (storeId) activeQuery = activeQuery.eq('store_id', storeId)
+    const { count: active } = await activeQuery
     totals.activeAutomations = active || 0
 
     return NextResponse.json({

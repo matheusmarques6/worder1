@@ -11,9 +11,18 @@
 // =============================================
 
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { publicStoreHost } from '@/lib/shopify/store-url'
+import { hasPlaceholderDomain } from '@/lib/stores/placeholder'
+import { extractEventPayloadStoreId } from '@/lib/events'
 
 export interface ResolveFeedOptions {
   orgId: string
+  /**
+   * Loja do e-mail. Produtos e links saem SÓ dela. Sem isto, o feed
+   * escolhia "a loja ativa mais nova da organização" — foi assim que um
+   * e-mail da Dr. Groot saiu com links da Medicube, cadastrada no dia.
+   */
+  storeId?: string | null
   feedId?: string | null
   feedType?: string | null
   contactId?: string | null
@@ -93,20 +102,125 @@ function mapTriggerItem(it: any) {
   }
 }
 
-// Fetch the store's public domain once so catalog products get real
-// clickable URLs (https://{domain}/products/{handle}).
-async function getShopDomain(orgId: string): Promise<string> {
+// -------------------------------------------------------------
+// De qual loja é este e-mail?
+//
+// Uma organização tem VÁRIAS lojas, e cada uma tem o seu catálogo e o
+// seu domínio. Tudo que este módulo devolve — produto, imagem, link —
+// tem de vir de UMA loja: a do e-mail. A ordem abaixo é a das fontes
+// mais confiáveis para as menos:
+//
+//   1. storeId explícito — a campanha (email_campaigns.store_id) ou o
+//      fluxo (automations.store_id) sabe a que loja pertence.
+//   2. o evento que disparou — webhooks e pixel carregam store_id.
+//   3. o contato — contacts.store_id; um fluxo da organização inteira
+//      ainda fala com um cliente de UMA loja.
+//   4. a única loja ativa da organização — sem ambiguidade possível.
+//
+// Se nada disso resolve, o feed NÃO adivinha: numa organização com
+// várias lojas, adivinhar é exatamente o vazamento que se quer evitar.
+// -------------------------------------------------------------
+
+export interface FeedStore {
+  /** Linha de shopify_stores, ou null quando não dá para saber. */
+  id: string | null
+  /** Host público (domínio principal, senão *.myshopify.com), ou ''. */
+  host: string
+  /** De onde veio a decisão — aparece no log quando algo sai errado. */
+  source: 'explicit' | 'event' | 'contact' | 'single' | 'none'
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+type StoreRow = { id: string; organization_id: string; shop_domain: string | null; primary_domain: string | null; is_active: boolean | null }
+
+// Cache curto por lambda: um lote de campanha chama isto uma vez por
+// contato e por bloco. Curto porque o domínio principal pode mudar.
+const STORE_TTL_MS = 5 * 60_000
+const storeCache = new Map<string, { at: number; row: StoreRow | null }>()
+
+async function loadStoreRow(storeId: string): Promise<StoreRow | null> {
+  const hit = storeCache.get(storeId)
+  if (hit && Date.now() - hit.at < STORE_TTL_MS) return hit.row
+  let row: StoreRow | null = null
   try {
     const { data } = await supabaseAdmin
       .from('shopify_stores')
-      .select('shop_domain')
+      .select('id, organization_id, shop_domain, primary_domain, is_active')
+      .eq('id', storeId)
+      .maybeSingle()
+    row = (data as StoreRow) || null
+  } catch { row = null }
+  // Leitura falha não entra no cache — a próxima tenta de novo.
+  if (row) storeCache.set(storeId, { at: Date.now(), row })
+  return row
+}
+
+/** Para os testes: esquece o que foi lido. */
+export function __resetFeedStoreCache() { storeCache.clear() }
+
+function toFeedStore(row: StoreRow | null, orgId: string, source: FeedStore['source']): FeedStore | null {
+  if (!row) return null
+  // Uma loja de OUTRA organização nunca serve, venha de onde vier o id.
+  if (row.organization_id !== orgId) return null
+  return { id: row.id, host: publicStoreHost(row), source }
+}
+
+export async function resolveFeedStore(
+  orgId: string,
+  storeId?: string | null,
+  contactId?: string | null,
+  eventData?: Record<string, any> | null
+): Promise<FeedStore> {
+  const none: FeedStore = { id: null, host: '', source: 'none' }
+  if (!orgId) return none
+
+  // 1. Explícito.
+  if (storeId && UUID_RE.test(storeId)) {
+    const found = toFeedStore(await loadStoreRow(storeId), orgId, 'explicit')
+    if (found) return found
+    console.warn(`[product-feeds] storeId ${storeId} não é da organização ${orgId} — ignorado`)
+  }
+
+  // 2. O evento.
+  const eventStoreId = extractEventPayloadStoreId(eventData)
+  if (eventStoreId) {
+    const found = toFeedStore(await loadStoreRow(eventStoreId), orgId, 'event')
+    if (found) return found
+  }
+
+  // 3. O contato.
+  if (contactId && UUID_RE.test(contactId)) {
+    try {
+      const { data: contact } = await supabaseAdmin
+        .from('contacts')
+        .select('store_id')
+        .eq('id', contactId)
+        .eq('organization_id', orgId)
+        .maybeSingle()
+      if (contact?.store_id) {
+        const found = toFeedStore(await loadStoreRow(contact.store_id), orgId, 'contact')
+        if (found) return found
+      }
+    } catch { /* segue para o próximo */ }
+  }
+
+  // 4. A única loja ativa. Lojas "sem integração" (domínio sintético)
+  // não contam: não têm catálogo nem domínio para linkar.
+  try {
+    const { data: stores } = await supabaseAdmin
+      .from('shopify_stores')
+      .select('id, organization_id, shop_domain, primary_domain, is_active')
       .eq('organization_id', orgId)
       .eq('is_active', true)
-      .order('installed_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-    return data?.shop_domain || ''
-  } catch { return '' }
+    const reais = ((stores || []) as StoreRow[]).filter((s) => !hasPlaceholderDomain(s))
+    if (reais.length === 1) return { id: reais[0].id, host: publicStoreHost(reais[0]), source: 'single' }
+    if (reais.length > 1) {
+      console.warn(`[product-feeds] organização ${orgId} tem ${reais.length} lojas e o e-mail não diz qual é — bloco de catálogo fica vazio`)
+    }
+  } catch { /* sem loja */ }
+
+  return none
 }
 
 // Map a synced shopify_products row to the feed product shape the email
@@ -134,16 +248,23 @@ function mapCatalogProduct(p: any, shopDomain: string) {
 
 const CATALOG_COLS = 'shopify_product_id, title, handle, price, compare_at_price, images, vendor, sku, status, product_type, created_at'
 
-// Fetch newest active catalog products for an org, tolerant of how the
+// Catálogo de UMA loja. organization_id fica como segunda cerca: mesmo
+// que um store_id errado chegue aqui, não atravessa organizações.
+function catalogQuery(orgId: string, storeId: string) {
+  return supabaseAdmin.from('shopify_products')
+    .select(CATALOG_COLS)
+    .eq('organization_id', orgId)
+    .eq('store_id', storeId)
+}
+
+// Fetch newest active catalog products for a store, tolerant of how the
 // status was stored. Some historical syncs saved the Shopify enum verbatim
 // ('ACTIVE') or left it null, so a strict .eq('status','active') silently
 // returned nothing. We try the case-insensitive/null-tolerant filter first,
-// and if that still yields zero we fall back to ANY product for the org so
+// and if that still yields zero we fall back to ANY product of the store so
 // a recommendation block never renders empty when the catalog IS synced.
-async function fetchNewestCatalog(orgId: string, limit: number): Promise<any[]> {
-  const base = () => supabaseAdmin.from('shopify_products')
-    .select(CATALOG_COLS)
-    .eq('organization_id', orgId)
+async function fetchNewestCatalog(orgId: string, storeId: string, limit: number): Promise<any[]> {
+  const base = () => catalogQuery(orgId, storeId)
     .order('created_at', { ascending: false })
     .limit(limit)
   let { data } = await base().or('status.ilike.active,status.is.null')
@@ -163,23 +284,25 @@ export async function resolveProductFeed(opts: ResolveFeedOptions): Promise<any[
   const event_data = opts.eventData || null
   const feed_id = opts.feedId || null
 
+  // Uma loja por e-mail. Resolvida uma vez, vale para todos os ramos.
+  const store = await resolveFeedStore(orgId, opts.storeId, contact_id, event_data)
+  const shopDomain = store.host
+
   let products: any[] = []
 
   switch (type) {
     case 'bestsellers':
     case 'most_viewed':
     case 'newest': {
-      const shopDomain = await getShopDomain(orgId)
-      const data = await fetchNewestCatalog(orgId, limit)
+      if (!store.id) break
+      const data = await fetchNewestCatalog(orgId, store.id, limit)
       products = data.map((p: any) => mapCatalogProduct(p, shopDomain))
       break
     }
 
     case 'random': {
-      const shopDomain = await getShopDomain(orgId)
-      const { data } = await supabaseAdmin.from('shopify_products')
-        .select(CATALOG_COLS)
-        .eq('organization_id', orgId)
+      if (!store.id) break
+      const { data } = await catalogQuery(orgId, store.id)
         .or('status.ilike.active,status.is.null')
         .limit(limit * 3)
       const shuffled = (data || []).map((p: any) => mapCatalogProduct(p, shopDomain)).sort(() => Math.random() - 0.5)
@@ -188,7 +311,7 @@ export async function resolveProductFeed(opts: ResolveFeedOptions): Promise<any[
     }
 
     case 'recently_viewed': {
-      const shopDomain = await getShopDomain(orgId)
+      if (!store.id) break
       if (contact_id) {
         try {
           const { data: events } = await supabaseAdmin.from('tracking_events')
@@ -202,19 +325,17 @@ export async function resolveProductFeed(opts: ResolveFeedOptions): Promise<any[
             .filter(Boolean)
             .map((id: any) => String(id))
           if (productIds.length > 0) {
-            const { data } = await supabaseAdmin.from('shopify_products')
-              .select(CATALOG_COLS)
-              .eq('organization_id', orgId)
+            // Só o que existe no catálogo DESTA loja: um produto visto na
+            // loja irmã não entra no e-mail desta.
+            const { data } = await catalogQuery(orgId, store.id)
               .in('shopify_product_id', productIds)
             products = (data || []).map((p: any) => mapCatalogProduct(p, shopDomain))
           }
         } catch {}
       }
       if (products.length === 0) {
-        const { data } = await supabaseAdmin.from('shopify_products')
-          .select(CATALOG_COLS).eq('organization_id', orgId).or('status.ilike.active,status.is.null')
-          .order('created_at', { ascending: false }).limit(limit)
-        products = (data || []).map((p: any) => mapCatalogProduct(p, shopDomain))
+        const data = await fetchNewestCatalog(orgId, store.id, limit)
+        products = data.map((p: any) => mapCatalogProduct(p, shopDomain))
       }
       break
     }
@@ -270,23 +391,20 @@ export async function resolveProductFeed(opts: ResolveFeedOptions): Promise<any[
         if (needEnrichment.length > 0) {
           const ids = Array.from(new Set(needEnrichment.map((p: any) => String(p.product_id))))
           try {
-            const { data: dbProducts } = await supabaseAdmin
+            // Os ids vêm do evento, então são produtos concretos; ainda
+            // assim, com a loja conhecida, só a linha DELA serve — o
+            // handle e o domínio do link têm de ser os dessa loja.
+            let enrichQuery = supabaseAdmin
               .from('shopify_products')
               .select('shopify_product_id, title, handle, images, variants, price')
               .eq('organization_id', orgId)
               .in('shopify_product_id', ids)
+            if (store.id) enrichQuery = enrichQuery.eq('store_id', store.id)
+            const { data: dbProducts } = await enrichQuery
             const byId = new Map<string, any>()
             for (const dp of dbProducts || []) {
               if (dp.shopify_product_id) byId.set(String(dp.shopify_product_id), dp)
             }
-            const { data: storeRow } = await supabaseAdmin
-              .from('shopify_stores')
-              .select('shop_domain')
-              .eq('organization_id', orgId)
-              .eq('is_active', true)
-              .limit(1)
-              .maybeSingle()
-            const shopDomain = storeRow?.shop_domain || ''
             for (const p of products) {
               const pid = p.product_id ? String(p.product_id) : null
               if (!pid) continue
@@ -413,17 +531,18 @@ export async function resolveProductFeed(opts: ResolveFeedOptions): Promise<any[
 
     case 'recommendations':
     default: {
-      const shopDomain = await getShopDomain(orgId)
-      const data = await fetchNewestCatalog(orgId, limit)
+      if (!store.id) break
+      const data = await fetchNewestCatalog(orgId, store.id, limit)
       products = data.map((p: any) => mapCatalogProduct(p, shopDomain))
     }
   }
 
-  // If feed_id provided, load feed config for filters
+  // If feed_id provided, load feed config for filters. A organização é
+  // a cerca: um feed de outra org não filtra nada aqui.
   if (feed_id) {
     try {
       const { data: feed } = await supabaseAdmin.from('product_feeds')
-        .select('filters').eq('id', feed_id).eq('organization_id', orgId).single()
+        .select('filters').eq('id', feed_id).eq('organization_id', orgId).maybeSingle()
       if (feed && feed.filters && Array.isArray(feed.filters) && feed.filters.length > 0) {
         for (const filter of feed.filters as any[]) {
           if (filter.field === 'category' && filter.value !== 'all') {

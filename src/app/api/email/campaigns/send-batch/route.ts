@@ -427,6 +427,9 @@ export async function POST(req: NextRequest) {
             provider: 'resend',
             status: 'queued',
             organization_id: organizationId,
+            // Loja da campanha (senão a do contato): é o que o rastreador
+            // de clique e os relatórios por loja leem.
+            store_id: campaign.store_id || contact.store_id || null,
             isp_domain: contactIsp,
           })
           .select('id')
@@ -483,9 +486,11 @@ export async function POST(req: NextRequest) {
           .update({ ab_variant: variant })
           .eq('id', emailSend.id)
 
-        // Resolve dynamic product/cart blocks per contact
-        let htmlResolved = await resolveProductBlocks(htmlSource, organizationId, contact.id);
-        htmlResolved = await resolveCartBlocks(htmlResolved, organizationId, contact.id);
+        // Resolve dynamic product/cart blocks per contact — com a loja da
+        // campanha, para que o catálogo e os links sejam DESTA loja e não
+        // da loja ativa mais nova da organização.
+        let htmlResolved = await resolveProductBlocks(htmlSource, organizationId, contact.id, undefined, campaign.store_id || null);
+        htmlResolved = await resolveCartBlocks(htmlResolved, organizationId, contact.id, undefined, null, storeUrl, campaign.store_id || null);
 
         // Prep final HTML (merge tags + tracking pixel + click tracking + unsubscribe)
         let finalHtml = prepareEmailHtml({

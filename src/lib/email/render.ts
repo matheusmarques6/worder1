@@ -435,7 +435,14 @@ export async function resolveProductBlocks(
   html: string,
   orgId: string,
   contactId?: string,
-  eventData?: Record<string, any>
+  eventData?: Record<string, any>,
+  /**
+   * Loja do e-mail (campaign.store_id / automation.store_id). É o que
+   * garante que os produtos e os links saem da loja certa numa
+   * organização com várias lojas. Sem ela o feed cai no evento, no
+   * contato e, por fim, na única loja ativa — nunca em "qualquer uma".
+   */
+  storeId?: string | null
 ): Promise<string> {
   const regex = /<!-- WORDER_PRODUCT_BLOCK:(\w+):(\d+):(\d+):(true|false):(true|false):(true|false):([^-]*?) -->/g
   let result = html
@@ -458,7 +465,7 @@ export async function resolveProductBlocks(
       // 50-200ms/call adds up across a batch.
       const { resolveProductFeed } = await import('@/lib/email/product-feeds')
       products = await resolveProductFeed({
-        orgId, feedType, contactId, maxProducts, eventData,
+        orgId, storeId, feedType, contactId, maxProducts, eventData,
       })
     } catch {
       // No products available
@@ -467,7 +474,7 @@ export async function resolveProductBlocks(
     if (products.length === 0 && feedType.startsWith('trigger_')) {
       try {
         const { resolveProductFeed } = await import('@/lib/email/product-feeds')
-        products = await resolveProductFeed({ orgId, feedType: 'bestsellers', maxProducts })
+        products = await resolveProductFeed({ orgId, storeId, feedType: 'bestsellers', maxProducts, contactId, eventData })
       } catch {}
     }
 
@@ -489,7 +496,9 @@ export async function resolveProductBlocks(
         const price = p.price || '0'
         const comparePrice = p.compare_at_price || p.compare_price || ''
         const imgUrl = p.image_url || p.images?.[0]?.src || ''
-        const url = p.url || (p.handle ? `https://loja.com/products/${p.handle}` : '#')
+        // O feed já monta a URL com o domínio da loja do e-mail. Sem URL,
+        // melhor um link morto do que um domínio inventado.
+        const url = p.url || '#'
 
         productHtml += `<td width="${100 / cols}%" style="padding:8px;vertical-align:top;text-align:center;">
           <a href="${url}" style="text-decoration:none;color:inherit;display:block;">
@@ -529,7 +538,10 @@ export async function resolveCartBlocks(
   triggerType?: string | null,
   /** The store's public URL (e.g. https://drgroot.com.br) used to absolutize
    *  site-relative product URLs so links never 404 on the app domain. */
-  storeUrl?: string | null
+  storeUrl?: string | null,
+  /** Loja do e-mail — escopa o catálogo usado para enriquecer os itens e
+   *  é a fonte do host quando storeUrl não veio. */
+  storeId?: string | null
 ): Promise<string> {
   const { triggerFamily, resolveTriggerCtaUrl, getShopDomain, isManualCtaOverride, absolutizeSiteUrl, normalizeHost } =
     await import('@/lib/email/trigger-cta')
@@ -538,6 +550,18 @@ export async function resolveCartBlocks(
   const matches: RegExpExecArray[] = []
   let m: RegExpExecArray | null
   while ((m = regex.exec(html)) !== null) matches.push(m)
+  if (matches.length === 0) return html
+
+  // Host da loja do e-mail, resolvido uma vez para todos os blocos. Só
+  // consulta o banco quando quem chamou não mandou a URL da loja.
+  let resolvedStoreHost = normalizeHost(storeUrl)
+  if (!resolvedStoreHost) {
+    try {
+      const { resolveFeedStore } = await import('@/lib/email/product-feeds')
+      const feedStore = await resolveFeedStore(orgId, storeId, contactId, eventData)
+      resolvedStoreHost = normalizeHost(feedStore.host)
+    } catch { /* cai no host do evento */ }
+  }
 
   for (const match of matches) {
     let cfg: any = {}
@@ -635,6 +659,7 @@ export async function resolveCartBlocks(
       const { resolveProductFeed } = await import('@/lib/email/product-feeds')
       products = await resolveProductFeed({
         orgId,
+        storeId,
         feedType,
         contactId,
         maxProducts: itemCap,
@@ -725,7 +750,9 @@ export async function resolveCartBlocks(
     //   permalink with ALL the items (/cart/variant:qty…); viewed/browse →
     //   the product page; order → order status. A manual buttonHref (that
     //   isn't one of the legacy auto placeholders) still wins as an override.
-    const shopDomain = normalizeHost(storeUrl) || getShopDomain(eventData)
+    // A loja do e-mail manda; o host que o evento carrega é o último
+    // recurso (um pixel de outra loja não pode redirecionar este link).
+    const shopDomain = resolvedStoreHost || getShopDomain(eventData)
     const family = triggerFamily(triggerType)
     const permalinkItems = products.map((p: any) => ({ variant_id: p.variant_id, quantity: p.quantity }))
     const orderStatusUrl: string = props.OrderStatusURL || props.order_status_url || raw.order_status_url || ''

@@ -64,6 +64,8 @@ interface EmailPreviewModeProps {
   templateId: string;
   triggerType: string;
   organizationId: string;
+  /** Loja do fluxo — produtos, links e {{store_*}} do preview saem dela. */
+  storeId?: string | null;
   onClose: () => void;
 }
 
@@ -75,7 +77,7 @@ interface EventItem {
   occurred_at: string;
 }
 
-export function EmailPreviewMode({ templateId, triggerType, organizationId, onClose }: EmailPreviewModeProps) {
+export function EmailPreviewMode({ templateId, triggerType, organizationId, storeId, onClose }: EmailPreviewModeProps) {
   const [activeTab, setActiveTab] = useState<'preview' | 'send_test'>('preview');
   const [viewMode, setViewMode] = useState<'desktop' | 'mobile'>('desktop');
   const [events, setEvents] = useState<EventItem[]>([]);
@@ -101,7 +103,7 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, onCl
       const res = await fetch('/api/automations/email-preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ templateId, triggerType, organizationId, action: 'list_events' }),
+        body: JSON.stringify({ templateId, triggerType, organizationId, storeId: storeId || undefined, action: 'list_events' }),
       });
       const data = await res.json();
       const eventList: EventItem[] = data.events || [];
@@ -117,7 +119,7 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, onCl
       // silent
     }
     setLoading(false);
-  }, [templateId, triggerType, organizationId]);
+  }, [templateId, triggerType, organizationId, storeId]);
 
   // 2. Render preview for a specific contact
   const renderPreview = async (contactId?: string) => {
@@ -130,6 +132,7 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, onCl
           ...(contactId ? { contactId } : {}),
           triggerType,
           organizationId,
+          storeId: storeId || undefined,
         }),
       });
       if (res.ok) {
@@ -167,6 +170,7 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, onCl
           contactId: currentEvent?.contact_id,
           triggerType,
           organizationId,
+          storeId: storeId || undefined,
           action: 'send_test',
           testEmail,
         }),

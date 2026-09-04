@@ -1,8 +1,55 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { renderMergeTags, resolveOrderBlocks, enrichOrderItemImages } from '@/lib/email/render';
+import { getAuthClient, authError } from '@/lib/api-utils';
+import { publicStoreUrl } from '@/lib/shopify/store-url';
+import { resolveFeedStore } from '@/lib/email/product-feeds';
 
 export const dynamic = 'force-dynamic';
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * A organização do corpo tem de ser uma do usuário logado. Antes a rota
+ * confiava no organizationId recebido — qualquer sessão podia pedir o
+ * preview (com dados de contato e evento) de outra organização.
+ */
+async function userBelongsToOrg(supabase: any, userId: string, userOrgId: string, orgId: string): Promise<boolean> {
+  if (!orgId || !UUID_RE.test(orgId)) return false;
+  if (orgId === userOrgId) return true;
+  const { data } = await supabase
+    .from('organization_members')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('organization_id', orgId)
+    .maybeSingle();
+  return Boolean(data);
+}
+
+/**
+ * Loja do preview, na mesma ordem do envio real: a do fluxo (storeId),
+ * senão a do evento, senão a do contato, senão a única da organização.
+ * As colunas são shop_* — pedir name/domain/email/phone fazia o
+ * PostgREST devolver erro e as quatro variáveis de loja saíam vazias
+ * em todo preview.
+ */
+async function loadPreviewStore(
+  supabase: any,
+  organizationId: string,
+  storeId: string | null | undefined,
+  contactId: string | null | undefined,
+  eventData: Record<string, any> | null | undefined,
+): Promise<{ id: string | null; row: Record<string, any> | null }> {
+  const feedStore = await resolveFeedStore(organizationId, storeId, contactId, eventData);
+  if (!feedStore.id) return { id: null, row: null };
+  const { data } = await supabase
+    .from('shopify_stores')
+    .select('id, shop_name, shop_domain, primary_domain, shop_email, shop_phone')
+    .eq('id', feedStore.id)
+    .eq('organization_id', organizationId)
+    .maybeSingle();
+  return { id: feedStore.id, row: data || null };
+}
 
 // Maps a flow-builder trigger_type to the real event_type(s) stored in contact_events.
 // A trigger may accept multiple underlying event types (e.g. "order paid" matches both
@@ -60,11 +107,11 @@ function buildMergeData(
       ? new Date(c.last_order_at).toLocaleDateString('pt-BR')
       : '',
 
-    // Store
-    store_name: s.name || s.shop_name || '',
-    store_url: s.domain || s.url || '',
-    store_email: s.email || '',
-    store_phone: s.phone || '',
+    // Store — o mesmo host público que o envio real usa em {{store_url}}.
+    store_name: s.shop_name || s.name || '',
+    store_url: publicStoreUrl(s) || s.url || '',
+    store_email: s.shop_email || s.email || '',
+    store_phone: s.shop_phone || s.phone || '',
 
     // Last order (from event props when available)
     order_number: String(eventProps.order_number || eventProps.order_id || ''),
@@ -144,19 +191,35 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'templateId, organizationId required' }, { status: 400 });
   }
 
+  // Sessão obrigatória, e a organização pedida tem de ser do usuário.
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+  if (!(await userBelongsToOrg(supabase, auth.user.id, auth.user.organization_id, organizationId))) {
+    return NextResponse.json({ error: 'Sem acesso a esta organização' }, { status: 403 });
+  }
+
+  // Loja do fluxo. Um id de outra organização é descartado (resolveFeedStore
+  // confere), nunca usado.
+  const requestedStoreId: string | null =
+    typeof body.storeId === 'string' && UUID_RE.test(body.storeId) ? body.storeId : null;
+
   try {
     // If action is list_events, return recent UNIQUE CONTACTS that had this event
     if (action === 'list_events') {
       const eventTypes = resolveEventTypes(triggerType);
 
-      // Get recent events of these types, then deduplicate by contact_id
-      const { data: rawEvents } = await supabase
+      // Get recent events of these types, then deduplicate by contact_id.
+      // Com loja, só eventos DELA: o preview de um fluxo da Dr. Groot
+      // não pode oferecer checkouts da Medicube como amostra.
+      let eventsQuery = supabase
         .from('contact_events')
         .select('id, contact_id, event_type, properties, occurred_at')
         .eq('organization_id', organizationId)
         .in('event_type', eventTypes)
         .order('occurred_at', { ascending: false })
         .limit(50);
+      if (requestedStoreId) eventsQuery = eventsQuery.eq('store_id', requestedStoreId);
+      const { data: rawEvents } = await eventsQuery;
 
       // Deduplicate: keep only the most recent event per contact
       const seenContacts = new Set<string>();
@@ -198,12 +261,13 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'testEmail required' }, { status: 400 });
       }
 
-      // Fetch template
+      // Fetch template — da organização, nunca de outra.
       const { data: tpl } = await supabase
         .from('email_templates')
         .select('html, name')
         .eq('id', templateId)
-        .single();
+        .eq('organization_id', organizationId)
+        .maybeSingle();
 
       if (!tpl?.html) {
         return NextResponse.json({ error: 'Template not found' }, { status: 404 });
@@ -216,7 +280,7 @@ export async function POST(request: NextRequest) {
       let testContact: Record<string, any> | null = null;
       let testEvent: Record<string, any> = {};
       if (contactId) {
-        const { data: c } = await supabase.from('contacts').select('*').eq('id', contactId).maybeSingle();
+        const { data: c } = await supabase.from('contacts').select('*').eq('id', contactId).eq('organization_id', organizationId).maybeSingle();
         testContact = c;
         const eventTypes = resolveEventTypes(triggerType);
         const { data: ev } = await supabase
@@ -231,14 +295,10 @@ export async function POST(request: NextRequest) {
         testEvent = (ev?.properties as Record<string, any>) || {};
         if (ev?.occurred_at && !testEvent.occurred_at) testEvent.occurred_at = ev.occurred_at;
       }
-      const { data: testStore } = await supabase
-        .from('shopify_stores')
-        .select('name, domain, email, phone')
-        .eq('organization_id', organizationId)
-        .limit(1)
-        .maybeSingle();
+      const testStore = await loadPreviewStore(supabase, organizationId, requestedStoreId, contactId, testEvent);
+      const testStoreUrl = publicStoreUrl(testStore.row) || undefined;
       if (html.includes('WORDER_ORDER_BLOCK')) {
-        await enrichOrderItemImages(testEvent, supabase, undefined, organizationId);
+        await enrichOrderItemImages(testEvent, supabase, testStore.id || undefined, organizationId);
         html = resolveOrderBlocks(html, testEvent);
       }
       // Run the SAME resolvers production uses, in the SAME order. Without
@@ -248,17 +308,17 @@ export async function POST(request: NextRequest) {
       // recipient sees from a real campaign send.
       try {
         const { resolveProductBlocks, resolveCartBlocks } = await import('@/lib/email/render');
-        html = await resolveProductBlocks(html, organizationId, contactId, testEvent);
-        html = await resolveCartBlocks(html, organizationId, contactId, testEvent, triggerType);
+        html = await resolveProductBlocks(html, organizationId, contactId, testEvent, testStore.id);
+        html = await resolveCartBlocks(html, organizationId, contactId, testEvent, triggerType, testStoreUrl, testStore.id);
       } catch (e: any) {
         console.warn('[email-preview send_test] dynamic block resolve failed:', e?.message);
       }
       try {
         const { resolveTriggerSmartTags } = await import('@/lib/email/merge-tags');
         // HTML context → escape substituted values (XSS parity with prod).
-        html = resolveTriggerSmartTags(html, testEvent, undefined, { escapeHtml: true });
+        html = resolveTriggerSmartTags(html, testEvent, testStoreUrl, { escapeHtml: true });
       } catch { /* best-effort */ }
-      html = renderMergeTags(html, buildMergeData(testContact, testEvent, testStore));
+      html = renderMergeTags(html, buildMergeData(testContact, testEvent, testStore.row));
 
       // Send via Resend usando remetente configurado da org
       try {
@@ -297,12 +357,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Need contactId for preview rendering
-    // 1. Fetch template
+    // 1. Fetch template — da organização, nunca de outra.
     const { data: template } = await supabase
       .from('email_templates')
       .select('html, design_json, name')
       .eq('id', templateId)
-      .single();
+      .eq('organization_id', organizationId)
+      .maybeSingle();
 
     if (!template?.html) {
       return NextResponse.json({ error: 'Template not found or has no HTML' }, { status: 404 });
@@ -315,18 +376,21 @@ export async function POST(request: NextRequest) {
         .from('contacts')
         .select('*')
         .eq('id', contactId)
+        .eq('organization_id', organizationId)
         .maybeSingle();
       contact = c;
     }
 
-    // If no contact found by ID, try to get any contact from org
+    // If no contact found by ID, try to get any contact from the org —
+    // da loja do fluxo, quando há uma.
     if (!contact) {
-      const { data: anyContact } = await supabase
+      let anyQuery = supabase
         .from('contacts')
         .select('*')
         .eq('organization_id', organizationId)
-        .limit(1)
-        .maybeSingle();
+        .limit(1);
+      if (requestedStoreId) anyQuery = anyQuery.eq('store_id', requestedStoreId);
+      const { data: anyContact } = await anyQuery.maybeSingle();
       contact = anyContact;
     }
 
@@ -350,6 +414,7 @@ export async function POST(request: NextRequest) {
         .order('occurred_at', { ascending: false })
         .limit(1);
       if (contactId) q = q.eq('contact_id', contactId);
+      if (requestedStoreId) q = q.eq('store_id', requestedStoreId);
       if (source) q = q.eq('event_source', source);
       const { data } = await q.maybeSingle();
       return data;
@@ -444,18 +509,17 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 4. Fetch store for {{store_*}} tags
-    const { data: store } = await supabase
-      .from('shopify_stores')
-      .select('name, domain, email, phone')
-      .eq('organization_id', organizationId)
-      .limit(1)
-      .maybeSingle();
+    // 4. Fetch store for {{store_*}} tags — a loja do fluxo, na mesma
+    // ordem de resolução do envio real. Antes era "uma loja qualquer da
+    // organização", e com colunas que não existem.
+    const previewStore = await loadPreviewStore(supabase, organizationId, requestedStoreId, contact?.id || contactId, eventData);
+    const store = previewStore.row;
+    const previewStoreUrl = publicStoreUrl(store) || undefined;
 
     // 5. Resolve order-products blocks using event data
     let processedHtml = template.html;
     if (processedHtml.includes('WORDER_ORDER_BLOCK')) {
-      await enrichOrderItemImages(eventData, supabase, undefined, organizationId);
+      await enrichOrderItemImages(eventData, supabase, previewStore.id || undefined, organizationId);
       processedHtml = resolveOrderBlocks(processedHtml, eventData);
     }
 
@@ -466,8 +530,8 @@ export async function POST(request: NextRequest) {
     // gap in the preview.
     try {
       const { resolveProductBlocks, resolveCartBlocks } = await import('@/lib/email/render');
-      processedHtml = await resolveProductBlocks(processedHtml, organizationId, contactId, eventData);
-      processedHtml = await resolveCartBlocks(processedHtml, organizationId, contactId, eventData, triggerType);
+      processedHtml = await resolveProductBlocks(processedHtml, organizationId, contactId, eventData, previewStore.id);
+      processedHtml = await resolveCartBlocks(processedHtml, organizationId, contactId, eventData, triggerType, previewStoreUrl, previewStore.id);
     } catch (e: any) {
       console.warn('[email-preview] dynamic block resolve failed:', e?.message);
     }
@@ -477,7 +541,7 @@ export async function POST(request: NextRequest) {
     try {
       const { resolveTriggerSmartTags } = await import('@/lib/email/merge-tags');
       // HTML context → escape substituted values (XSS parity with prod).
-      processedHtml = resolveTriggerSmartTags(processedHtml, eventData, undefined, { escapeHtml: true });
+      processedHtml = resolveTriggerSmartTags(processedHtml, eventData, previewStoreUrl, { escapeHtml: true });
     } catch { /* best-effort */ }
 
     // 6. Resolve merge tags using the production engine — covers {{first_name}},

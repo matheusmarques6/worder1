@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { X, Search, ChevronDown, ChevronUp, Trash2, Loader2 } from 'lucide-react'
+import { useStoreStore } from '@/stores'
 
 interface Product {
   id: string
@@ -80,6 +81,11 @@ export function BrowseProductsModal({ isOpen, onClose, onSelect, maxProducts = 9
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'all' | 'selected'>('all')
   const [storeDomain, setStoreDomain] = useState('')
+  // Produtos e domínio da loja SELECIONADA. Sem isto o modal pedia os
+  // produtos de todas as lojas da organização e montava os links com o
+  // domínio da primeira que viesse.
+  const { currentStore } = useStoreStore()
+  const storeId = currentStore?.id
 
   useEffect(() => {
     if (!isOpen) return
@@ -87,20 +93,22 @@ export function BrowseProductsModal({ isOpen, onClose, onSelect, maxProducts = 9
     setSelected(new Set())
     setTab('all')
 
-    fetch('/api/products')
+    const qs = storeId ? `?storeId=${encodeURIComponent(storeId)}` : ''
+    fetch(`/api/products${qs}`)
       .then(r => r.json())
       .then(data => {
         const rawProds: RawProduct[] = Array.isArray(data) ? data : data.products || data.data || []
-        // Get store domain for building URLs (prefer custom primaryDomain over myshopify domain)
-        const stores = data.stores || []
-        const domain = stores[0]?.primaryDomain || stores[0]?.domain || ''
+        // Domínio da loja selecionada (o principal, não o myshopify).
+        const stores: any[] = data.stores || []
+        const mine = storeId ? stores.find((s) => s.id === storeId) : (stores.length === 1 ? stores[0] : null)
+        const domain = mine?.primaryDomain || mine?.domain || ''
         setStoreDomain(domain)
         setCollections(data.collections || [])
         setProducts(rawProds.map(p => normalizeProduct(p, domain)))
       })
       .catch(() => setProducts([]))
       .finally(() => setLoading(false))
-  }, [isOpen])
+  }, [isOpen, storeId])
 
   // Use collections from API (fallback to product categories)
   const categories = useMemo(() => {

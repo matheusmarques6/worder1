@@ -53,16 +53,84 @@ export async function resolveStoreByDomain<T = any>(
   let query = supabase
     .from('shopify_stores')
     .select(select)
-    // shop_domain.eq covers the primary; cs (contains) on the array
-    // covers any alias. PostgREST .or() with array contains uses {x}
-    // syntax — must be wrapped in braces for a single-value match.
-    .or(`shop_domain.eq.${domain},shop_domain_aliases.cs.{${domain}}`);
+    // shop_domain.eq covers the API host; primary_domain.eq covers the
+    // public storefront domain the pixel/popup actually runs on
+    // (drgroot.com); cs (contains) on the array covers any alias.
+    // PostgREST .or() with array contains uses {x} syntax — must be
+    // wrapped in braces for a single-value match.
+    .or(`shop_domain.eq.${domain},primary_domain.eq.${domain},shop_domain_aliases.cs.{${domain}}`);
 
   if (activeOnly) query = query.eq('is_active', true);
   if (opts.organizationId) query = query.eq('organization_id', opts.organizationId);
 
   const { data } = await query.limit(1).maybeSingle();
   return (data as T) || null;
+}
+
+// =============================================================
+// Loja de um evento público (pixel, identify, tracking)
+//
+// O tracking.js manda accountId (organização), storeId (muitas vezes
+// nulo) e storeDomain juntos. Os quatro endpoints resolviam na ordem
+// storeId → accountId → storeDomain, e o ramo accountId era
+// "qualquer loja da organização, limit 1" — então TODO evento de uma
+// loja sem storeId no script era carimbado com a loja errada, antes
+// mesmo de olhar o domínio que veio no payload. Numa organização com
+// duas lojas, metade dos eventos ia para a loja irmã: contatos,
+// eventos, gatilhos de automação.
+//
+// Ordem certa: storeId → storeDomain → accountId, e o accountId só
+// resolve quando a organização tem UMA loja ativa. Nunca "a primeira".
+// =============================================================
+
+export interface TrackingStoreKeys {
+  storeId?: string | null;
+  storeDomain?: string | null;
+  accountId?: string | null;
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export async function resolveTrackingStore<T = { id: string; organization_id: string }>(
+  supabase: SupabaseClient,
+  keys: TrackingStoreKeys,
+  select: string = 'id, organization_id'
+): Promise<T | null> {
+  // 1. O id da loja é a chave mais forte.
+  if (keys.storeId && UUID_RE.test(keys.storeId)) {
+    const { data } = await supabase
+      .from('shopify_stores')
+      .select(select)
+      .eq('id', keys.storeId)
+      .maybeSingle();
+    if (data) return data as T;
+  }
+
+  // 2. O domínio em que o script está rodando (alias-aware, também
+  // lojas desconectadas — o evento ainda tem dono).
+  if (keys.storeDomain) {
+    const byDomain = await resolveStoreByDomain<T>(supabase, keys.storeDomain, { select, activeOnly: false });
+    if (byDomain) return byDomain;
+  }
+
+  // 3. A organização — só quando não há ambiguidade.
+  if (keys.accountId && UUID_RE.test(keys.accountId)) {
+    const cols = select === '*' ? '*' : Array.from(new Set(
+      select.split(',').map((c) => c.trim()).filter(Boolean).concat(['shop_domain'])
+    )).join(', ');
+    const { data } = await supabase
+      .from('shopify_stores')
+      .select(cols)
+      .eq('organization_id', keys.accountId)
+      .eq('is_active', true);
+    const reais = ((data || []) as any[]).filter((s) => !String(s.shop_domain || '').endsWith('.worder.local'));
+    if (reais.length === 1) return reais[0] as T;
+    if (reais.length > 1) {
+      console.warn(`[resolveTrackingStore] organização ${keys.accountId} tem ${reais.length} lojas e o evento não diz qual — descartado`);
+    }
+  }
+
+  return null;
 }
 
 /**

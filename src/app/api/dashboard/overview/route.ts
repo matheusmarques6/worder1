@@ -473,8 +473,10 @@ export async function GET(request: NextRequest) {
     let syncTriggered = false;
     if (stores.length > 0) {
       const STALE_MS = 60 * 60 * 1000; // 1 hour
-      const targetStoreId = storeId || stores[0]?.id;
-      const targetStore = stores.find((s: any) => s.id === targetStoreId) || stores[0];
+      // A loja selecionada, ou a única. Com várias e nenhuma selecionada
+      // não se dispara sync em "qualquer uma".
+      const targetStoreId = storeId || (stores.length === 1 ? stores[0]?.id : null);
+      const targetStore = targetStoreId ? stores.find((s: any) => s.id === targetStoreId) : null;
 
       let shouldSync = false;
       let useHistorical = false;

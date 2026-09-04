@@ -51,8 +51,20 @@ export async function POST(request: NextRequest) {
     // Use a fake emailSendId for test emails
     const testSendId = 'test-' + Date.now();
 
+    // Blocos dinâmicos de produto com a loja DA CAMPANHA — o teste tem de
+    // mostrar os produtos e links que o cliente vai receber. Sem isto o
+    // e-mail de teste saía com os comentários <!-- WORDER_*_BLOCK --> crus.
+    let htmlSource: string = template.html;
+    try {
+      const { resolveProductBlocks, resolveCartBlocks } = await import('@/lib/email/render');
+      htmlSource = await resolveProductBlocks(htmlSource, user.organization_id, undefined, undefined, campaign.store_id || null);
+      htmlSource = await resolveCartBlocks(htmlSource, user.organization_id, undefined, undefined, null, undefined, campaign.store_id || null);
+    } catch (e: any) {
+      console.warn('[TestCampaign] dynamic block resolve failed:', e?.message);
+    }
+
     const finalHtml = prepareEmailHtml({
-      html: template.html,
+      html: htmlSource,
       mergeData: sampleData,
       emailSendId: testSendId,
       baseUrl,

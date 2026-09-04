@@ -181,38 +181,16 @@ export async function POST(request: NextRequest) {
     const supabase = getSupabaseAdmin();
 
     // ---- Resolve store ----
-    let store: { id: string; organization_id: string } | null = null;
-
-    if (storeId) {
-      const { data } = await supabase
-        .from('shopify_stores')
-        .select('id, organization_id')
-        .eq('id', storeId)
-        .maybeSingle();
-      store = data;
-    }
-
-    if (!store && accountId) {
-      const { data } = await supabase
-        .from('shopify_stores')
-        .select('id, organization_id')
-        .eq('organization_id', accountId)
-        .limit(1)
-        .maybeSingle();
-      store = data;
-    }
-
-    if (!store && storeDomain) {
-      // Alias-aware: matches shop_domain OR shop_domain_aliases so a
-      // pixel sending the canonical myshopifyDomain still resolves
-      // even when the merchant connected with a renamed domain.
-      const { resolveStoreByDomain } = await import('@/lib/shopify/resolve-store-by-domain');
-      store = await resolveStoreByDomain<{ id: string; organization_id: string }>(
-        supabase,
-        storeDomain,
-        { select: 'id, organization_id', activeOnly: false }
-      );
-    }
+    // storeId → storeDomain → accountId (só com uma loja na organização).
+    // A ordem antiga tentava accountId antes do domínio e pegava
+    // "qualquer loja da organização": eventos da loja B carimbados na
+    // loja A. Ver resolveTrackingStore.
+    const { resolveTrackingStore } = await import('@/lib/shopify/resolve-store-by-domain');
+    const store = await resolveTrackingStore<{ id: string; organization_id: string }>(
+      supabase,
+      { storeId, storeDomain, accountId },
+      'id, organization_id'
+    );
 
     if (!store) {
       return NextResponse.json(

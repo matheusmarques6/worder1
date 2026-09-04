@@ -21,6 +21,7 @@ import { renderDocumentToHtml } from '@/lib/email/render-html'
 import { cn } from '@/lib/utils'
 import { EmailSwitcher, type EmailSiblingItem } from './modals/EmailSwitcher'
 import { useEmailAutosave, type SaveStatus } from './hooks/useEmailAutosave'
+import { useStoreStore } from '@/stores'
 
 interface WorderEmailEditorProps {
   templateName: string
@@ -32,6 +33,8 @@ interface WorderEmailEditorProps {
     templateId: string
     triggerType: string
     organizationId: string
+    /** Loja do fluxo — o preview com dados reais usa o catálogo dela. */
+    storeId?: string | null
   }
   flowName?: string
   emailSiblings?: EmailSiblingItem[]
@@ -444,6 +447,13 @@ export interface WorderEmailEditorHandle {
 }
 
 const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorProps>(function WorderEmailEditor({ templateName, design, onSave, onBack, onRename, flowContext, flowName, emailSiblings, currentTemplateId, onNavigateEmail }, ref) {
+  // Loja cujo catálogo alimenta o preview de blocos dinâmicos: a do
+  // fluxo quando estamos dentro de um, senão a selecionada no switcher.
+  // Num ref para o handler de preview ler sempre o valor atual sem
+  // entrar na lista de dependências.
+  const { currentStore } = useStoreStore()
+  const previewStoreIdRef = useRef<string | null>(null)
+  previewStoreIdRef.current = flowContext?.storeId || currentStore?.id || null
   const [editableName, setEditableName] = useState(templateName)
   const [editingName, setEditingName] = useState(false)
   // ── State ──
@@ -1399,7 +1409,11 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
       try {
         const { resolveProductBlocks } = await import('@/lib/email/render-html')
         resolvedDoc = await resolveProductBlocks(doc, async () => {
-          const res = await fetch('/api/products')
+          // Só o catálogo da loja selecionada — sem o storeId a rota
+          // devolvia os produtos de TODAS as lojas da organização.
+          const storeId = previewStoreIdRef.current
+          const qs = storeId ? `?storeId=${encodeURIComponent(storeId)}` : ''
+          const res = await fetch(`/api/products${qs}`)
           if (!res.ok) return []
           const data = await res.json()
           return data.products || []
@@ -2158,6 +2172,7 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
           templateId={flowContext.templateId}
           triggerType={flowContext.triggerType}
           organizationId={flowContext.organizationId}
+          storeId={flowContext.storeId}
           onClose={() => setShowFlowPreview(false)}
         />
       )}

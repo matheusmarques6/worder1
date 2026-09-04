@@ -876,7 +876,9 @@ const actionExecutors: Record<string, NodeExecutor> = {
         const eventData = context.trigger?.data || {};
         try {
           const { enrichOrderItemImages } = await import('@/lib/email/render');
-          await enrichOrderItemImages(eventData, supabase, undefined, organizationId);
+          // Com a loja do fluxo, a imagem vem do catálogo DELA; sem loja
+          // (fluxo da organização inteira) fica a cerca da organização.
+          await enrichOrderItemImages(eventData, supabase, runStoreId || undefined, organizationId);
         } catch {}
 
         // Resolve order-products blocks using enriched event data

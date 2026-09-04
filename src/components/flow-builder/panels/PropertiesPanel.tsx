@@ -3141,6 +3141,7 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
           templateId={config.templateId}
           triggerType={triggerType}
           organizationId={organizationId}
+          storeId={storeId}
           onClose={() => setShowPreviewMode(false)}
         />
       )}

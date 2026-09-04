@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { X, Search, Plus } from 'lucide-react'
+import { useStoreStore } from '@/stores'
 
 interface ProductFeed {
   id: string
@@ -65,16 +66,21 @@ export function ViewFeedsModal({ isOpen, onClose, onSelect, currentFeedId }: Pro
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState(currentFeedId || '')
   const [loading, setLoading] = useState(true)
+  // Feeds da loja selecionada (mais os da organização inteira). Os
+  // produtos em si só são escolhidos no envio, pela loja do e-mail.
+  const { currentStore } = useStoreStore()
+  const storeId = currentStore?.id
 
   useEffect(() => {
     if (!isOpen) return
     setLoading(true)
-    fetch('/api/email/product-feeds')
+    const qs = storeId ? `?store_id=${encodeURIComponent(storeId)}` : ''
+    fetch(`/api/email/product-feeds${qs}`)
       .then(r => r.json())
       .then(data => setFeeds(Array.isArray(data) ? data : data.feeds || []))
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [isOpen])
+  }, [isOpen, storeId])
 
   if (!isOpen) return null
 
@@ -165,6 +171,8 @@ export function CreateFeedModal({ isOpen, onClose, onCreate }: {
   const [timePeriod, setTimePeriod] = useState('3d')
   const [filters, setFilters] = useState<{ field: string; operator: string; value: string }[]>([])
   const [saving, setSaving] = useState(false)
+  // O feed nasce na loja selecionada.
+  const { currentStore } = useStoreStore()
 
   if (!isOpen) return null
 
@@ -175,7 +183,10 @@ export function CreateFeedModal({ isOpen, onClose, onCreate }: {
       const res = await fetch('/api/email/product-feeds', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), feed_type: feedType, fallback_type: fallbackType, time_period: timePeriod, filters }),
+        body: JSON.stringify({
+          name: name.trim(), feed_type: feedType, fallback_type: fallbackType, time_period: timePeriod, filters,
+          store_id: currentStore?.id || null,
+        }),
       })
       const data = await res.json()
       if (!res.ok) {

@@ -29,35 +29,13 @@ export async function POST(request: NextRequest) {
     // Never trust a raw body organization_id: resolve the store first
     // (mirrors /api/track/event), and only fall back to the body org
     // after confirming it actually exists.
-    let store: { id: string; organization_id: string } | null = null
-
-    if (storeId) {
-      const { data } = await supabase
-        .from('shopify_stores')
-        .select('id, organization_id')
-        .eq('id', storeId)
-        .maybeSingle()
-      store = data
-    }
-
-    if (!store && accountId) {
-      const { data } = await supabase
-        .from('shopify_stores')
-        .select('id, organization_id')
-        .eq('organization_id', accountId)
-        .limit(1)
-        .maybeSingle()
-      store = data
-    }
-
-    if (!store && storeDomain) {
-      const { resolveStoreByDomain } = await import('@/lib/shopify/resolve-store-by-domain')
-      store = await resolveStoreByDomain<{ id: string; organization_id: string }>(
-        supabase,
-        storeDomain,
-        { select: 'id, organization_id', activeOnly: false }
-      )
-    }
+    // storeId → storeDomain → accountId (só com uma loja na organização).
+    const { resolveTrackingStore } = await import('@/lib/shopify/resolve-store-by-domain')
+    const store = await resolveTrackingStore<{ id: string; organization_id: string }>(
+      supabase,
+      { storeId, storeDomain, accountId },
+      'id, organization_id'
+    )
 
     let organizationId: string | null = store?.organization_id || null
 

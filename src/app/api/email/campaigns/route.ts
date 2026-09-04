@@ -23,6 +23,16 @@ export async function GET(request: NextRequest) {
     // saw every campaign in the org because the filter was ignored.
     const storeId = searchParams.get('storeId') || searchParams.get('store_id');
 
+    // A loja pedida tem de ser do usuário — um id de outra organização
+    // é recusado, não vira filtro.
+    if (storeId) {
+      const { validateStoreAccess } = await import('@/lib/api-utils');
+      const access = await validateStoreAccess(auth.supabase as any, user.organization_id, storeId, user.id);
+      if (!access.valid) {
+        return NextResponse.json({ error: access.error }, { status: access.status || 403 });
+      }
+    }
+
     let query = supabaseAdmin
       .from('email_campaigns')
       .select('*, email_templates(id, name)')

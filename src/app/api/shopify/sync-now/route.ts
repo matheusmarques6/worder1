@@ -62,38 +62,19 @@ export async function POST(request: NextRequest) {
     const historical: boolean = body.historical === true || body.full === true;
     const since: string | null = typeof body.since === 'string' ? body.since : null;
 
-    // Find store — prefer the explicit one the merchant clicked.
-    let storeQuery = supabase
-      .from('shopify_stores')
-      .select('*')
-      .in('organization_id', orgIds)
-      .eq('is_active', true);
-
-    if (requestedStoreId) {
-      storeQuery = storeQuery.eq('id', requestedStoreId);
-    } else {
-      storeQuery = storeQuery.order('installed_at', { ascending: false }).limit(1);
-    }
-
-    let { data: store } = await storeQuery.maybeSingle();
-
-    // Fallback: any active store. Only triggers when NO storeId was
-    // passed AND the org scope returned nothing (extremely rare —
-    // typically a stale auth session pointing at a deleted org).
-    if (!store && !requestedStoreId) {
-      const { data: anyStore } = await supabase
-        .from('shopify_stores')
-        .select('*')
-        .eq('is_active', true)
-        .order('installed_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      store = anyStore;
-    }
+    // Find store — the explicit one the merchant clicked, or the ONLY
+    // active store of their organizations. Never "the newest": with two
+    // stores that synced the wrong one. And never a store outside the
+    // user's organizations — the old "any active store" fallback ran on
+    // the admin client with no organization filter at all.
+    const { pickStore, pickStoreError } = await import('@/lib/stores/pick-store');
+    const picked = await pickStore<any>(supabase, { orgIds, storeId: requestedStoreId, select: '*' });
+    let store: any = picked.store;
 
     if (!store) {
-      console.error('[Sync] No store found');
-      return NextResponse.json({ error: 'Nenhuma loja encontrada' }, { status: 404 });
+      console.error('[Sync] No store found:', picked.reason);
+      const err = pickStoreError(picked.reason);
+      return NextResponse.json({ error: err.error, code: err.code }, { status: err.status });
     }
 
     // Desconectada = sem sync. Antes, um sync em background disparado

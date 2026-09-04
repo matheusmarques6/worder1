@@ -47,10 +47,11 @@ export async function POST(req: NextRequest) {
   let baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.worder.com.br'
 
   // When campaignId is provided pull the latest saved version.
+  let campaignStoreId: string | null = null
   if (campaignId) {
     const { data: camp } = await supabaseAdmin
       .from('email_campaigns')
-      .select('id, name, subject, preheader, html, organization_id')
+      .select('id, name, subject, preheader, html, organization_id, store_id')
       .eq('id', campaignId)
       .eq('organization_id', auth.user.organization_id)
       .maybeSingle()
@@ -60,10 +61,22 @@ export async function POST(req: NextRequest) {
     finalHtml = camp.html || rawHtml || ''
     finalSubject = camp.subject || subject || ''
     finalPreheader = camp.preheader || preheader || ''
+    campaignStoreId = camp.store_id || null
   }
 
   if (!finalHtml) {
     return NextResponse.json({ error: 'HTML do email é obrigatório' }, { status: 400 })
+  }
+
+  // Blocos dinâmicos de produto com a loja DA CAMPANHA, como no envio
+  // real. Sem loja (HTML solto), o resolvedor só usa a única loja da
+  // organização — nunca adivinha entre várias.
+  try {
+    const { resolveProductBlocks, resolveCartBlocks } = await import('@/lib/email/render')
+    finalHtml = await resolveProductBlocks(finalHtml, auth.user.organization_id, undefined, undefined, campaignStoreId)
+    finalHtml = await resolveCartBlocks(finalHtml, auth.user.organization_id, undefined, undefined, null, undefined, campaignStoreId)
+  } catch (e: any) {
+    console.warn('[inbox-preview] dynamic block resolve failed:', e?.message)
   }
 
   const merge: Record<string, string> = { ...SAMPLE_MERGE, ...(mergeData || {}) }

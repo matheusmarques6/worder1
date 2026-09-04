@@ -110,6 +110,23 @@ export async function sendCampaignEmail({
       }
     }
 
+    // 0b. A loja do envio. O fluxo sabe a sua (automations.store_id);
+    // um fluxo da organização inteira herda a loja do contato — o
+    // cliente é de UMA loja, e os produtos, links e a atribuição do
+    // envio têm de ser dela.
+    let sendStoreId: string | null = storeId || null;
+    if (!sendStoreId && resolvedContactId) {
+      try {
+        const { data: contactRow } = await supabaseAdmin
+          .from('contacts')
+          .select('store_id')
+          .eq('id', resolvedContactId)
+          .eq('organization_id', organizationId)
+          .maybeSingle();
+        sendStoreId = contactRow?.store_id || null;
+      } catch { /* segue sem loja */ }
+    }
+
     // 1. Create email_sends row with status 'queued'
     // 'queued' is the initial state allowed by email_sends_status_check;
     // 'pending' is NOT in the allowlist and would fail the CHECK constraint.
@@ -132,6 +149,10 @@ export async function sendCampaignEmail({
         provider: 'resend',
         status: 'queued',
         organization_id: organizationId,
+        // A loja do envio fica gravada: é o que o rastreador de clique
+        // usa para mandar o contato para a loja CERTA quando o destino
+        // do link está quebrado, e o que os relatórios por loja leem.
+        store_id: sendStoreId,
         // Trava de duplicidade. O índice único faz o trabalho: seis runs
         // paralelas disparando com 2s de intervalo TODAS leriam "ainda
         // não enviei" numa verificação por SELECT, e todas mandariam.
@@ -211,11 +232,13 @@ export async function sendCampaignEmail({
       }
     }
 
-    // 3. Resolve dynamic product blocks + cart blocks
-    let htmlWithProducts = await resolveProductBlocks(templateHtml, organizationId, contactId, eventData);
+    // 3. Resolve dynamic product blocks + cart blocks — sempre com a loja
+    // do envio, para que produtos e links saiam da loja certa numa
+    // organização com várias lojas.
+    let htmlWithProducts = await resolveProductBlocks(templateHtml, organizationId, resolvedContactId || contactId, eventData, sendStoreId);
     // Pass eventData so the cart block can adapt to the active trigger
     // (cart vs checkout vs browse vs order) via trigger_auto feed type.
-    htmlWithProducts = await resolveCartBlocks(htmlWithProducts, organizationId, contactId, eventData, triggerType, mergeData.store_url);
+    htmlWithProducts = await resolveCartBlocks(htmlWithProducts, organizationId, resolvedContactId || contactId, eventData, triggerType, mergeData.store_url, sendStoreId);
     // Resolve {{ trigger.link }}, {{ trigger.first_item_image }} etc.
     // — smart tags that adapt the right URL/title/image to whichever
     // event fired the email.

@@ -80,8 +80,14 @@ export async function GET(request: NextRequest) {
       query = query.order('created_at', { ascending: false });
     }
 
-    // Se storeId fornecido, filtrar por store
+    // Se storeId fornecido, filtrar por store — depois de conferir que a
+    // loja é de uma organização do usuário. Um id de outra organização
+    // não devolve nada, em vez de virar filtro válido.
     if (storeId) {
+      const access = await validateStoreAccess(supabase, user.organization_id, storeId, user.id);
+      if (!access.valid) {
+        return NextResponse.json({ error: access.error }, { status: access.status || 403 });
+      }
       query = query.eq('store_id', storeId);
     }
 

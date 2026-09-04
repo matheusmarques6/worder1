@@ -101,15 +101,16 @@ export async function POST(request: NextRequest) {
       .single();
     store = data;
   } else {
-    const { data } = await supabase
-      .from('shopify_stores')
-      .select('*')
-      .eq('organization_id', organizationId)
-      .eq('is_active', true)
-      .order('installed_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    store = data;
+    // Sem storeId só serve a ÚNICA loja ativa da organização. "A mais
+    // nova" instalava webhooks e pixel na loja errada assim que uma
+    // segunda loja era cadastrada.
+    const { pickStore, pickStoreError } = await import('@/lib/stores/pick-store');
+    const picked = await pickStore<any>(supabase, { orgIds: organizationId ? [organizationId] : [], select: '*' });
+    if (!picked.store) {
+      const err = pickStoreError(picked.reason);
+      return NextResponse.json({ error: err.error, code: err.code }, { status: err.status });
+    }
+    store = picked.store;
   }
 
   if (!store) return NextResponse.json({ error: 'Loja não encontrada' }, { status: 404 });

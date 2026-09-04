@@ -67,47 +67,89 @@ export async function GET(
 
 /**
  * Resolve a URL "casa" pra qual mandar o contato quando o destino do
- * email esta quebrado (merge tag vazia, template malformado). Caminho:
- * email_sends -> email_campaigns.store_id -> shopify_stores.domain.
- * Fallback final: app.worder.com.br.
+ * email esta quebrado (merge tag vazia, template malformado).
+ *
+ * A loja tem de ser a DO ENVIO. Antes, sem loja na campanha, caía na
+ * "loja ativa mais nova da organização" — e um clique num e-mail da
+ * Dr. Groot levava para a Medicube, cadastrada no dia. A ordem agora:
+ *   email_sends.store_id → campanha → automação → contato → única loja
+ *   ativa da organização → worder.com.br.
+ * Nunca "qualquer loja da organização".
  */
 async function resolveStoreFallback(emailSendId: string): Promise<string> {
   try {
     const { supabaseAdmin } = await import('@/lib/supabase-admin');
     const { data: send } = await supabaseAdmin
       .from('email_sends')
-      .select('campaign_id, organization_id')
+      .select('campaign_id, organization_id, store_id, contact_id, flow_id, automation_id')
       .eq('id', emailSendId)
       .maybeSingle();
-    if (send?.campaign_id) {
+    if (!send) return 'https://worder.com.br';
+
+    const storeUrlById = async (storeId: string | null | undefined): Promise<string> => {
+      if (!storeId) return '';
+      const { data: store } = await supabaseAdmin
+        .from('shopify_stores')
+        .select('shop_domain, primary_domain, organization_id')
+        .eq('id', storeId)
+        .maybeSingle();
+      // A loja de outra organização não serve, venha de onde vier o id.
+      if (!store || (send.organization_id && store.organization_id !== send.organization_id)) return '';
+      // A coluna é shop_domain — pedir `domain` fazia o PostgREST devolver
+      // erro e este fallback NUNCA funcionava. E o host certo para o
+      // cliente é o principal.
+      return publicStoreUrl(store);
+    };
+
+    // 1. O envio sabe a sua loja.
+    { const url = await storeUrlById(send.store_id); if (url) return url; }
+
+    // 2. A campanha.
+    if (send.campaign_id) {
       const { data: campaign } = await supabaseAdmin
         .from('email_campaigns')
         .select('store_id')
         .eq('id', send.campaign_id)
         .maybeSingle();
-      if (campaign?.store_id) {
-        const { data: store } = await supabaseAdmin
-          .from('shopify_stores')
-          .select('shop_domain, primary_domain')
-          .eq('id', campaign.store_id)
-          .maybeSingle();
-        // A coluna é shop_domain — pedir `domain` fazia o PostgREST devolver
-        // erro e este fallback NUNCA funcionava: todo clique sem destino caía
-        // em worder.com.br. E o host certo para o cliente é o principal.
-        { const url = publicStoreUrl(store); if (url) return url; }
-      }
+      const url = await storeUrlById(campaign?.store_id);
+      if (url) return url;
     }
-    // Sem store na campanha — tenta primeira loja ativa da org.
-    if (send?.organization_id) {
-      const { data: store } = await supabaseAdmin
+
+    // 3. A automação (envios de fluxo gravam flow_id / automation_id).
+    const automationId = send.automation_id || send.flow_id || null;
+    if (automationId && /^[0-9a-f-]{36}$/i.test(String(automationId))) {
+      const { data: automation } = await supabaseAdmin
+        .from('automations')
+        .select('store_id')
+        .eq('id', automationId)
+        .maybeSingle();
+      const url = await storeUrlById(automation?.store_id);
+      if (url) return url;
+    }
+
+    // 4. O contato é de UMA loja.
+    if (send.contact_id) {
+      const { data: contact } = await supabaseAdmin
+        .from('contacts')
+        .select('store_id')
+        .eq('id', send.contact_id)
+        .maybeSingle();
+      const url = await storeUrlById(contact?.store_id);
+      if (url) return url;
+    }
+
+    // 5. Só quando a organização tem UMA loja ativa não há o que errar.
+    if (send.organization_id) {
+      const { data: stores } = await supabaseAdmin
         .from('shopify_stores')
         .select('shop_domain, primary_domain')
         .eq('organization_id', send.organization_id)
-        .eq('is_active', true)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      { const url = publicStoreUrl(store); if (url) return url; }
+        .eq('is_active', true);
+      const reais = (stores || []).filter((s: any) => !String(s.shop_domain || '').endsWith('.worder.local'));
+      if (reais.length === 1) {
+        const url = publicStoreUrl(reais[0]);
+        if (url) return url;
+      }
     }
   } catch (err) {
     console.error('[ClickTracker] resolveStoreFallback failed:', err);

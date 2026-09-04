@@ -26,31 +26,17 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const storeId = searchParams.get('storeId');
 
-    // Find the store
-    let storeQuery = supabase
-      .from('shopify_stores')
-      .select('id')
-      .in('organization_id', orgIds)
-      .eq('is_active', true)
-      .order('created_at', { ascending: false })
-      .limit(1);
+    // Find the store: the requested one, or the ONLY active store of the
+    // user's organizations. Never "the newest" — with two stores that
+    // listed the wrong catalog.
+    const { pickStore } = await import('@/lib/stores/pick-store');
+    const picked = await pickStore<{ id: string }>(supabase, { orgIds, storeId, select: 'id' });
 
-    if (storeId) {
-      storeQuery = supabase
-        .from('shopify_stores')
-        .select('id')
-        .eq('id', storeId)
-        .in('organization_id', orgIds)
-        .limit(1);
+    if (!picked.store) {
+      return NextResponse.json({ products: [], total: 0, reason: picked.reason });
     }
 
-    const { data: stores, error: storeError } = await storeQuery;
-
-    if (storeError || !stores || stores.length === 0) {
-      return NextResponse.json({ products: [], total: 0 });
-    }
-
-    const resolvedStoreId = stores[0].id;
+    const resolvedStoreId = picked.store.id;
 
     // Fetch products
     const { data: products, error, count } = await supabase

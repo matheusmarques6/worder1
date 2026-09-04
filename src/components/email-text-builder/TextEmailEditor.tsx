@@ -117,6 +117,8 @@ interface TextEmailEditorProps {
     templateId: string;
     triggerType: string;
     organizationId: string;
+    /** Loja do fluxo — o preview com dados reais usa o catálogo dela. */
+    storeId?: string | null;
   };
   onSave: (design: TextEmailDesign, html: string) => Promise<boolean>;
   onBack: () => void;
@@ -766,6 +768,7 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
           templateId={flowContext.templateId}
           triggerType={flowContext.triggerType}
           organizationId={flowContext.organizationId}
+          storeId={flowContext.storeId}
           onClose={() => setShowFlowPreview(false)}
         />
       )}
