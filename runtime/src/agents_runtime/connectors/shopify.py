@@ -61,9 +61,11 @@ _RETRY_BUDGET_SECONDS = 6.0
 # documentação antes de subir) não filtra por título — os únicos filtros
 # continuam sendo datas, `limit`, `since_id` e `times_used`. Como o `ends_at`
 # da rule é o `validity_until` do grant, uma janela estreita em volta dele traz
-# um punhado de rules em vez da loja inteira; quem garante que é A rule certa é
-# o título, comparado exato depois. A margem cobre o truncamento de subsegundo do lado
-# da Shopify.
+# um punhado de rules em vez da loja inteira; quem estreita até A rule certa é
+# o título mais a comparação de termos de `_diverging_fields` — o título
+# sozinho NÃO basta, porque o código do grant tem 32 bits e não é único no
+# banco (item 51 da auditoria). A margem cobre o truncamento de subsegundo do
+# lado da Shopify.
 #
 # Uma página só: se a rule não estiver nos 250 primeiros resultados da janela,
 # a busca devolve None e vira ShopifyError. Falha FECHADA de propósito — nunca
@@ -172,18 +174,22 @@ def _diverging_fields(expected: dict, rule: dict) -> list[str]:
     """
     diverging = [
         field
-        for field in ("target_type", "value_type", "usage_limit")
+        for field in ("target_type", "value_type")
         if field not in rule or rule[field] != expected[field]
     ]
-    # `value` compara NUMERICAMENTE. `incentive_grants.value` é numeric(12,2),
-    # psycopg entrega Decimal('10.00') e montamos "-10.00"; a Shopify devolve
-    # "-10.0" para a MESMA rule. Igualdade de string reprovaria o nosso próprio
-    # retry idempotente e o cupom legítimo nunca sairia.
-    try:
-        if Decimal(str(rule["value"])) != Decimal(str(expected["value"])):
-            diverging.append("value")
-    except (KeyError, ArithmeticError):
-        diverging.append("value")
+    # Os DOIS campos numéricos comparam NUMERICAMENTE, não pelo tipo cru do
+    # JSON. `incentive_grants.value` é numeric(12,2), psycopg entrega
+    # Decimal('10.00') e montamos "-10.00"; a Shopify devolve "-10.0" para a
+    # MESMA rule. `usage_limit` sai daqui como int e pode voltar como "1".
+    # Igualdade ingênua reprovaria o nosso próprio retry idempotente e o cupom
+    # legítimo nunca sairia — a mesma regressão nos dois campos.
+    # Ausente ou inconvertível continua DIVERGÊNCIA (fail-closed).
+    for field, numeric in (("value", Decimal), ("usage_limit", int)):
+        try:
+            if numeric(str(rule[field])) != numeric(str(expected[field])):
+                diverging.append(field)
+        except (KeyError, ArithmeticError, ValueError):
+            diverging.append(field)
     return diverging
 
 
