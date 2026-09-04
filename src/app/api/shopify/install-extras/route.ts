@@ -28,6 +28,10 @@ const REQUIRED_WEBHOOKS = [
   'checkouts/create', 'checkouts/update',
   'customers/create', 'customers/update', 'customers/delete',
   'products/create', 'products/update', 'products/delete',
+  // Estoque por local: mantém a disponibilidade dos produtos (e por
+  // consequência os feeds) em dia quando só o inventário muda. Exige
+  // read_inventory — só é registrado quando o app tem essa permissão.
+  'inventory_levels/update',
   'refunds/create',
   'fulfillments/create', 'fulfillments/update',
   'app/uninstalled',
@@ -255,9 +259,15 @@ export async function POST(request: NextRequest) {
   let webhookFailed = 0;
   const failedTopics: string[] = [];
 
+  const storedScopes: string[] = Array.isArray(store.scopes) ? store.scopes.map((s: any) => String(s).toLowerCase()) : [];
   for (const topic of REQUIRED_WEBHOOKS) {
     if (existingTopics.includes(topic)) {
       webhookExisting++;
+      continue;
+    }
+    // Sem read_inventory a Shopify recusa a inscrição; pular evita
+    // contar como falha um webhook que o app nem pode receber.
+    if (topic === 'inventory_levels/update' && storedScopes.length > 0 && !storedScopes.includes('read_inventory')) {
       continue;
     }
     // Bulk-finish and any other topic in WEBHOOK_PATH_OVERRIDES gets a

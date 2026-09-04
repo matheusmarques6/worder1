@@ -19,6 +19,8 @@ interface Product {
   category?: string
   collections?: string[]
   buttonText?: string
+  /** Escondido dos feeds dinâmicos pelo lojista; ainda pode ser escolhido à mão. */
+  hidden_from_feeds?: boolean
 }
 
 interface RawProduct {
@@ -41,6 +43,7 @@ interface RawProduct {
   handle?: string
   url?: string
   shopify_product_id?: string
+  hidden_from_feeds?: boolean
 }
 
 interface BrowseProductsModalProps {
@@ -69,6 +72,7 @@ function normalizeProduct(raw: RawProduct, storeDomain?: string): Product {
     collections: raw.collections || (raw.product_type ? [raw.product_type] : []),
     status: raw.status,
     shopify_product_id: raw.shopify_product_id || String(raw.id),
+    hidden_from_feeds: raw.hidden_from_feeds === true,
   }
 }
 
@@ -228,7 +232,14 @@ export function BrowseProductsModal({ isOpen, onClose, onSelect, maxProducts = 9
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{product.title}</p>
+                    <p className="text-sm font-medium text-gray-900 truncate">
+                      {product.title}
+                      {product.hidden_from_feeds && (
+                        <span className="ml-2 inline-block align-middle px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200" title="Este produto não entra em feeds dinâmicos; aqui você o escolhe à mão.">
+                          Oculto dos feeds
+                        </span>
+                      )}
+                    </p>
                     <div className="flex items-center gap-2 mt-0.5">
                       {product.compare_at_price && product.compare_at_price > product.price && (
                         <span className="text-xs text-gray-400 line-through">{formatPrice(product.compare_at_price)}</span>

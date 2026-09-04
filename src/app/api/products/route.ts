@@ -117,6 +117,22 @@ export async function GET(request: NextRequest) {
       costsMap.set(key, cost);
     });
 
+    // Produtos que o lojista escondeu dos feeds (decisão da Worder,
+    // em shopify_products). O seletor manual do editor mostra a marca
+    // para a pessoa saber que aquele produto não entra em feed nenhum.
+    const hiddenByStore = new Map<string, Set<string>>();
+    try {
+      const { data: hiddenRows } = await supabase
+        .from('shopify_products')
+        .select('store_id, shopify_product_id')
+        .in('store_id', stores.map((s: any) => s.id))
+        .eq('hidden_from_feeds', true);
+      for (const h of hiddenRows || []) {
+        if (!hiddenByStore.has(h.store_id)) hiddenByStore.set(h.store_id, new Set());
+        hiddenByStore.get(h.store_id)!.add(String(h.shopify_product_id));
+      }
+    } catch { /* coluna pode não existir ainda */ }
+
     // Buscar produtos de cada loja
     const allProducts: any[] = [];
     let allCollections: any[] = [];
@@ -231,6 +247,8 @@ export async function GET(request: NextRequest) {
             // Loja
             store_id: store.id,
             store_name: store.shop_name || store.shop_domain,
+            // Escondido dos feeds dinâmicos (ainda pode ser escolhido à mão).
+            hidden_from_feeds: hiddenByStore.get(store.id)?.has(String(product.id)) || false,
           };
         });
 

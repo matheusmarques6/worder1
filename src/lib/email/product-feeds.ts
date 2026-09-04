@@ -250,11 +250,18 @@ const CATALOG_COLS = 'shopify_product_id, title, handle, price, compare_at_price
 
 // Catálogo de UMA loja. organization_id fica como segunda cerca: mesmo
 // que um store_id errado chegue aqui, não atravessa organizações.
+//
+// Dois filtros que valem para TODO feed dinâmico:
+//   hidden_from_feeds — o lojista escondeu o produto na tela de Produtos.
+//   available         — a Shopify diz que não dá para comprar (esgotado
+//                       sem venda permitida). NULL é "não sei" e passa.
 function catalogQuery(orgId: string, storeId: string) {
   return supabaseAdmin.from('shopify_products')
     .select(CATALOG_COLS)
     .eq('organization_id', orgId)
     .eq('store_id', storeId)
+    .eq('hidden_from_feeds', false)
+    .or('available.is.null,available.eq.true')
 }
 
 // Fetch newest active catalog products for a store, tolerant of how the

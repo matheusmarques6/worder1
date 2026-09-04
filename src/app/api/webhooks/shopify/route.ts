@@ -2401,6 +2401,57 @@ async function processMarketingConsentUpdate(store: ShopifyStoreConfig, customer
   }
 }
 
+/**
+ * inventory_levels/update — { inventory_item_id, location_id, available }.
+ * Acha a variante pelo inventory_item_id dentro de shopify_products.variants
+ * e atualiza o estoque dela, recomputando a disponibilidade do produto.
+ * Assume um local de estoque (o caso comum); com vários, o products/update
+ * que a Shopify dispara em seguida traz o total certo e prevalece.
+ */
+async function processInventoryLevelUpdate(store: ShopifyStoreConfig, level: any) {
+  const itemId = level?.inventory_item_id;
+  const available = typeof level?.available === 'number' ? level.available : parseInt(String(level?.available ?? ''), 10);
+  if (itemId === null || itemId === undefined || !Number.isFinite(available)) return;
+
+  const supabase = getSupabase();
+  // O id pode estar gravado como número (webhook REST) ou texto (sync GraphQL).
+  const candidates: Array<number | string> = [];
+  const asNum = Number(itemId);
+  if (Number.isFinite(asNum)) candidates.push(asNum);
+  candidates.push(String(itemId));
+
+  let row: { id: string; variants: any[] } | null = null;
+  for (const c of candidates) {
+    const { data } = await supabase
+      .from('shopify_products')
+      .select('id, variants')
+      .eq('store_id', store.id)
+      .contains('variants', [{ inventory_item_id: c }])
+      .limit(1)
+      .maybeSingle();
+    if (data) { row = data as any; break; }
+  }
+  if (!row) {
+    console.log(`[Shopify] inventory_levels/update: nenhum produto com inventory_item_id=${itemId} na loja ${store.id}`);
+    return;
+  }
+
+  const { computeProductAvailability } = await import('@/lib/shopify/product-availability');
+  const variants = (Array.isArray(row.variants) ? row.variants : []).map((v: any) =>
+    String(v?.inventory_item_id) === String(itemId) ? { ...v, inventory_quantity: available } : v
+  );
+  const availability = computeProductAvailability(variants);
+  await supabase
+    .from('shopify_products')
+    .update({
+      variants,
+      inventory_quantity: availability.inventoryQuantity ?? 0,
+      available: availability.available,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', row.id);
+}
+
 async function processProductEvent(store: ShopifyStoreConfig, product: any, topic: string) {
   console.log(`[Shopify] Processing product event: ${topic} - ${product.title}`);
 
@@ -2444,6 +2495,14 @@ async function processProductEvent(store: ShopifyStoreConfig, product: any, topi
   // doesn't carry them, but if a future webhook does we accept it.
   const collections = Array.isArray(product.collections) ? product.collections : [];
 
+  // Disponibilidade e estoque a partir das variantes que a Shopify
+  // mandou: é o que mantém os feeds sem produto esgotado quando o
+  // preço/estoque muda na Shopify (products/update dispara também em
+  // mudanças de inventário). hidden_from_feeds NÃO entra aqui — é uma
+  // decisão da Worder e sobrevive a qualquer webhook.
+  const { computeProductAvailability } = await import('@/lib/shopify/product-availability');
+  const availability = computeProductAvailability(product.variants);
+
   const productRow: Record<string, any> = {
     store_id: store.id,
     organization_id: store.organization_id,
@@ -2460,6 +2519,10 @@ async function processProductEvent(store: ShopifyStoreConfig, product: any, topi
     description: plainDescription,
     collections,
     price: product.variants?.[0]?.price ? parseFloat(product.variants[0].price) : null,
+    compare_at_price: product.variants?.[0]?.compare_at_price ? parseFloat(product.variants[0].compare_at_price) : null,
+    sku: product.variants?.[0]?.sku || null,
+    inventory_quantity: availability.inventoryQuantity ?? 0,
+    available: availability.available,
     updated_at: new Date().toISOString(),
   };
   // Resilient write: drop description/body_html/collections columns on
@@ -2809,6 +2872,10 @@ export async function POST(request: NextRequest) {
         case 'products/update':
         case 'products/delete':
           await processProductEvent(store, body, topic);
+          break;
+
+        case 'inventory_levels/update':
+          await processInventoryLevelUpdate(store, body);
           break;
 
         case 'app/uninstalled': {

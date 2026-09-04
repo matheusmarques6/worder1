@@ -32,10 +32,10 @@ function seedDuasLojas() {
     { id: ALHEIA, organization_id: OUTRA_ORG, shop_name: 'Alheia', shop_domain: 'alheia.myshopify.com', primary_domain: 'alheia.com', is_active: true, installed_at: '2026-01-01' },
   ])
   fake.seed('shopify_products', [
-    { shopify_product_id: '1', organization_id: ORG, store_id: GROOT, title: 'Shampoo Groot', handle: 'shampoo-groot', price: 10, status: 'active', images: [], created_at: '2026-08-01' },
-    { shopify_product_id: '2', organization_id: ORG, store_id: GROOT, title: 'Tônico Groot', handle: 'tonico-groot', price: 20, status: 'active', images: [], created_at: '2026-08-02' },
-    { shopify_product_id: '3', organization_id: ORG, store_id: MEDICUBE, title: 'Sérum Medicube', handle: 'serum-medicube', price: 30, status: 'active', images: [], created_at: '2026-09-04' },
-    { shopify_product_id: '4', organization_id: OUTRA_ORG, store_id: ALHEIA, title: 'Coisa alheia', handle: 'alheia', price: 99, status: 'active', images: [], created_at: '2026-09-04' },
+    { shopify_product_id: '1', organization_id: ORG, store_id: GROOT, title: 'Shampoo Groot', handle: 'shampoo-groot', price: 10, status: 'active', images: [], created_at: '2026-08-01', hidden_from_feeds: false, available: true },
+    { shopify_product_id: '2', organization_id: ORG, store_id: GROOT, title: 'Tônico Groot', handle: 'tonico-groot', price: 20, status: 'active', images: [], created_at: '2026-08-02', hidden_from_feeds: false, available: true },
+    { shopify_product_id: '3', organization_id: ORG, store_id: MEDICUBE, title: 'Sérum Medicube', handle: 'serum-medicube', price: 30, status: 'active', images: [], created_at: '2026-09-04', hidden_from_feeds: false, available: null },
+    { shopify_product_id: '4', organization_id: OUTRA_ORG, store_id: ALHEIA, title: 'Coisa alheia', handle: 'alheia', price: 99, status: 'active', images: [], created_at: '2026-09-04', hidden_from_feeds: false, available: true },
   ])
   fake.seed('contacts', [
     { id: CONTATO_GROOT, organization_id: ORG, store_id: GROOT, email: 'cliente@groot.com' },
@@ -144,6 +144,19 @@ describe('resolveProductFeed — produtos e links só da loja do e-mail', () => 
       { visitor_id: CONTATO_GROOT, event_type: 'product_viewed', properties: { product_id: '1' }, created_at: '2026-09-03' },
     ])
     const products = await resolveProductFeed({ orgId: ORG, storeId: GROOT, feedType: 'recently_viewed', contactId: CONTATO_GROOT, maxProducts: 4 })
+    expect(products.map((p) => p.title)).toEqual(['Shampoo Groot'])
+  })
+
+  it('produto oculto pelo lojista não entra em feed nenhum', async () => {
+    fake.tables.shopify_products.find((p) => p.shopify_product_id === '1')!.hidden_from_feeds = true
+    const products = await resolveProductFeed({ orgId: ORG, storeId: GROOT, feedType: 'bestsellers', maxProducts: 4 })
+    expect(products.map((p) => p.title)).toEqual(['Tônico Groot'])
+  })
+
+  it('produto esgotado (available=false) sai do feed; sem informação (null) fica', async () => {
+    fake.tables.shopify_products.find((p) => p.shopify_product_id === '2')!.available = false
+    fake.tables.shopify_products.find((p) => p.shopify_product_id === '1')!.available = null
+    const products = await resolveProductFeed({ orgId: ORG, storeId: GROOT, feedType: 'newest', maxProducts: 4 })
     expect(products.map((p) => p.title)).toEqual(['Shampoo Groot'])
   })
 

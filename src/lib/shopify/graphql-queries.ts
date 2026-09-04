@@ -529,6 +529,12 @@ export const PRODUCTS_QUERY = `
             price
             compareAtPrice
             inventoryQuantity
+            inventoryPolicy
+            availableForSale
+            inventoryItem {
+              id
+              tracked
+            }
             barcode
             selectedOptions {
               name
