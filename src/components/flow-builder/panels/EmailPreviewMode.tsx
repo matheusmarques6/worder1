@@ -4,6 +4,7 @@ import * as React from 'react';
 import { useState, useEffect, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, Monitor, Smartphone, ChevronDown, Send, Mail, CheckCircle2, XCircle, Inbox, Loader2, Copy, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { BodyPortal } from '@/components/shared/BodyPortal';
 
 // ── Event-type labels (clean, muted style — no heavy coloring) ────────────
 const EVENT_LABELS: Record<string, string> = {
@@ -290,7 +291,10 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, stor
 
   const displayName = (currentEvent as any)?.contact_email || contact?.email || 'Sem lead';
 
+  // No body: aberto de dentro do painel lateral (que anima com transform)
+  // o `fixed` não cobriria a tela. Ver BodyPortal.
   return (
+    <BodyPortal>
     <div className="fixed inset-0 z-[9999] bg-zinc-50 flex flex-col font-sans">
       {/* ── Header ───────────────────────────────────────────────── */}
       <div className="flex items-center justify-between px-6 h-14 border-b border-zinc-200 bg-white">
@@ -555,6 +559,7 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, stor
         </div>
       </div>
     </div>
+    </BodyPortal>
   );
 }
 
