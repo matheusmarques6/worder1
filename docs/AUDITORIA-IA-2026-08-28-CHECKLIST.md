@@ -3533,6 +3533,101 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   é de quatro linhas, mas muda o que os e-mails já enviados renderizavam, e por isso é decisão, não
   rodapé.
 
+- [ ] **81. A DLQ não tem dreno, e escrever o dreno antes de trocar a chave de idempotência do toque
+  faz o cliente receber a mesma mensagem duas vezes** `[confirmado]` · *(descoberto no item 51)*
+  Citações ancoradas em `0c675e0d`. **A ordem dos dois passos é obrigatória: primeiro a chave, depois
+  o dreno.**
+  **A função existe, tem grant e ninguém a chama.** `internal.reprocess_dead_letters(text, text,
+  integer default 50)` (`20260812000004:494-518`), `security definer`, `search_path = pg_catalog,
+  internal`, com `revoke ... from public` e `grant execute ... to worker_role` (`:526,531`). Zero
+  chamadores, varrido nas cinco fontes: o wrapper Python `repository/engine.py:440-447` não é chamado
+  por ninguém; TS não alcança (`internal.`, sem grant a `service_role`); nenhuma migration a chama;
+  **não há `pg_cron` no stream versionado** (o único `cron.schedule` está comentado e é de outro
+  assunto, `supabase/notifications-table.sql:86-87`); o único uso do repositório é
+  `runtime/tests/pipeline/test_scenarios_c.py:285`, SQL cru de teste. **O contraste que fecha o
+  argumento:** os dois vizinhos da mesma trinca de housekeeping (`20260812000004:10-11`) —
+  `sweep_outbox_unknown` e `review_stale_unknown` — **têm** chamador em `queueing/sender.py:216-217`.
+  E o quarto, `correlate_outbox_status`, **parece** órfã no Python e não é: é chamada de SQL
+  (`20260828000006:106`). `reprocess_dead_letters` é a única das quatro realmente sem chamador.
+  **O que cai lá fica lá para sempre.** As quatro DLQs nascem em `20260812000002:85-88`
+  (`q_inbound_dlq`, `q_domain_events_dlq`, `q_scheduled_dlq`, `q_evals_dlq`). Não há retention, não
+  há partição, não há varredura: a mensagem fica visível e nunca lida. Quem cai lá:
+  `engine_loop.py:104-123` — falha `PERMANENT` vai direto (`retries.py:43-45`), transitória vai
+  depois de esgotar o limite da fila (`config.py:26`: inbound 5, domain_events 5, scheduled 3,
+  evals 2), com `error_class` e `last_error[:500]` acrescentados ao payload
+  (`engine_loop.py:117-120`). **O dano não é a mensagem parada, é o silêncio:** `runtime/FORK.md:517-522`
+  já registrava que o TS desativava a conversa com `ai_disabled_reason` e disparava `sendAlert`, e o
+  runtime manda para a DLQ **e nada mais** — *"o agente pode estar morrendo em toda mensagem há dias,
+  com o inbox mostrando 'Bot ativo' e o sino em silêncio"*. A única observabilidade é o
+  `engine.queue_depths` do heartbeat, que é **log**, não alerta.
+  **Por que a chave vem primeiro.** `reprocess_dead_letters` reenfileira com `pgmq.send`
+  (`:512-515`), que gera **msg_id novo**. E `worker.py:226` monta a chave de idempotência do toque
+  como `touch-{conversation_id}-{message_id}`, onde `message_id` **é** o msg_id do pgmq
+  (`repository/queue.py:65` → `app.py:158`) — chave da **mensagem**, não do toque. Com msg_id novo, o
+  pré-check `outbox_key_exists` (`worker.py:235`, `repository/engine.py:147-153`) passa, o `insert`
+  sem `on conflict` de `conclude_turn` (`20260813000008:175-181`) passa, e **a mesma mensagem de
+  funil sai de novo para o cliente**, mais um turno de LLM cobrado do lojista e um segundo
+  `set_conversation_owner`. Hoje isso é inalcançável **exatamente porque** não há dreno.
+  **A forma do conserto da chave já está no repositório, 59 linhas acima.**
+  `worker.py:167` usa `reply-{conversation_id}-{generation}` — chave de **negócio**, e por isso imune
+  a re-enfileiramento com msg_id novo: o coalescer manda mensagem nova a cada colheita e a chave não
+  muda, porque `generation` é contador da conversa bumpado em `20260828000004:65`. `worker.py:226`
+  usa a chave da mensagem. **A assimetria está no mesmo arquivo e é o desenho a copiar.** O que falta
+  ao payload do toque é um identificador próprio: `emit_ai_mission_job` (`20260813000008:95-107`) não
+  põe `touch_id`, `job_id` nem nonce, e `MissionTouchJob.from_payload` (`queueing/jobs.py:62-79`)
+  espelha a ausência. **E o emissor não deduplica** — dois nós de fluxo executados duas vezes dão
+  dois toques hoje, sem dreno nenhum.
+  **O dreno seletivo é escrevível sem Postgres.** O `error_class` já viaja no payload
+  (`engine_loop.py:117-120`) e o conjunto do permanente é fechado e legível: `retries.decide` manda à
+  DLQ em `Failure.PERMANENT` (`retries.py:44-45`) e `failures.classify` (`failures.py:85-111`) define
+  permanente como status fora de `{408,425,429,500,502,503,504}`, `ValueError`/`PermissionError`/
+  `LookupError`, ou os três textos de `_PERMANENT_TEXT`. Um `where message->>'error_class' not in
+  (...)` na função — que hoje **não tem filtro nenhum** (`20260812000004:508-518`) — basta. Um dreno
+  cego reprocessaria também o permanente, que por construção volta a falhar em `from_payload` e volta
+  para a DLQ; **e não há proteção contra o laço, porque o `read_ct` ZERA a cada `pgmq.send`** (é
+  mensagem nova). **O que não se sabe sem o banco é o que está lá**, e portanto se o conserto é uma
+  linha no housekeeping do sender ou item próprio — queries 2 e 3 do item 51.
+
+- [ ] **82. `incentive_grants.coupon_code` sem `unique (organization_id, upper(coupon_code))` — e
+  criá-lo não é uma linha** `[confirmado]` · *(descoberto no item 51)*
+  Citações ancoradas em `0c675e0d`. **NÃO criado no item 51 por uma razão que basta sozinha: `create
+  unique index` FALHA se já houver duplicata no vivo, e o repositório não sabe se há.**
+  **A forma já está validada pelo item 50** (`:2600`): `(organization_id, upper(coupon_code))`,
+  funcional, parcial em `coupon_code is not null`, pelo predicado de `consume_incentive_grant`
+  (`20260813000011:49-50`). **A constraint É o índice — não duplicar**, e é o item 50 que pede isso
+  por escrito. Hoje `incentive_grants` (`20260813000005:66-92`) tem `coupon_code text,` (`:87`) sem
+  unique; os únicos únicos são a PK (`:67`) e `idempotency_key` (`:90`), que é
+  `org:contact:object_kind:object_ref:kind` e impede dois grants para o mesmo contato+objeto, **não**
+  dois códigos iguais entre contatos diferentes. Nenhum dos índices existentes toca `coupon_code`.
+  **O que a colisão faz está no item 51(b)**, e o dano de checkout foi fechado por `2b5236d8`. Sobram
+  o `usage_limit` compartilhado e o ledger, que só o unique fecha.
+  **Os passos, na ordem:**
+  1. `select organization_id, upper(coupon_code), count(*), array_agg(id order by created_at) from
+     public.incentive_grants where coupon_code is not null group by 1,2 having count(*) > 1;`
+  2. **Se houver linhas: reconciliação antes do índice**, e ela é decisão de produto, não de DDL —
+     o que fazer com um `incentive_ledger` que já creditou pedidos ao contato errado, numa tabela
+     append-only (`20260813000011:15-16`). **O unique não conserta o que já colidiu.**
+  3. Constraint + **tratamento do conflito em `record_coupon_code`**. `repository/incentives.py:198-209`
+     é um `update ... set coupon_code = %s where id = %s and coupon_code is null`, **sem** `on
+     conflict`.
+  **O que a `UniqueViolation` faz hoje, e não é o que soa.** Ela **não** explode no meio do turno do
+  agente: `record_coupon_code` roda em transação própria (`tools/coupon.py:197-199`), o `except` de
+  `:190` só pega `ShopifyError`/`httpx.HTTPError`, e a exceção cai em `tools/base.py:88-94`, que
+  captura `Exception` e devolve `ToolResult(success=False)`. **O cliente vê o agente dizer que não
+  conseguiu emitir o cupom** — turno vivo, nada perdido. **O dano real é mais chato:** cupom **órfão
+  na Shopify**, grant de B **para sempre sem `coupon_code`**, e **toda** tentativa seguinte repete o
+  ciclo, porque `tools/coupon.py:158` só pula a Shopify quando o código já está gravado. Falha
+  **permanente e silenciosa** de emissão, não explosão. É esse comportamento que o passo 3 precisa
+  tratar.
+  **Ressalva de fonte:** isto é o que `supabase/migrations/` diz. `supabase/README.md` declara
+  `migrations-archive/` e `sql/` como DDL aplicado à mão e não registrado, e o CI nunca aplicou
+  nenhuma migration de setembro (item 49). Um unique já existir no vivo é improvável — `grep` por
+  `coupon_code` fora do stream versionado volta zero — mas só `pg_indexes` responde (query 5 do item
+  51).
+  **A ordem em relação ao guard de `2b5236d8` importa nos dois sentidos:** com o guard aplicado **e**
+  o unique criado, a colisão vira um par de falhas encadeadas — o `ShopifyError` do guard levanta
+  antes de `record_coupon_code`, e a `UniqueViolation` nem chega a ser alcançada.
+
 ---
 
 ## REABERTO — item 1 reprovado em review (28/08)
