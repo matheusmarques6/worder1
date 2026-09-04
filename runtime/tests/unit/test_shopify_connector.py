@@ -265,6 +265,88 @@ class TestIdempotentRetry:
         assert "100" not in str(caught.value)
         assert len(seen) == 2  # parou na busca, não tocou o discount code
 
+    @pytest.mark.parametrize(
+        "found_rule",
+        [
+            pytest.param(
+                {"target_type": "line_item", "value_type": "percentage", "value": "-10.0"},
+                id="usage_limit ausente",
+            ),
+            pytest.param(
+                {"target_type": "line_item", "value_type": "percentage", "usage_limit": 1},
+                id="value ausente",
+            ),
+            pytest.param(
+                {"target_type": "line_item", "value": "-10.0", "usage_limit": 1},
+                id="value_type ausente",
+            ),
+            pytest.param(
+                {"target_type": "line_item", "value_type": "fixed_amount",
+                 "value": "-10.0", "usage_limit": 1},
+                id="value_type divergente",
+            ),
+            pytest.param(
+                {"target_type": "line_item", "value_type": "percentage",
+                 "value": "-10.0", "usage_limit": 5},
+                id="usage_limit divergente",
+            ),
+        ],
+    )
+    async def test_a_missing_or_divergent_field_is_divergence_never_a_tie(
+        self, found_rule: dict
+    ) -> None:
+        """Fail-closed nos QUATRO campos, e ausente NUNCA empata (item 51, E-3/E-4).
+
+        Um GET que não devolve o campo não prova equivalência nenhuma. Sem
+        estes casos, trocar `field not in rule or ...` por `field in rule and
+        ...`, engolir o `except` do bloco numérico, ou tirar `value_type`/
+        `usage_limit` da comparação passa verde na suíte inteira — e o cliente
+        B volta a sair com o cupom de A.
+        """
+
+        def taken(request: httpx.Request) -> httpx.Response:
+            if request.method == "POST" and request.url.path.endswith("/price_rules.json"):
+                return httpx.Response(422, json=_TAKEN)
+            if request.method == "GET":
+                return httpx.Response(
+                    200, json={"price_rules": [{"id": 55, "title": "WD-GUARD", **found_rule}]}
+                )
+            raise AssertionError("não pode chegar ao discount code")
+
+        transport, seen = _transport(taken)
+        with pytest.raises(shopify.ShopifyError, match="termos diferentes"):
+            await shopify.create_discount(
+                STORE, code="WD-GUARD", kind="percent", value=Decimal("10"),
+                validity_until=UNTIL, transport=transport,
+            )
+        assert len(seen) == 2  # parou na busca, não tocou o discount code
+
+    async def test_a_usage_limit_that_came_back_as_a_string_is_the_same_rule(self) -> None:
+        """`usage_limit` é número: `"1"` da Shopify contra `1` nosso é EMPATE.
+
+        Irmão do caso da escala decimal, e a mesma regressão: comparar o tipo
+        cru do JSON reprovaria o nosso próprio retry idempotente e o cupom
+        legítimo pararia de sair.
+        """
+
+        def taken(request: httpx.Request) -> httpx.Response:
+            if request.method == "POST" and request.url.path.endswith("/price_rules.json"):
+                return httpx.Response(422, json=_TAKEN)
+            if request.method == "GET":
+                return httpx.Response(200, json={"price_rules": [
+                    {"id": 88, "title": "WD-STR", "target_type": "line_item",
+                     "value_type": "percentage", "value": "-10.0", "usage_limit": "1"},
+                ]})
+            return httpx.Response(422, json={"errors": {"code": ["has already been taken"]}})
+
+        transport, seen = _transport(taken)
+        code = await shopify.create_discount(
+            STORE, code="WD-STR", kind="percent", value=Decimal("10"),
+            validity_until=UNTIL, transport=transport,
+        )
+        assert code == "WD-STR"
+        assert seen[-1].url.path == "/admin/api/2026-04/price_rules/88/discount_codes.json"
+
     async def test_any_other_failure_raises_for_the_retry(self) -> None:
         def broken(request: httpx.Request) -> httpx.Response:
             return httpx.Response(500, text="internal")
