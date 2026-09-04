@@ -173,6 +173,32 @@ const triggerExecutors: Record<string, NodeExecutor> = {
 // ACTION EXECUTORS
 // ============================================
 
+/**
+ * Chave de duplicidade de um envio de automação.
+ *
+ * (automação, nó, contato, dia). O dia entra porque reentrada legítima
+ * no mesmo fluxo — abandonar o carrinho de novo semana que vem — tem de
+ * continuar enviando; o que não pode é o MESMO passo sair seis vezes
+ * numa tarde porque seis runs paralelas existem.
+ *
+ * Sem automação ou sem contato identificado não há o que deduplicar:
+ * devolve null e o envio segue sem trava (é o caso do e-mail de teste).
+ */
+function buildEmailDedupeKey(
+  context: any,
+  node: any,
+  organizationId?: string
+): string | null {
+  const workflow = context?.workflow || {};
+  const automationId =
+    context?.automation_id || workflow.automationId || workflow.id || null;
+  const contactId = context?.contact?.id || null;
+  const nodeId = node?.id || null;
+  if (!automationId || !contactId || !nodeId) return null;
+  const dia = new Date().toISOString().slice(0, 10);
+  return `auto:${automationId}:${nodeId}:${contactId}:${dia}`;
+}
+
 const actionExecutors: Record<string, NodeExecutor> = {
   // ========== WHATSAPP ==========
   action_whatsapp: {
@@ -665,20 +691,42 @@ const actionExecutors: Record<string, NodeExecutor> = {
         }
 
         // 2b. Smart Sending — skip if contact received email recently
+        // Desligado por padrão — ligar é escolha do lojista por nó.
+        // Quando ligado, pula quem recebeu qualquer e-mail nas últimas
+        // N horas (o mesmo sentido do Smart Sending da Omnisend).
         if (config.smartSending && !isTest && context.contact?.id) {
-          const skipHours = config.smartSendingHours || 16;
+          const skipHours = Math.max(1, Number(config.smartSendingHours) || 16);
           const cutoff = new Date(Date.now() - skipHours * 60 * 60 * 1000).toISOString();
-          const { data: recentSends } = await supabase
+          let q = supabase
             .from('email_sends')
             .select('id')
             .eq('contact_id', context.contact.id)
             .gte('created_at', cutoff)
+            // Envio que falhou não chegou a ninguém: contá-lo bloqueava
+            // o próximo e-mail por causa de um erro nosso, e o contato
+            // ficava sem receber nada.
+            .not('status', 'in', '("failed","cancelled","bounced")')
             .limit(1);
+          // Escopo da organização: o cliente é service-role e sem este
+          // filtro a consulta atravessa todos os inquilinos.
+          if (organizationId) q = q.eq('organization_id', organizationId);
+          const { data: recentSends, error: smartErr } = await q;
 
-          if (recentSends && recentSends.length > 0) {
+          if (smartErr) {
+            // Na dúvida, ENVIA. Um erro de leitura não pode virar
+            // silêncio para o contato.
+            console.warn('[action_email] Smart Sending: consulta falhou, seguindo com o envio:', smartErr);
+          } else if (recentSends && recentSends.length > 0) {
+            console.log('[action_email] ⊘ Smart Sending', {
+              nodeId: node?.id, skipHours, contactId: context.contact.id,
+            });
             return {
               status: 'success',
-              output: { skipped: true, reason: `Smart Sending: contato recebeu email nas últimas ${skipHours}h` },
+              output: {
+                sent: false,
+                skipped: true,
+                reason: `Smart Sending: contato recebeu e-mail nas últimas ${skipHours}h`,
+              },
             };
           }
         }
@@ -995,7 +1043,27 @@ const actionExecutors: Record<string, NodeExecutor> = {
           // Trigger type so the "Produtos do Gatilho" block builds the
           // correct CTA link (checkout recovery / cart permalink / product).
           triggerType: (context as any).trigger?.type || null,
+          // Trava de duplicidade: um índice único no banco garante que
+          // este passo, deste fluxo, para este contato, saia UMA vez por
+          // dia. É o que faltava — a idempotência existente age na
+          // INSCRIÇÃO e não ajuda quando as runs duplicadas já existem.
+          // Reentrada legítima no fluxo em outro dia continua enviando.
+          dedupeKey: buildEmailDedupeKey(context, node, organizationId),
         });
+
+        // A trava do banco recusou: outra execução já mandou este mesmo
+        // e-mail. O fluxo segue para o próximo nó como se tivesse
+        // enviado — porque, do ponto de vista do contato, enviou.
+        if ((result as any).skipped) {
+          console.log('[action_email] ⊘ duplicado bloqueado', {
+            nodeId: node?.id,
+            contactId: (context.contact as any)?.id,
+          });
+          return {
+            status: 'success',
+            output: { sent: false, skipped: true, reason: 'Envio duplicado bloqueado' },
+          };
+        }
 
         if (!result.success) {
           // Permanent failures from Resend (invalid recipient,

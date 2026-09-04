@@ -62,6 +62,66 @@ export interface EventQueryOptions {
 }
 
 // =============================================
+// JUNÇÃO DE EVENTOS REPETIDOS
+// =============================================
+
+/** Valor que não acrescenta nada: nulo, texto vazio ou lista vazia. */
+function vazio(v: any): boolean {
+  if (v === null || v === undefined) return true;
+  if (typeof v === 'string') return v.trim() === '';
+  if (Array.isArray(v)) return v.length === 0;
+  if (typeof v === 'object') return Object.keys(v).length === 0;
+  return false;
+}
+
+/**
+ * Junta as propriedades de duas entregas do MESMO evento.
+ *
+ * A Shopify manda o mesmo fato mais de uma vez (checkouts/create e
+ * depois checkouts/update; orders/create e orders/paid), e reenvia cada
+ * webhook até 8 vezes. Cada entrega pode estar mais ou menos completa.
+ *
+ * Regra: o mais novo ganha campo a campo, mas SÓ quando traz valor —
+ * assim uma entrega magra que chega depois nunca apaga o que já
+ * sabíamos. `raw` é o payload inteiro e é substituído quando o novo
+ * vem preenchido, porque aí ele é a versão mais atual do pedido.
+ *
+ * Devolve null quando não há nada a mudar, para não gravar à toa.
+ */
+export function mergeEventProperties(
+  antigas: Record<string, any> | null | undefined,
+  novas: Record<string, any> | null | undefined
+): Record<string, any> | null {
+  if (!novas || typeof novas !== 'object') return null;
+  const base: Record<string, any> = { ...(antigas || {}) };
+  let mudou = false;
+
+  for (const [chave, valorNovo] of Object.entries(novas)) {
+    if (vazio(valorNovo)) continue;
+    const valorAntigo = base[chave];
+
+    // Objetos aninhados (raw, Customer, ShippingAddress…) juntam-se
+    // recursivamente: um update que traz só o e-mail não pode apagar o
+    // endereço que veio no create.
+    if (
+      valorNovo && typeof valorNovo === 'object' && !Array.isArray(valorNovo) &&
+      valorAntigo && typeof valorAntigo === 'object' && !Array.isArray(valorAntigo)
+    ) {
+      const filho = mergeEventProperties(valorAntigo, valorNovo);
+      if (filho) { base[chave] = filho; mudou = true; }
+      continue;
+    }
+
+    if (JSON.stringify(valorAntigo) !== JSON.stringify(valorNovo)) {
+      base[chave] = valorNovo;
+      mudou = true;
+    }
+  }
+
+  return mudou ? base : null;
+}
+
+// =============================================
 // CREATE EVENT
 // =============================================
 
@@ -177,6 +237,33 @@ export async function createEvent(input: CreateEventInput): Promise<EventRecord 
       if (!existing.anonymous_id && record.anonymous_id) {
         patch.anonymous_id = record.anonymous_id;
       }
+
+      // O evento repetido não é lixo: é a MESMA coisa contada de novo,
+      // quase sempre mais completa. checkouts/create chega magro e
+      // checkouts/update chega depois com o abandoned_checkout_url, os
+      // itens e o e-mail. Guardar só o primeiro jogava fora exatamente
+      // o campo que o fluxo de recuperação precisa.
+      //
+      // A junção é campo a campo, e o mais NOVO só ganha quando traz
+      // valor de verdade — um webhook posterior pode vir mais magro que
+      // o anterior, e nesse caso o que já estava salvo permanece.
+      const mesclado = mergeEventProperties(existing.properties, record.properties);
+      if (mesclado) patch.properties = mesclado;
+
+      // Valor e moeda seguem a mesma regra: só sobrescrevem se o novo
+      // disser alguma coisa.
+      if (record.monetary_value != null && record.monetary_value !== existing.monetary_value) {
+        patch.monetary_value = record.monetary_value;
+      }
+      if (record.currency && record.currency !== existing.currency) {
+        patch.currency = record.currency;
+      }
+      // occurred_at avança para a ocorrência mais recente — é o que faz
+      // "manter o mais novo" valer para quem ordena por data.
+      if (record.occurred_at && existing.occurred_at && record.occurred_at > existing.occurred_at) {
+        patch.occurred_at = record.occurred_at;
+      }
+
       if (Object.keys(patch).length > 0) {
         const { data: updated } = await supabase
           .from('contact_events')

@@ -440,6 +440,29 @@ export async function GET(request: NextRequest) {
     // usuário criou e ainda não conectou. Com storeId alvo, o placeholder
     // vira a própria loja conectada (mesmo id).
 
+    // ── Loader da vitrine + demais extras (fire-and-forget) ──
+    // O escopo write_script_tags é pedido no início do OAuth, mas nada
+    // aqui instalava o ScriptTag: a permissão existia e o loader nunca
+    // subia, então a tela mostrava "Loader não pôde ser instalado
+    // automaticamente" e o lojista tinha de colar o script no
+    // theme.liquid à mão. O connect manual chama isto pelo navegador
+    // depois de conectar; aqui o retorno é um redirect, então o
+    // navegador nunca chegava a chamar.
+    try {
+      fetch(`${APP_URL}/api/shopify/install-extras`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Internal-Request': 'true',
+          // A rota exige o header E o bearer: sem os dois ela cai no
+          // caminho de sessão, que aqui não existe (o callback é público,
+          // o clique final vem do navegador do dono da loja).
+          Authorization: `Bearer ${process.env.CRON_SECRET || ''}`,
+        },
+        body: JSON.stringify({ storeId }),
+      }).catch(() => {});
+    } catch { /* ignore */ }
+
     // ── Sync inicial (fire-and-forget) ──
     try {
       fetch(`${APP_URL}/api/shopify/trigger-sync`, {

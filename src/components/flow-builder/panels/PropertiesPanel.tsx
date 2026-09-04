@@ -3072,18 +3072,21 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
             <input type="checkbox" checked={config.smartSending || false} onChange={(e) => onUpdate('smartSending', e.target.checked)}
               className="w-4 h-4 mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
             <div>
-              <p className="text-sm text-gray-900">Pular perfis contatados recentemente</p>
+              <p className="text-sm text-gray-900">Pular quem recebeu e-mail há pouco</p>
               <p className="text-xs text-gray-500 mt-0.5">
-                <span className="text-blue-600">Smart Sending</span> will skip anyone who received an email within the last {config.smartSendingHours || 16} hours.
+                <span className="text-blue-600">Smart Sending</span> pula o contato que já recebeu
+                qualquer e-mail seu nas últimas {config.smartSendingHours || 16} horas. Desligado por
+                padrão — envio duplicado do mesmo passo já é bloqueado sempre.
               </p>
             </div>
           </label>
           {config.smartSending && (
             <div className="flex items-center gap-2 ml-6">
-              <span className="text-xs text-gray-500">Skip window:</span>
-              <input type="number" min="1" value={config.smartSendingHours || 16} onChange={(e) => onUpdate('smartSendingHours', parseInt(e.target.value) || 16)}
+              <span className="text-xs text-gray-500">Janela:</span>
+              <input type="number" min="1" max="168" value={config.smartSendingHours || 16}
+                onChange={(e) => onUpdate('smartSendingHours', Math.min(168, Math.max(1, parseInt(e.target.value) || 16)))}
                 className="w-14 px-2 py-1 rounded border border-gray-200 text-xs text-gray-700 focus:outline-none focus:border-blue-500" />
-              <span className="text-xs text-gray-500">hours</span>
+              <span className="text-xs text-gray-500">horas</span>
             </div>
           )}
 

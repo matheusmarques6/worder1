@@ -41,6 +41,12 @@ export interface SendCampaignEmailParams {
    *  "Produtos do Gatilho" block builds the correct CTA link. Omitted for
    *  plain campaign broadcasts (link family inferred from the event). */
   triggerType?: string | null;
+  /**
+   * Trava de duplicidade. Quando presente, o índice único em
+   * email_sends garante que este envio saia UMA vez — mesmo com várias
+   * execuções concorrentes tentando ao mesmo tempo.
+   */
+  dedupeKey?: string | null;
 }
 
 export async function sendCampaignEmail({
@@ -59,7 +65,8 @@ export async function sendCampaignEmail({
   storeId,
   eventData,
   triggerType,
-}: SendCampaignEmailParams): Promise<{ success: boolean; emailSendId?: string; error?: string }> {
+  dedupeKey,
+}: SendCampaignEmailParams): Promise<{ success: boolean; emailSendId?: string; error?: string; skipped?: boolean; reason?: string }> {
   let emailSendId = '' as string;
   // Hoisted so the catch block can flip email_consent on the contact
   // when Resend reports a permanent failure mid-send.
@@ -125,9 +132,22 @@ export async function sendCampaignEmail({
         provider: 'resend',
         status: 'queued',
         organization_id: organizationId,
+        // Trava de duplicidade. O índice único faz o trabalho: seis runs
+        // paralelas disparando com 2s de intervalo TODAS leriam "ainda
+        // não enviei" numa verificação por SELECT, e todas mandariam.
+        // Aqui a segunda simplesmente não consegue gravar.
+        dedupe_key: dedupeKey || null,
       })
       .select('id')
       .single();
+
+    // 23505 = violação de unicidade: outra execução já registrou este
+    // mesmo envio. Não é erro — é a trava funcionando. Devolver sucesso
+    // com skipped deixa o fluxo seguir para o próximo nó normalmente.
+    if ((insertError as any)?.code === '23505' && dedupeKey) {
+      console.log(`[SendCampaignEmail] duplicado bloqueado: ${dedupeKey}`);
+      return { success: true, skipped: true, reason: 'duplicate_send' };
+    }
 
     if (insertError || !emailSend) {
       console.error('[SendCampaignEmail] Failed to create email_sends row:', insertError);
