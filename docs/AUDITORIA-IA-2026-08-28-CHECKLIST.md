@@ -3146,10 +3146,92 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
 
 ## Fase 6 — Limpeza
 
-- [ ] **54. `encoding="utf-8"` nos dois fixtures de teste** `[confirmado]`
-  `runtime/tests/unit/test_secret_box_vectors.py:22` e `runtime/tests/unit/test_humanize.py:31` usam
-  `Path.read_text()` sem encoding — as duas únicas falhas da suíte no Windows (907 ✓ / 2 ✗), e são
-  justamente as suítes que provam a paridade byte a byte com o TS. `runtime/src/` está limpo.
+- [x] **54. `encoding="utf-8"` nos dois fixtures de teste — o número move 2, o significado move 10**
+  `[confirmado]` · commits `24ed7f06` (os dois `encoding`) `5eec0e53` (a fitness) + este texto
+  **Todas as citações deste item estão ancoradas em `cae62fae`.**
+  **O item estava certo no conserto e errado no tamanho.** Ele descrevia **2 falhas**; o defeito eram
+  **8 verdes falsos**. `locale.getpreferredencoding(False)` nesta máquina é **cp1252**, e **nenhum dos
+  dois fixtures tem byte indefinido em cp1252** — os dois decodificavam **com sucesso** e produziam
+  dado errado. Não era erro de leitura, era **mojibake silencioso**: a família de defeito que esta
+  auditoria persegue desde o item 43, não a família do erro alto. Se fosse `UnicodeDecodeError`, seria
+  mais barato, porque seria alto.
+  **A suíte estava provando paridade consigo mesma, corrompida.** `bubble_vectors.json` tem **10
+  vetores**; lidos como cp1252, **9 saem corrompidos e 8 PASSAM**. O assert de `test_humanize.py:46` é
+  `split_into_bubbles(vector["text"]) == vector["bubbles"]` — **os dois lados vêm do mesmo objeto do
+  mesmo fixture corrompido**, então o teste é auto-consistente em espaço-mojibake. Só denuncia o vetor
+  cujo corte depende de **contagem de caracteres** (`parágrafo longo quebra em fronteira de espaço`):
+  em mojibake `ç` vira dois caracteres, o comprimento muda e a fronteira de corte anda de lugar. Ou
+  seja: o arquivo que se declara prova de que *"a paridade com o legado é PROVADA, não declarada"*
+  (`test_humanize.py:1`) não comparava com o que o TS gerou; comparava com uma tradução corrompida de
+  si mesmo. Verde e vazio.
+  **A assimetria dos dois fixtures é estrutura, não sorte.** Em `test_secret_box_vectors` a detecção é
+  1 de 1 porque o lado esquerdo do assert vem do **ciphertext** (`stored`, hex ASCII puro nos 4
+  vetores — verificado), que atravessa o cp1252 intacto e devolve UTF-8 verdadeiro da decriptação. Só
+  o lado direito (`plain`) passou pelo locale. Os dois lados não compartilham a corrupção. No humanize
+  compartilham, e por isso a detecção é 1 de 9.
+  **A frase que este item precisa carregar não é o número.** Depois do conserto a suíte vai a 1244
+  passando. Mas o ganho não são as 2 que passam a passar: são as **8 que já passavam e passam a passar
+  pelo motivo certo**. **O número move 2; o significado move 10.** Um leitor futuro que só olhe o
+  delta vai achar que este item valeu duas linhas.
+  **O `ruff` não pega isto, e não foi ligado (com o número medido).** A regra é **`PLW1514`
+  / `unspecified-encoding`** — `UP015` é `redundant-open-modes`, irrelevante, e a família `W` não tem
+  regra de encoding. Ela **não está no `select`** (`runtime/pyproject.toml:63-74`, sem `PL`) e é
+  *preview* no ruff 0.16.1. **Ligada, dá zero hits**: o detector foi sondado com 9 formas sintáticas
+  fora do repositório e a inferência de tipo do ruff sobrevive à atribuição de variável mas **morre em
+  `.parent` e em `/`** — exatamente as duas formas dos dois defeitos
+  (`FIXTURE = Path(__file__).parent / … ; FIXTURE.read_text()` e
+  `(Path(__file__).parent / "fixtures" / "bubble_vectors.json").read_text()`).
+  `--select PLW1514 --preview` devolvia `All checks passed!` **com o bug presente**: 0 hits antes,
+  durante e depois. E há custo: `preview = true` global leva o `ruff` de **10 para 74** erros,
+  estourando o item 74; a variante cirúrgica (`preview` + `explicit-preview-rules` + `PLW1514`) mantém
+  em 10, mas para uma trava que **não fecha esta porta**. Não vale.
+  **A trava que fecha a porta é uma fitness, e ela entrou:**
+  `runtime/tests/unit/test_text_io_declares_its_encoding.py` (`5eec0e53`), no idioma de
+  `test_no_max_seq.py`. Varre todo `.py` do runtime fora dos diretórios com ponto e reprova
+  `read_text`/`write_text`/`open` em modo texto sem `encoding`, **listando todas as violações numa
+  mensagem só**. É **AST, não regex**: `test_responder_factory.py:73` passa o `encoding=` na linha
+  seguinte, e um detector de linha reprovaria código correto já hoje. **Zero exceções foram
+  necessárias** — as 23 leituras de teste já passavam `encoding="utf-8"`; as duas únicas violações
+  eram as deste item. `bytes.decode()` nu ficou **de fora de propósito**: é sempre UTF-8, nunca o
+  locale, e incluí-lo reprovaria quatro chamadas corretas (`server.py:387`, `judges/pre_send.py:74`,
+  `tests/support/runtime_process.py:85`, `tests/db/test_server.py:56`). A **mutação foi provada nas
+  duas direções** e mora dentro do arquivo (`TestTheDetectorItself`, 8 casos), porque trava que
+  ninguém viu falhar é decoração.
+  **`runtime/src/` está limpo — a afirmação do item confere.** Varredura AST completa: **zero**
+  ocorrências em produção. Os três hits de `grep` são falsos positivos e vale registrar por quê:
+  `server.py:213` é `async def _open(self)`, um método e não o builtin; `server.py:387` e
+  `judges/pre_send.py:74` são `bytes.decode()` sem argumento, que é **sempre** UTF-8. Lado TypeScript
+  é imune por construção: `writeFileSync` de string é UTF-8 fixo, e os dois geradores dos fixtures
+  (`scripts/gen-secret-box-vectors.mjs:93`, `src/lib/ai/__tests__/gen-bubble-vectors.test.ts:61`)
+  escrevem string. **Os fixtures estavam certos; quem lia é que estava errado.**
+  **O CI não viu isto — e o motivo NÃO é o lint.** São dois fatos separados. (i) **O CI não roda este
+  código:** `origin/claude/debug-console-error-FWrLE` está em `f0196638`, **152 commits atrás**; a fila
+  inteira desta auditoria nunca foi vista por CI algum (mesma raiz do item 49). Quando rodar, o job
+  `lint` reprova pelos 10 erros do item 74 e deixa o check agregado vermelho — mas os quatro jobs de
+  `.github/workflows/runtime.yml` (`lint`, `boundaries`, `tests-unit`, `tests-db`) **não têm `needs:`
+  nenhum**: rodam em paralelo, e `tests-unit` executa e passa independentemente do lint. **Não é
+  verdade que "o lint cai antes de chegar perto disto".** (ii) **Mesmo quando rodar, ele não pegaria
+  isto:** todo job roda em `ubuntu-latest`, onde `getpreferredencoding` é UTF-8, os dois testes passam
+  e os 8 vetores corrompidos-mas-verdes rodam **corretos** lá. **O CI é estruturalmente cego para esta
+  classe de defeito** — não por estar desatualizado, mas por só existir num SO onde o bug não aparece.
+  **Essa cegueira é anterior a este item e sobrevive a ele: virou o item 84.**
+  **Correções de números e citações do texto antigo:** `test_secret_box_vectors.py:22` estava
+  **exata**; `test_humanize.py:31` **errava por 9 linhas** — a real era `:39-40` (o `read_text()` em
+  `:40`). O "907 ✓ / 2 ✗" envelheceu **337 testes**: na âncora era **1244 coletados / 1242 ✓ / 2 ✗**.
+  **O baseline da fila muda daqui em diante.** As seis notas que gravam "as 2 falhas são do item 54,
+  alheias a este" (`:340`, `:1572`, `:1738`, `:2920`, `:3061`, `:3138`) são instantâneos datados e
+  continuam corretos como registro, mas **deixam de valer para todo item futuro**: o baseline passa a
+  ser **1254 coletados / zero falhas**. O `PYTHONUTF8=1` que os itens `:741` e `:790` usaram
+  justamente para contornar isto **deixa de ser necessário**.
+  **Suíte.** Antes, árvore limpa, âncora `cae62fae`: **1244 coletados / 1242 passando / 2 falhas** (as
+  **deste** item). Depois: **1254 coletados, todos passando**. O delta de +10 é +9 do arquivo novo
+  (1 fitness + 8 de autoteste do detector) e **+1** de
+  `test_no_provider_network::test_no_blocking_test_reaches_a_provider`, que é parametrizado por
+  arquivo de teste e ganhou um caso ao existir um arquivo de teste novo. `ruff check .` **10**
+  (item 74, intocado — o `encoding` foi aplicado **inline**, 76 → 92 colunas, abaixo do
+  `line-length = 100`, para não deslocar o `E501` de `test_humanize.py:286` que o item 74 cita);
+  `lint-imports` **3 kept, 0 broken**. Nenhum `-m db` e nenhum `-m pipeline` (sem Postgres eles
+  penduram em vez de falhar). TS não foi tocado.
 
 - [ ] **55. Apagar a cadeia `actions-engine`** — ~717 linhas `[confirmado]`
   `src/lib/ai/actions-engine.ts` + `intent-detector.ts` + `sentiment-analyzer.ts`, mais o bloco
@@ -3901,6 +3983,43 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   leitor, e a Etapa 3 do FORK (`agent.py:166-167`) precisa de onde ler a data de verdade —, ou o
   campo, a projeção `null::timestamptz` e os dois asserts saem juntos. **Não apagar sem decidir:**
   apagar é a saída barata que fecha a porta do RF-006 sem que ninguém tenha dito que quer fechá-la.
+
+- [ ] **84. O CI do runtime só existe em Ubuntu — uma classe inteira de defeito é invisível para ele**
+  `[confirmado]` · *(descoberto no item 54)*
+  Citações ancoradas em `cae62fae`. `.github/workflows/runtime.yml` tem **quatro** jobs — `lint:40`,
+  `boundaries:53`, `tests-unit:67`, `tests-db:79` — e **todos os quatro** rodam em
+  `runs-on: ubuntu-latest`. Não há `strategy.matrix`, não há runner Windows nem macOS em lugar nenhum
+  do arquivo. Varredura do checklist inteiro antes de abrir este item (`ubuntu`, `runs-on`,
+  `windows-latest`, `matrix`, `matriz`, "sistema operacional"): **zero ocorrências** — as quatro
+  menções a "Windows" são o skip de event-loop do `:40` e três apontadores para o item 54. **Território
+  sem dono**, e explicitamente **não é do item 49**, que fala de CI nunca ter rodado e não menciona SO.
+  **Por que isso é um achado e não uma preferência:** o desenvolvimento acontece em Windows e a
+  entrega acontece em Linux, então toda a família de defeito que **muda de comportamento com o SO** —
+  encoding do locale, separador de caminho, fim de linha, política de event-loop — atravessa o CI sem
+  encostar nele. O CI não é lento nem desatualizado nessa dimensão: ele **não tem o SO onde o bug
+  existe**.
+  **A evidência é viva, não hipotética: o item 54 é a prova.** Dois `Path.read_text()` sem `encoding`
+  sobreviveram à árvore inteira porque em `ubuntu-latest` `getpreferredencoding` é UTF-8 e lá eles
+  passam. Pior: os **8 vetores que passavam corrompidos** na máquina do dono rodavam **corretos** no
+  CI, então nem o sintoma nem a causa jamais apareceriam num run verde. O defeito só era visível para
+  quem tem a máquina, e só por acidente.
+  **Não implementar aqui.** Acrescentar `windows-latest` à matriz é **decisão de infra e de custo, do
+  dono**, e nada disso foi medido: tempo e preço de dobrar quatro jobs; se os skips de plataforma já
+  existentes (`tests/db/conftest.py:23`, `tests/pipeline/conftest.py:29`,
+  `tests/pipeline/test_runtime_process.py:41`) viram flake ou viram silêncio; e sobretudo **se o
+  `supabase start` do `tests-db` sequer sobe em runner Windows** — se não subir, a matriz só faz
+  sentido para `tests-unit`, o que é uma decisão diferente e mais barata. Este item registra o fato e
+  devolve a escolha.
+  **Depende do item 49 para valer alguma coisa:** enquanto o CI não rodar nesta branch (`origin` em
+  `f0196638`, 152 commits atrás), acrescentar SO à matriz é acrescentar SO a um gate que ninguém
+  dispara. A ordem é 49 primeiro.
+  **Adjacente que só uma execução Windows com Postgres responde:**
+  `runtime/tests/support/runtime_process.py:85` faz `self._process.stdout.read().decode(errors="replace")`
+  sobre um `Popen` binário (`:60-66`, sem `text=True`), ou seja decodifica UTF-8 — mas o processo
+  filho é um Python cujo `sys.stdout.encoding` nesta máquina é **cp1252**, e o `errors="replace"`
+  engole a discrepância em silêncio. Só morde o tier `-m pipeline`, e só se o filho emitir não-ASCII.
+  **Não verificado** — `-m pipeline` não roda aqui (sem Postgres) e em Linux passaria de qualquer
+  jeito. É exatamente o tipo de coisa que a matriz existiria para responder.
 
 ---
 
