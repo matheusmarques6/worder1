@@ -3142,6 +3142,12 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   nesta fila que uma citação sem âncora apodrece.** `FORK.md:370,372` carregava a quarta e a quinta
   versões erradas e foi corrigido em `f0bd017d`.
   **O irmão pior está no mesmo select: `shadow_until` — ver item 83.**
+  **DESATUALIZADO PELO ITEM 56 (`ea5cbb35`), e a anotação vem dele:** as duas afirmações abaixo
+  eram verdadeiras quando o item 53 fechou e **as duas caíram**. A linha 47 **foi** tocada (é hunk
+  daquele commit, porque `test_prompt_layers.py` sumiu e o vocabulário dela tinha de acompanhar), e
+  as seis regras **não** têm mais seis testes: uma ficou **órfã** — a seleção da missão pelo evento —,
+  e o vão está registrado no item 63. O raciocínio original continua certo para a âncora dele; o
+  estado, não.
   **`runtime/docs/testes-e-cicd.md` NÃO foi tocado.** A acusação de que a linha 47 reivindicava
   cobertura inexistente é **falsa**: os três tiers foram varridos, `test_prompt_layers.py:3` se
   declara a implementação nominal daquela linha, as seis regras dela têm seis testes, e há cobertura
@@ -3341,7 +3347,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   nenhum teste morreu junto. Python intocado: `pytest -m unit` **1258/1258**, `ruff` **10** (item 74),
   `lint-imports` **3 kept, 0 broken**.
 
-- [x] **56. Apagar `agent_core/prompt.py` + `test_prompt_layers.py`** — **495 linhas medidas** `[confirmado]` · commits `74ea68f0` `ea5cbb35` · relatório `task-56-report.md`
+- [x] **56. Apagar `agent_core/prompt.py` + `test_prompt_layers.py`** — **495 linhas medidas** `[confirmado]` · commits `74ea68f0` `ea5cbb35` `f6cc4a79` · relatório `task-56-report.md`
   **Âncora deste item: `59540569`** — toda citação `arquivo:linha` abaixo é nessa numeração, salvo
   onde o texto diz outra coisa.
   **"~450 linhas" era estimativa e estava 10% baixa: são 495, MEDIDAS por `wc -l`** (`prompt.py` 203
@@ -3427,7 +3433,13 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   aqui de propósito); `lint-imports` **3 kept / 0 broken** — nenhum contrato nomeia o módulo.
   **TS não se moveu porque não foi tocado:** `tsc --noEmit` exit 0 e `vitest` 1321 com as mesmas 4
   falhas pré-existentes, medidos na âncora; zero arquivo TS no diff dos três commits.
-  **Oito citações reancoradas, conferidas DEPOIS de mover.** A migração acrescentou **+33** linhas ao
+  **Resíduo de vocabulário declarado e NÃO consertado:** `agent_core/responder.py:21-24` ainda usa o
+  vocabulário antigo, mesma classe do `agent_core/__init__.py:1` que **foi** corrigido aqui. A
+  diferença não é de mérito, é de risco: `__init__.py` é comentário de cabeçalho, `responder.py` é o
+  arquivo mais quente do runtime e os itens 58 e 67 ainda vão editá-lo. Fica para eles.
+  (`tests/pipeline/test_real_responder.py:5,188,216` tem o mesmo resíduo, e é dívida anterior a este
+  item.)
+  **Nove citações reancoradas, conferidas DEPOIS de mover.** A migração acrescentou **+33** linhas ao
   topo de `repository/agent.py` (as dataclasses precisam preceder `ActiveVersion`, porque
   `config: AgentConfig` é anotação avaliada na criação da classe) — o brief estimava ~25, o medido é
   33. **Item 45:** a aresta `repository.agent → agent_core.prompt` deixou de existir, e a lista de
@@ -3481,6 +3493,14 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   (duplicata de `formatRAGAsContext`) + `pending_defaults.py` + os 4 pacotes vazios
   (`dispatch/`, `inbox/`, `onboarding/`, `quota/`) + as filas `q_scheduled`/`q_evals` de `config.py:21,26`
   e `polling.py:69-79` até existir handler.
+  **Acrescentado pelo item 56 (`f6cc4a79`, revisão da execução):** `AgentConfig.scenario_prompts` —
+  campo **morto** que a migração do 56 carregou junto por disciplina de escopo (o brief mandava
+  mover, não podar). Ele é escrito com `{}` **literal** em `repository/agent.py:181` e tem **zero
+  leituras em toda a árvore**; `occasion`, que era quem o alimentaria, não existe em `src/`. Detalhe
+  que mostra o custo de mantê-lo: `from collections.abc import Mapping` foi acrescentado àquele
+  arquivo **só para anotar um campo que ninguém lê**. Podar mexe no construtor de produção, então
+  não cabia no mesmo commit de 495 linhas apagadas — cabe aqui.
+  *(Verificado sem dono antes de entrar: o item 57 é sobre `evals/` e este escopo não o listava.)*
 
 - [ ] **61. Rotas órfãs** `[relatado]`
   `whatsapp/conversations/[id]/ai` (duplicata insegura do toggle, apagar primeiro), `ai/respond`,
