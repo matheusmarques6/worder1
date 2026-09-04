@@ -403,7 +403,10 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `:147-156` apaga chunks e documentos por `knowledge_base_id` sem filtro de org; só `:159-163` escopa.
 
 - [x] **23. Fallback sem escopo em `/api/ai/respond`** `[relatado]` · commit `5c7a6774`
-  `:293-297` lê `ai_agent_configs` só por `agent_id`. Rota órfã — resolver junto com o item 55.
+  `:293-297` lê `ai_agent_configs` só por `agent_id`. Rota órfã — ~~resolver junto com o item 55~~
+  **o dono é o item 61**, corrigido pelo item 55: `src/app/api/ai/respond/route.ts` **não importa
+  nada** da cadeia `actions-engine` (é autocontida, lê `profiles` e `ai_agent_configs`), e o item 61
+  já a lista entre as rotas órfãs. A delegação para o 55 era dupla atribuição.
 
 - [x] **24. Filtro de org nas views de atividade** `[confirmado]` · commit `84fc4c62`
   Nenhuma view tem `security_invoker` (`grep` em todas as migrations: zero), então a RLS das tabelas-base
@@ -3238,7 +3241,8 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `lint-imports` **3 kept, 0 broken**. Nenhum `-m db` e nenhum `-m pipeline` (sem Postgres eles
   penduram em vez de falhar). TS não foi tocado.
 
-- [ ] **55. Apagar a cadeia `actions-engine`** — ~964 linhas `[confirmado]` · *(âncora `622180a1`)*
+- [x] **55. Apagar a cadeia `actions-engine`** — ~964 linhas `[confirmado]` · *(âncora `622180a1`)* ·
+  commits `46fbb324` (reancoragem) e `c76a29bb` (deleção)
   `src/lib/ai/actions-engine.ts` (332) + `intent-detector.ts` (199) + `sentiment-analyzer.ts` (186)
   = **717 apagadas inteiras**, mais ~112 de `engine.ts`, 122 de `types.ts` e ~13 de
   `prompt-builder.ts` **editadas**: **~964 linhas em seis arquivos** (três apagados, três editados).
@@ -3264,6 +3268,47 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   apaga a tabela**, e daqui não se sabe se ela existe (ou tem linhas) na base viva. Nada de
   `drop table` sem o dono decidir.
   **Ordem entre itens: 55, 58 e 67 editam o mesmo `engine.ts` — não rodar em paralelo.**
+
+  **Executado.** A base é a decisão **D8** de `core/agentes-por-evento.md:75` — *"`ai_agent_actions`
+  morre — WHEN/DO migram para dentro das missões (a missão de `whatsapp.received` absorve os
+  intents)"* —, que vive na tabela `| # | Decisão |` da seção **"PARTE II — Decisões estruturais
+  fechadas"**, é reforçada em `:251` (*"aposentada (D8)"*) e **não** está marcada `[PENDENTE]`. O
+  herdeiro que ela nomeia existe com o nome exato: `DISCOVERY_EVENT = "whatsapp.received"` em
+  `runtime/.../mission_resolver.py:25`, carregado em `responder.py:326-327` e arbitrado em `:497`.
+  **O que se perdeu, e é só isto:** o **gatilho determinístico** por condição `intent` / `sentiment` /
+  `time` (`types.ts:163`) não tem herdeiro. `contains` tem (`settings.safety.handoff_keywords`,
+  `cloud-runner.ts:154` / `responder.py:439`), e **os seis efeitos têm**: `transfer` +
+  `exact_message` → `handoff_keywords` + `handoff_confirmation_message`; `dont_mention` →
+  `settings.safety.blocked_topics`, com painel no IA Hub e aplicado **sobre a resposta pronta** nos
+  dois motores (`cloud-sender.ts:129-136`, `responder.py:823-834`) — virou trava, o original era só
+  uma frase no prompt; `bring_up` → `persona.guidelines` (`prompt_compiler.py:195`) + `moment_facts`;
+  `use_source` **nunca restringiu RAG** (era uma frase no prompt), mesmo herdeiro; `ask_for` →
+  parcial, pelas tools `save_customer`/`save_interests`. E `mission.forbidden` é coluna do stream
+  versionado (`20260813000001_ai_missions.sql:29`), renderizada como *"Não fazer: {item}"* —
+  literalmente WHEN/DO dentro das missões.
+  **O que se ganhou, além das ~964 linhas:** `intent-detector.ts:46` e `sentiment-analyzer.ts:38`
+  faziam **`fetch` direto a `api.openai.com`**, fora de `ai-providers.ts` e **fora do cost-tracker** —
+  duas chamadas de LLM por mensagem que nunca chegavam ao `ai_usage_logs`. Gasto invisível, e o
+  melhor motivo para apagar hoje em vez de um dia. Some junto a query incondicional a
+  `ai_agent_actions` por mensagem inbound no modo `legacy`, com o erro engolido em `console.error`.
+  **Ordem de execução, obrigatória e cumprida:** `engine.ts` editado primeiro, os três arquivos
+  entraram no `DELETION_SET` de `src/lib/ai/__tests__/deletion-set.test.ts` (**não**
+  `src/tests/`, que não existe) e o teste passou verde — prova de que nenhum código vivo os
+  alcançava —, e só então a deleção, com a lista esvaziada de novo (o teste *"todo caminho listado
+  existe"* proíbe manter caminho apagado). **`TABLES_STILL_READ_BY_LIVE_CODE` (`:153-158`) não
+  precisou de mudança:** `ai_agent_actions` nunca esteve lá apesar de ser lida por código vivo
+  (`engine.ts:323`) — inconsistência anterior a este item que se resolveu sozinha quando a leitura
+  sumiu.
+  **Resíduo criado, e ele tem endereço:** `times_triggered` / `last_triggered_at` e a RPC
+  `increment_action_trigger` perderam o **único escritor** (`actions-engine.ts:301`) — registrado no
+  **item 67**, que não os cobria. `ai_usage_logs.actions_triggered` passa a receber `[]` sempre.
+  A tabela, a RPC (×3 definições, com `GRANT` divergente), o trigger, os índices e as policies
+  continuam no banco — nota no **item 70**.
+  **Números:** `npx tsc --noEmit` exit 0 antes e depois. `npx vitest run` **1321 testes** antes e
+  depois, com as **mesmas 4 falhas pré-existentes** (`reports-utils.test.ts` ×3 de timezone,
+  `file-extractor.integration.test.ts` ×1 de fixture de PDF) — nenhum arquivo de teste foi apagado e
+  nenhum teste morreu junto. Python intocado: `pytest -m unit` **1258/1258**, `ruff` **10** (item 74),
+  `lint-imports` **3 kept, 0 broken**.
 
 - [ ] **56. Apagar `agent_core/prompt.py` + `test_prompt_layers.py`** — ~450 linhas `[confirmado]`
   Mover `AgentConfig`/`TenantPolicy` para `repository/agent.py`, o único importador.
@@ -3421,7 +3466,8 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   do stream esse aviso é recorrente, por desenho. Elas atualizam
   `ai_agents.total_messages`, `.total_tokens_used`, `.avg_response_time_ms`
   e `.total_conversations`. Hoje só têm um chamador cada, e é sempre o motor TS:
-  `update_agent_stats` só em `src/lib/ai/engine.ts:443`; `increment_agent_conversations` só em
+  `update_agent_stats` só em `src/lib/ai/engine.ts:327` (era `:443` antes de `c76a29bb`, a deleção do
+  item 55); `increment_agent_conversations` só em
   `src/lib/ai/cloud-sender.ts:384` (era `:371` antes de `f903a43c`; **este item não declara âncora**,
   e as duas citações desta linha se movem a cada edição de `cloud-sender.ts`).
   Nenhum arquivo em `runtime/` chama qualquer um dos dois. O
@@ -3438,6 +3484,18 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `src/lib/ai/proposals.ts` filtra por `ai_agent_id` em `whatsapp_cloud_messages` (`:132,160,166`),
   então sem o carimbo essas consultas também ficam sem linha para atribuir ao agente certo em org
   migrada.
+
+  **Acrescentado pelo item 55 (commit `c76a29bb`) — uma instância nova da mesma classe, que este item
+  não cobria.** A deleção da cadeia `actions-engine` tirou o **único escritor** de
+  `ai_agent_actions.times_triggered` / `.last_triggered_at` e o **único chamador** da RPC
+  `increment_action_trigger` (era `actions-engine.ts:301`, mais o fallback manual em `:313`). Os
+  contadores viram campo sem escritor nenhum — não "escritor que não escreve", como
+  `update_agent_stats`, mas escritor que deixou de existir — e a RPC vira função SQL órfã, definida
+  **três vezes** em `sql/` (`ai-agents-functions.sql:44`, `ai-agents-rpc-functions.sql:176`,
+  `ai-agents-stored-procedures.sql:156`) com `GRANT EXECUTE` divergente (só
+  `ai-agents-functions.sql:234` concede a `authenticated` além de `service_role`). Mesmo raciocínio
+  do item 49 se aplica: **não promover**, porque não há motor que use. Colateral menor do lado TS:
+  `ai_usage_logs.actions_triggered` passa a receber `[]` em todo turno.
 
 - [ ] **68. Teto de TEMPO do turno** `[relatado]` · *(descoberto no item 41)*
   A recon do item 41 mostrou que só existe teto POR CHAMADA (`DEFAULT_TIMEOUT_SECONDS = 60.0`, os
@@ -3558,6 +3616,23 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   pode ter sido aplicado em produção fora deste repositório.** Mesma conclusão e mesmo YAGNI: sem um
   dono definindo se/quando essas migrations são aplicadas fora do CI, não se inventa script de
   reconciliação.
+
+  **Acrescentado pelo item 55 (commit `c76a29bb`) — resíduo da mesma família, criado pela deleção.**
+  A cadeia `actions-engine` foi apagada, mas **apagar o código não apaga a tabela**: o único
+  `CREATE TABLE ai_agent_actions` do repositório está em `sql/ai-agents-complete-migration.sql:147`,
+  **fora do stream versionado** (`supabase/migrations/` tem zero ocorrências), junto com dois índices
+  (`:175,176`), o trigger `enforce_actions_limit` (`:182-191`) e RLS/policies (`:301,344-346`), mais
+  RLS em `migrations-archive/001_enable_rls.sql:109,320` e `002:97`. Sobra também a RPC
+  `increment_action_trigger`, definida **três vezes** (`ai-agents-functions.sql:44`,
+  `ai-agents-rpc-functions.sql:176`, `ai-agents-stored-procedures.sql:156`), agora **sem nenhum
+  chamador**, com o mesmo `GRANT` divergente do padrão acima (`ai-agents-functions.sql:234` concede a
+  `authenticated` **e** `service_role`; as outras duas só a `service_role`). Pelo precedente deste
+  item, **a tabela e a RPC provavelmente existem na base viva** — e daqui não é verificável se a
+  tabela tem linhas. **Nada de `drop table`**: derrubar tabela de produção sem saber se tem dado é
+  decisão do dono, e o `git revert` do `c76a29bb` só é suficiente porque o dado, se existir, continua
+  lá. A pergunta que fecha isso em um segundo, com Postgres na mão:
+  `select count(*), count(*) filter (where is_active) from ai_agent_actions group by
+  organization_id`. Mesmo YAGNI de sempre: sem dono, não se inventa script de reconciliação.
 
 - [ ] **71. `/api/debug` — a décima terceira rota de debug, com o mesmo fail-open que o item 43
   fechou nas outras doze, e leitura cross-tenant sem sessão** `[confirmado]` ·

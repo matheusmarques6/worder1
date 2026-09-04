@@ -783,13 +783,23 @@ código, agora declarado na docstring de `reserve()`.
 
 ### Regras When/Do
 
-**27. `ai_agent_actions` (o motor de ações) não existe no runtime.** TS: `engine.ts:96-134` carrega
-as regras da tabela e `actions-engine.ts` as avalia, com detecção de intenção e de sentimento,
-podendo transferir ou responder uma mensagem exata antes de chamar o modelo. Runtime: nada.
-*Efeito na loja:* as regras "quando o cliente disser X, responda Y / transfira" param de disparar.
-**Divergência consciente** — o item 55 desta auditoria apaga a cadeia inteira também no TS (a
-migration da tabela está em `migrations-archive/` e não há consumidor fora de `src/lib/ai/`); o
-runtime não porta o que o produto está removendo.
+**27. ~~`ai_agent_actions` (o motor de ações) não existe no runtime.~~ RESOLVIDO — não é mais
+divergência: a cadeia foi apagada também no TS** (item 55 da auditoria, commit `c76a29bb`).
+Era: `engine.ts:94-137` (o item citava `:96-134`, deslocado) carregava as regras da tabela e
+`actions-engine.ts` as avaliava, com detecção de intenção e de sentimento, podendo transferir ou
+responder uma mensagem exata antes de chamar o modelo; runtime, nada. Hoje os dois lados estão em
+paridade: `actions-engine.ts`, `intent-detector.ts` e `sentiment-analyzer.ts` não existem mais, e o
+que restava dos efeitos migrou para `settings.safety.{handoff_keywords,handoff_confirmation_message,
+blocked_topics}`, `persona.guidelines` e `mission.forbidden` — presentes nos **dois** motores. É a
+execução da decisão D8 de `core/agentes-por-evento.md:75`.
+**Duas afirmações da versão anterior desta linha eram falsas e ficam corrigidas:** a migration da
+tabela **não** está em `migrations-archive/` — o único `CREATE TABLE ai_agent_actions` do
+repositório está em `sql/ai-agents-complete-migration.sql:147`, fora do stream versionado; e
+**havia** consumidor fora de `src/lib/ai/` — 22 statements SQL em 7 arquivos de `sql/` e
+`migrations-archive/` (DDL, três definições de `increment_action_trigger` com `GRANT` divergente,
+índices, trigger, RLS, `TRUNCATE`). O que era verdade é que não havia consumidor `.ts` fora de
+`src/lib/ai/`, e continua sendo. *Consequência:* apagar o código **não** apagou a tabela nem a RPC —
+elas provavelmente seguem na base viva, sem escritor nem leitor (itens 67 e 70).
 
 ### O texto que o cliente escreve
 
@@ -841,7 +851,7 @@ from public.ai_agents where organization_id = …`) e percorra esta lista. Nenhu
 | `persona.{response_length,tone,language,reply_delay,role_description}` | preenchidos | **13**, **14**, **15**, **18** |
 | `temperature` / `max_tokens` | diferentes do default (0.7 / 2048) | **16** |
 | `ai_budgets` da org | tem linha com limite | **25** — o limite deixa de existir |
-| `ai_agent_actions` da org | tem regra ativa | **27** — as regras When/Do param |
+| ~~`ai_agent_actions` da org~~ | ~~tem regra ativa~~ | ~~**27**~~ — não é mais pré-requisito: a cadeia foi apagada no TS (item 55), a capacidade some dos dois lados e não há o que adiar |
 | `whatsapp_business_accounts` da org | mais de uma com `status='active'` | **3** e **31** — agente errado E número errado |
 | Volume de áudio/imagem no inbox da org | alto (varejo BR: quase sempre) | **11** — respostas no vazio desde a primeira hora |
 
