@@ -2619,9 +2619,10 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   *"mata o HOT"*. Um argumento de performance que o primeiro `EXPLAIN` derruba contamina o resto do
   item — é a lição que o próprio 46 escreveu sobre o "com lock" exagerado.
   **O caminho mais barato já é dívida de outro item:** o **51(b)** aponta que `coupon_code` tem 32
-  bits e não é único (colisão em ~65k grants); um `unique (organization_id, upper(coupon_code))`
-  resolveria colisão **e** predicado numa constraint só. É conserto do 51 — registrado aqui para quem
-  escrever aquele brief não duplicar índice.
+  bits e não é único (colisão em ~65k grants **por organização** — a colisão só faz dano dentro de
+  uma loja); um `unique (organization_id, upper(coupon_code))` resolveria colisão **e** predicado
+  numa constraint só. **É o item 82** — o 51 recusou explicitamente criar o unique e delegou, então
+  não pare no 51 — registrado aqui para quem escrever aquele brief não duplicar índice.
 
   **A pergunta aberta do `idx_orders_email` se responde, e a resposta muda o desenho — mas NÃO se
   age sobre ela.** Varri o lado TS: 33 arquivos de `src/` mencionam `shopify_orders`, e **quatro**
@@ -2726,7 +2727,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   3. `select idx_scan from pg_stat_user_indexes where indexrelname = 'idx_orders_email';`
   4. `select count(*) filter (where email is null), count(*) filter (where email = '') from public.shopify_orders;`
 
-- [x] **51. Uma corrida, uma chave fraca e uma função órfã** `[relatado]` · commit `2b5236d8`
+- [x] **51. Uma corrida, uma chave fraca e uma função órfã** `[relatado]` · commits `2b5236d8` + `cfe40369` + `f57ffb67`
   Citações ancoradas em `0c675e0d`. **Nada foi medido em banco vivo — não há Postgres nesta
   máquina; `-m db` e `-m pipeline` não foram rodados.** Todo veredito abaixo é por leitura de código,
   exceto onde diz o contrário. As seis perguntas que só o banco responde estão no fim.
@@ -2796,13 +2797,14 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `_find_price_rule_id` reencontrava a rule **pelo título, que é o código**, dentro da janela de 60 s
   de `ends_at` (`_ENDS_AT_MARGIN`, `connectors/shopify.py:69`), e o 422 do discount code era tratado
   como sucesso: **B saía com o percentual, o `usage_limit` e a validade de A**. A 30% contra 10%
-  autorizados, o lojista paga a diferença. **Consertado em `2b5236d8`** — ver o bloco do conserto
+  autorizados, o lojista paga a diferença. **Consertado em `2b5236d8`, endurecido em `cfe40369` + `f57ffb67`** — ver o bloco do conserto
   abaixo.
   **A contabilidade, escrita certo:** não debita do grant errado — (i) **MARCA** o grant de A como
   consumido (`order by created_at limit 1`, `:46-52`, o mais antigo, sem filtro de status nem de
   validade); (ii) credita o pedido de B ao **`contact_id` de A** no `incentive_ledger` (`:65`), em
   tabela append-only; (iii) deixa o grant de B `issued` e **reusável** — `_validated_grant`
-  (`tools/coupon.py:215-250`) confere sete coisas e B passa em todas. E o dedup existente não salva:
+  (`tools/coupon.py:215-254`) confere **nove** coisas — sete incondicionais mais duas condicionais
+  (`requested_kind`, `requested_value`) — e B passa em todas. E o dedup existente não salva:
   `incentive_ledger_consumed_once_per_order (grant_id, order_ref)` (`:21-23`) é chaveado em
   `grant_id`, então com o grant errado escolhido ele **dedupa perfeitamente o registro errado**.
   **Um terceiro consumidor, que põe a mentira na boca do agente:** os grants vivos com código viram
@@ -2819,12 +2821,18 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `_price_rule_payload` monta e `create_discount` já tinha na mão; a assinatura continua `int | None`
   e o ramo fail-closed do chamador (`:234-238`) não muda de forma. **Quatro campos, não três** —
   `target_type` é o único que separa `free_shipping` de um `percent` de 100, cujos outros três campos
-  são idênticos (`_price_rule_payload:87-100`). **`value` compara NUMERICAMENTE**: `numeric(12,2)`
-  (`20260813000005:79`) chega como `Decimal('10.00')` e monta `"-10.00"`, a Shopify normaliza para
-  `"-10.0"`, e igualdade de string reprovaria o **nosso próprio retry idempotente** — que
-  comprovadamente passa por esta busca (`test_shopify_connector.py:123` cobre a sequência). **Campo
-  ausente conta como divergência**, fail-closed: um GET que não devolve o campo não prova
-  equivalência. O novo `raise` é o **terceiro** ramo fechado da função, irmão do GET não-200
+  são idênticos (`_price_rule_payload:87-100`). **Os DOIS campos numéricos comparam
+  NUMERICAMENTE**: `value` é `numeric(12,2)` (`20260813000005:79`), chega como `Decimal('10.00')` e
+  monta `"-10.00"`, a Shopify normaliza para `"-10.0"`, e igualdade de string reprovaria o **nosso
+  próprio retry idempotente** — que comprovadamente passa por esta busca
+  (`test_shopify_connector.py:123` cobre a sequência); `usage_limit` sai como `int` e pode voltar
+  como `"1"`, exatamente a mesma regressão um campo ao lado, **consertada no fix round
+  (`cfe40369`)** — a v1 do conserto o comparava com `!=` cru. **Campo ausente conta como
+  divergência**, fail-closed: um GET que não devolve o campo não prova equivalência.
+  **O que continua sem prova executável são DUAS coisas, não uma** (não há Shopify aqui): que o
+  `GET /price_rules.json` de `2026-04` devolve os quatro campos no objeto da rule, **e** em que tipo
+  JSON devolve os dois numéricos. A segunda deixou de importar com a normalização; a primeira é a
+  que resta, e falha fechada. O novo `raise` é o **terceiro** ramo fechado da função, irmão do GET não-200
   (`:180-183`) e da rule ausente na janela (`:234-238`) — nenhum dos dois mudou. A mensagem nomeia
   **campos, não valores**, porque `failures.classify` (`queueing/failures.py:95-98`) lê status HTTP do
   **texto** da exceção com `\b(?:HTTP\s*)?([1-5]\d{2})\b` e um `"-100.0"` cru viraria um falso HTTP
@@ -2839,17 +2847,24 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   continua acontecendo**. **O guard fecha o buraco do VALOR ERRADO no checkout; não fecha o
   `usage_limit` compartilhado nem o ledger.** O resíduo é inerente a o código do cupom ser a
   identidade, e fechá-lo é o **item 82**.
-  **Três comentários reescritos, não um.** O que fazia a afirmação falsa e mais forte estava **dentro
-  da função que o conserto muda** — `shopify.py:185-186`, *"Nunca pega a rule de outro grant."* —,
-  mais o docstring do módulo (`:7-10`) e o do 422 do discount code (`:254-257`). Reescrever só um
-  deixaria no arquivo a frase que causou isto.
+  **Quatro comentários reescritos, não um.** O que fazia a afirmação falsa e mais forte estava
+  **dentro da função que o conserto muda** — `shopify.py:185-186`, *"Nunca pega a rule de outro
+  grant."* —, mais o docstring do módulo (`:7-10`) e o do 422 do discount code (`:254-257`).
+  Reescrever só um deixaria no arquivo a frase que causou isto — e foi o que quase aconteceu: o
+  **quarto**, no bloco de constantes (`:64-65`, *"quem garante que é A rule certa é o título"*),
+  passou batido em `2b5236d8` e só caiu no fix round (`cfe40369`). Era o que o leitor encontra
+  **primeiro**, 120 linhas acima do guard.
   **Este código é do item 33** (`:630`, `[x]`, commits `1744994b` + `c7a790a0`), que escreveu
   `_find_price_rule_id`, o 422-taken-é-sucesso e o comentário acima. O item 51 está reabrindo
   território dele com um fato que ele não tinha — não são dois itens consertando a mesma função em
   desacordo. E o contexto que o 33 deixou continua valendo (`:658`): o recurso
   `PriceRule`/`DiscountCode` do REST **está deprecado** e migrar para GraphQL "devia virar fila"
   (item 64). O conserto vai para uma superfície com prazo; não é motivo para não fazê-lo, é motivo
-  para o próximo leitor saber.
+  para o próximo leitor saber. **E o item 64 foi reancorado por causa deste item**, no fix round: as
+  três citações de `connectors/shopify.py` derivaram, e mais do que isso — o *shape* que ele manda
+  mapear para GraphQL **mudou**, porque a consulta nova terá de devolver os quatro campos do guard
+  ou a busca falha fechada. É o terceiro caso seguido desta fila em que um conserto envelhece o
+  vizinho (49 → 67, 50 → 46, 51 → 64); a higiene de vizinhança é parte do item, não extra.
   **O `unique (organization_id, upper(coupon_code))` NÃO foi criado aqui.** Razão que basta sozinha:
   **`create unique index` FALHA se já houver duplicata no vivo**, e o repositório não sabe se há —
   só a query 1 abaixo decide. Virou o **item 82**, com a forma que o item 50 (`:2600`) já validou e o
@@ -2898,9 +2913,16 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   **Suíte, medida nesta âncora.** Antes: `pytest -m unit` **1233 coletados / 1231 passando / 2
   falhas** pré-existentes de encoding (item 54), `ruff check .` **10** (item 74), `lint-imports`
   **3 kept, 0 broken**. Depois de `2b5236d8`: **1236 / 1234 / as mesmas 2** — delta **+3 casos**,
-  exatamente os três novos; ruff **10** e lint-imports **3/0** inalterados. As **2 fixtures de GET**
-  editadas só tinham `id` e `title`, e com o guard estrito passariam a divergir: elas ganharam os
-  campos, e o guard **não** foi enfraquecido para acomodá-las. TS não foi tocado.
+  exatamente os três novos. Depois do fix round (`cfe40369` + `f57ffb67`): **1242 / 1240 / as mesmas
+  2** — delta acumulado **+9 casos**; ruff **10** e lint-imports **3/0** inalterados nas três
+  medições. As **2 fixtures de GET** editadas só tinham `id` e `title`, e com o guard estrito
+  passariam a divergir: elas ganharam os campos, e o guard **não** foi enfraquecido para
+  acomodá-las. TS não foi tocado.
+  **Os seis casos do fix round existem porque a revisão provou, por mutação, que os três primeiros
+  não seguravam o ruling E-4** — campo ausente virando empate, `value` ausente virando empate, e
+  `value_type`/`usage_limit` fora da comparação deixavam a suíte **verde**. Os cinco mutantes
+  correspondentes (mais um sexto, que reverte a normalização do `usage_limit`) foram reintroduzidos
+  um a um num worktree isolado e **todos ficam vermelhos** hoje, cada um no caso que o nomeia.
 
   **As seis perguntas que só um banco vivo responde** (nenhuma executada):
   1. `select organization_id, upper(coupon_code), count(*), array_agg(id order by created_at) from
@@ -2999,8 +3021,9 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
 
 - [ ] **64. Migrar cupom da Shopify de REST para GraphQL** `[proposto]` · *(descoberto no item 35)*
   `connectors/shopify.py` cria e busca cupom por três chamadas REST: `POST /price_rules.json`
-  (`:219`), `GET /price_rules.json` (`:172`) e `POST /price_rules/{rule_id}/discount_codes.json`
-  (`:250`). O item 33 já tinha registrado que `PriceRule`/`DiscountCode` são recursos legados da
+  (`:287`), `GET /price_rules.json` (`:217`) e `POST /price_rules/{rule_id}/discount_codes.json`
+  (`:319`). *(Reancoradas no estado de `cfe40369` — o item 51 mexeu no arquivo e as três citações antigas
+  `:219`/`:172`/`:250` derivaram.)* O item 33 já tinha registrado que `PriceRule`/`DiscountCode` são recursos legados da
   Admin REST desde outubro/2024; o item 35 confirmou de novo, direto na documentação da versão
   exata que o runtime usa hoje (`2026-04`): `PriceRule` e `DiscountCode` continuam documentados e
   respondendo, com aviso de legado — *"The REST Admin API is a legacy API as of October 1,
@@ -3014,6 +3037,13 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `priceRuleCreate`/`discountCodeBasicCreate` (Admin GraphQL) contra o shape que
   `_find_price_rule_id` e a criação do cupom esperam hoje — e é o caminho do dinheiro do produto,
   por isso não entrou no item 35. Evidência completa em `task-35-evidence.md`.
+  **Requisito novo, posto pelo item 51 (`2b5236d8` + `cfe40369`):** o shape mudou. A busca não
+  compara mais só o título — `_diverging_fields` (`shopify.py:164`) exige ler de volta
+  `target_type`, `value_type`, `value` e `usage_limit`, e trata **campo ausente como divergência**.
+  Logo **a consulta GraphQL da migração tem de selecionar os quatro campos**: uma que não os
+  devolva faz o guard falhar **fechado** e o cupom para de sair. Os dois numéricos (`value`,
+  `usage_limit`) são comparados numericamente, então tipo de retorno do GraphQL (`Decimal`/`Int`/
+  string) não é problema; ausência é.
 
 - [ ] **65. `agent_traces` para org migrada** `[proposto]` · *(descoberto no item 37)*
   O runtime não escreve a trilha do lojista, e o item 37 tentou e parou aqui por motivo verificado.
