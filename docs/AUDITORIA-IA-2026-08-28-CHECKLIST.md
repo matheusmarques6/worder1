@@ -1345,8 +1345,14 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `organization_id` além de `agent_id`, com `SECURITY DEFINER` + `search_path` fixo e `GRANT` só para
   `service_role`; `RAGService` passa a receber `organizationId` no construtor. Achado de segurança das
   quatro definições antigas registrado à parte no **item 70**; item 49 encolhido (uma das quatro RPCs
-  pendentes saiu da lista). **(2) apagar o fallback** — `searchDirect` e `cosineSimilarity` saíram
-  inteiros; `{error}` da RPC agora vira exceção direta, no molde de `tools/knowledge.py` (o gêmeo Python
+  pendentes saiu da lista). **(2) apagar o fallback** — `searchDirect` e a **cópia privada de
+  `rag.ts`** de `cosineSimilarity` saíram inteiros. *(Citação corrigida pelo item 60: `93be34de`
+  tocou só `src/lib/ai/rag.ts` e este checklist — `git show --stat`. A `cosineSimilarity`
+  **exportada**, `src/lib/ai/embeddings.ts:274`, sobreviveu e continuou sem chamador; a frase
+  original fazia o leitor concluir que o órfão já tinha sido tratado. O item 60 apaga a exportada,
+  o que torna a frase original verdadeira por outra via — fica registrado aqui para o próximo não
+  concluir que o 43 mentiu.)* `{error}` da RPC agora vira exceção direta, no molde de
+  `tools/knowledge.py` (o gêmeo Python
   nunca teve fallback). Efeito em cada chamador: `engine.ts` e `ai-chatbot-service.ts` já tinham
   `try/catch` best-effort ao redor da chamada — agora esse `catch` dispara em todo erro real da RPC (e
   não só quando o fallback também falhava), resposta sai sem contexto, visível em log
@@ -1725,9 +1731,18 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   não fala.
 
   **Devolvido sem virar trabalho aqui:** `ChannelBlock.constraints` é campo morto — três produtores
-  em `src/`, todos `()` (`responder.py:596`, `toucher.py:400`, `server.py:182`), um consumidor
-  (`prompt_compiler.py:238`) e nem os testes constroem outra coisa; **candidato a deleção, não a
-  paridade**, e o dono de sobras é o item 60. O bloco ESTADO fantasma do preview virou o
+  em `src/`, todos `()` (`responder.py:592`, `toucher.py:394`, `server.py:320`), um consumidor
+  (`prompt_compiler.py:281`, `lines.extend` de tupla sempre vazia) e nem os testes constroem outra
+  coisa; **candidato a deleção, não a paridade**, e o dono de sobras é o item 60.
+  *(Reancorado em `fc49446b` pelo item 60. As quatro linhas acima estavam podres — eram `:596`,
+  `:400`, `:182` e `:238`. A contagem **três em `src/`** estava e continua **certa**: a frase é
+  escopada a `src/`. Fora de `src/` há mais dois produtores, que a frase nunca prometeu cobrir e que
+  a poda precisa tocar: `runtime/tests/unit/test_prompt_compiler_blocks.py:80` e
+  `runtime/scripts/measure_transcript_duplication.py:71` — este último é o script versionado pelo
+  item 39 em `01087626`, **fora de toda trava** (as travas varrem `runtime/src/agents_runtime/`) e
+  invisível ao `ruff`, que não pega argumento de palavra-chave inesperado. Some a declaração,
+  `prompt_compiler.py:132` (`constraints: tuple[str, ...]`, sem default), e o comentário que o
+  nomeia, `server.py:295-299`.)* O bloco ESTADO fantasma do preview virou o
   **item 76** (três dos seus campos são de organização, não de conversa, e `core/agentes-por-evento.md:304`
   promete o bloco como feature). O campo `ghost` que `_serialize` devolve por bloco
   (`server.py:132`) e que a UI descarta — `PreviewBlock` (`RadialView.tsx:39`) nem o declara — virou
@@ -3782,10 +3797,33 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   entrada; e os dois territórios sem dono que a recon achou viraram o **item 87**.
 
 - [ ] **60. Apagar sobras menores** `[confirmado]`
-  Cache de embeddings sem consumidor (`clearEmbeddingsCache` e irmãs, ~90 l.) + `rag.ts::buildContext`
-  (duplicata de `formatRAGAsContext`) + `pending_defaults.py` + os 4 pacotes vazios
-  (`dispatch/`, `inbox/`, `onboarding/`, `quota/`) + a fila `q_scheduled` de `config.py:21,26`
-  e `polling.py:69-79` até existir handler.
+  Cache de embeddings (`clearEmbeddingsCache` e irmãs) + `rag.ts::buildContext` +
+  `pending_defaults.py` + os 4 pacotes vazios (`dispatch/`, `inbox/`, `onboarding/`, `quota/`) +
+  a fila `q_scheduled` de `config.py:21,26` e `polling.py:69-79` até existir handler.
+  **Correção medida em `fc49446b`, antes de qualquer deleção — o cache NÃO está inteiro sem
+  consumidor.** `getEmbeddingCacheStats` (`src/lib/ai/embeddings.ts:321-328`) tem consumidor
+  **vivo**, por **import dinâmico**: `src/app/api/ai/test/route.ts:175-176` faz
+  `const { getEmbeddingCacheStats } = await import('@/lib/ai/embeddings')` e o resultado sai no
+  corpo da resposta (`:187`, `sessionStats`) — exatamente a forma que um grep por importador
+  estático não vê. **Ela não sai**, e `cacheStats` (`:25-29`), que só ela lê, também não.
+  O morto são **93 linhas medidas**, em dois intervalos: `:270-303` (34 — `cosineSimilarity` e as
+  constantes `EMBEDDING_MODEL`/`EMBEDDING_DIMENSIONS`, que **não** são cache; os hits de grep fora
+  do arquivo são o homônimo Python de `agent_core/llm.py:38`) e `:329-387` (59 —
+  `resetCacheStats`, `clearEmbeddingsCache`, `getEmbeddingFromCache`). O "~90 l." acerta a
+  magnitude; a composição é outra. Apagar `clearEmbeddingsCache` não deixa cache sem teto: toda
+  escrita é `setex` com `CACHE_TTL.EMBEDDING` (`embeddings.ts:123,230`; `src/lib/redis.ts:73` =
+  7 dias), e a limpeza genérica sobrevive em `cacheKeys` (`redis.ts:183`) + `cacheDel` (`:152`).
+  **E `buildContext` NÃO é duplicata de `formatRAGAsContext`.** Comparadas lado a lado nesta
+  âncora, o miolo é idêntico (vazio → `''`; item `` `[Fonte ${i+1}: ${r.source_name}]\n${r.content}` ``;
+  separador `'\n\n---\n\n'`; nenhum truncamento e nenhum limite nas duas). A diferença é o
+  **envelope**: `buildContext` (`rag.ts:119-134`) acrescenta preâmbulo (`:128-129`) e instrução
+  (`:133`) próprios e **não** passa por `wrapAsDataBlock`. A viva
+  (`prompt-builder.ts:313-324`) é a **mais segura** — o chamador `buildRAGSection` (`:252-256`)
+  escreve o cabeçalho `## Conhecimento Base`, a mesma instrução, **e mais** o
+  `wrapAsDataBlock('base_conhecimento', …)`, que é a defesa de prompt-injection do P1.2
+  (comentário `:249-251`). Apagar `buildContext` (`:115-134`, 20 linhas, zero chamadores na
+  árvore) remove uma **armadilha**, não uma cópia: religá-la reintroduziria o buraco que o P1.2
+  fechou.
   **`q_evals` SAIU deste escopo — item 57 (`dd51029b`), com prova.** A fila não é sobra: **RNF-022
   a reserva por requisito** (`core/requisitos-e-entidades.md:100` — *"weighted polling 8 (inbound) :
   4 (domain events) : 2 (scheduled) : **1 (evals)**"*, que é literalmente `config.py:21`), e `:184`
@@ -3798,7 +3836,13 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   fila justamente por isso: a ordem 57→60 valia, e o resultado é que `q_evals` **fica**.
   **`q_scheduled` está no MESMO estado, e a prova dela é mais forte — não apague sem decidir.**
   A revisão da execução do item 57 mediu: mesmo RNF-022, mesmo inventário do item 81, **quatro**
-  asserções em `test_weighted_polling.py`, **e** lógica de produção dedicada que `q_evals` não tem —
+  asserções em `test_weighted_polling.py` — e elas ficam escritas aqui para o próximo não as remedir:
+  `:43` (o `SCHEDULED: 2` dentro do `Counter(poll(ALL_BUSY, WINDOW))` de `:40-45`, a proporção),
+  `:51` (o `set` polido, que proíbe prioridade estrita), `:85` (`picked[SCHEDULED] == 2`, o
+  empréstimo de slot com `q_inbound` vazia) e `:113` (`effective_queue(SCHEDULED,
+  timedelta(minutes=11), …) == DOMAIN_EVENTS`, dentro de `TestPromotionByAge` `:109`); **`:23` é
+  fixture (`ALL_BUSY`), não asserção** — a mesma correção que o **item 81** já registrou para
+  `q_evals`. **E** lógica de produção dedicada que `q_evals` não tem —
   `polling.py:69,76-77`, a promoção por idade que só existe para `SCHEDULED`. As duas filas estão sem
   handler (`app.py:208-212`), e é **só isso** que elas têm em comum com código morto.
   **Não é limpeza, é decisão sobre o requisito** — a mesma que tirou `q_evals` daqui. Fica no escopo
@@ -3810,8 +3854,19 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   mover, não podar). Ele é escrito com `{}` **literal** em `repository/agent.py:181` e tem **zero
   leituras em toda a árvore**; `occasion`, que era quem o alimentaria, não existe em `src/`. Detalhe
   que mostra o custo de mantê-lo: `from collections.abc import Mapping` foi acrescentado àquele
-  arquivo **só para anotar um campo que ninguém lê**. Podar mexe no construtor de produção, então
-  não cabia no mesmo commit de 495 linhas apagadas — cabe aqui.
+  arquivo **só para anotar um campo que ninguém lê**.
+  **Duas correções medidas em `fc49446b`, porque a frase anterior superestimava a poda.** (1) Os
+  sítios de construção são **dois**, não um: além de `repository/agent.py:181` há
+  `runtime/tests/unit/test_agent_block_has_one_producer.py:141`, que roda em `-m unit` — mesmo erro
+  de contagem que o item 59 cometeu com `first_order_at` e corrigiu. (2) O campo **tem default** —
+  `repository/agent.py:46` é `scenario_prompts: Mapping[str, str] = field(default_factory=dict)` —,
+  então os dois sítios passam `scenario_prompts={}` **redundantemente**: nenhuma assinatura muda,
+  nenhuma semântica muda, o `__post_init__` (`:49-52`) não o toca, e
+  `test_agent_block_has_one_producer.py:73` já constrói `AgentConfig` sem passá-lo e passa hoje.
+  Os três sítios `AgentConfig(` da árvore são por palavra-chave. A poda é **4 linhas em 2
+  arquivos** (`agent.py:17,46,181` + o teste `:141`), não "mexer no construtor de produção". A linha
+  `:17` não é opcional: `Mapping` só aparece em `:17` e `:46`, e deixá-lo leva `ruff check .` de 10
+  para 11 (F401), quebrando o baseline do item 74.
   *(Verificado sem dono antes de entrar: o item 57 é sobre `evals/` e este escopo não o listava.)*
   **Acrescentado pelo item 59 (`5f5dba63`): `PurchaseHistory.first_order_at`** — campo calculado por
   SQL (`repository/orders.py:44`, escrito em `:160` a partir do `min(coalesce(...))` de `:114`) que,
