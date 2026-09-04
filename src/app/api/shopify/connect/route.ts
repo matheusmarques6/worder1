@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient, getAuthClient, authError } from '@/lib/api-utils';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { SupabaseClient } from '@supabase/supabase-js';
+import { isTombstoneStore } from '@/lib/stores/placeholder';
 export const dynamic = 'force-dynamic';
 
 let _supabase: SupabaseClient | null = null;
@@ -208,11 +209,12 @@ export async function GET(request: NextRequest) {
     if (error) throw error;
 
     const stores = (allStores || []).filter((s: any) => {
-      const dom: string = s.shop_domain || '';
       // Cleanup tombstones we keep around so old foreign keys still
-      // resolve. They use the .worder.local TLD and either an
-      // "archived-" or "manual-" prefix when soft-deleted.
-      if (dom.endsWith('.worder.local')) return false;
+      // resolve. Só as ARQUIVADAS: a linha manual-*.worder.local de uma
+      // loja recém-criada, ainda sem integração, é uma loja de verdade
+      // e some do switcher se cair aqui — era o que acontecia com quem
+      // escolhia "configurar integração depois".
+      if (isTombstoneStore(s)) return false;
       // REAL stores stay listed whatever the connection state. This
       // used to also drop is_active=false / status='disconnected'
       // rows, but this endpoint feeds the same zustand list as the

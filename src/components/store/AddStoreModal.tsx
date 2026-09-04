@@ -42,6 +42,8 @@ export function AddStoreModal({ isOpen, onClose, onSuccess }: AddStoreModalProps
   const [showSecret, setShowSecret] = useState(false)
   const [createdStoreId, setCreatedStoreId] = useState<string | null>(null)
   const [connecting, setConnecting] = useState(false)
+  const [oauthConnecting, setOauthConnecting] = useState(false)
+  const [copiedRedirect, setCopiedRedirect] = useState(false)
   const [showGuide, setShowGuide] = useState(true)
 
   // Step 3: Pixel installation
@@ -55,7 +57,8 @@ export function AddStoreModal({ isOpen, onClose, onSuccess }: AddStoreModalProps
   const [connectedStoreName, setConnectedStoreName] = useState<string>('')
   const [webhooksInfo, setWebhooksInfo] = useState<string>('')
 
-  const handleClose = () => {
+  /** Zera o formulário e fecha, sem avisar ninguém. */
+  const resetAndClose = () => {
     setStep('info')
     setStoreName('')
     setStoreSegment('')
@@ -67,6 +70,8 @@ export function AddStoreModal({ isOpen, onClose, onSuccess }: AddStoreModalProps
     setError('')
     setLoading(false)
     setConnecting(false)
+    setOauthConnecting(false)
+    setCopiedRedirect(false)
     setCreatedStoreId(null)
     setConnectedStoreId(null)
     setConnectedDomain(null)
@@ -76,6 +81,19 @@ export function AddStoreModal({ isOpen, onClose, onSuccess }: AddStoreModalProps
     setConnectedStoreName('')
     setWebhooksInfo('')
     onClose()
+  }
+
+  /**
+   * Fechar pelo X ou pelo fundo. A loja do passo 1 já existe no banco
+   * neste ponto, então avisar é obrigatório: sem isso o switcher só
+   * descobria a loja nova no próximo carregamento da página, e o
+   * usuário via o modal fechar sem nada acontecer.
+   */
+  const handleClose = () => {
+    if (createdStoreId) {
+      onSuccess({ id: createdStoreId, name: storeName, domain: connectedDomain })
+    }
+    resetAndClose()
   }
 
   const handleCreateStore = async () => {
@@ -204,6 +222,63 @@ export function AddStoreModal({ isOpen, onClose, onSuccess }: AddStoreModalProps
     setConnecting(false)
   }
 
+  /**
+   * OAuth com app próprio — o caminho para quando o app foi criado em
+   * OUTRA organização Shopify (agência conectando a loja de um
+   * cliente). A conexão por Custom App usa client_credentials, que
+   * exige app e loja na mesma organização e devolve shop_not_permitted
+   * quando não é o caso; só o OAuth atravessa organizações.
+   *
+   * Conecta na loja criada no passo 1 (storeId), então allowCreate é
+   * false: alterar integração nunca cria loja.
+   */
+  const handleOAuthConnect = async () => {
+    const domain = shopifyDomain.trim().replace('.myshopify.com', '').replace(/[^a-z0-9-]/gi, '')
+    if (!domain) { setError('Informe o domínio Shopify'); return }
+    if (!clientId.trim()) { setError('Informe o Client ID'); return }
+    if (!clientSecret.trim()) { setError('Informe o Client Secret'); return }
+
+    setOauthConnecting(true)
+    setError('')
+    try {
+      const res = await fetch('/api/integrations/shopify/oauth-manual/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          domain: `${domain}.myshopify.com`,
+          clientId: clientId.trim(),
+          clientSecret: clientSecret.trim(),
+          storeId: createdStoreId || undefined,
+          allowCreate: false,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.error || !data.authUrl) {
+        setError(data.error || 'Erro ao iniciar a autorização OAuth.')
+        setOauthConnecting(false)
+        return
+      }
+      // A partir daqui o navegador sai da página: a Shopify pede a
+      // autorização e devolve em /integrations/shopify, que mostra a
+      // loja já conectada. O modal não sobrevive à navegação — por
+      // isso o aviso no botão.
+      window.location.href = data.authUrl
+    } catch {
+      setError('Erro de conexão. Tente novamente.')
+      setOauthConnecting(false)
+    }
+  }
+
+  const handleCopyRedirectUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(
+        `${window.location.origin}/api/integrations/shopify/oauth-manual/callback`
+      )
+      setCopiedRedirect(true)
+      setTimeout(() => setCopiedRedirect(false), 2500)
+    } catch {}
+  }
+
   const handleCopyPixel = async () => {
     if (!pixelCode) return
     try {
@@ -215,16 +290,18 @@ export function AddStoreModal({ isOpen, onClose, onSuccess }: AddStoreModalProps
 
   const handleFinish = () => {
     onSuccess({
-      id: connectedStoreId,
+      id: connectedStoreId || createdStoreId,
       name: connectedStoreName || storeName,
       domain: connectedDomain,
     })
-    handleClose()
+    resetAndClose()
   }
 
   const handleSkipIntegration = () => {
-    onSuccess({ id: createdStoreId, name: storeName })
-    handleClose()
+    // A loja já foi criada no passo 1 — só avisa e sai. Ela aparece no
+    // switcher marcada como "Sem integração" até o usuário conectar.
+    onSuccess({ id: createdStoreId, name: storeName, domain: null })
+    resetAndClose()
   }
 
   const handleSkipPixel = () => {
@@ -475,7 +552,7 @@ export function AddStoreModal({ isOpen, onClose, onSuccess }: AddStoreModalProps
                 </div>
 
                 <button onClick={handleManualConnect}
-                  disabled={connecting || !shopifyDomain.trim() || !clientId.trim() || !clientSecret.trim()}
+                  disabled={connecting || oauthConnecting || !shopifyDomain.trim() || !clientId.trim() || !clientSecret.trim()}
                   className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium bg-[#95BF47] hover:bg-[#7da03a] text-white disabled:opacity-50 transition-colors text-sm">
                   {connecting ? (
                     <><Loader2 className="w-4 h-4 animate-spin" /> Conectando...</>
@@ -483,6 +560,41 @@ export function AddStoreModal({ isOpen, onClose, onSuccess }: AddStoreModalProps
                     <><Store className="w-4 h-4" /> Conectar Shopify <ArrowRight className="w-4 h-4" /></>
                   )}
                 </button>
+              </div>
+
+              {/* App criado em OUTRA organização Shopify (modelo agência):
+                  client_credentials devolve shop_not_permitted, e só o
+                  OAuth atravessa organizações. Mesmo Client ID/Secret. */}
+              <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-xl space-y-2">
+                <p className="text-[11.5px] text-blue-800 leading-relaxed">
+                  <strong>App criado em outra organização</strong> (ex.: agência conectando a loja de um
+                  cliente)? O botão acima retorna <code className="font-mono text-[10.5px]">shop_not_permitted</code>.
+                  Use OAuth: cadastre a Redirect URL abaixo nas configurações do app no Dev Dashboard
+                  e conecte — quem estiver logado na loja só precisa autorizar.
+                </p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 text-[10.5px] bg-white border border-blue-200 rounded px-2 py-1.5 text-gray-800 break-all font-mono">
+                    {(typeof window !== 'undefined' ? window.location.origin : '')}/api/integrations/shopify/oauth-manual/callback
+                  </code>
+                  <button onClick={handleCopyRedirectUrl}
+                    className="px-2 py-1.5 bg-blue-100 text-blue-700 text-xs font-medium rounded hover:bg-blue-200 flex-shrink-0 flex items-center gap-1">
+                    {copiedRedirect ? <CheckCircle2 className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                    {copiedRedirect ? 'Copiado' : 'Copiar'}
+                  </button>
+                </div>
+                <button onClick={handleOAuthConnect}
+                  disabled={oauthConnecting || connecting || !shopifyDomain.trim() || !clientId.trim() || !clientSecret.trim()}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 transition-colors text-sm">
+                  {oauthConnecting ? (
+                    <><Loader2 className="w-4 h-4 animate-spin" /> Redirecionando para autorização…</>
+                  ) : (
+                    <><Shield className="w-4 h-4" /> Conectar via OAuth (app de outra organização)</>
+                  )}
+                </button>
+                <p className="text-[10.5px] text-blue-700/80 leading-snug">
+                  Você sai desta tela para autorizar na Shopify e volta na página de integrações
+                  com a loja <strong>{storeName || 'nova'}</strong> já conectada.
+                </p>
               </div>
 
               {/* Other platforms */}

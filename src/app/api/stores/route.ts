@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { isTombstoneStore } from '@/lib/stores/placeholder';
 
 export const dynamic = 'force-dynamic';
 
@@ -66,10 +67,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, stores: [], error: error.message });
     }
 
-    // Filter out internal placeholder stores (manual-.worder.local)
-    const realStores = (stores || []).filter((s: any) =>
-      !s.shop_domain?.endsWith('.worder.local')
-    );
+    // Esconde só as LÁPIDES (linhas arquivadas guardadas por causa das
+    // chaves estrangeiras). A loja que o usuário acabou de criar e
+    // ainda não integrou também usa domínio .worder.local, e o filtro
+    // antigo a apagava da lista: quem escolhia "configurar integração
+    // depois" via o modal fechar e nada aparecer — a loja existia no
+    // banco e era invisível para sempre.
+    const realStores = (stores || []).filter((s: any) => !isTombstoneStore(s));
 
     return NextResponse.json({
       success: true,
