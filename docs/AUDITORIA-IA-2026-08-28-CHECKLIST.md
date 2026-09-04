@@ -3238,11 +3238,32 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `lint-imports` **3 kept, 0 broken**. Nenhum `-m db` e nenhum `-m pipeline` (sem Postgres eles
   penduram em vez de falhar). TS não foi tocado.
 
-- [ ] **55. Apagar a cadeia `actions-engine`** — ~717 linhas `[confirmado]`
-  `src/lib/ai/actions-engine.ts` + `intent-detector.ts` + `sentiment-analyzer.ts`, mais o bloco
-  `engine.ts:96-134` e `:389-401`. `grep ai_agent_actions` fora de `src/lib/ai/` retorna zero e a
-  migration da tabela está em `migrations-archive/`. Hoje ainda custa uma query que falha por mensagem
-  (`engine.ts:344`, erro engolido).
+- [ ] **55. Apagar a cadeia `actions-engine`** — ~964 linhas `[confirmado]` · *(âncora `622180a1`)*
+  `src/lib/ai/actions-engine.ts` (332) + `intent-detector.ts` (199) + `sentiment-analyzer.ts` (186)
+  = **717 apagadas inteiras**, mais ~112 de `engine.ts`, 122 de `types.ts` e ~13 de
+  `prompt-builder.ts` **editadas**: **~964 linhas em seis arquivos** (três apagados, três editados).
+  O "~717" do texto original contava só os três arquivos e não contava o que o próprio item mandava
+  apagar dentro de `engine.ts`, nem os tipos que ficam sem consumidor.
+  **Três citações estavam deslocadas, e uma delas era arma carregada:** `engine.ts:389-401` **NÃO é
+  a cadeia — é o miolo do `postProcessResponse`** (os `.replace()` que tiram markdown e o `trim`
+  aplicados a **toda** resposta); seguir a citação ao pé da letra quebraria o pós-processamento de
+  todo turno. O bloco certo é **`:352-381`** (`buildTransferResponse` + `buildExactMessageResponse`).
+  As outras duas: `:96-134` → **`:94-137`** (o comentário do passo 3 abre em `:94` e o `}` do
+  `if (this.actionsEngine)` fecha em `:137`); e a query que roda por mensagem com o erro engolido é a
+  de `loadActions`, **`:322-332`**, não `:344` — `:344` é o `.select('api_key')` de
+  `resolveOpenaiKeyForActions`, que só roda quando já existe regra.
+  **Duas afirmações do item eram falsas.** (i) `grep ai_agent_actions` fora de `src/lib/ai/` **não**
+  retorna zero: são **33 ocorrências em 12 arquivos**, e a composição é o que importa — **22
+  statements SQL** em 7 arquivos de `sql/` e `migrations-archive/` (a DDL, três definições de
+  `increment_action_trigger` com `GRANT` divergente, dois índices, o trigger `enforce_actions_limit`,
+  RLS/policies e um `TRUNCATE`) e **11 linhas de documentação** em 5 arquivos; **zero em `.ts`/`.tsx`
+  e zero no stream versionado** (`supabase/migrations/`). (ii) A migration da tabela **não** está em
+  `migrations-archive/`: o único `CREATE TABLE ai_agent_actions` do repositório está em
+  `sql/ai-agents-complete-migration.sql:147` — pasta que o **item 70** classificou como *"pode já ter
+  sido aplicada em produção, não verificável daqui"*. **Consequência obrigatória: apagar o código NÃO
+  apaga a tabela**, e daqui não se sabe se ela existe (ou tem linhas) na base viva. Nada de
+  `drop table` sem o dono decidir.
+  **Ordem entre itens: 55, 58 e 67 editam o mesmo `engine.ts` — não rodar em paralelo.**
 
 - [ ] **56. Apagar `agent_core/prompt.py` + `test_prompt_layers.py`** — ~450 linhas `[confirmado]`
   Mover `AgentConfig`/`TenantPolicy` para `repository/agent.py`, o único importador.
