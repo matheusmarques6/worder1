@@ -1742,7 +1742,12 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   item 39 em `01087626`, **fora de toda trava** (as travas varrem `runtime/src/agents_runtime/`) e
   invisível ao `ruff`, que não pega argumento de palavra-chave inesperado. Some a declaração,
   `prompt_compiler.py:132` (`constraints: tuple[str, ...]`, sem default), e o comentário que o
-  nomeia, `server.py:295-299`.)* O bloco ESTADO fantasma do preview virou o
+  nomeia, `server.py:295-299`.)*
+  **EXECUTADO pelo item 60 em `b8e979d6`:** o campo saiu inteiro — declaração, consumidor, os cinco
+  produtores. A decisão registrada acima (a restrição do momento vigente vai para o `forbidden` da
+  missão, não para o bloco CANAL) **continua valendo**; o que deixou de existir é o destino
+  recusado, e o comentário de `server.py` foi reescrito para dizer isso em vez de nomear um campo
+  que não existe mais. O bloco ESTADO fantasma do preview virou o
   **item 76** (três dos seus campos são de organização, não de conversa, e `core/agentes-por-evento.md:304`
   promete o bloco como feature). O campo `ghost` que `_serialize` devolve por bloco
   (`server.py:132`) e que a UI descarta — `PreviewBlock` (`RadialView.tsx:39`) nem o declara — virou
@@ -3796,7 +3801,10 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   de trava ao **item 63**; a enumeração `RF-` do **item 57** (`:3515-3519`) fica obsoleta em uma
   entrada; e os dois territórios sem dono que a recon achou viraram o **item 87**.
 
-- [ ] **60. Apagar sobras menores** `[confirmado]`
+- [x] **60. Apagar sobras menores** — **143 linhas medidas (113 TS + 30 Python)** `[confirmado]` ·
+  commits `def23170` (checklist antes do código) `87fd172a` `e337adc7` `995e2391` `0cead265`
+  `b8e979d6` · relatório `task-60-report.md`, que é **gitignored** — por isso o que precisa
+  sobreviver está AQUI. Âncora do trabalho: `fc49446b`.
   Cache de embeddings (`clearEmbeddingsCache` e irmãs) + `rag.ts::buildContext` +
   `pending_defaults.py` + os 4 pacotes vazios (`dispatch/`, `inbox/`, `onboarding/`, `quota/`) +
   a fila `q_scheduled` de `config.py:21,26` e `polling.py:69-79` até existir handler.
@@ -3845,9 +3853,15 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `q_evals`. **E** lógica de produção dedicada que `q_evals` não tem —
   `polling.py:69,76-77`, a promoção por idade que só existe para `SCHEDULED`. As duas filas estão sem
   handler (`app.py:208-212`), e é **só isso** que elas têm em comum com código morto.
-  **Não é limpeza, é decisão sobre o requisito** — a mesma que tirou `q_evals` daqui. Fica no escopo
-  porque ninguém decidiu ainda, mas com a prova escrita: quem executar o 60 **não apaga** sem
-  responder o RNF-022 antes. (A versão anterior desta nota era uma linha dizendo "confere antes de
+  **Não é limpeza, é decisão sobre o requisito** — a mesma que tirou `q_evals` daqui.
+  **`q_scheduled` SAI deste escopo, com a prova escrita, e pelo precedente literal do `q_evals`:**
+  o item 57 **removeu do escopo**, **manteve o registro aqui dentro** e **fechou** — é o que a
+  linha *"`q_evals` SAIU deste escopo — item 57"* diz. A pergunta que o item 60 precisava
+  responder era *"apagar?"*, e ela já estava respondida por escrito, com **não**: RNF-022
+  (`core/requisitos-e-entidades.md:100`) reserva a fila e `:184` a inventaria. Não falta decisão
+  para a limpeza saber o que fazer — falta **não fazer nada**. Um `[ ]` permanente sem dono seria
+  pior que um item errado. **A pergunta que continua aberta não é de limpeza e ganhou destinatário
+  no item 89.** (A versão anterior desta nota era uma linha dizendo "confere antes de
   apagar", o que convidava o próximo a refazer a medição.)
   **Acrescentado pelo item 56 (`f6cc4a79`, revisão da execução):** `AgentConfig.scenario_prompts` —
   campo **morto** que a migração do 56 carregou junto por disciplina de escopo (o brief mandava
@@ -3863,10 +3877,11 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   então os dois sítios passam `scenario_prompts={}` **redundantemente**: nenhuma assinatura muda,
   nenhuma semântica muda, o `__post_init__` (`:49-52`) não o toca, e
   `test_agent_block_has_one_producer.py:73` já constrói `AgentConfig` sem passá-lo e passa hoje.
-  Os três sítios `AgentConfig(` da árvore são por palavra-chave. A poda é **4 linhas em 2
-  arquivos** (`agent.py:17,46,181` + o teste `:141`), não "mexer no construtor de produção". A linha
-  `:17` não é opcional: `Mapping` só aparece em `:17` e `:46`, e deixá-lo leva `ruff check .` de 10
-  para 11 (F401), quebrando o baseline do item 74.
+  Os três sítios `AgentConfig(` da árvore são por palavra-chave. A poda é **5 linhas em 2
+  arquivos**, não "mexer no construtor de produção" — e a quinta só apareceu na execução:
+  `agent.py:46` era o **único** uso tanto de `Mapping` (`:17`) quanto de `field` (`:18`), então
+  `:18` também encolhe, para `from dataclasses import dataclass`. Nenhuma das duas é opcional:
+  qualquer import órfão leva `ruff check .` de 10 para 11 (F401) e quebra o baseline do item 74.
   *(Verificado sem dono antes de entrar: o item 57 é sobre `evals/` e este escopo não o listava.)*
   **Acrescentado pelo item 59 (`5f5dba63`): `PurchaseHistory.first_order_at`** — campo calculado por
   SQL (`repository/orders.py:44`, escrito em `:160` a partir do `min(coalesce(...))` de `:114`) que,
@@ -3880,6 +3895,70 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   (`first_order_at=datetime(2026, 6, 1, 12, 0)`). São **três** tiers de edição, um deles rodável sem
   Postgres. O item 59 não o podou de propósito — mexe em `repository/orders.py`, que não está no
   título dele, e em teste `db` que ele não podia rodar.
+
+  **FECHAMENTO — o que saiu, commit a commit, com as linhas medidas.**
+  1. `87fd172a` — **113 linhas TS**. `src/lib/ai/embeddings.ts:270-303` (34: `cosineSimilarity`
+     exportada, `EMBEDDING_MODEL`, `EMBEDDING_DIMENSIONS`) e `:329-387` (59: `resetCacheStats`,
+     `clearEmbeddingsCache`, `getEmbeddingFromCache`), mais `src/lib/ai/rag.ts:115-134` (20:
+     `buildContext`). `cacheStats` virou `const` — `resetCacheStats` era a única reatribuição.
+     **`getEmbeddingCacheStats` permanece.**
+  2. `e337adc7` — **19 linhas**: os 4 `__init__.py` (13) + as 6 linhas de `runtime/pyproject.toml`
+     (`:100,102` do contrato de WhatsApp e `:138,140,143,145` do contrato de banco), no MESMO
+     commit, porque `source_modules` apontando para módulo inexistente faz `lint-imports` sair com
+     exit 1 e **nenhuma** tabela — gate vermelho e cego ao mesmo tempo (ruling B do item 59
+     valendo também para `source_modules`).
+  3. `995e2391` — **5 linhas**: `scenario_prompts` e os dois imports órfãos de `agent.py`.
+  4. `0cead265` — **7 linhas de código + docstring**: `first_order_at`, a coluna `min(coalesce(…))`
+     do `select`, o unpack que passou de quatro nomes para três, as duas asserções `-m db` e o
+     sítio `-m unit`; o docstring de `repository/contacts.py:13-15`, que nomeava este item como
+     dono da sobra, foi reescrito.
+  5. `b8e979d6` — **`ChannelBlock.constraints`**, 8 edições em 6 arquivos (ruling do item 45,
+     entregue a este item e não listado no corpo dele até aqui): declaração, consumidor, os três
+     produtores de `src/`, o produtor de `-m unit` e o **quinto**,
+     `runtime/scripts/measure_transcript_duplication.py:71` — script versionado pelo item 39, fora
+     de toda trava e invisível ao `ruff`, cujo esquecimento quebraria a ferramenta em silêncio.
+     O comentário `server.py:295-301` foi **reescrito**, não apagado.
+  **Gates, medidos a cada commit:** `pytest -m unit` **1170** (1190 − 20, o delta previsto: 16 ids
+  por caminho relativo nas quatro travas de fitness + 4 escondidos em `test_no_max_seq.py`, que usa
+  `ids=lambda p: p.name`), zero falhas; `ruff check .` **10** (item 74, intocado); `lint-imports`
+  **3 kept, 0 broken**; `npx vitest run` **1321 com as mesmas 4 falhas pré-existentes e alheias**;
+  `npx tsc --noEmit` limpo. **Aviso para quem vier depois:** os 12 ids `__init__.pyN` que
+  sobreviveram foram **remapeados** pela deleção dos quatro pacotes — nenhum id `__init__.pyN`
+  anotado antes de `e337adc7` continua apontando para o mesmo arquivo.
+  **O que NÃO foi provado, e por quê:** `pytest -m db` e `-m pipeline` não são executáveis nesta
+  máquina — sem Postgres eles penduram em vez de falhar. A reescrita do `select` de
+  `repository/orders.py` é **inspeção, não prova**. O modo de falha silencioso não é o
+  desalinhamento de aridade (esse estoura `ValueError` alto): é apagar a coluna **errada** — o
+  `max(` em vez do `min(` —, o que faz `last_order_at` receber o mínimo, mesmo tipo, nenhum erro, e
+  `history_lines` (`repository/orders.py:197-198` depois da poda) imprimir a data errada como
+  *"último em …"*. A verificação mecânica
+  rodada foi `grep -n "min(coalesce\|max(coalesce" runtime/src/agents_runtime/repository/orders.py`,
+  que devolveu **exatamente um hit, na linha do `max(`**.
+  **Dois alvos SAÍRAM do escopo com a prova escrita, e é por isso que o item fecha.** O precedente
+  é literal e é do próprio item 57 com `q_evals`: **removeu do escopo, manteve o registro aqui
+  dentro, fechou**. (a) `q_scheduled` — reservada por RNF-022, prova acima. (b)
+  `agent_core/pending_defaults.py` (26 linhas, zero imports, zero chamadores, zero testes) — pelo
+  critério mecânico é código morto, e **não é**: é o **estacionamento nomeado** do `PENDENTE-3`,
+  endereçado por `core/agentes-por-evento.md:380` (*"os números de arbitragem/caps viram constantes
+  nomeadas em `runtime/src/agents_runtime/agent_core/pending_defaults.py`"*) e registrado como
+  estado **`aberto`** em `core/STATUS-agentes-por-evento.md:116` (repetido em `:469`); o docstring
+  do próprio arquivo (`:1-7`) e `agent_core/mission_resolver.py:142` completam o endereço. Apagá-lo
+  não removeria código morto: reverteria decisão registrada e transformaria dois doc-fonte em
+  citação podre com a pendência ainda aberta. Procurado dono no checklist **pelo defeito**, com
+  variação de vocabulário (`PENDENTE-3`, `pending_defaults`, `EVENT_PRIORITY`, `MISSION_TOUCH`,
+  `arbitragem`, `caps`, `frequency cap`): não há — os hits de "arbitragem" são sobre
+  `mission_resolver.arbitrate()`, mecanismo diferente. **Nos dois casos a pergunta "apagar?" já
+  estava respondida por escrito, com não.** A pergunta que **de fato** continua aberta não é de
+  limpeza e é do dono do produto: **item 89**.
+  **Dependência do item 61 — CONFERIDA, não "não verificada".** O corpo do 61 lista oito alvos e
+  `api/ai/test` não é nenhum deles; e `DELETION_SET`, `DELETION_SET_ROUTES`, `DELETION_SET_PENDING`
+  e `DELETION_SET_PENDING_ROUTES` (`src/lib/ai/__tests__/deletion-set.test.ts:46,66,78,79`) estão
+  **todos vazios**. Nada pendente ameaça a rota hoje. **Se um dia o 61 apagar `api/ai/test`,
+  `getEmbeddingCacheStats` perde o único consumidor e volta à fila de deleção** — junto com
+  `cacheStats`, que só ela lê.
+  **Achados devolvidos, não consertados:** o doc-fonte `arquitetura` que o runtime cita e que não
+  existe no repositório virou o **item 88**; a ausência total de teste de `src/lib/ai/embeddings.ts`
+  foi para o **item 63** (lacunas de teste), que é o dono pelo defeito.
 
 - [ ] **61. Rotas órfãs** `[relatado]`
   `whatsapp/conversations/[id]/ai` (duplicata insegura do toggle, apagar primeiro), `ai/respond`,
@@ -3963,12 +4042,26 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   (`tests/db/test_ai_missions_schema.py`) e RLS (`tests/db/test_rls_e2.py`) — nenhum chama os dois
   loaders.** O único teste que restava do "o bloco de instrução extra é escolhido pelo que abriu a
   conversa" era `test_prompt_layers.py:130-135`, e ele prendia o mecanismo **morto** (camada de
-  cenário por `origin_occasion`, que `repository/agent.py` fixa como `scenario_prompts={}` literal);
+  cenário por `origin_occasion`, que `repository/agent.py` fixava como `scenario_prompts={}`
+  literal — campo apagado pelo item 60 em `995e2391`, o que só reforça este raciocínio);
   o mecanismo **vivo** que o substituiu nunca ganhou o seu. **`test_mission_resolver.py:121-153` não
   fecha este vão**, e é importante que fique escrito por quê: ele é `TestArbitration` e exercita
   `arbitrate()`, cujo corpo inteiro (`mission_resolver.py:133-150`) é `if owner … / if discovery … /
   raise` — **não olha `event_type`**. Foi por acreditar nele que a contagem de órfãs do item 56 errou
   pela terceira vez (5 → 2 → 0 → 1): *"parecida" não é sucessor*.
+  **Acrescentado pelo item 60 (`b8e979d6`) — e é a primeira entrada de TS desta lista:**
+  `src/lib/ai/embeddings.ts` **não tem arquivo de teste nenhum**. Não existe `embeddings.test.ts`
+  em `src/lib/ai/__tests__/` (conferido por `ls`), e a única trava que toca o arquivo é **textual**:
+  `hub-runtime-parity.test.ts:107-108` casa duas regex (`OPENAI_EMBEDDING_MODEL` e
+  `OPENAI_EMBEDDING_DIMENSIONS`) e `:152-153` uma linha literal de `EMBEDDING_SPACE`; o
+  `it.each(PROTECTED_MODULES)` de `deletion-set.test.ts:358` só exige que o **arquivo** continue
+  alcançável. Fica sem afirmador tudo o que `generateEmbeddingsBatch` (`:142-247`) faz de
+  não-trivial: reordenar o retorno por `a.index - b.index` (`:217`), o batching de 100 (`:192`) e o
+  rate-limit entre lotes (`:241`). É o **único** caminho de ingestão de embeddings do hub — um erro
+  de ordenação aqui grava vetor no chunk errado **sem erro nenhum**, a mesma classe de falha
+  silenciosa que o comentário `:6-14` do próprio arquivo descreve para o modelo trocado. Sintoma
+  correlato do mesmo vão: `resetCacheStats` documentava-se *"(para testes)"* e nenhum teste a
+  usava — foi por isso que o item 60 a apagou.
 
 - [ ] **64. Migrar cupom da Shopify de REST para GraphQL** `[proposto]` · *(descoberto no item 35)*
   `connectors/shopify.py` cria e busca cupom por três chamadas REST: `POST /price_rules.json`
@@ -4825,6 +4918,78 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
      tool). Uma linha; não vale item próprio, e é por isso que está aqui e não sozinho.
   **É decisão de produto, não de limpeza.** O item 59 não a tomou de propósito: apagar código morto
   do Python não autoriza remover capacidade prometida na UI.
+
+- [ ] **88. Citações do runtime apontam para um doc-fonte que não veio no fork** `[confirmado]` · *(descoberto no item 60)*
+  Citações ancoradas em `fc49446b`. O fork trouxe dois dos três documentos-fonte —
+  `runtime/docs/testes-e-cicd.md` e `runtime/docs/observabilidade-e-monitoramento.md` — e **não**
+  trouxe o terceiro. O nome dele aparece **uma única vez** em toda a árvore, em
+  `runtime/src/agents_runtime/__init__.py:9`: *"Module responsibilities and their boundaries are
+  defined in `core/arquitetura-plataforma-agentes-whatsapp.md` §3"*. Sem essa linha, o item pediria
+  que alguém achasse um documento sem dizer como ele se chama.
+  **A contagem depende de uma fronteira, e a fronteira vai declarada.** Contando as citações **com
+  seção numerada** em `src/` + `pyproject.toml`, são **nove**: `runtime/pyproject.toml:81`
+  (*"Fitness function nº 1 of arquitetura §8"*) e `:82` (*"the module table of arquitetura §3"*),
+  `src/agents_runtime/__init__.py:9` (§3), `agent_core/llm.py:3` (§3), `agent_core/think_gate.py:13`
+  (§3), `config.py:20` (§ADR-5), `queueing/backoff.py:3` (§ADR-4), `queueing/polling.py:45` (§ADR-5)
+  e `queueing/__init__.py:12` (§2). Contando também `tests/` e `runtime/docs/`, são **treze**:
+  `tests/unit/test_backoff.py:3` (§ADR-4), `tests/unit/test_no_sql_outside_repository.py:22` (§3),
+  `tests/unit/test_think_gate.py:12` (§3) e `runtime/docs/observabilidade-e-monitoramento.md:131`
+  (§3.2). *(Fora da conta, porque citam a versão sem invocar seção: os cabeçalhos*
+  *"Base: … Arquitetura v1.3" de `runtime/docs/testes-e-cicd.md:3` e*
+  *`runtime/docs/observabilidade-e-monitoramento.md:3`, e as menções soltas de*
+  *`config.py:47`, `tests/unit/test_weighted_polling.py:3`,*
+  *`tests/unit/test_no_sql_outside_repository.py:82` e `pyproject.toml:147,155`, que dizem*
+  *"a arquitetura"/"arquitetural" sem §.)*
+  **Medido: o documento não existe.** `core/` tem só `agentes-por-evento.md`,
+  `requisitos-e-entidades.md` e `STATUS-agentes-por-evento.md`, e nenhum dos três traz tabela de
+  módulos nem ADRs numerados; `find -iname "*arquitetura*"` devolve apenas
+  `docs/ARQUITETURA-INTEGRACOES.md` (integrações do lado TS, outro assunto) e
+  `docs/Worder-Arquitetura-Funcionalidades.pdf`.
+  **Não é dívida nova** — nasceu com o fork, e nenhum item deste checklist a reivindicava
+  (procurado dono pelo defeito: antes deste item, o único hit de "arquitetura" no checklist era
+  *"preço arquitetural"*, assunto alheio). **Não é conserto de uma linha:** ou o documento entra no
+  repositório, e as nove/treze citações passam a ter destino, ou elas passam a citar o que de fato
+  existe. **É decisão de quem é dono da documentação, não de limpeza** — por isso está aqui e não
+  foi corrigido dentro do item 60.
+
+- [ ] **89. Se `q_scheduled` ganhar handler, onde aterrissam os números do `PENDENTE-3`?** `[confirmado]` · *(descoberto no item 60)*
+  **Destinatário: o dono do produto.** Não é limpeza, não é lacuna de teste e não é dívida de
+  código — são duas decisões de requisito que o item 60 não podia tomar e cuja ausência mantinha
+  dois arquivos vivos sem que ninguém soubesse por quê. O 60 tirou os dois do seu escopo com a
+  prova escrita e fechou; a pergunta fica aqui, com dono.
+  **1. `q_scheduled` vai ganhar handler?** Isto é: os toques agendados de funil/follow-up
+  (`ScheduledTouch`, `core/requisitos-e-entidades.md:182`) vão ser despachados por esta fila — e aí
+  a fila é reserva correta —, ou o despacho proativo vai por outro caminho e o **RNF-022**
+  (`:100`) deve ser reescrito de 8:4:2:1 para 8:4:1? Hoje a fila existe em `config.py:21,26`, tem
+  lógica de produção dedicada (`queueing/polling.py:69,76-77`, a promoção por idade que só existe
+  para `SCHEDULED`) e **nenhum handler** (`app.py:208-212`).
+  **Quem responder decide DUAS coisas, não uma.** `core/requisitos-e-entidades.md:100` escreve a
+  promoção por idade só para um caso — *"(domain event > 2 min sobe a peso de inbound)"*. A
+  promoção de `SCHEDULED` (10 min → `DOMAIN_EVENTS`, com a constante `promote_scheduled_after`) é
+  comportamento de produção **além** do requisito escrito. Divergência doc↔código medida em
+  `fc49446b`; não é defeito, é parte da pergunta.
+  **2. Os números do `PENDENTE-3` aterrissam mesmo em `pending_defaults.py`?** `core/agentes-por-evento.md:380`
+  diz que os números de arbitragem e frequency cap *"viram constantes nomeadas em
+  `runtime/src/agents_runtime/agent_core/pending_defaults.py`"*, e
+  `core/STATUS-agentes-por-evento.md:116` registra o estado como **`aberto`** (repetido em `:469`).
+  O arquivo tem 26 linhas, zero imports, zero chamadores e zero testes — pelo critério mecânico é
+  código morto, e não é: é o endereço nomeado de uma decisão que ninguém tomou. **Se a resposta for
+  "os números vêm em outro lugar"**, sai tudo junto: −26 linhas, as três edições de doc-fonte
+  (`agentes-por-evento.md:380`, `STATUS-agentes-por-evento.md:116,469`), o docstring de
+  `agent_core/mission_resolver.py:142` que o cita, e **−5 ids** de `-m unit` (medidos em
+  `fc49446b`: as travas `test_no_direct_clock`, `test_no_direct_randomness`, `test_no_max_seq`,
+  `test_no_provider_network` e `test_no_sql_outside_repository`, uma cada). **Se a resposta for
+  "aterrissam ali"**, o arquivo está certo onde está e nada muda.
+  **As duas perguntas andam juntas** porque a segunda só tem resposta depois da primeira: os
+  números do `PENDENTE-3` são de arbitragem e cap **de toque**, e é o despacho de missão — o mesmo
+  que a fila `q_scheduled` transportaria — que os consumiria. Separá-las criaria duas
+  contabilidades para uma decisão só.
+  **Procurado dono pelo defeito antes de abrir**, com variação de vocabulário no checklist inteiro
+  (`PENDENTE-3`, `pending_defaults`, `EVENT_PRIORITY`, `MISSION_TOUCH`, `arbitragem`, `caps`,
+  `frequency cap`, `ScheduledTouch`, `toque agendado`, `follow-up`, `despacho proativo`,
+  `promote_scheduled`, `handler`, `RNF-022`): **não há.** O item 81 cita `q_scheduled_dlq` no
+  inventário de DLQs e o item 57 cita RNF-022 pela metade do `q_evals` — nenhum dos dois é dono da
+  decisão; os hits de "arbitragem" são sobre `mission_resolver.arbitrate()`, mecanismo diferente.
 
 ---
 
