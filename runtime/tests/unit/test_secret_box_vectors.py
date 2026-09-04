@@ -19,7 +19,7 @@ from agents_runtime.crypto.secret_box import (
 )
 
 FIXTURE = Path(__file__).parent / "fixtures" / "secret_box_vectors.json"
-DATA = json.loads(FIXTURE.read_text())
+DATA = json.loads(FIXTURE.read_text(encoding="utf-8"))
 KEY = DATA["encryption_key"]
 
 

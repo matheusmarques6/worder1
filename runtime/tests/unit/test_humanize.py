@@ -37,7 +37,7 @@ from tests.support.fake_conn import RecordingConnection
 _FROZEN = FrozenClock(datetime(2026, 9, 2, 12, 0, tzinfo=UTC))
 
 VECTORS = json.loads(
-    (Path(__file__).parent / "fixtures" / "bubble_vectors.json").read_text()
+    (Path(__file__).parent / "fixtures" / "bubble_vectors.json").read_text(encoding="utf-8")
 )["vectors"]
 
 
