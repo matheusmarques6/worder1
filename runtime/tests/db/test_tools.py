@@ -27,7 +27,6 @@ import pytest
 
 from agents_runtime.agent_core.llm import EmbeddingResult, Usage
 from agents_runtime.tools import base as tools
-from agents_runtime.tools.customer import GetCustomerContext
 from agents_runtime.tools.knowledge import SearchKnowledge
 from tests.db.factories import create_agent, create_tenant, create_thread
 from tests.support.clock import FrozenClock
@@ -167,66 +166,6 @@ class TestSearchKnowledge:
 
         assert result.success is False
         assert "query" in result.error
-
-
-class TestGetCustomerContext:
-    async def test_it_reads_the_contact_of_this_conversation(
-        self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
-    ) -> None:
-        thread = create_thread(admin, tenant)
-        with admin.cursor() as cur:
-            # Shape canônico: nome é first/last (full_name é gerada), idioma
-            # vive em custom_fields, e opt-out seria linha em
-            # whatsapp_opt_status — ausente aqui, logo 'opted_in'.
-            cur.execute(
-                """
-                update public.contacts
-                   set first_name = 'Joana',
-                       custom_fields = jsonb_build_object('language', 'pt-BR')
-                 where id = %s
-                """,
-                (thread.contact_id,),
-            )
-
-        async with as_runtime_worker(dsn) as conn:
-            result = await tools.run_tool(
-                conn,
-                GetCustomerContext(),
-                _context(tenant, thread.conversation_id),
-                {},
-                clock=FrozenClock(START),
-            )
-
-        assert result.success is True
-        assert result.output["name"] == "Joana"
-        assert result.output["language"] == "pt-BR"
-        assert result.output["opt_status"] == "opted_in"
-        assert result.output["conversations"] == 1
-
-    async def test_it_never_reads_a_conversation_of_another_tenant(
-        self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
-    ) -> None:
-        """The conversation id is the one place a tool could be pointed
-        elsewhere. Scoped by the policy, a stranger's conversation is simply not
-        there — and the tool says so instead of inventing a customer."""
-        stranger = create_tenant(admin)
-        try:
-            theirs = create_thread(admin, stranger)
-
-            async with as_runtime_worker(dsn) as conn:
-                result = await tools.run_tool(
-                    conn,
-                    GetCustomerContext(),
-                    _context(tenant, theirs.conversation_id),
-                    {},
-                    clock=FrozenClock(START),
-                )
-
-            assert result.success is False
-            assert result.output == {}
-        finally:
-            with admin.cursor() as cur:
-                cur.execute("delete from public.organizations where id = %s", (stranger,))
 
 
 class TestTheTrail:

@@ -18,10 +18,12 @@ dentro do responder, não só no motor.
 nota de cada tentativa e o alerta do não-envio são gravados por este arquivo —
 não pelo chamador, que poderia esquecer.
 
-O que NÃO existe no E2, declarado: `get_customer_context` (S7) não tem
-consumidor aqui porque a camada `customer_context` do RF-010 fala de PEDIDOS, e
-o espelho de pedidos chega no E3 — inventar um "cliente sem histórico" para
-quem já conversou três vezes seria pior que a ausência (decisão 86d).
+O que NÃO existe aqui, declarado: não há tool de contexto do cliente. A
+`get_customer_context` (S7) nunca teve consumidor neste arquivo e foi apagada no
+item 59; os fatos do contato e o histórico de pedidos chegam pelo bloco ESTADO
+(`contact_fact_pairs` e `history_lines`), não por tool — inventar um "cliente
+sem histórico" para quem já conversou três vezes seria pior que a ausência
+(decisão 86d).
 """
 
 import json

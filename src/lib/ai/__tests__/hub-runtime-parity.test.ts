@@ -41,8 +41,10 @@ const responderSource = read('runtime/src/agents_runtime/agent_core/responder.py
 
 /**
  * Nomes que o responder realmente consulta em `settings.tools.enabled`. Uma
- * classe de tool existir não basta: `get_customer_context` está registrada e
- * nenhum código a oferece ao modelo (o bloco ESTADO já entrega esses dados).
+ * classe de tool existir não basta — o item 59 apagou o exemplo vivo disso
+ * (`get_customer_context` tinha classe e nenhum código a oferecia ao modelo; o
+ * bloco ESTADO já entregava esses dados), então hoje o filtro não descarta
+ * nada. Ele fica para o dia em que voltar a descartar.
  */
 const RUNTIME_HONORED = RUNTIME_TOOL_NAMES.filter((n) =>
   new RegExp(`["']${n}["']\\s+(?:not\\s+)?in\\s+(?:enabled_tools|resolved\\.tools)`).test(responderSource),
