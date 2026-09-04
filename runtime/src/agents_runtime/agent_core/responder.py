@@ -636,7 +636,7 @@ def build_responder(
                     # `persona["language"] or settings.primary_language` são o
                     # fóssil que este item existe para matar.
                     language=agent.language,
-                    never_say_ai=True,
+                    never_say_ai=settings.never_say_ai,
                 )
 
                 # --- 9.3b: as tools que o modelo pode PEDIR neste turno. A grade é

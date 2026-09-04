@@ -421,7 +421,7 @@ def build_toucher(
                     # Lida de volta do bloco do agente, não recalculada — uma
                     # fórmula só para a língua em todo o runtime (item 45).
                     language=agent.language,
-                    never_say_ai=True,
+                    never_say_ai=settings.never_say_ai,
                 )
                 conversation = _as_chat(transcript)
 
