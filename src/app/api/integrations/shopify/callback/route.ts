@@ -241,6 +241,13 @@ export async function GET(request: NextRequest) {
         return NextResponse.redirect(`${APP_URL}/integrations/shopify?error=save_failed`);
       }
       storeId = newStore.id;
+      // A loja nasce com remetente próprio: <nome-da-loja>@worder.email.
+      try {
+        const { ensureStoreSharedSender } = await import('@/lib/email/shared-sender');
+        await ensureStoreSharedSender(storeId);
+      } catch (e) {
+        console.warn('[Shopify Callback] remetente compartilhado não alocado:', (e as Error).message);
+      }
     }
 
     // =============================================

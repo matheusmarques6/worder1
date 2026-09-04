@@ -365,6 +365,13 @@ export async function GET(request: NextRequest) {
         return redirectTo(APP_URL, '/integrations/shopify?error=save_failed');
       }
       storeId = data.id;
+      // A loja nasce com remetente próprio: <nome-da-loja>@worder.email.
+      try {
+        const { ensureStoreSharedSender } = await import('@/lib/email/shared-sender');
+        await ensureStoreSharedSender(storeId);
+      } catch (e) {
+        console.warn('[ShopifyOAuthManual] remetente compartilhado não alocado:', (e as Error).message);
+      }
     }
 
     // ── Webhooks (REST, mesmos 17 tópicos e URL do connect manual) ──

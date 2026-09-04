@@ -151,6 +151,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: insertError.message }, { status: 500 });
     }
 
+    // A loja nasce com remetente próprio: <nome-da-loja>@worder.email,
+    // único na Worder. Nunca herda o remetente de outra loja.
+    try {
+      const { ensureStoreSharedSender } = await import('@/lib/email/shared-sender');
+      const r = await ensureStoreSharedSender(store.id);
+      if (r?.settings) store.settings = { ...(store.settings || {}), email_settings: r.settings };
+    } catch (e) {
+      console.warn('[/api/stores POST] remetente compartilhado não alocado:', (e as Error).message);
+    }
+
     return NextResponse.json({ store });
   } catch (error: any) {
     console.error('[/api/stores POST] Error:', error.message);

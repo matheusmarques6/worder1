@@ -17,6 +17,8 @@ export interface FakeSupabase {
   /** Chamadas registradas: [tabela, método, argumentos]. */
   calls: Array<[string, string, any[]]>
   seed: (table: string, rows: Row[]) => void
+  /** Declara uma chave única: insert repetido devolve erro 23505. */
+  unique: (table: string, cols: string[]) => void
   reset: () => void
 }
 
@@ -46,6 +48,7 @@ function orClause(expr: string): (r: Row) => boolean {
 
 export function createFakeSupabase(): FakeSupabase {
   const tables: Record<string, Row[]> = {}
+  const uniques: Record<string, string[][]> = {}
   const calls: Array<[string, string, any[]]> = []
 
   function builder(table: string) {
@@ -55,6 +58,9 @@ export function createFakeSupabase(): FakeSupabase {
     let head = false
     let orderCol: string | null = null
     let orderAsc = true
+    // Escrita pendente: aplicada quando o builder é aguardado.
+    let op: 'select' | 'insert' | 'update' | 'delete' = 'select'
+    let payload: any = null
     const b: any = {}
     const chain = (name: string, fn?: (...a: any[]) => void) => {
       b[name] = (...args: any[]) => { calls.push([table, name, args]); fn?.(...args); return b }
@@ -72,24 +78,54 @@ export function createFakeSupabase(): FakeSupabase {
     chain('range', () => {})
     chain('single', () => { single = true })
     chain('maybeSingle', () => { single = true })
-    chain('update', () => {})
-    chain('insert', () => {})
+    chain('update', (patch: any) => { op = 'update'; payload = patch })
+    chain('insert', (rows: any) => { op = 'insert'; payload = rows })
+    chain('upsert', (rows: any) => { op = 'insert'; payload = rows })
+    chain('delete', () => { op = 'delete' })
+
+    const violates = (row: Row): boolean => {
+      const keys = uniques[table] || []
+      const existing = tables[table] || []
+      return keys.some((cols) => existing.some((e) => cols.every((c) => String(e[c]) === String(row[c]))))
+    }
+
     b.then = (resolve: any, reject: any) => {
-      let rows = (tables[table] || []).filter((r) => filters.every((f) => f(r)))
-      if (orderCol) {
-        const c = orderCol
-        rows = [...rows].sort((a, z) => {
-          const x = a[c], y = z[c]
-          if (x === y) return 0
-          return (x > y ? 1 : -1) * (orderAsc ? 1 : -1)
-        })
+      let result: any
+      if (op === 'insert') {
+        const rows: Row[] = (Array.isArray(payload) ? payload : [payload]).map((r: any) => ({ ...r }))
+        const dup = rows.find(violates)
+        if (dup) {
+          result = { data: null, error: { code: '23505', message: `duplicate key value violates unique constraint (${table})` } }
+        } else {
+          tables[table] = [...(tables[table] || []), ...rows]
+          result = { data: single ? rows[0] : rows, error: null }
+        }
+      } else if (op === 'update') {
+        const hit = (tables[table] || []).filter((r) => filters.every((f) => f(r)))
+        for (const r of hit) Object.assign(r, payload)
+        result = { data: single ? (hit[0] || null) : hit, error: null }
+      } else if (op === 'delete') {
+        const keep = (tables[table] || []).filter((r) => !filters.every((f) => f(r)))
+        const removed = (tables[table] || []).length - keep.length
+        tables[table] = keep
+        result = { data: null, count: removed, error: null }
+      } else {
+        let rows = (tables[table] || []).filter((r) => filters.every((f) => f(r)))
+        if (orderCol) {
+          const c = orderCol
+          rows = [...rows].sort((a, z) => {
+            const x = a[c], y = z[c]
+            if (x === y) return 0
+            return (x > y ? 1 : -1) * (orderAsc ? 1 : -1)
+          })
+        }
+        if (limitN != null) rows = rows.slice(0, limitN)
+        result = head
+          ? { data: null, count: rows.length, error: null }
+          : single
+            ? { data: rows[0] || null, error: null }
+            : { data: rows, count: rows.length, error: null }
       }
-      if (limitN != null) rows = rows.slice(0, limitN)
-      const result = head
-        ? { data: null, count: rows.length, error: null }
-        : single
-          ? { data: rows[0] || null, error: null }
-          : { data: rows, count: rows.length, error: null }
       return Promise.resolve(result).then(resolve, reject)
     }
     return b
@@ -100,6 +136,7 @@ export function createFakeSupabase(): FakeSupabase {
     calls,
     from: (table: string) => builder(table),
     seed(table, rows) { tables[table] = rows.map((r) => ({ ...r })) },
-    reset() { for (const k of Object.keys(tables)) delete tables[k]; calls.length = 0 },
+    unique(table, cols) { uniques[table] = [...(uniques[table] || []), cols] },
+    reset() { for (const k of Object.keys(tables)) delete tables[k]; for (const k of Object.keys(uniques)) delete uniques[k]; calls.length = 0 },
   }
 }

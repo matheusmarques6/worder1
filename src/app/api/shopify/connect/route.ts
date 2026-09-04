@@ -139,6 +139,15 @@ export async function POST(request: NextRequest) {
 
     if (insertError) throw insertError;
 
+    // A loja nasce com remetente próprio: <nome-da-loja>@worder.email,
+    // único na Worder. Nunca herda o remetente de outra loja.
+    try {
+      const { ensureStoreSharedSender } = await import('@/lib/email/shared-sender');
+      await ensureStoreSharedSender(newStore.id);
+    } catch (e) {
+      console.warn('[Connect] remetente compartilhado não alocado:', (e as Error).message);
+    }
+
     // First connect — kick off install-extras so the merchant doesn't
     // have to click anything to get the storefront script tag, web
     // pixel, and webhooks wired. Async fire-and-forget (it takes a

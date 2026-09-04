@@ -15,6 +15,14 @@ vi.mock('@/lib/supabase-admin', () => ({
   supabaseAdmin: { from: (t: string) => fake.from(t) },
   getSupabaseAdmin: () => ({ from: (t: string) => fake.from(t) }),
 }))
+// O alocador do domínio compartilhado usa o mesmo cliente falso.
+vi.mock('@/lib/email/shared-sender', async () => {
+  const real = await vi.importActual<typeof import('../shared-sender')>('../shared-sender')
+  return {
+    ...real,
+    ensureStoreSharedSender: (storeId: string) => real.ensureStoreSharedSender(storeId, fake as any),
+  }
+})
 vi.mock('@/lib/email/providers/resend', () => ({ createResendProvider: (config: any) => ({ name: 'resend', config, send: async () => ({ id: 'x' }) }) }))
 vi.mock('@/lib/email/providers/smtp', () => ({ createSmtpProvider: (config: any) => ({ name: 'smtp', config, send: async () => ({ id: 'x' }) }) }))
 
@@ -48,7 +56,14 @@ beforeEach(() => {
   fake.reset()
   __resetEmailProviderCache()
   process.env.RESEND_FROM_EMAIL = 'noreply@worder.email'
+  delete process.env.SHARED_SENDER_DOMAIN
   seedMultiLoja()
+  // Reservas do domínio compartilhado (chave única) — a loja sem
+  // remetente ganha o dela aqui.
+  fake.unique('shared_sender_addresses', ['domain', 'local_part'])
+  fake.seed('shared_sender_addresses', [
+    { domain: 'worder.email', local_part: 'based', store_id: BASED, organization_id: ORG },
+  ])
 })
 
 describe('getEmailProviderForOrg — identidade por loja', () => {
@@ -60,31 +75,42 @@ describe('getEmailProviderForOrg — identidade por loja', () => {
     expect((config as any).senderSource).toBe('store')
   })
 
-  it('loja sem remetente numa organização com várias lojas: neutro com o NOME da loja, nunca o e-mail da irmã', async () => {
+  it('loja sem remetente ganha o dela no domínio compartilhado — nunca o e-mail da irmã', async () => {
     const { config } = await getEmailProviderForOrg(ORG, GROOT)
-    expect(config.defaultFrom).toBe('noreply@worder.email')
+    expect(config.defaultFrom).toBe('dr-groot@worder.email')
     expect(config.defaultFrom).not.toBe('based@worder.email')
     expect(config.defaultSenderName).toBe('Dr. Groot')
     expect(config.defaultReplyTo).toBe('carter@outlook.com')
-    expect((config as any).senderSource).toBe('platform')
+    expect((config as any).senderSource).toBe('store')
+    // E fica gravado na loja: da próxima vez já é "configurado".
+    const saved = fake.tables.shopify_stores.find((s) => s.id === GROOT)!
+    expect(saved.settings.email_settings.default_sender_email).toBe('dr-groot@worder.email')
   })
 
-  it('organização com UMA loja: o padrão da organização é dessa loja e vale', async () => {
-    fake.seed('shopify_stores', [
-      { id: BASED, organization_id: ORG, shop_name: 'Based', shop_email: 'contato@sourosa.com', shop_domain: 'lojalaclode.myshopify.com', is_active: true, settings: {} },
-      // Loja sem integração não conta.
-      { id: GROOT, organization_id: ORG, shop_name: 'Nova', shop_email: null, shop_domain: 'manual-nova-1.worder.local', is_active: true, settings: {} },
+  it('duas lojas com o mesmo nome não dividem o endereço: a segunda "Based" vira based-2', async () => {
+    // A loja Based da organização não tem remetente no settings; o nome
+    // "based" já está reservado (é dela, então continua dela).
+    const { config: basedCfg } = await getEmailProviderForOrg(ORG, BASED)
+    expect(basedCfg.defaultFrom).toBe('based@worder.email')
+    // Outra "Based", em outra organização, sem remetente.
+    fake.seed('organizations', [
+      ...fake.tables.organizations,
+      { id: OUTRA_ORG, name: 'Outra', email_settings: {}, email_provider: 'resend', email_provider_config: null },
     ])
-    const { config } = await getEmailProviderForOrg(ORG, BASED)
-    expect(config.defaultFrom).toBe('based@worder.email')
+    fake.seed('shopify_stores', [
+      ...fake.tables.shopify_stores,
+      { id: '44444444-4444-4444-8444-444444444444', organization_id: OUTRA_ORG, shop_name: 'Based', shop_email: null, shop_domain: 'based2.myshopify.com', is_active: true, settings: {} },
+    ])
+    const { config } = await getEmailProviderForOrg(OUTRA_ORG, '44444444-4444-4444-8444-444444444444')
+    expect(config.defaultFrom).toBe('based-2@worder.email')
     expect(config.defaultSenderName).toBe('Based')
-    expect((config as any).senderSource).toBe('org')
   })
 
   it('loja de OUTRA organização não é lida, mesmo com remetente próprio', async () => {
     const { config } = await getEmailProviderForOrg(ORG, ALHEIA)
     expect(config.defaultFrom).not.toBe('alheia@alheia.com')
     expect(config.defaultSenderName).not.toBe('Alheia')
+    expect((config as any).senderSource).toBe('platform')
   })
 
   it('sem loja (envio da organização inteira) usa o padrão da organização', async () => {
@@ -109,10 +135,10 @@ describe('getStoreSender / getOrgSender', () => {
     expect(s.source).toBe('store')
   })
 
-  it('loja sem remetente: nome da loja + e-mail neutro, marcado como "platform" para a tela avisar', async () => {
+  it('loja sem remetente: recebe o dela no domínio compartilhado, origem "store"', async () => {
     const s = await getStoreSender(ORG, GROOT)
-    expect(s.from).toBe('Dr. Groot <noreply@worder.email>')
-    expect(s.source).toBe('platform')
+    expect(s.from).toBe('Dr. Groot <dr-groot@worder.email>')
+    expect(s.source).toBe('store')
   })
 
   it('sem loja cai no remetente da organização', async () => {

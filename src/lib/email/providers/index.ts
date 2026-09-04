@@ -4,12 +4,10 @@
 // Identidade do remetente (from / nome / reply-to) — a regra, em UM lugar:
 //
 //   1. Loja com email_settings próprio → é ela. Sempre.
-//   2. Loja sem remetente configurado:
-//        organização com UMA loja → o padrão da organização (é a mesma
-//        loja, guardado no lugar antigo);
-//        organização com VÁRIAS lojas → identidade neutra da plataforma
-//        (RESEND_FROM_EMAIL) com o NOME da loja e reply-to no e-mail da
-//        loja. Nunca o remetente de outra loja.
+//   2. Loja sem remetente configurado → recebe na hora o dela no domínio
+//        compartilhado: <nome-da-loja>@worder.email, único em toda a
+//        Worder (src/lib/email/shared-sender.ts). Nunca o remetente de
+//        outra loja; o neutro da plataforma só se a alocação falhar.
 //   3. Sem loja (envio da organização inteira) → padrão da organização.
 //
 // O defeito que motivou isto: a leitura da loja pedia a coluna `name`,
@@ -35,20 +33,6 @@ export function __resetEmailProviderCache() { cache.clear(); }
 /** Remetente neutro da plataforma — nunca é a identidade de uma loja. */
 export function platformFallbackFrom(): string {
   return process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
-}
-
-/** Domínio sintético de loja ainda sem integração — não conta como loja. */
-function isPlaceholderDomain(shopDomain: unknown): boolean {
-  return typeof shopDomain === 'string' && shopDomain.endsWith('.worder.local');
-}
-
-async function countRealActiveStores(organizationId: string): Promise<number> {
-  const { data } = await supabaseAdmin
-    .from('shopify_stores')
-    .select('id, shop_domain')
-    .eq('organization_id', organizationId)
-    .eq('is_active', true);
-  return ((data || []) as any[]).filter((s) => !isPlaceholderDomain(s.shop_domain)).length;
 }
 
 export type SenderSource = 'store' | 'org' | 'platform';
@@ -97,10 +81,6 @@ export async function getEmailProviderForOrg(
   // A identidade que o provider_config já carregava (SMTP com from fixo,
   // por exemplo) só serve para envios SEM loja. Com loja, é recalculada
   // abaixo — nenhum padrão da organização pode ficar por baixo.
-  const configuredFrom = config.defaultFrom;
-  const configuredSenderName = config.defaultSenderName;
-  const configuredReplyTo = config.defaultReplyTo;
-
   let source: SenderSource = 'org';
 
   if (storeId) {
@@ -125,26 +105,38 @@ export async function getEmailProviderForOrg(
       config.defaultFrom = storeFrom;
       config.defaultSenderName = storeName;
       config.defaultReplyTo = storeReplyTo;
-    } else {
-      // 2. Sem remetente na loja. O padrão da organização só vale quando
-      // ela tem UMA loja — aí é a mesma coisa. Com várias, o padrão da
-      // organização é a identidade de OUTRA loja: fica a neutra.
-      const stores = store ? await countRealActiveStores(organizationId) : 0;
-      const orgFrom = configuredFrom || orgDefaults.from;
-      if (store && stores <= 1 && orgFrom) {
-        source = 'org';
-        config.defaultFrom = orgFrom;
-        config.defaultSenderName = storeName || configuredSenderName || orgDefaults.senderName;
-        config.defaultReplyTo = configuredReplyTo || orgDefaults.replyTo || storeReplyTo;
+    } else if (store) {
+      // 1b. Loja sem remetente: recebe agora o dela no domínio
+      // compartilhado (<nome-da-loja>@worder.email, único na Worder).
+      // É o que toda loja nova ganha ao nascer; aqui é a rede de
+      // segurança para as que nasceram antes disso existir.
+      let provisioned: { default_sender_email?: string; default_sender_name?: string; default_reply_to?: string } | null = null;
+      try {
+        const { ensureStoreSharedSender } = await import('@/lib/email/shared-sender');
+        provisioned = (await ensureStoreSharedSender(storeId))?.settings || null;
+      } catch (e) {
+        console.error('[email-providers] não foi possível alocar remetente compartilhado:', (e as Error).message);
+      }
+      if (provisioned?.default_sender_email) {
+        source = 'store';
+        config.defaultFrom = provisioned.default_sender_email;
+        config.defaultSenderName = provisioned.default_sender_name || storeName;
+        config.defaultReplyTo = provisioned.default_reply_to || storeReplyTo;
       } else {
         source = 'platform';
         config.defaultFrom = platformFallbackFrom();
         config.defaultSenderName = storeName || 'Worder';
         config.defaultReplyTo = storeReplyTo;
-        if (store) {
-          console.warn(`[email-providers] loja ${storeId} sem remetente configurado — usando remetente neutro da plataforma com o nome "${config.defaultSenderName}"`);
-        }
+        console.warn(`[email-providers] loja ${storeId} sem remetente e sem alocação — usando remetente neutro da plataforma com o nome "${config.defaultSenderName}"`);
       }
+    } else {
+      // 2. storeId não é desta organização (ou não existe): nunca a
+      // identidade de ninguém — neutro, e o log denuncia.
+      source = 'platform';
+      config.defaultFrom = platformFallbackFrom();
+      config.defaultSenderName = 'Worder';
+      config.defaultReplyTo = undefined;
+      console.warn(`[email-providers] storeId ${storeId} não pertence à organização ${organizationId} — remetente neutro`);
     }
   } else {
     // 3. Sem loja: padrão da organização (o comportamento de sempre).

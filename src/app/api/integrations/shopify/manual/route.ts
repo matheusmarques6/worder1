@@ -461,6 +461,14 @@ export async function POST(request: NextRequest) {
     } catch (writeErr: any) {
       throw writeErr;
     }
+    // A loja nasce com remetente próprio: <nome-da-loja>@worder.email.
+    // Idempotente para uma loja existente que já tem o seu.
+    try {
+      const { ensureStoreSharedSender } = await import('@/lib/email/shared-sender');
+      await ensureStoreSharedSender(storeId);
+    } catch (e) {
+      console.warn('[ShopifyManual] remetente compartilhado não alocado:', (e as Error).message);
+    }
 
     // ──────────────────────────────────────────
     // 5. Register 17 webhooks (skip any that already exist for this URL)

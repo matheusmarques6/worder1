@@ -45,6 +45,8 @@ interface Domain {
   warmup_enabled?: boolean
   warmup_day?: number
   warmup_daily_limit?: number
+  /** worder.email — domínio compartilhado da Worder, verificado para todos. */
+  is_system?: boolean
 }
 
 function statusBadgeClass(status: string) {
@@ -440,6 +442,16 @@ function SenderConfig({
   const [saving, setSaving] = useState(false)
   const [loaded, setLoaded] = useState(false)
   const [toast, setToast] = useState('')
+  const [saveError, setSaveError] = useState<{ message: string; suggestion?: string } | null>(null)
+  // Domínio compartilhado da Worder (worder.email): verificado para todas
+  // as lojas; o nome antes do @ é único em toda a plataforma.
+  const [sharedDomain, setSharedDomain] = useState('worder.email')
+  const [suggestedLocal, setSuggestedLocal] = useState('')
+  const [availability, setAvailability] = useState<{ state: 'idle' | 'checking' | 'available' | 'taken' | 'invalid'; suggestion?: string }>({ state: 'idle' })
+  // Domínio dos links de tracking (opcional, por loja).
+  const [trackingDomain, setTrackingDomain] = useState('')
+  const [originalTrackingDomain, setOriginalTrackingDomain] = useState('')
+  const [appHost, setAppHost] = useState('app.worder.com.br')
   // Originals to detect changes after save
   const [originalSenderName, setOriginalSenderName] = useState('')
   const [originalSenderEmail, setOriginalSenderEmail] = useState('')
@@ -455,10 +467,16 @@ function SenderConfig({
   const [syncResult, setSyncResult] = useState<any>(null)
 
   useEffect(() => {
+    if (typeof window !== 'undefined' && window.location?.host) setAppHost(window.location.host)
+  }, [])
+
+  useEffect(() => {
     // Per-store config: ignore the previous org-scoped endpoint and
     // pull this store's sender. Skip the fetch until we know which
     // store is active — otherwise the first render lands on the org's
     // legacy values and we'd flash the sibling store's sender.
+    // Loja ainda sem remetente recebe o dela (<nome>@worder.email) no
+    // próprio GET — a resposta avisa com `allocated`.
     if (!storeId) { setLoaded(true); return }
     fetch(`/api/settings/store-email?storeId=${encodeURIComponent(storeId)}`)
       .then(r => r.json())
@@ -467,35 +485,71 @@ function SenderConfig({
         const name = s.default_sender_name || ''
         const reply = s.default_reply_to || ''
         const email = s.default_sender_email || ''
+        const shared = d?.shared_domain || 'worder.email'
+        setSharedDomain(shared)
+        setSuggestedLocal(d?.suggested_local_part || '')
         setSenderName(name)
         setReplyTo(reply)
         if (email.includes('@')) {
           setSenderLocal(email.split('@')[0])
           setSelectedDomain(email.split('@')[1])
         } else {
-          setSenderLocal('')
-          setSelectedDomain('')
+          setSenderLocal(d?.suggested_local_part || '')
+          setSelectedDomain(shared)
         }
+        setTrackingDomain(s.tracking_domain || '')
+        setOriginalTrackingDomain(s.tracking_domain || '')
         setOriginalSenderName(name)
         setOriginalSenderEmail(email)
         setOriginalReplyTo(reply)
+        if (d?.allocated && email) {
+          setToast(`Criamos o remetente desta loja: ${email}`)
+          setTimeout(() => setToast(''), 4000)
+        }
         setLoaded(true)
       })
       .catch(() => setLoaded(true))
   }, [storeId])
 
   useEffect(() => {
-    if (verifiedDomains.length > 0 && !selectedDomain) {
-      setSelectedDomain(verifiedDomains[0].domain)
-    }
-  }, [verifiedDomains, selectedDomain])
+    if (!selectedDomain) setSelectedDomain(sharedDomain)
+  }, [sharedDomain, selectedDomain])
 
+  const isShared = selectedDomain.toLowerCase() === sharedDomain.toLowerCase()
   const fullEmail = senderLocal && selectedDomain ? `${senderLocal}@${selectedDomain}` : ''
+
+  // No domínio compartilhado, confere ao digitar se o nome está livre —
+  // a mesma regra que o salvar aplica. Debounce para não bater na API a
+  // cada tecla.
+  useEffect(() => {
+    if (!isShared || !senderLocal || !storeId) { setAvailability({ state: 'idle' }); return }
+    const local = senderLocal.toLowerCase()
+    if (local === originalSenderEmail.split('@')[0] && originalSenderEmail.endsWith(`@${sharedDomain}`)) {
+      setAvailability({ state: 'available' }); return
+    }
+    if (!/^[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?$/.test(local)) { setAvailability({ state: 'invalid' }); return }
+    let cancelled = false
+    setAvailability({ state: 'checking' })
+    const t = setTimeout(async () => {
+      try {
+        const r = await fetch(`/api/email/shared-sender/check?local=${encodeURIComponent(local)}&storeId=${encodeURIComponent(storeId)}`)
+        const d = await r.json()
+        if (cancelled) return
+        if (!r.ok) { setAvailability({ state: 'idle' }); return }
+        setAvailability(d.available ? { state: 'available' } : { state: 'taken', suggestion: d.suggestion })
+      } catch { if (!cancelled) setAvailability({ state: 'idle' }) }
+    }, 400)
+    return () => { cancelled = true; clearTimeout(t) }
+  }, [isShared, senderLocal, storeId, sharedDomain, originalSenderEmail])
+
+  const canSave = Boolean(storeId && fullEmail && senderName && !saving)
+    && (!isShared || availability.state === 'available' || availability.state === 'idle')
 
   const save = async () => {
     if (!fullEmail) return
     if (!storeId) return
     setSaving(true)
+    setSaveError(null)
     try {
       const res = await fetch('/api/settings/store-email', {
         method: 'PATCH',
@@ -504,14 +558,22 @@ function SenderConfig({
           storeId,
           email_settings: {
             default_sender_name: senderName,
-            default_sender_email: fullEmail,
-            default_reply_to: replyTo || fullEmail,
+            default_sender_email: fullEmail.toLowerCase(),
+            default_reply_to: replyTo || fullEmail.toLowerCase(),
+            tracking_domain: trackingDomain.trim(),
           },
         }),
       })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setSaveError({ message: data.error || `Falha ao salvar (${res.status})`, suggestion: data.suggestion })
+        if (data.code === 'local_part_taken') setAvailability({ state: 'taken', suggestion: data.suggestion ? String(data.suggestion).split('@')[0] : undefined })
+        return
+      }
       if (res.ok) {
         setToast('Salvo com sucesso')
         setTimeout(() => setToast(''), 2000)
+        setOriginalTrackingDomain(trackingDomain.trim())
 
         // Detect what changed and prompt to apply to all emails
         const finalReplyTo = replyTo || fullEmail
@@ -640,56 +702,102 @@ function SenderConfig({
       <div className="px-6 py-5 border-b border-gray-100">
         <div className="flex items-center gap-2">
           <Mail className="w-4 h-4 text-[#FF6A2B]" />
-          <h2 className="text-base font-semibold text-gray-900">Remetente Padrão</h2>
+          <h2 className="text-base font-semibold text-gray-900">Remetente desta loja{storeName ? ` · ${storeName}` : ''}</h2>
         </div>
         <p className="text-sm text-gray-500 mt-1 leading-relaxed">
-          Configure o email e nome do remetente. Só é possível enviar a partir de domínios verificados.
+          Cada loja envia com o próprio nome e e-mail. O domínio <span className="font-mono text-[13px] text-gray-700">{sharedDomain}</span> já
+          vem verificado para todas as lojas da Worder; para enviar da sua marca, adicione e verifique um domínio acima.
         </p>
       </div>
-      <div className="p-6 space-y-4">
+      <div className="p-6 space-y-5">
+        {saveError && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+            <p>{saveError.message}</p>
+            {saveError.suggestion && (
+              <button
+                type="button"
+                onClick={() => { setSenderLocal(String(saveError.suggestion).split('@')[0]); setSaveError(null) }}
+                className="mt-1.5 text-xs font-medium text-red-800 underline"
+              >
+                Usar {saveError.suggestion}
+              </button>
+            )}
+          </div>
+        )}
+
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">Nome do remetente</label>
           <input
             type="text"
             value={senderName}
             onChange={e => setSenderName(e.target.value)}
-            placeholder="Minha Loja"
+            placeholder={storeName || 'Minha Loja'}
             className="w-full px-4 py-2.5 border border-zinc-200 rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#FF6A2B]/20 focus:border-[#FF6A2B]"
           />
         </div>
+
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Email do remetente</label>
-          {verifiedDomains.length === 0 ? (
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
-              Nenhum domínio verificado. Adicione e verifique um domínio acima primeiro.
-            </div>
-          ) : (
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={senderLocal}
-                onChange={e => setSenderLocal(e.target.value.replace(/[^a-zA-Z0-9._\-+]/g, ''))}
-                placeholder="contato"
-                className="flex-1 px-4 py-2.5 border border-zinc-200 rounded-lg text-sm text-gray-900 font-mono placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#FF6A2B]/20 focus:border-[#FF6A2B]"
-              />
-              <span className="flex items-center text-sm text-gray-400 font-mono">@</span>
-              <select
-                value={selectedDomain}
-                onChange={e => setSelectedDomain(e.target.value)}
-                className="flex-1 px-4 py-2.5 border border-zinc-200 rounded-lg text-sm text-gray-900 font-mono bg-white focus:outline-none focus:ring-2 focus:ring-[#FF6A2B]/20 focus:border-[#FF6A2B]"
-              >
-                {verifiedDomains.map(d => (
-                  <option key={d.id} value={d.domain}>{d.domain}</option>
-                ))}
-              </select>
-            </div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">E-mail do remetente</label>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={senderLocal}
+              onChange={e => setSenderLocal(e.target.value.toLowerCase().replace(/[^a-z0-9._\-]/g, ''))}
+              placeholder={suggestedLocal || 'contato'}
+              aria-label="Parte antes do @"
+              className={`flex-1 px-4 py-2.5 border rounded-lg text-sm text-gray-900 font-mono placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#FF6A2B]/20 focus:border-[#FF6A2B] ${
+                isShared && availability.state === 'taken' ? 'border-red-300 bg-red-50/40' : isShared && availability.state === 'available' && senderLocal ? 'border-emerald-300' : 'border-zinc-200'
+              }`}
+            />
+            <span className="flex items-center text-sm text-gray-400 font-mono">@</span>
+            <select
+              value={selectedDomain}
+              onChange={e => setSelectedDomain(e.target.value)}
+              aria-label="Domínio do remetente"
+              className="flex-1 px-4 py-2.5 border border-zinc-200 rounded-lg text-sm text-gray-900 font-mono bg-white focus:outline-none focus:ring-2 focus:ring-[#FF6A2B]/20 focus:border-[#FF6A2B]"
+            >
+              <option value={sharedDomain}>{sharedDomain} · compartilhado Worder (verificado)</option>
+              {verifiedDomains.filter(d => d.domain.toLowerCase() !== sharedDomain.toLowerCase()).map(d => (
+                <option key={d.id} value={d.domain}>{d.domain} · seu domínio</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Estado do nome no domínio compartilhado */}
+          {isShared && senderLocal && (
+            <p className={`text-xs mt-1.5 flex items-center gap-1.5 ${
+              availability.state === 'taken' || availability.state === 'invalid' ? 'text-red-600' : availability.state === 'available' ? 'text-emerald-600' : 'text-gray-500'
+            }`}>
+              {availability.state === 'checking' && <><Loader2 className="w-3 h-3 animate-spin" /> Verificando se está livre…</>}
+              {availability.state === 'available' && <><CheckCircle className="w-3 h-3" /> {senderLocal}@{sharedDomain} é exclusivo desta loja em toda a Worder.</>}
+              {availability.state === 'invalid' && <><AlertCircle className="w-3 h-3" /> Use letras minúsculas, números, ponto, hífen ou underscore.</>}
+              {availability.state === 'taken' && (
+                <>
+                  <AlertCircle className="w-3 h-3" /> Já usado por outra loja.
+                  {availability.suggestion && (
+                    <button type="button" onClick={() => setSenderLocal(availability.suggestion!)} className="underline font-medium">
+                      Usar {availability.suggestion}
+                    </button>
+                  )}
+                </>
+              )}
+            </p>
+          )}
+          {isShared && !senderLocal && suggestedLocal && (
+            <p className="text-xs text-gray-500 mt-1.5">
+              Sugestão para esta loja: <button type="button" onClick={() => setSenderLocal(suggestedLocal)} className="font-mono text-gray-900 underline">{suggestedLocal}@{sharedDomain}</button>
+            </p>
+          )}
+          {!isShared && verifiedDomains.filter(d => !d.is_system).length === 0 && (
+            <p className="text-xs text-amber-700 mt-1.5">Nenhum domínio próprio verificado ainda. Adicione e verifique um domínio acima para usá-lo aqui.</p>
           )}
           {fullEmail && (
             <p className="text-xs text-gray-500 mt-1.5 font-mono">
-              Envios de: <span className="text-gray-900 font-semibold">{senderName || 'Sua Loja'} &lt;{fullEmail}&gt;</span>
+              Envios de: <span className="text-gray-900 font-semibold">{senderName || storeName || 'Sua Loja'} &lt;{fullEmail}&gt;</span>
             </p>
           )}
         </div>
+
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">Responder para (opcional)</label>
           <input
@@ -699,11 +807,31 @@ function SenderConfig({
             placeholder={fullEmail || 'contato@sualoja.com'}
             className="w-full px-4 py-2.5 border border-zinc-200 rounded-lg text-sm text-gray-900 font-mono placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#FF6A2B]/20 focus:border-[#FF6A2B]"
           />
+          <p className="text-xs text-gray-400 mt-1.5">Onde chegam as respostas dos clientes. Pode ser o e-mail da loja mesmo sem domínio verificado.</p>
         </div>
+
+        <div className="pt-4 border-t border-gray-100">
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Domínio dos links (opcional)</label>
+          <input
+            type="text"
+            value={trackingDomain}
+            onChange={e => setTrackingDomain(e.target.value.toLowerCase().replace(/^https?:\/\//, '').replace(/[^a-z0-9.-]/g, ''))}
+            placeholder="links.sualoja.com.br"
+            className="w-full px-4 py-2.5 border border-zinc-200 rounded-lg text-sm text-gray-900 font-mono placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#FF6A2B]/20 focus:border-[#FF6A2B]"
+          />
+          <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
+            Os links de clique, abertura e descadastro dos e-mails desta loja passam a usar este host, alinhado à sua marca.
+            {trackingDomain && (
+              <> Crie no seu DNS um registro <span className="font-mono text-gray-700">CNAME</span> de <span className="font-mono text-gray-700">{trackingDomain}</span> para <span className="font-mono text-gray-700">{appHost}</span>.</>
+            )}
+            {!trackingDomain && <> Vazio: usa o domínio da Worder.</>}
+          </p>
+        </div>
+
         <div className="flex items-center gap-3">
           <button
             onClick={save}
-            disabled={saving || !fullEmail || !senderName}
+            disabled={!canSave}
             className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#FF6A2B] text-white text-sm font-medium rounded-lg hover:bg-[#E85D1F] disabled:opacity-50 transition-colors"
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
