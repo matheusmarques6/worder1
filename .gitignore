@@ -50,3 +50,7 @@ Thumbs.db
 *.log
 .env.local
 package-lock.json
+
+# supabase cli (stack local) — .temp/start-secrets guarda credenciais do stack
+supabase/.branches
+supabase/.temp
