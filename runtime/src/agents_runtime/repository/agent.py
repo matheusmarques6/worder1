@@ -14,7 +14,8 @@ A versão ativa vem do **índice parcial** do S2 (D6): não existe FK de cache e
 e dois mecanismos dizendo a mesma coisa divergiriam no pior dia.
 """
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from datetime import datetime
 from uuid import UUID
 
@@ -22,12 +23,44 @@ import psycopg
 
 from agents_runtime.agent_core.guards import GuardState
 from agents_runtime.agent_core.media import read_message
-from agents_runtime.agent_core.prompt import AgentConfig, TenantPolicy
 from agents_runtime.agent_core.think_gate import PendingMessage
 
 #: Quantas mensagens de histórico acompanham a pergunta. Conversa de meses não
 #: cabe num prompt, e o que decide a próxima resposta é o fim dela.
 DEFAULT_TRANSCRIPT_LIMIT = 20
+
+
+@dataclass(frozen=True, slots=True)
+class AgentConfig:
+    """One `agent_versions` row, by value.
+
+    Morava em `agent_core/prompt.py` até o item 56 apagar o motor de camadas.
+    Veio para cá porque este módulo é quem a constrói em produção
+    (`load_active_version`, abaixo) — e a validação de `__post_init__` veio
+    junto: é ela que impede uma versão sem instrução de virar um agente sem
+    instrução, já que `prompt_compiler` faria `base_instructions=""` calado.
+    """
+
+    model: str
+    base_prompt: str
+    scenario_prompts: Mapping[str, str] = field(default_factory=dict)
+    enabled_tools: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.base_prompt or not self.base_prompt.strip():
+            raise ValueError(
+                "agent config inválida: base_prompt vazio — a versão não tem instrução"
+            )
+        if not self.model or not self.model.strip():
+            raise ValueError("agent config inválida: model vazio")
+
+
+@dataclass(frozen=True, slots=True)
+class TenantPolicy:
+    """The two tenant-level switches that reach the prompt (`tenants` row)."""
+
+    primary_language: str
+    never_say_ai: bool
 
 
 @dataclass(frozen=True, slots=True)

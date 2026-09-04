@@ -24,10 +24,16 @@ import ast
 import uuid
 from pathlib import Path
 
+import pytest
+
 import agents_runtime
-from agents_runtime.agent_core.prompt import AgentConfig, TenantPolicy
 from agents_runtime.agent_core.prompt_compiler import agent_block
-from agents_runtime.repository.agent import ActiveVersion, TenantSettings
+from agents_runtime.repository.agent import (
+    ActiveVersion,
+    AgentConfig,
+    TenantPolicy,
+    TenantSettings,
+)
 
 _SRC = Path(agents_runtime.__file__).parent
 _VERSION_ID = uuid.UUID(int=1)
@@ -113,3 +119,25 @@ class TestWhatTheAgentBlockCarries:
 
         assert block.agent_id == str(_VERSION_ID)
         assert block.language == "pt-PT"
+
+
+class TestTheConfigIsAValue:
+    """Migrado de `test_prompt_layers.py:283-292` pelo item 56.
+
+    Veio junto com o símbolo: `AgentConfig.__post_init__` é código que produção
+    EXECUTA — `load_active_version` o atravessa em todo turno, pelos três call
+    sites (`responder.py`, `toucher.py`, `server.py`) — e este é o único teste
+    dele no repositório inteiro. Apagar `test_prompt_layers.py` sem trazê-lo
+    deixaria a guarda sem trava em tier nenhum.
+    """
+
+    def test_an_empty_base_prompt_is_rejected(self) -> None:
+        # A version with no base prompt would compose a prompt made only of
+        # context and knowledge — an agent with no instructions at all.
+        with pytest.raises(ValueError):
+            AgentConfig(
+                model="claude-sonnet-5",
+                base_prompt="   ",
+                scenario_prompts={},
+                enabled_tools=(),
+            )
