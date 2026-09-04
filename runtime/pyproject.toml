@@ -157,7 +157,7 @@ forbidden_modules = ["psycopg"]
 allow_indirect_imports = "true"
 # Dívida pré-existente: 9 módulos (fora `agents_runtime.app`, já exempto acima)
 # abrem conexões psycopg diretamente em vez de passar pelo `repository/`. Ligar
-# a checagem de verdade (linha acima) sem consertar os 11 de uma vez deixaria a
+# a checagem de verdade (linha acima) sem consertar os 9 de uma vez deixaria a
 # tarefa virar uma refatoração arquitetural fora de escopo — então cada um vira
 # uma exceção NOMEADA aqui, visível e contável, em vez de a trava ficar muda.
 # Encolher esta lista é o trabalho de uma tarefa futura, não apagar a linha.

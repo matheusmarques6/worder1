@@ -4723,6 +4723,19 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   jeito. É exatamente o tipo de coisa que a matriz existiria para responder.
 
 - [ ] **87. A aba Ferramentas oferece ao lojista seis tools que o runtime não sabe executar, e o
+  **Resíduo Python não declarado pela execução:** `tests/unit/test_mission_resolver.py:33,45` são as
+  **últimas** ocorrências de `get_customer_context` no Python — fixture e constante de teste, não
+  produção. Ficam de propósito (a ferramenta que elas nomeiam nunca foi oferecível, e mexer nelas
+  mudaria o que o teste de arbitragem exercita), mas ficam **declaradas**, porque um `grep` futuro
+  vai encontrá-las e achar que a deleção foi incompleta.
+  **CORREÇÃO DO FIX ROUND — as duas superfícies NÃO são o mesmo defeito no efeito, e tratá-las como
+  "uma linha cosmética" faria quem executar pular a que importa.** `catalog.ts` alimenta um campo que
+  o runtime **ignora**; o `placeholder` de `MissionEditorModal.tsx:307` descreve o campo
+  `enabled_tools` da missão, que é **lido em produção** (`responder.py:512-514` → `:647`) e é **o
+  único caminho de interface para ligar `create_coupon`**. Um lojista que siga o placeholder liga a
+  ferramenta errada — ou não liga a certa. **Continuam num item só** porque a raiz é comum e é essa:
+  *não há fonte única do vocabulário de tools no lado TS*. Mas a segunda superfície é a que tem
+  consequência para o lojista, e é por ela que se começa.
   placeholder ensina a digitar uma sétima que já nem existe** `[confirmado]` · *(descoberto no item
   59)*
   Citações ancoradas em `a22700db`. **Não é dívida nova nem foi criada pelo item 59** — é dívida que
@@ -4747,7 +4760,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
      hoje **nada** no Python contradiz a caixa marcada. Efeito por tool, na ordem do FORK:
      `transfer_to_human` (a loja fica sem caminho automático para humano), `order_status`
      ("cadê meu pedido?" sem dado real), `product_lookup`, `save_customer`, `save_interests`,
-     `timeline`. `hub-runtime-parity.test.ts:71-84` (*"DIVERGÊNCIA CONHECIDA: o painel oferece 6
+     `timeline`. `hub-runtime-parity.test.ts:69-82` (*"DIVERGÊNCIA CONHECIDA: o painel oferece 6
      ferramentas que o runtime ignora"*) **trava a divergência** — ela é consciente e
      verde, não um bug escondido; o que falta é alguém **decidir**: implementar no runtime, tirar da
      aba, ou marcar as seis como indisponíveis na UI.
