@@ -657,6 +657,14 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   price rules órfãs nunca são limpas, e o recurso `PriceRule`/`DiscountCode` do REST está deprecado
   na Shopify — migrar para GraphQL é maior que o item 35 e devia virar fila.
 
+  **REABERTO E FECHADO DE NOVO PELO ITEM 51** (commit `2b5236d8`), com um fato que este item não
+  tinha: o título da price rule **é** o código do grant, e o código tem 32 bits sem `unique` no
+  banco, então dois grants da mesma loja podem colidir e `_find_price_rule_id` devolvia a rule do
+  outro. O comentário *"Nunca pega a rule de outro grant"* escrito aqui era falso, e foi reescrito;
+  a busca agora compara quatro campos da rule, não só o título. Os dois ramos fail-closed que este
+  item criou continuam intactos — o novo `raise` é um terceiro irmão deles. **Não é desacordo entre
+  dois itens sobre a mesma função.**
+
 - [x] **34. Templates com componentes e variáveis** `[relatado]` · commits `9af5ca4d` `5c775704`
   `d330182d` `ecc3eff0`
   `runtime/src/agents_runtime/channels/cloud_api.py:88-94` monta só `{name, language}`.
@@ -2718,12 +2726,205 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   3. `select idx_scan from pg_stat_user_indexes where indexrelname = 'idx_orders_email';`
   4. `select count(*) filter (where email is null), count(*) filter (where email = '') from public.shopify_orders;`
 
-- [ ] **51. Corridas remanescentes** `[relatado]`
-  (a) Toque reentregue pela DLQ duplica — `worker.py:226` usa o `msg_id` do pgmq na chave, e
-  `reprocess_dead_letters` gera msg_id novo. (b) `coupon_code` tem 32 bits e não é único; colisão em
-  ~65k grants debita do grant errado. (c) `cancel_pending_ai_response` perde para o coalescer numa janela
-  de até 2s (dívida já registrada no comentário da migration). (d) DLQ sem dreno:
-  `internal.reprocess_dead_letters` tem grant e zero chamadores.
+- [x] **51. Uma corrida, uma chave fraca e uma função órfã** `[relatado]` · commit `2b5236d8`
+  Citações ancoradas em `0c675e0d`. **Nada foi medido em banco vivo — não há Postgres nesta
+  máquina; `-m db` e `-m pipeline` não foram rodados.** Todo veredito abaixo é por leitura de código,
+  exceto onde diz o contrário. As seis perguntas que só o banco responde estão no fim.
+
+  **O título estava errado e por isso está trocado. Das quatro sub-afirmações, só (c) descreve uma
+  corrida — e não é a corrida que ela descreve.** (b) é **entropia insuficiente numa chave sem
+  `unique`**: não depende de concorrência nenhuma, dois grants emitidos com meses de distância
+  colidem igual. (d) é **função órfã**. (a) é **consequência de (d)**, não achado independente. Um
+  item chamado "corridas" faz o próximo leitor procurar concorrência em (b), onde não há.
+
+  ---
+
+  **(a) + (d) são UMA peça, e a ordem dos consertos é obrigatória.**
+  A citação de (a) está exata: `worker.py:226` monta `touch-{conversation_id}-{message_id}` e o
+  `message_id` **é** o `msg_id` do pgmq, sem intermediário (`repository/queue.py:65` →
+  `app.py:158`). É chave **da mensagem**, não do toque. `internal.reprocess_dead_letters`
+  (`20260812000004:512-515`) reenfileira com `pgmq.send`, que gera msg_id novo — logo chave nova,
+  `outbox_key_exists` (`worker.py:235`) passa, o `insert` sem `on conflict` de `conclude_turn`
+  (`20260813000008:175-181`) passa, e **o toque sai de novo**: a mesma mensagem de funil ao cliente,
+  outro turno de LLM cobrado do lojista.
+  **Mas hoje isso é inalcançável, e quem o derruba é (d).** Varridos os três caminhos: reentrega por
+  visibility timeout usa o **mesmo** msg_id — a prova é o próprio `read_ct` alimentando
+  `retries.decide` (`repository/queue.py:65` → `engine_loop.py:104-110`); se a reentrega gerasse
+  msg_id novo, `read_ct` seria sempre 1 e o limite de tentativas (`config.py:26`) nunca dispararia.
+  O retry do worker usa `set_visibility` (`engine_loop.py:111-114`), não re-envio. Sobra a DLQ, e
+  **sem chamador de `reprocess_dead_letters` nenhum RE-ENFILEIRAMENTO gera msg_id novo.** Frase
+  medida de propósito: `emit_ai_mission_job` (`20260813000008:93-108`) faz `pgmq.send` a cada chamada
+  e **não deduplica**, então dois nós de fluxo executados duas vezes dão dois toques hoje, sem dreno
+  nenhum — a chave por `msg_id` dá zero proteção nesse caso. Não é a corrida de (a), mas "msg_id novo
+  nunca é gerado" prometeria proteção que não existe.
+  **(d) sobrevive inteira e é a mais forte das quatro.** `internal.reprocess_dead_letters` tem
+  `grant execute ... to worker_role` (`20260812000004:531`), `security definer`, e **zero
+  chamadores**: o wrapper Python `repository/engine.py:440` não é chamado por ninguém; TS não
+  alcança (`internal.`, sem grant a `service_role`); nenhuma migration a chama; **não há `pg_cron` no
+  stream versionado** (o único `cron.schedule` está comentado e é de outro assunto,
+  `supabase/notifications-table.sql:86-87`); o único uso é `tests/pipeline/test_scenarios_c.py:285`.
+  O contraste que fecha o argumento: os dois vizinhos da mesma trinca — `sweep_outbox_unknown` e
+  `review_stale_unknown` — **têm** chamador em `queueing/sender.py:216-217`. As mensagens ficam nas
+  quatro DLQs **para sempre**, sem retention, sem alerta, sem varredura (`runtime/FORK.md:517-522` já
+  registrava o silêncio).
+  **Não-achado, registrado para economizar um round:** `internal.correlate_outbox_status` **parece**
+  órfã no Python e **não é** — é chamada de SQL (`20260828000006:106` é o chamador vivo;
+  `20260813000003:217` e `20260828000005:72` estão dentro de corpos que as migrations
+  20260828000005/6 dropam e recriam). `reprocess_dead_letters` é a **única** das quatro funções de
+  housekeeping de `20260812000004:10-11` realmente sem chamador.
+  **O dreno NÃO foi escrito aqui**, e a razão que basta sozinha é: **ligar o dreno ativa (a)** — todo
+  toque reprocessado vira toque duplicado. Primeiro a chave, depois o dreno. Virou o **item 81**,
+  com a assimetria que diz que forma o conserto da chave deve ter: `worker.py:167` usa
+  `reply-{conversation_id}-{generation}` — chave de **negócio**, imune a re-enfileiramento — e
+  `worker.py:226` usa a da mensagem. **A assimetria está no mesmo arquivo, a 59 linhas de
+  distância**, e é a evidência mais barata de que (a) é desenho, não fatalidade.
+
+  ---
+
+  **(b) sobrevive, mas "debita do grant errado" é FALSO como mecânica, e o dano é pior.**
+  `consume_incentive_grant` (`20260813000011:73-76`) faz `uses = uses + 1` e um `status = 'consumed'`
+  condicional — **não há débito de valor em lugar nenhum da função**. O desconto já foi aplicado pela
+  Shopify; a RPC é contabilidade posterior.
+  **O dano mais caro vem ANTES da contabilidade, e é dinheiro no checkout.** `WD-` + `hex[:8]`
+  (`commerce/offer_engine.py:214-217`) = 2³² de entropia real (`gen_random_uuid()` UUIDv4, os 8
+  primeiros hex são `time_low`), `sqrt(2³²) ≈ 65 536`, p ≈ 39%; 50% em ~77 000. **Mas a colisão só
+  faz dano dentro de UMA organização** — `consume_incentive_grant` casa por `organization_id`
+  (`20260813000011:49-50`) e a loja é resolvida por `load_active_store`
+  (`tools/coupon.py:164-166`) — então são 65k grants de **uma loja**, não do produto. Sem essa
+  qualificação o item parece muito mais iminente do que é, e é ela que justifica a **forma** do
+  conserto que o item 50 já deixou pronta. Na colisão, o `POST /price_rules.json` volta 422 "taken",
+  `_find_price_rule_id` reencontrava a rule **pelo título, que é o código**, dentro da janela de 60 s
+  de `ends_at` (`_ENDS_AT_MARGIN`, `connectors/shopify.py:69`), e o 422 do discount code era tratado
+  como sucesso: **B saía com o percentual, o `usage_limit` e a validade de A**. A 30% contra 10%
+  autorizados, o lojista paga a diferença. **Consertado em `2b5236d8`** — ver o bloco do conserto
+  abaixo.
+  **A contabilidade, escrita certo:** não debita do grant errado — (i) **MARCA** o grant de A como
+  consumido (`order by created_at limit 1`, `:46-52`, o mais antigo, sem filtro de status nem de
+  validade); (ii) credita o pedido de B ao **`contact_id` de A** no `incentive_ledger` (`:65`), em
+  tabela append-only; (iii) deixa o grant de B `issued` e **reusável** — `_validated_grant`
+  (`tools/coupon.py:215-250`) confere sete coisas e B passa em todas. E o dedup existente não salva:
+  `incentive_ledger_consumed_once_per_order (grant_id, order_ref)` (`:21-23`) é chaveado em
+  `grant_id`, então com o grant errado escolhido ele **dedupa perfeitamente o registro errado**.
+  **Um terceiro consumidor, que põe a mentira na boca do agente:** os grants vivos com código viram
+  linhas do bloco de ESTADO do prompt — *"Cupom vigente {code}: {kind} {value}, válido até {until}"*
+  (`repository/incentives.py:158-176` → `responder.py:174-190`, e `toucher.py:339-348` no toque) —
+  com `kind`/`value` lidos **do grant**. Numa colisão, o grant de B diz "percent 10" enquanto o cupom
+  que existe na loja é o de A, a 30%: **o agente descreve termos que o checkout não vai honrar.**
+  **E o conserto compõe fail-closed com esse consumidor:** o guard levanta **antes** de
+  `record_coupon_code`, o grant fica sem código, e `incentives.py:169` (`and coupon_code is not
+  null`) o exclui do bloco de ESTADO sozinho.
+
+  **O conserto de código, e é o único do item — `2b5236d8`.** `connectors/shopify.py`: a comparação
+  de termos mora **dentro** de `_find_price_rule_id`, que recebe o `price_rule` que
+  `_price_rule_payload` monta e `create_discount` já tinha na mão; a assinatura continua `int | None`
+  e o ramo fail-closed do chamador (`:234-238`) não muda de forma. **Quatro campos, não três** —
+  `target_type` é o único que separa `free_shipping` de um `percent` de 100, cujos outros três campos
+  são idênticos (`_price_rule_payload:87-100`). **`value` compara NUMERICAMENTE**: `numeric(12,2)`
+  (`20260813000005:79`) chega como `Decimal('10.00')` e monta `"-10.00"`, a Shopify normaliza para
+  `"-10.0"`, e igualdade de string reprovaria o **nosso próprio retry idempotente** — que
+  comprovadamente passa por esta busca (`test_shopify_connector.py:123` cobre a sequência). **Campo
+  ausente conta como divergência**, fail-closed: um GET que não devolve o campo não prova
+  equivalência. O novo `raise` é o **terceiro** ramo fechado da função, irmão do GET não-200
+  (`:180-183`) e da rule ausente na janela (`:234-238`) — nenhum dos dois mudou. A mensagem nomeia
+  **campos, não valores**, porque `failures.classify` (`queueing/failures.py:95-98`) lê status HTTP do
+  **texto** da exceção com `\b(?:HTTP\s*)?([1-5]\d{2})\b` e um `"-100.0"` cru viraria um falso HTTP
+  100 — hoje inofensivo só porque `tools/coupon.py:190` captura `ShopifyError` antes, e essa captura
+  não pode ser a única coisa segurando isso.
+  **O que o guard NÃO fecha, escrito no código e aqui para ninguém fechar o item achando que a
+  colisão acabou: NÃO é "economicamente idêntico".** Entre dois grants distintos com os quatro campos
+  iguais é **uma** rule, **um** código, **um** `usage_limit` (`shopify.py:111`, alimentado por
+  `max_uses`, default 1) — com `max_uses = 1` o primeiro que resgatar consome o cupom do outro, e **B
+  recebe um código que não funciona no checkout** depois de `record_coupon_code` gravar sucesso
+  (`once_per_customer` limita por cliente, não cria um segundo uso). E **todo o dano contábil acima
+  continua acontecendo**. **O guard fecha o buraco do VALOR ERRADO no checkout; não fecha o
+  `usage_limit` compartilhado nem o ledger.** O resíduo é inerente a o código do cupom ser a
+  identidade, e fechá-lo é o **item 82**.
+  **Três comentários reescritos, não um.** O que fazia a afirmação falsa e mais forte estava **dentro
+  da função que o conserto muda** — `shopify.py:185-186`, *"Nunca pega a rule de outro grant."* —,
+  mais o docstring do módulo (`:7-10`) e o do 422 do discount code (`:254-257`). Reescrever só um
+  deixaria no arquivo a frase que causou isto.
+  **Este código é do item 33** (`:630`, `[x]`, commits `1744994b` + `c7a790a0`), que escreveu
+  `_find_price_rule_id`, o 422-taken-é-sucesso e o comentário acima. O item 51 está reabrindo
+  território dele com um fato que ele não tinha — não são dois itens consertando a mesma função em
+  desacordo. E o contexto que o 33 deixou continua valendo (`:658`): o recurso
+  `PriceRule`/`DiscountCode` do REST **está deprecado** e migrar para GraphQL "devia virar fila"
+  (item 64). O conserto vai para uma superfície com prazo; não é motivo para não fazê-lo, é motivo
+  para o próximo leitor saber.
+  **O `unique (organization_id, upper(coupon_code))` NÃO foi criado aqui.** Razão que basta sozinha:
+  **`create unique index` FALHA se já houver duplicata no vivo**, e o repositório não sabe se há —
+  só a query 1 abaixo decide. Virou o **item 82**, com a forma que o item 50 (`:2600`) já validou e o
+  aviso dele de não duplicar índice (a constraint **é** o índice).
+
+  ---
+
+  **(c) cai INTEIRA, e por prova, não por suspeita.**
+  1. **A "janela de até 2s" está com o sinal trocado.** Os 2 s são `coalescer_tick`
+     (`config.py:45`), o **período de polling**, e são a janela em que o cancelamento **GANHA** —
+     enquanto o tick não passa, `pending_response_at` está lá e o `update` do cancel
+     (`20260817000003:26-34`) acerta a linha. A janela em que ele **perde** vai da colheita até o
+     envio: **a geração inteira**, dezenas de segundos.
+  2. **A colheita zera `pending_response_at`** — `20260828000004:57-58` (runtime) e `:79-80`
+     (legacy) para o `<= now()`, `:63-69` e `:91-97` para o zeramento. *(A versão anterior dessas
+     linhas em `20260812000004` foi **dropada** por `20260828000004:32`; citá-la é citar função
+     morta.)* Detalhe material da versão nova: para org em **legacy** o coalescer limpa
+     `pending_response_at` **sem criar job nenhum** (`:86-97`) — o cancel devolve 0 linhas e mesmo
+     assim nenhum turno nasce.
+  3. **"O cliente recebe resposta depois de pedir humano" é falso em três dos quatro caminhos.**
+     Existe segunda linha de defesa que o item não viu: os guards são lidos **dentro do turno**,
+     **depois** da colheita — `responder.py:350-354` (`load_legacy_guard_state`) e `:402-407`
+     (`evaluate_inbound_guards`) —, e calam o turno. `guards.py:328-329` (`ai_enabled is False`)
+     cobre `bot/route.ts:124` (que grava `ai_enabled = false` em `:105-111`, **antes** do cancel) e o
+     ramo `botOff` de `webhook-processor.ts:516`; `guards.py:372-376` (`stop_on_human_reply`, default
+     ligado) cobre `messages/route.ts:241` (que grava `sender: 'human'` em `:221`, antes). **O cancel
+     é atalho de custo, não o freio.**
+  4. **E o quarto caminho é PROVADAMENTE INALCANÇÁVEL — não é pergunta de banco vivo.** O ramo
+     `unsupported` (`webhook-processor.ts:515-516`) só perderia a corrida com `debounce_seconds = 0`,
+     porque `ingest_inbound_message` agenda `now() + debounce` (`20260817000004:153-156`) e o
+     coalescer só colhe o vencido. **Zero é impossível:** `sanitizeDelivery` faz clamp em `[3,60]`
+     (`src/lib/ai/agent-hub.ts:75-76,83-85`), `getDeliveryDebounceSeconds` passa **sempre** por ele
+     (`src/lib/ai/delivery-settings.ts:51`) e todo caminho de erro devolve o default 8 (`:48`,
+     `:55`); o único chamador de produção de `ingest_inbound_message` é
+     `webhook-processor.ts:495-503`, que passa esse valor. **`p_debounce_seconds ≥ 3` sempre.**
+  5. **"Dívida já registrada no comentário da migration" é meia-verdade.** O comentário existe
+     (`20260817000003:9-12`) mas registra **outra** dívida — *"matar um turno já em voo"* — e não
+     menciona coalescer, corrida nem 2 s. **O que sobra de (c) é essa dívida, e ela é real:** se o
+     atendente desliga o bot ou responde **enquanto** a geração corre, depois de `responder.py:350`
+     ter lido o guard e antes de `conclude_turn`, o cancel é no-op **e** o guard já foi lido. Janela:
+     a geração inteira. É o único caso real, já está registrado onde deveria, e **não é uma corrida
+     de 2 s com o coalescer.**
+
+  ---
+
+  **Suíte, medida nesta âncora.** Antes: `pytest -m unit` **1233 coletados / 1231 passando / 2
+  falhas** pré-existentes de encoding (item 54), `ruff check .` **10** (item 74), `lint-imports`
+  **3 kept, 0 broken**. Depois de `2b5236d8`: **1236 / 1234 / as mesmas 2** — delta **+3 casos**,
+  exatamente os três novos; ruff **10** e lint-imports **3/0** inalterados. As **2 fixtures de GET**
+  editadas só tinham `id` e `title`, e com o guard estrito passariam a divergir: elas ganharam os
+  campos, e o guard **não** foi enfraquecido para acomodá-las. TS não foi tocado.
+
+  **As seis perguntas que só um banco vivo responde** (nenhuma executada):
+  1. `select organization_id, upper(coupon_code), count(*), array_agg(id order by created_at) from
+     public.incentive_grants where coupon_code is not null group by 1,2 having count(*) > 1;` —
+     **decide se o unique do item 82 pode sequer ser criado**, e quantas linhas precisam de
+     reconciliação antes. Zero linhas: entra limpo.
+  2. `select queue_name, queue_length, newest_msg_age_sec, oldest_msg_age_sec from pgmq.metrics_all()
+     where queue_name like '%\_dlq';` — **converte (d) de dívida em incidente em curso.** DLQs com
+     mensagens antigas = toque e resposta de cliente parados há dias, com o inbox mostrando "Bot
+     ativo".
+  3. `select msg_id, read_ct, enqueued_at, message->>'error_class', left(message->>'last_error',200)
+     from pgmq.q_q_domain_events_dlq order by enqueued_at limit 50;` (idem `q_q_inbound_dlq`) —
+     separa o permanente do transitório e decide se o dreno do item 81 é uma linha no housekeeping do
+     sender ou item próprio.
+  4. `select count(*) from public.incentive_grants;` e o mesmo agrupado por `organization_id` — a
+     distância real até os ~65k **por org**. Sem isto, a prioridade de (b) é chute.
+  5. `select indexname, indexdef from pg_indexes where tablename = 'incentive_grants';` — o CI nunca
+     aplicou nenhuma migration de setembro e `migrations-archive/`/`sql/` são DDL não registrado
+     (item 49). Se um unique já existir no vivo (improvável — `grep` fora do stream volta zero), o
+     item 82 vira no-op.
+  6. `select count(*) from public.incentive_grants where status = 'issued' and coupon_code is not
+     null and validity_until > now();` — o denominador real do risco de (b) na Shopify, já que o dano
+     de checkout só ocorre entre grants cujas janelas de `ends_at` se sobrepõem dentro dos 60 s de
+     `_ENDS_AT_MARGIN`.
 
 - [ ] **52. Degrau 3 da cascata: decidir** `[confirmado]`
   `agent_core/providers.py:106-107` só usa `platform` se o parâmetro for passado, e nenhum dos dois
