@@ -79,19 +79,19 @@ class TestResolution:
     def test_an_anthropic_key_builds_the_native_adapter(self) -> None:
         port = resolve_agent_llm(
             (row("anthropic", "ant-key"),), agent_provider="anthropic", base_secret=None
-        )
+        ).port
         assert isinstance(port, AnthropicLlm)
 
     def test_an_openai_key_builds_the_compatible_adapter(self) -> None:
         port = resolve_agent_llm(
             (row("openai", "oa-key"),), agent_provider="openai", base_secret=None
-        )
+        ).port
         assert isinstance(port, OpenAICompatibleLlm)
 
     def test_an_org_openrouter_key_builds_the_router(self) -> None:
         port = resolve_agent_llm(
             (row("openrouter", "or-key"),), agent_provider="openai", base_secret=None
-        )
+        ).port
         assert isinstance(port, OpenRouterLlm)
 
     def test_byo_only_without_keys_dies_loud(self) -> None:
@@ -114,8 +114,33 @@ class TestResolution:
         sentinel = object()
         port = resolve_agent_llm(
             (), agent_provider="openai", base_secret=None, platform=sentinel
-        )
+        ).port
         assert port is sentinel
+
+
+class TestWhoBuiltThePort:
+    """Item 52 — a posse sai da cascata, não do call site. `built_here` é o
+    booleano que os dois call sites de produção passam para o `owns` de
+    `scoped_agent_llm`: verdadeiro só quando `client_for` acabou de construir
+    o adapter, falso quando o degrau (3) devolve o objeto do chamador. Sem
+    isto, `respond()`/`touch()` fechariam o cliente de plataforma do Judge 1
+    no primeiro turno de org sem chave — o item 40 de volta, cross-tenant."""
+
+    def test_the_byo_step_says_the_cascade_built_it(self) -> None:
+        resolved = resolve_agent_llm(
+            (row("anthropic", "ant-key"),), agent_provider="anthropic", base_secret=None
+        )
+        assert resolved.built_here is True
+
+    def test_the_platform_step_says_the_cascade_did_not_build_it(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("AGENTS_PLATFORM_LLM_ENABLED", "true")
+        sentinel = object()
+        resolved = resolve_agent_llm(
+            (), agent_provider="openai", base_secret=None, platform=sentinel
+        )
+        assert (resolved.port, resolved.built_here) == (sentinel, False)
 
 
 def _base_url(port: OpenAICompatibleLlm) -> str:

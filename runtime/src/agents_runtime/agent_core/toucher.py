@@ -287,14 +287,15 @@ def build_toucher(
             # Item 40 da auditoria: só o cliente que ESTA chamada construiu
             # (via `resolve_agent_llm`) é fechado por `scoped_agent_llm`
             # abaixo. `llm` é o cliente de plataforma do Judge 1 — por
-            # processo, ruling D — e nunca passa por aqui dentro.
+            # processo, ruling D — e nunca passa por aqui dentro. A posse vem
+            # da PRÓPRIA cascata (`built_here`, item 52), não é `True` fixo
+            # aqui: quem sabe se construiu ou tomou emprestado é quem resolveu.
             owns_agent_llm = False
             if agent_llm_from_org_keys:
                 try:
-                    agent_llm = resolve_agent_llm(
+                    agent_llm, owns_agent_llm = resolve_agent_llm(
                         key_rows, agent_provider=version.provider, base_secret=base_secret
                     )
-                    owns_agent_llm = True
                 except NoOrgLlmKey as reason:
                     await _alert(
                         conn, job,

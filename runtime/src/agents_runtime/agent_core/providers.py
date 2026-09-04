@@ -21,6 +21,7 @@ import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from typing import NamedTuple
 
 from agents_runtime.agent_core import openrouter
 from agents_runtime.agent_core.direct_providers import (
@@ -97,24 +98,38 @@ def platform_enabled() -> bool:
     return os.environ.get(PLATFORM_ENABLED_VARIABLE, "").lower() in ("1", "true", "yes")
 
 
+class ResolvedAgentLlm(NamedTuple):
+    """O port da cascata E quem o construiu — quem decide a posse é quem a
+    reporta. `built_here=True` só no degrau BYO, onde `client_for` acabou de
+    construir o adapter; `False` no degrau (3), que devolve o objeto de
+    plataforma que o CHAMADOR entregou. É esse booleano que vai para o
+    `owns` de `scoped_agent_llm`: derivar a posse no call site seria correto
+    só por procedência do argumento, e um degrau futuro que devolva objeto
+    compartilhado não recebido do chamador reintroduziria o item 40."""
+
+    port: LlmPort
+    built_here: bool
+
+
 def resolve_agent_llm(
     rows: tuple[ProviderKeyRow, ...],
     *,
     agent_provider: str,
     base_secret: str | None,
     platform: LlmPort | None = None,
-) -> LlmPort:
+) -> ResolvedAgentLlm:
     """A cascata inteira. `platform` só entra quando o degrau (3) estiver
     ligado por config — hoje é stub desligado (BYO-only)."""
     choice = select_provider_key(rows, agent_provider=agent_provider)
     if choice is not None:
         decoded = decode_stored_key(choice.api_key, base_secret=base_secret)
-        return client_for(
-            ProviderChoice(choice.provider, decoded, choice.base_url)
+        return ResolvedAgentLlm(
+            client_for(ProviderChoice(choice.provider, decoded, choice.base_url)),
+            True,
         )
 
     if platform is not None and platform_enabled():
-        return platform
+        return ResolvedAgentLlm(platform, False)
 
     raise NoOrgLlmKey(
         f"org sem chave para '{agent_provider}' e sem OpenRouter próprio (BYO-only)"
