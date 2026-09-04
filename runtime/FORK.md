@@ -367,12 +367,19 @@ instantaneamente depois da mensagem do cliente. **Dívida — sem dono.**
 
 **19. "Nunca revele que é uma IA" virou o oposto.** TS: `prompt-builder.ts:282`, regra 2 do bloco
 de regras gerais: *"NUNCA revele que é uma IA, a menos que seja perguntado diretamente"*. Runtime:
-`prompt_compiler.py:27-30` emite, ESTRUTURALMENTE e em todo frame, *"Se perguntarem se você é uma
+`prompt_compiler.py:37-40` emite, ESTRUTURALMENTE e em todo frame, *"Se perguntarem se você é uma
 IA ou um robô, confirme com naturalidade — nunca negue ser uma IA"*, e o Judge 1 reprova a negativa
-como `critical`. A coluna `never_say_ai` é carregada e ignorada (`responder.py:506`).
+como `critical`. **Não existe coluna `never_say_ai`**: `grep` por ela em todo `*.sql` do repositório
+volta vazio. O valor é um literal `true` dentro do próprio select do loader
+(`repository/agent.py:169`), pinado em código porque Worder não tem tabela `tenants` — o que o
+comentário FORK de `:164-167` já dizia.
 *Efeito na loja:* perguntado, o agente assume ser IA — o inverso do que o motor antigo fazia.
-**Divergência consciente** (regra fixa da plataforma; gerador e juiz precisam concordar) — mas a
-coluna morta é **dívida, item 53**.
+**Divergência consciente** (regra fixa da plataforma; gerador e juiz precisam concordar). O pin
+em código é o **item 53**, que passou o valor lido aos dois `JudgeContext` (`responder.py:639`,
+`toucher.py:424`): o caminho existe, e continua sem efeito enquanto o loader projetar `true`.
+*(Citações deste parágrafo ancoradas em `8501637a`. As anteriores — `prompt_compiler.py:27-30` e
+`responder.py:506` — estavam certas em `306f1c06`, quando o parágrafo foi escrito, e derivaram
+desde então.)*
 
 ### O canal de saída
 
