@@ -27,7 +27,13 @@ export async function POST(
   if (denied) return denied
 
   const body = await req.json()
-  const { scheduled_at, send_time_optimization } = body
+  const { scheduled_at, send_time_optimization, timezone_mode } = body
+  if (timezone_mode !== undefined && !['fixed', 'recipient'].includes(timezone_mode)) {
+    return NextResponse.json(
+      { error: "timezone_mode deve ser 'fixed' ou 'recipient'" },
+      { status: 400 }
+    )
+  }
   if (!scheduled_at) {
     return NextResponse.json({ error: 'scheduled_at is required (ISO 8601)' }, { status: 400 })
   }
@@ -66,6 +72,17 @@ export async function POST(
   // /api/email/campaigns/send/route.ts).
   if (typeof send_time_optimization === 'boolean') {
     updatePayload.send_time_optimization = send_time_optimization
+  }
+  // 'recipient' = o horário escolhido é de PAREDE e vale no fuso de
+  // cada contato. Os dois modos disputam a mesma decisão (a que horas
+  // sai), então ligar um desliga o outro — deixar os dois marcados
+  // faria o envio parecer aleatório para o lojista.
+  if (timezone_mode) {
+    updatePayload.timezone_mode = timezone_mode
+    if (timezone_mode === 'recipient') updatePayload.send_time_optimization = false
+  }
+  if (updatePayload.send_time_optimization === true) {
+    updatePayload.timezone_mode = 'fixed'
   }
 
   const { data: updated, error } = await supabaseAdmin

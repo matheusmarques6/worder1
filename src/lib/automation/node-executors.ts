@@ -2375,7 +2375,7 @@ const conditionExecutors: Record<string, NodeExecutor> = {
 
 const controlExecutors: Record<string, NodeExecutor> = {
   control_delay: {
-    async execute({ config, isTest }) {
+    async execute({ config, context, isTest, supabase, organizationId }) {
       // Cascade through every shape the editor might have saved the
       // delay in:
       //   config.delay.{value,unit}    — automation/index.tsx
@@ -2410,34 +2410,72 @@ const controlExecutors: Record<string, NodeExecutor> = {
       const delayMs = value * (multipliers[unit] || multipliers.hours);
       let resumeAt = new Date(Date.now() + delayMs);
 
-      // Apply day-of-week restrictions (allowedDays: 0=Mon, 1=Tue, ..., 6=Sun)
-      if (config.restrictDays && config.allowedDays?.length > 0) {
-        const allowedDays: number[] = config.allowedDays;
-        // JS getDay(): 0=Sun, 1=Mon... → convert to 0=Mon, 6=Sun
-        let guard = 0;
-        while (!allowedDays.includes(resumeAt.getDay() === 0 ? 6 : resumeAt.getDay() - 1) && guard < 8) {
-          resumeAt = new Date(resumeAt.getTime() + 24 * 60 * 60 * 1000);
-          guard++;
-        }
-      }
+      // As restrições de dia e de horário eram avaliadas com
+      // getDay()/getHours()/setHours(), ou seja, no relógio do
+      // SERVIDOR — que na Vercel é UTC. "Enviar só entre 09:00 e
+      // 21:00" saía como 06:00 às 18:00 no Brasil, silenciosamente.
+      // Agora a janela é sempre de um fuso explícito:
+      //   'recipient' → fuso do contato (padrão da Omnisend)
+      //   'store'     → fuso da loja/organização, igual para todos
+      const restringeDias = Boolean(config.restrictDays) && config.allowedDays?.length > 0;
+      const restringeHora = Boolean(config.restrictTime) && config.timeFrom && config.timeTo;
 
-      // Apply time window restrictions
-      if (config.restrictTime && config.timeFrom && config.timeTo) {
-        const [fromH, fromM] = config.timeFrom.split(':').map(Number);
-        const [toH, toM] = config.timeTo.split(':').map(Number);
-        const hour = resumeAt.getHours();
-        const min = resumeAt.getMinutes();
-        const current = hour * 60 + min;
-        const from = fromH * 60 + fromM;
-        const to = toH * 60 + toM;
+      if (restringeDias || restringeHora) {
+        const { clampToSendWindow } = await import('@/lib/scheduling/timezone');
+        const { resolveTimezoneForRun } = await import('@/lib/scheduling/resolve');
 
-        if (current < from) {
-          resumeAt.setHours(fromH, fromM, 0, 0);
-        } else if (current > to) {
-          // Move to next day at fromH:fromM
-          resumeAt = new Date(resumeAt.getTime() + 24 * 60 * 60 * 1000);
-          resumeAt.setHours(fromH, fromM, 0, 0);
+        const modo = config.timezoneMode === 'store' ? 'store' : 'recipient';
+        const alvo = await resolveTimezoneForRun(supabase, {
+          // No modo 'store' o contato é ignorado de propósito: o
+          // lojista pediu UM horário, igual para a base inteira.
+          contact: modo === 'recipient' ? context?.contact : undefined,
+          storeId: (context as any)?.storeId,
+          organizationId: organizationId || (context as any)?.organizationId,
+        });
+
+        let fromHour: number | undefined;
+        let fromMinute = 0;
+        let toHour: number | undefined;
+        let toMinute = 0;
+        if (restringeHora) {
+          const [fh, fm] = String(config.timeFrom).split(':').map(Number);
+          const [th, tm] = String(config.timeTo).split(':').map(Number);
+          if (Number.isInteger(fh) && Number.isInteger(th)) {
+            fromHour = fh; fromMinute = fm || 0;
+            toHour = th; toMinute = tm || 0;
+          }
         }
+
+        // A UI grava os dias como 0=segunda … 6=domingo; o núcleo usa
+        // a convenção do JS (0=domingo). Converter aqui evita que a
+        // regra deslize um dia — o bug que fazia "só dias úteis"
+        // liberar domingo e barrar sexta.
+        const allowedWeekdays = restringeDias
+          ? (config.allowedDays as number[]).map((d) => (d === 6 ? 0 : d + 1))
+          : undefined;
+
+        resumeAt = clampToSendWindow(resumeAt, alvo.timezone, {
+          fromHour, fromMinute, toHour, toMinute, allowedWeekdays,
+        });
+
+        if (isTest) {
+          return {
+            status: 'success',
+            output: {
+              delay: `${value} ${unit}`,
+              resumeAt: resumeAt.toISOString(),
+              timezone: alvo.timezone,
+              timezoneSource: alvo.source,
+              test: true,
+            },
+          };
+        }
+
+        return {
+          status: 'waiting',
+          output: { delay: `${value} ${unit}`, timezone: alvo.timezone, timezoneSource: alvo.source },
+          waitUntil: resumeAt,
+        };
       }
 
       if (isTest) {
@@ -2456,19 +2494,38 @@ const controlExecutors: Record<string, NodeExecutor> = {
   },
 
   control_delay_until: {
-    async execute({ config, isTest }) {
+    async execute({ config, context, isTest, supabase, organizationId }) {
       let resumeAt: Date;
+      let timezone: string | undefined;
+      let timezoneSource: string | undefined;
 
       if (config.datetime) {
+        // Instante absoluto escolhido no calendário: já vem com fuso
+        // embutido, não há o que reinterpretar.
         resumeAt = new Date(config.datetime);
-      } else if (config.time) {
-        const [hours, minutes] = config.time.split(':').map(Number);
-        resumeAt = new Date();
-        resumeAt.setHours(hours, minutes, 0, 0);
-        
-        if (resumeAt <= new Date()) {
-          resumeAt.setDate(resumeAt.getDate() + 1);
+        if (isNaN(resumeAt.getTime())) {
+          return { status: 'error', output: null, error: 'Data/hora inválida' };
         }
+      } else if (config.time) {
+        // "Espere até as 09:00" só quer dizer alguma coisa dentro de um
+        // fuso. setHours() usava o do servidor (UTC na Vercel), então
+        // 09:00 chegava como 06:00 no Brasil.
+        const [hours, minutes] = String(config.time).split(':').map(Number);
+        if (!Number.isInteger(hours)) {
+          return { status: 'error', output: null, error: 'Horário inválido' };
+        }
+        const { nextOccurrenceInTz } = await import('@/lib/scheduling/timezone');
+        const { resolveTimezoneForRun } = await import('@/lib/scheduling/resolve');
+
+        const modo = config.timezoneMode === 'store' ? 'store' : 'recipient';
+        const alvo = await resolveTimezoneForRun(supabase, {
+          contact: modo === 'recipient' ? context?.contact : undefined,
+          storeId: (context as any)?.storeId,
+          organizationId: organizationId || (context as any)?.organizationId,
+        });
+        timezone = alvo.timezone;
+        timezoneSource = alvo.source;
+        resumeAt = nextOccurrenceInTz(alvo.timezone, hours, minutes || 0);
       } else {
         return {
           status: 'error',
@@ -2480,13 +2537,13 @@ const controlExecutors: Record<string, NodeExecutor> = {
       if (isTest) {
         return {
           status: 'success',
-          output: { resumeAt: resumeAt.toISOString(), test: true },
+          output: { resumeAt: resumeAt.toISOString(), timezone, timezoneSource, test: true },
         };
       }
 
       return {
         status: 'waiting',
-        output: { resumeAt: resumeAt.toISOString() },
+        output: { resumeAt: resumeAt.toISOString(), timezone, timezoneSource },
         waitUntil: resumeAt,
       };
     },

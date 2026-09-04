@@ -133,7 +133,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Resolve contacts
-    const contactFields = 'id, email, first_name, last_name, phone, last_email_sent_at, engagement_score, best_send_hour'
+    // timezone/country entram para o modo "fuso do destinatário": sem
+    // eles todo contato cairia no fuso da loja e o recurso viraria um
+    // agendamento fixo com nome bonito.
+    const contactFields = 'id, email, first_name, last_name, phone, last_email_sent_at, engagement_score, best_send_hour, timezone, country'
     let contacts: any[] = []
     let contactsError: any = null
 
@@ -304,55 +307,90 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // ── Send Time Optimization: bucket by best_send_hour ──
-    // When enabled, each contact is scheduled at their personal best hour (UTC).
-    // Klaviyo-style: learns from open history, defaults to 10 UTC when unknown.
-    const sendTimeOptimization = Boolean(campaign.send_time_optimization)
-    const DEFAULT_HOUR = 10
+    // ── Quando cada contato recebe ──
+    // Dois modos, mutuamente exclusivos, na ordem de precedência:
+    //
+    //  1. timezone_mode = 'recipient' — cada contato recebe no horário
+    //     de PAREDE escolhido, lido no fuso dele (o "Send in
+    //     recipient's time zone" da Omnisend).
+    //  2. send_time_optimization — cada contato recebe na hora em que
+    //     costuma abrir e-mail (best_send_hour, aprendido do histórico).
+    //
+    // Sem nenhum dos dois, todo mundo sai junto, como sempre foi.
+    const recipientTimezoneMode = campaign.timezone_mode === 'recipient'
+    const sendTimeOptimization = !recipientTimezoneMode && Boolean(campaign.send_time_optimization)
 
-    type HourBucket = { hour: number; contacts: ContactWithVariant[] }
-    const hourBuckets: HourBucket[] = []
+    type ScheduledBatch = { contacts: ContactWithVariant[]; delayMs: number }
+    const scheduledBatches: ScheduledBatch[] = []
+    const now = Date.now()
+    let timezoneBucketCount = 0
+    let hourBucketCount = 0
 
-    if (sendTimeOptimization) {
+    /** Fatia um grupo em lotes, escalonando dentro do grupo. */
+    const pushBatches = (list: ContactWithVariant[], baseDelayMs: number) => {
+      for (let i = 0; i < list.length; i += BATCH_SIZE) {
+        const batch = list.slice(i, i + BATCH_SIZE)
+        const intraThrottle = Math.floor((i / BATCH_SIZE) / 5) * 1000
+        scheduledBatches.push({ contacts: batch, delayMs: baseDelayMs + intraThrottle })
+      }
+    }
+
+    if (recipientTimezoneMode) {
+      const { planRecipientTimezoneSend } = await import('@/lib/scheduling/campaign-plan')
+
+      // O fuso de quem agendou define QUAL horário de parede foi
+      // escolhido — é o relógio que o lojista tinha na tela.
+      let authorTimezone: string | null = null
+      if (campaign.store_id) {
+        const { data: loja } = await supabaseAdmin
+          .from('shopify_stores').select('timezone').eq('id', campaign.store_id).maybeSingle()
+        authorTimezone = (loja as any)?.timezone || null
+      }
+      if (!authorTimezone) {
+        const { data: org } = await supabaseAdmin
+          .from('organizations').select('quiet_hours_timezone').eq('id', organizationId).maybeSingle()
+        authorTimezone = (org as any)?.quiet_hours_timezone || null
+      }
+
+      const buckets = planRecipientTimezoneSend(taggedContacts as any[], {
+        // Campanha enviada na hora (sem agendar) usa agora como
+        // referência: o horário de parede vira "este mesmo".
+        scheduledAt: campaign.scheduled_at ? new Date(campaign.scheduled_at) : new Date(now),
+        authorTimezone,
+        fallbackTimezone: authorTimezone,
+        now: new Date(now),
+      })
+      timezoneBucketCount = buckets.length
+      for (const b of buckets) pushBatches(b.contacts as ContactWithVariant[], b.delayMs)
+
+      console.log(
+        `[SendCampaign] ${campaign_id} no fuso do destinatário: ${buckets.length} fusos, ` +
+        `primeiro em ${Math.round((buckets[0]?.delayMs ?? 0) / 60000)}min, ` +
+        `último em ${Math.round((buckets[buckets.length - 1]?.delayMs ?? 0) / 60000)}min`
+      )
+    } else if (sendTimeOptimization) {
+      // best_send_hour é a MODA das aberturas em UTC, então o balde
+      // também é UTC — é a mesma unidade, não uma conversão perdida.
+      const DEFAULT_HOUR = 10
       const byHour = new Map<number, ContactWithVariant[]>()
       for (const c of taggedContacts) {
         const h = Number.isInteger(c.best_send_hour) ? c.best_send_hour : DEFAULT_HOUR
         const hour = Math.max(0, Math.min(23, h))
-        if (!byHour.has(hour)) byHour.set(hour, [])
-        byHour.get(hour)!.push(c)
+        const lista = byHour.get(hour)
+        if (lista) lista.push(c)
+        else byHour.set(hour, [c])
       }
-      for (const [hour, list] of byHour) hourBuckets.push({ hour, contacts: list })
-    } else {
-      hourBuckets.push({ hour: -1, contacts: taggedContacts })
-    }
-
-    // Build all batches with their scheduled delay
-    type ScheduledBatch = { contacts: ContactWithVariant[]; delayMs: number }
-    const scheduledBatches: ScheduledBatch[] = []
-
-    const now = Date.now()
-    for (const bucket of hourBuckets) {
-      // Base delay until this hour's next UTC occurrence (0 if bucket.hour === -1)
-      let bucketDelayMs = 0
-      if (bucket.hour >= 0) {
+      hourBucketCount = byHour.size
+      for (const [hour, list] of byHour) {
         const nowDate = new Date(now)
         const target = new Date(Date.UTC(
-          nowDate.getUTCFullYear(),
-          nowDate.getUTCMonth(),
-          nowDate.getUTCDate(),
-          bucket.hour,
-          0, 0, 0
+          nowDate.getUTCFullYear(), nowDate.getUTCMonth(), nowDate.getUTCDate(), hour, 0, 0, 0
         ))
         if (target.getTime() <= now) target.setUTCDate(target.getUTCDate() + 1)
-        bucketDelayMs = target.getTime() - now
+        pushBatches(list, target.getTime() - now)
       }
-
-      // Split bucket into batches of BATCH_SIZE with intra-bucket throttle staircase
-      for (let i = 0; i < bucket.contacts.length; i += BATCH_SIZE) {
-        const batch = bucket.contacts.slice(i, i + BATCH_SIZE)
-        const intraThrottle = Math.floor((i / BATCH_SIZE) / 5) * 1000
-        scheduledBatches.push({ contacts: batch, delayMs: bucketDelayMs + intraThrottle })
-      }
+    } else {
+      pushBatches(taggedContacts, 0)
     }
 
     const batches: ContactWithVariant[][] = scheduledBatches.map(sb => sb.contacts)
@@ -388,7 +426,9 @@ export async function POST(request: NextRequest) {
           );
         }
         console.log(
-          `[SendCampaign] Campaign ${campaign_id} enqueued: ${contacts.length} contacts in ${scheduledBatches.length} batches${sendTimeOptimization ? ` across ${hourBuckets.length} send-time buckets` : ''} (durable queue)`
+          `[SendCampaign] Campaign ${campaign_id} enqueued: ${contacts.length} contacts in ${scheduledBatches.length} batches` +
+          `${recipientTimezoneMode ? ` across ${timezoneBucketCount} timezones` : ''}` +
+          `${sendTimeOptimization ? ` across ${hourBucketCount} send-time buckets` : ''} (durable queue)`
         );
       } else {
         // Fallback sem Redis: dispara em paralelo com pequeno delay entre batches
@@ -441,7 +481,8 @@ export async function POST(request: NextRequest) {
       queued: true,
       totalContacts: contacts.length,
       batches: scheduledBatches.length,
-      sendTimeBuckets: sendTimeOptimization ? hourBuckets.length : undefined,
+      sendTimeBuckets: sendTimeOptimization ? hourBucketCount : undefined,
+      timezoneBuckets: recipientTimezoneMode ? timezoneBucketCount : undefined,
       smartSendingSkipped,
       engagementSkipped,
       warmupCapped,

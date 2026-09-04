@@ -7,7 +7,7 @@
 // Modal elegante pra agendar envio de campanha.
 // =============================================
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { X, Calendar, Clock, Loader2, AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -35,14 +35,30 @@ export default function ScheduleCampaignModal({
 
   const [date, setDate] = useState(defaultDate.toISOString().slice(0, 10))
   const [time, setTime] = useState(defaultDate.toTimeString().slice(0, 5))
-  // STO checkbox: send each contact at their personal best hour
-  // (learned from open history). Klaviyo-style. Backend already
-  // supports this via campaigns.send_time_optimization; this is
-  // just the UX entry-point.
-  const [smartSendTime, setSmartSendTime] = useState(false)
+  // Três modos de "quando sai", mutuamente exclusivos — os dois
+  // últimos disputam a mesma decisão, então marcar um desmarca o outro
+  // (é o que o backend também impõe, para o envio nunca ficar ambíguo).
+  //   fixed     — todo mundo no mesmo instante
+  //   recipient — o horário escolhido vale no fuso de CADA contato
+  //   smart     — cada contato na hora em que costuma abrir
+  const [sendMode, setSendMode] = useState<'fixed' | 'recipient' | 'smart'>('fixed')
+  const smartSendTime = sendMode === 'smart'
   const [saving, setSaving] = useState(false)
   const [canceling, setCanceling] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Quanto da base tem fuso conhecido. Sem esse número o lojista
+  // escolhe "no fuso de cada contato" achando que vale para todos,
+  // quando na prática a maioria pode cair no fuso da loja.
+  const [coverage, setCoverage] = useState<{ coverage: number; withTimezone: number; total: number } | null>(null)
+  useEffect(() => {
+    let vivo = true
+    fetch('/api/contacts/timezone-coverage')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (vivo && d && typeof d.coverage === 'number') setCoverage(d) })
+      .catch(() => { /* informativo: a tela funciona sem isso */ })
+    return () => { vivo = false }
+  }, [])
 
   const scheduledDate = new Date(`${date}T${time}:00`)
   const isValid = !isNaN(scheduledDate.getTime()) && scheduledDate.getTime() > Date.now() - 60_000
@@ -58,6 +74,7 @@ export default function ScheduleCampaignModal({
         body: JSON.stringify({
           scheduled_at: scheduledDate.toISOString(),
           send_time_optimization: smartSendTime,
+          timezone_mode: sendMode === 'recipient' ? 'recipient' : 'fixed',
         }),
       })
       const json = await res.json()
@@ -172,29 +189,79 @@ export default function ScheduleCampaignModal({
             </div>
           </div>
 
-          {/* Smart send time toggle. When checked the scheduled time
-              becomes the *baseline*; each contact gets bumped to their
-              personal best hour (max ±12h drift) based on past opens. */}
-          <label className="flex items-start gap-3 cursor-pointer p-3 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors">
-            <input
-              type="checkbox"
-              checked={smartSendTime}
-              onChange={(e) => setSmartSendTime(e.target.checked)}
-              className="mt-0.5 w-4 h-4 accent-orange-500"
-            />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-gray-900">
-                Send-Time Optimization
-                <span className="ml-2 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-orange-100 text-orange-700 rounded">
-                  Smart
-                </span>
-              </p>
-              <p className="text-xs text-gray-500 mt-0.5 leading-snug">
-                Cada contato recebe no horário que ele costuma abrir emails. Aumenta
-                a taxa de abertura em ~15% segundo benchmarks de Klaviyo.
-              </p>
-            </div>
-          </label>
+          {/* Como o horário escolhido é interpretado. Os três modos
+              decidem a mesma coisa, então são excludentes. */}
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+              Como enviar
+            </label>
+            {([
+              {
+                id: 'fixed' as const,
+                titulo: 'No horário marcado',
+                desc: 'Todo mundo recebe no mesmo instante, no seu horário.',
+                selo: null,
+              },
+              {
+                id: 'recipient' as const,
+                titulo: 'No fuso de cada contato',
+                desc: `Cada pessoa recebe às ${time} do relógio DELA. Quem está mais a leste recebe antes; a campanha acompanha o dia pelo mundo.`,
+                selo: 'Fuso',
+              },
+              {
+                id: 'smart' as const,
+                titulo: 'Send-Time Optimization',
+                desc: 'Cada contato recebe na hora em que ele costuma abrir e-mail, aprendida do histórico de aberturas.',
+                selo: 'Smart',
+              },
+            ]).map((opt) => (
+              <label
+                key={opt.id}
+                className={cn(
+                  'flex items-start gap-3 cursor-pointer p-3 rounded-lg border transition-colors',
+                  sendMode === opt.id
+                    ? 'border-orange-500 bg-orange-50/50'
+                    : 'border-gray-200 hover:border-gray-300'
+                )}
+              >
+                <input
+                  type="radio"
+                  name="send-mode"
+                  checked={sendMode === opt.id}
+                  onChange={() => setSendMode(opt.id)}
+                  className="mt-0.5 w-4 h-4 accent-orange-500"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-900">
+                    {opt.titulo}
+                    {opt.selo && (
+                      <span className="ml-2 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-orange-100 text-orange-700 rounded">
+                        {opt.selo}
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-0.5 leading-snug">{opt.desc}</p>
+                </div>
+              </label>
+            ))}
+            {sendMode === 'recipient' && (
+              <div className="text-xs text-gray-500 leading-snug px-1 space-y-1">
+                <p>
+                  Contatos sem fuso conhecido recebem no fuso da loja. O fuso é
+                  aprendido quando a pessoa navega na loja, ou deduzido do país
+                  do endereço.
+                </p>
+                {coverage && (
+                  <p className={cn('font-medium', coverage.coverage < 30 ? 'text-amber-700' : 'text-gray-600')}>
+                    {coverage.withTimezone.toLocaleString('pt-BR')} de{' '}
+                    {coverage.total.toLocaleString('pt-BR')} contatos ({coverage.coverage}%) têm
+                    fuso conhecido hoje
+                    {coverage.coverage < 30 && ' — o resto vai pelo fuso da loja'}.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* Preview */}
           <div className="bg-gray-50 border border-gray-100 rounded-lg p-3 text-sm">
@@ -208,9 +275,11 @@ export default function ScheduleCampaignModal({
               })}
             </p>
             <p className="text-gray-500 text-xs mt-0.5">
-              {smartSendTime
+              {sendMode === 'smart'
                 ? `~${scheduledDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} (horário otimizado por contato)`
-                : `às ${scheduledDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`}
+                : sendMode === 'recipient'
+                  ? `às ${scheduledDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} no fuso de cada contato`
+                  : `às ${scheduledDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`}
             </p>
           </div>
 

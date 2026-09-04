@@ -15,6 +15,7 @@ import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import type { WorderShopifyEventType } from '@/lib/shopify/event-types';
 import { EVENT_SOURCES } from '@/lib/shopify/event-types';
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
+import { normalizeTimezoneInput } from '@/lib/scheduling/timezone';
 
 export const dynamic = 'force-dynamic';
 
@@ -787,6 +788,20 @@ export async function POST(request: NextRequest) {
       if (device_type) contactUpdate.device_type = device_type;
       if (browser) contactUpdate.browser = browser;
       if (os) contactUpdate.os = os;
+
+      // Fuso do próprio navegador do contato — a informação mais
+      // confiável que existe para "que horas são para ele". O pixel já
+      // calculava isso, mas só jogava dentro do hash de fingerprint;
+      // agora vira o dado que a campanha e o delay usam. Sobrescreve o
+      // palpite por país, nunca o contrário (o país só preenche quando
+      // timezone está vazio).
+      const tzInformado = normalizeTimezoneInput(
+        (body as any)?.tz ?? (body as any)?.timezone ?? (body as any)?.properties?.tz
+      );
+      if (tzInformado) {
+        contactUpdate.timezone = tzInformado;
+        contactUpdate.timezone_source = 'browser';
+      }
 
       // UTM attribution
       if (utmParams) {

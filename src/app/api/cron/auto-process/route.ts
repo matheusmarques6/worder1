@@ -196,6 +196,8 @@ export async function GET(request: NextRequest) {
                 updatedAt: contact.updated_at,
                 totalOrders: contact.total_orders ?? 0,
                 totalSpent: contact.total_spent ?? 0,
+                timezone: contact.timezone ?? null,
+                country: contact.country ?? null,
               } : undefined,
               deal,
               // Mesma correção já aplicada no process-runs: o motor de

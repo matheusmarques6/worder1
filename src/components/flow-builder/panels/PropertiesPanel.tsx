@@ -757,6 +757,16 @@ export function PropertiesPanel({ organizationId, automationId, storeId }: { org
                     </div>
                   )}
                 </div>
+
+                {/* Em QUAL relógio a janela vale. Sem essa escolha o
+                    motor usava o relógio do servidor (UTC), e "09:00"
+                    saía como 06:00 no Brasil. */}
+                {(selectedNode.data.config?.restrictDays || selectedNode.data.config?.restrictTime) && (
+                  <DelayTimezoneMode
+                    value={selectedNode.data.config?.timezoneMode || 'recipient'}
+                    onChange={(v) => handleUpdate('timezoneMode', v)}
+                  />
+                )}
               </div>
             )}
 
@@ -792,6 +802,10 @@ export function PropertiesPanel({ organizationId, automationId, storeId }: { org
                     <p className="text-[10px] text-gray-400">
                       Se o horário já passou hoje, aguardará até amanhã
                     </p>
+                    <DelayTimezoneMode
+                      value={selectedNode.data.config?.timezoneMode || 'recipient'}
+                      onChange={(v) => handleUpdate('timezoneMode', v)}
+                    />
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -3333,6 +3347,38 @@ function FilterLogicToggle({ value, onChange }: {
       <span className="text-[10px] text-gray-400">
         {isOr ? 'Basta uma condição ser verdadeira' : 'Todas as condições precisam ser verdadeiras'}
       </span>
+    </div>
+  );
+}
+
+// Em qual relógio a espera é medida. Antes desta escolha o motor usava
+// o horário do servidor — UTC na Vercel —, então "enviar entre 09:00 e
+// 21:00" na prática era 06:00 às 18:00 no Brasil.
+function DelayTimezoneMode({ value, onChange }: {
+  value: string;
+  onChange: (v: 'recipient' | 'store') => void;
+}) {
+  const isStore = value === 'store';
+  const btn = (active: boolean) => cn(
+    'px-2 py-1 text-[10px] font-semibold rounded transition-colors',
+    active ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-700'
+  );
+  return (
+    <div className="space-y-1 pt-1">
+      <label className="text-[10px] text-gray-500 uppercase tracking-wide">Fuso horário</label>
+      <div className="flex items-center gap-0.5 bg-gray-100 rounded p-0.5 w-fit">
+        <button type="button" onClick={() => onChange('recipient')} className={btn(!isStore)}>
+          Do contato
+        </button>
+        <button type="button" onClick={() => onChange('store')} className={btn(isStore)}>
+          Da loja
+        </button>
+      </div>
+      <p className="text-[10px] text-gray-400 leading-snug">
+        {isStore
+          ? 'Todos seguem o relógio da loja, não importa onde estejam.'
+          : 'Cada contato segue o próprio relógio. Sem fuso conhecido, usa o da loja.'}
+      </p>
     </div>
   );
 }

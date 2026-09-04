@@ -269,6 +269,11 @@ export async function GET(request: NextRequest) {
               updatedAt: contact.updated_at,
               totalOrders: contact.total_orders ?? 0,
               totalSpent: contact.total_spent ?? 0,
+              // O delay usa estes dois para decidir o fuso do
+              // destinatário; sem eles a janela de horário cairia
+              // sempre no fuso da loja.
+              timezone: contact.timezone ?? null,
+              country: contact.country ?? null,
             } : undefined,
             deal,
             // Variable engine expects {type, data, timestamp}; passing

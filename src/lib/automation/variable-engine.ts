@@ -76,6 +76,10 @@ export interface VariableContext {
      *  as duas tags saíam sempre 0 no envio real. */
     totalOrders?: number;
     totalSpent?: number;
+    /** Fuso IANA do contato e país — é o que permite ao delay e à
+     *  campanha respeitarem o relógio de quem recebe. */
+    timezone?: string | null;
+    country?: string | null;
   };
   
   deal?: {

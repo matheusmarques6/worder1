@@ -145,6 +145,14 @@ function basicFingerprint() {
     return fnv1a(parts.join('|'));
   } catch (_) { return null; }
 }
+function browserTimezone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+  } catch (_) {
+    return '';
+  }
+}
+
 function richFingerprint() {
   var parts = [];
   try {
@@ -351,6 +359,9 @@ function send(eventType, properties) {
       page_path: location.pathname,
       referrer: document.referrer,
       user_agent: navigator.userAgent,
+      // Fuso IANA do navegador: é o que permite enviar campanha e
+      // delay no relógio de quem recebe, em vez do relógio do servidor.
+      tz: browserTimezone(),
       utmParams: utmParams,
       clickIds: clickIds,
       properties: props,

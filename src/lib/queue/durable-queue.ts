@@ -4,7 +4,8 @@
 //
 // Fila simples e confiável baseada em Redis sorted set:
 //   - Jobs agendados em `queue:{name}:scheduled` (ZSET, score = scheduledFor)
-//   - Jobs processando em `queue:{name}:processing` (HASH, workerId → job)
+//   - Jobs reservados em `queue:{name}:processing` (ZSET, score = prazo
+//     de visibilidade); quem estoura o prazo volta para o agendado
 //   - Backoff exponencial automático com dead-letter após maxAttempts
 //   - Idempotência: jobId é único (SET queue:{name}:seen para dedup)
 // =============================================
@@ -43,9 +44,25 @@ export interface EnqueueOptions {
 }
 
 function keyScheduled(queue: string) { return `${NAMESPACE}:${queue}:scheduled` }
+function keyProcessing(queue: string) { return `${NAMESPACE}:${queue}:processing` }
 function keyDead(queue: string) { return `${NAMESPACE}:${queue}:dead` }
 function keyJob(queue: string, id: string) { return `${NAMESPACE}:${queue}:job:${id}` }
 function keySeen(queue: string, id: string) { return `${NAMESPACE}:${queue}:seen:${id}` }
+
+/**
+ * Prazo de visibilidade: quanto tempo um job reservado pode ficar sem
+ * notícia antes de voltar para a fila.
+ *
+ * O worker roda com maxDuration de 60s e reserva até 20 jobs. Se os
+ * envios demorarem, a função é morta no meio do laço — e os jobs que
+ * ela já tinha reservado sumiam para sempre: saíam do agendado e não
+ * eram registrados em lugar nenhum. Nenhum erro, nenhum dead letter,
+ * simplesmente e-mails que nunca saíram.
+ *
+ * 5 minutos dá folga de sobra para um worker de 60s terminar e ainda
+ * devolve o trabalho rápido quando ele morre.
+ */
+const VISIBILITY_MS = 5 * 60_000
 
 export function isQueueAvailable(): boolean {
   return Boolean(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN)
@@ -94,12 +111,47 @@ export async function enqueue<T>(
 }
 
 /**
- * Reserva N jobs prontos para execução. Marca-os como processing atomicamente.
- * Retorna lista de jobs reservados.
+ * Devolve à fila os jobs reservados que estouraram o prazo de
+ * visibilidade — os que um worker pegou e nunca reportou (timeout da
+ * função, deploy no meio, crash).
+ *
+ * Retorna quantos foram devolvidos.
+ */
+export async function reclaimStale(queue: string, now: number = Date.now()): Promise<number> {
+  const redis = getRedis()
+  const vencidos = (await redis.zrange(keyProcessing(queue), 0, now, {
+    byScore: true,
+    offset: 0,
+    count: 100,
+  })) as string[]
+  if (!vencidos.length) return 0
+
+  let devolvidos = 0
+  for (const id of vencidos) {
+    // zrem atômico: se outro worker devolveu antes, este não duplica.
+    const removed = await redis.zrem(keyProcessing(queue), id)
+    if (!removed) continue
+    const raw = await redis.get<string>(keyJob(queue, id))
+    if (!raw) continue // job já apagado — nada a devolver
+    // Volta para execução imediata, preservando a contagem de
+    // tentativas: um job que morre em loop ainda termina em dead letter.
+    await redis.zadd(keyScheduled(queue), { score: now, member: id })
+    devolvidos++
+  }
+  return devolvidos
+}
+
+/**
+ * Reserva N jobs prontos para execução, registrando cada um no
+ * conjunto de "em processamento" com prazo de visibilidade. Sem esse
+ * registro um worker que morre leva os jobs junto.
  */
 export async function reserve<T = any>(queue: string, batch: number = 10): Promise<Job<T>[]> {
   const redis = getRedis()
   const now = Date.now()
+
+  // Antes de pegar trabalho novo, recupera o que ficou preso.
+  await reclaimStale(queue, now).catch(() => 0)
 
   // Pega até `batch` jobs cujo scheduledFor <= now
   const ids = (await redis.zrange(keyScheduled(queue), 0, now, {
@@ -120,6 +172,9 @@ export async function reserve<T = any>(queue: string, batch: number = 10): Promi
     if (!raw) continue
     try {
       const job = typeof raw === 'string' ? JSON.parse(raw) : (raw as Job<T>)
+      // Só depois de ler o job com sucesso: marcar antes deixaria lixo
+      // permanente no conjunto para jobs corrompidos.
+      await redis.zadd(keyProcessing(queue), { score: now + VISIBILITY_MS, member: id })
       out.push(job)
     } catch {
       /* ignore corrupt */
@@ -133,6 +188,7 @@ export async function reserve<T = any>(queue: string, batch: number = 10): Promi
  */
 export async function complete(queue: string, jobId: string): Promise<void> {
   const redis = getRedis()
+  await redis.zrem(keyProcessing(queue), jobId)
   await redis.del(keyJob(queue, jobId))
   // não apaga `seen` — ele tem TTL próprio
 }
@@ -152,6 +208,10 @@ export async function fail<T>(
     attempts: job.attempts + 1,
     lastError: String(error).slice(0, 500),
   }
+
+  // Sai de "em processamento" nos dois desfechos — senão o reclaim o
+  // devolveria à fila depois de ele já ter ido para o dead letter.
+  await redis.zrem(keyProcessing(queue), job.id)
 
   if (next.attempts >= next.maxAttempts) {
     // Dead letter
@@ -176,15 +236,20 @@ export async function fail<T>(
  */
 export async function stats(queue: string): Promise<{
   scheduled: number
+  processing: number
   dead: number
 }> {
   const redis = getRedis()
-  const [scheduled, dead] = await Promise.all([
+  const [scheduled, processing, dead] = await Promise.all([
     redis.zcard(keyScheduled(queue)),
+    redis.zcard(keyProcessing(queue)),
     redis.llen(keyDead(queue)),
   ])
   return {
     scheduled: Number(scheduled || 0),
+    // Um `processing` que não desce é o sintoma de worker morrendo no
+    // meio: o reclaim devolve, mas o número denuncia o problema.
+    processing: Number(processing || 0),
     dead: Number(dead || 0),
   }
 }

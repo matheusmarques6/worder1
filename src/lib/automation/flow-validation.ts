@@ -102,6 +102,26 @@ export function validateFlow(
           nodeId: n.id,
           message: `O nó "Aguardar até" precisa de uma data/hora ou horário do dia configurado.`,
         })
+      } else if (cfg.datetime) {
+        // Data fixa que já passou não espera nada: o run atravessa o nó
+        // na hora. Publicar assim é quase sempre engano — a data ficou
+        // de uma campanha antiga.
+        const quando = new Date(cfg.datetime)
+        if (isNaN(quando.getTime())) {
+          issues.push({
+            severity: 'error',
+            code: 'DELAY_UNTIL_INVALID_DATE',
+            nodeId: n.id,
+            message: `A data do nó "Aguardar até" é inválida.`,
+          })
+        } else if (quando.getTime() < Date.now()) {
+          issues.push({
+            severity: 'warning',
+            code: 'DELAY_UNTIL_IN_PAST',
+            nodeId: n.id,
+            message: `A data do nó "Aguardar até" já passou — a automação não vai esperar nada nesse ponto.`,
+          })
+        }
       }
       continue
     }
