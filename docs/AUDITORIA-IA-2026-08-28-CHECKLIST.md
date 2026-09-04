@@ -1755,6 +1755,13 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   **não há ciclo** — `repository/agent.py` importa `agent_core.guards/media/prompt/think_gate` e
   nunca `prompt_compiler`. O `TYPE_CHECKING` aqui é escolha de pureza, não quebra-ciclo, e é isso
   que a docstring do código diz. `tsc --noEmit` limpo depois da linha de TSX.
+  **Reancorado pelo item 56 (`ea5cbb35`):** a aresta `repository.agent → agent_core.prompt` **não
+  existe mais** — o item 56 apagou o módulo e trouxe `AgentConfig`/`TenantPolicy` para dentro de
+  `repository/agent.py`. Hoje o import é `agent_core.guards/media/think_gate`, três e não quatro. O
+  **raciocínio continua válido e fica mais forte** (menos uma aresta, mesma ausência de ciclo); o que
+  envelheceu foi a lista. A fitness deste item (`test_agent_block_has_one_producer.py`) teve o import
+  reescrito no mesmo commit — ela era o segundo importador que o item 56 negava ter — e passou a
+  hospedar o teste do `__post_init__` migrado de `test_prompt_layers.py`.
   **Sem prova executável:** `tests/db/test_server.py` e
   `tests/db/test_responder_agent_identity.py` **não foram executados** — `-m db` e `-m pipeline`
   penduram sem Postgres em vez de falhar. Ou seja, ninguém provou contra banco que o endpoint devolve
@@ -3334,7 +3341,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   nenhum teste morreu junto. Python intocado: `pytest -m unit` **1258/1258**, `ruff` **10** (item 74),
   `lint-imports` **3 kept, 0 broken**.
 
-- [ ] **56. Apagar `agent_core/prompt.py` + `test_prompt_layers.py`** — **495 linhas medidas** `[confirmado]`
+- [x] **56. Apagar `agent_core/prompt.py` + `test_prompt_layers.py`** — **495 linhas medidas** `[confirmado]` · commits `74ea68f0` `ea5cbb35` · relatório `task-56-report.md`
   **Âncora deste item: `59540569`** — toda citação `arquivo:linha` abaixo é nessa numeração, salvo
   onde o texto diz outra coisa.
   **"~450 linhas" era estimativa e estava 10% baixa: são 495, MEDIDAS por `wc -l`** (`prompt.py` 203
@@ -3384,7 +3391,73 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   levado ao **item 63**.
   A linha 47 precisa ser reescrita junto — hoje ela está **correta** e não deve ser tocada antes.
   **O item 45 não cobre isto:** a fitness dele (`test_agent_block_has_one_producer.py`) conta
-  construções de `AgentBlock`, e `prompt.py` produz `Layer`.
+  construções de `AgentBlock`, e `prompt.py` produz `Layer` — **premissa incompleta, conclusão
+  certa**: ela não cobre `prompt.py`, mas **importa** dele. Duas coisas diferentes, e é a segunda que
+  quebrava a suíte.
+
+  **EXECUTADO.** Commit `74ea68f0` corrigiu este texto **antes** de qualquer linha de código mudar
+  (o "único importador" que daria `ImportError`, as 495 medidas, o ganho colateral inexistente e a
+  contagem); `ea5cbb35` moveu, apagou e reescreveu a linha 47 **num commit só**.
+  **Por que num commit só:** `prompt.py` usava `AgentConfig`/`TenantPolicy` em cinco assinaturas de
+  módulo e **nenhum dos dois arquivos tinha `from __future__ import annotations`** — as anotações são
+  avaliadas em tempo de definição, então "mover, suíte verde, depois apagar" deixaria `NameError` no
+  import entre os dois commits. Não houve commit vermelho.
+  **O que NÃO foi feito, de propósito:** fazer `prompt.py` importar de `repository.agent`. Passaria
+  no `lint-imports` (o contrato tem `allow_indirect_imports = "true"`, `pyproject.toml:157`) e
+  **inverteria a camada em silêncio** — exatamente o que o bloco `TYPE_CHECKING` de
+  `prompt_compiler.py:29-34` gasta quatro linhas de docstring para evitar. Nenhuma fitness pegaria.
+  **A única perda real, e ela não estava na linha 47.** `AgentConfig.__post_init__` é código que
+  **produção executa**: `load_active_version` o atravessa em todo turno, pelos três call sites
+  (`responder.py:290`, `toucher.py:161`, `server.py:274`), e a coluna é anulável — sem ele,
+  `prompt_compiler.py:106` faria `base_instructions=""` calado e a versão sem instrução viraria
+  agente sem instrução. A validação **migrou junto com o símbolo** e o único teste dela no
+  repositório inteiro (`test_prompt_layers.py:283-292`) **migrou junto**, para
+  `tests/unit/test_agent_block_has_one_producer.py`, em `TestTheConfigIsAValue`. O ramo irmão
+  (`model` vazio) segue sem teste — já estava assim antes deste item.
+  **Números, com o delta caso a caso.** `pytest -m unit` **1258 → 1232**, medidos com árvore limpa
+  antes e depois: **−21** testes de `test_prompt_layers.py`, **−5** ids de fitness que varrem `src/`
+  (`test_no_direct_clock`, `test_no_direct_randomness`, `test_no_max_seq`,
+  `test_no_provider_network::test_only_an_adapter_names_a_provider`, `test_no_sql_outside_repository`,
+  todos `[…/prompt.py]`), **−1** id que varre `tests/`
+  (`test_no_provider_network::test_no_blocking_test_reaches_a_provider[unit/test_prompt_layers.py]`),
+  **+1** teste migrado — que **não** cria id novo, porque o arquivo de destino já existia e já
+  estava na parametrização. Total **−26**. São **seis** ids parametrizados, não um: contar só o que o
+  item 54 descobriu erraria o delta em 4. `test_text_io_declares_its_encoding.py` não é afetada
+  (teste único, sem `parametrize`). `ruff` **10 antes e 10 depois** (os do item 74, não consertados
+  aqui de propósito); `lint-imports` **3 kept / 0 broken** — nenhum contrato nomeia o módulo.
+  **TS não se moveu porque não foi tocado:** `tsc --noEmit` exit 0 e `vitest` 1321 com as mesmas 4
+  falhas pré-existentes, medidos na âncora; zero arquivo TS no diff dos três commits.
+  **Oito citações reancoradas, conferidas DEPOIS de mover.** A migração acrescentou **+33** linhas ao
+  topo de `repository/agent.py` (as dataclasses precisam preceder `ActiveVersion`, porque
+  `config: AgentConfig` é anotação avaliada na criação da classe) — o brief estimava ~25, o medido é
+  33. **Item 45:** a aresta `repository.agent → agent_core.prompt` deixou de existir, e a lista de
+  imports que ele cita como prova do "não há ciclo" foi corrigida (o raciocínio fica **mais forte**).
+  **Item 83:** `agent.py:64`→`:97`, `:67`→`:100`, `:165`→`:198`, `:166-167`→`:199-200`, `:169`→`:202`,
+  `:178`→`:211`. **Item 63:** `agent.py:169`→`:202`. **Uma nona, achada só na conferência posterior:**
+  `tests/unit/test_agent_block_has_one_producer.py:60`→**`:66`**, citada pelo item 83 — e ela deslocou
+  para **baixo**, não para cima como a revisão previu, porque o mesmo commit acrescentou
+  `import pytest` e abriu o import em forma parentizada. É a prova de por que a regra é conferir
+  depois de mover.
+  **As prosas, pela régua do item 52** (comentário de navegação em código vivo se corrige; registro
+  datado de decisão, não): **corrigidas as três** — `core/STATUS-agentes-por-evento.md:481-482`
+  (prosa viva, o cabeçalho `:3-4` diz "atualizado NO MESMO commit", e ela **mandava** fazer esta
+  deleção: agora diz que está feita, e a imprecisão do "sem consumidor" fica registrada);
+  `agent_core/__init__.py:1` e `repository/contacts.py:8-9` (docstrings de navegação em código vivo,
+  as duas passariam a apontar para módulo apagado). **NÃO corrigida, de propósito:**
+  `core/agentes-por-evento.md:263` — *"`agent_core/prompt.py` evolui para o `prompt_compiler` de
+  blocos"* — é o doc-fonte, registro de decisão datado, e depois da deleção ele fica **certo**, não
+  mentindo. Fica dito aqui para que o próximo não a "conserte".
+  **Dependência com o item 59:** a linha 47 reescrita tirou "primeira compra" do texto porque o campo
+  nunca chegou ao prompt — ele só existe no JSON da tool `get_customer_context`
+  (`tools/customer.py:78-81`), sem asserção em `tests/db/test_tools.py:172-230`. Se o **item 59**
+  apagar `customer.py`, some o último vestígio de produção do campo, e **a reescrita feita aqui já
+  cobre esse futuro** — não precisa ser refeita. A frase "dívida anterior" que o brief usava era
+  imprecisa: o mecanismo é que nunca existiu; a **trava** (`test_prompt_layers.py:158-165`, que
+  assertava `"189.90"` e `"2025-03-14"`) existia e foi **este** item que a apagou. Como o mecanismo
+  nunca existiu, o conserto é a reescrita, não um substituto de trava.
+  **Vizinho registrado, item 57:** com `prompt.py` fora, `evals/pack.py:27` — que tinha uma **cópia
+  literal** de `OCCASIONS` — vira o **único** dono do vocabulário de ocasiões. Quem decidir apagar
+  metade de `pack.py` decide também o destino dele.
 
 - [ ] **57. Decidir sobre `evals/`** — ~400 linhas `[confirmado]`
   Ou wirar o harness (rota interna ou handler para `q_evals`), ou apagar `harness.py` + metade de
@@ -3396,6 +3469,12 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
 - [ ] **59. Apagar `tools/registry.py` + `tools/customer.py`** — ~170 linhas `[confirmado]`
   O responder monta `turn_tools` à mão (`responder.py:499-518`) e nunca passa pelo registry; a grade
   prometida na docstring não vale em produção.
+  **Dependência registrada pelo item 56 (`ea5cbb35`):** `tools/customer.py:78-81` é hoje o **último**
+  lugar de produção onde `first_order_at` ("primeira compra") chega ao modelo, e ele chega no JSON de
+  uma tool, não no prompt — `tests/db/test_tools.py:172-230` (`TestGetCustomerContext`) asserta
+  `name`, `language`, `opt_status` e `conversations`, **nunca `purchases` nem `first_order_at`**.
+  Apagar `customer.py` remove o vestígio sem quebrar teste nenhum. **`runtime/docs/testes-e-cicd.md:47`
+  já foi reescrita pelo 56 sem o campo**, então este item **não** precisa mexer nela de novo.
 
 - [ ] **60. Apagar sobras menores** `[confirmado]`
   Cache de embeddings sem consumidor (`clearEmbeddingsCache` e irmãs, ~90 l.) + `rag.ts::buildContext`
@@ -3441,11 +3520,28 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   teste apenas dentro de uma docstring. É o vão mais fundo desta lista, porque não se fecha com
   banco — precisa de um teste que exercite a função.
   **Acrescentado pelo item 53 (revisão da execução, `89eca846`):** a fiação de
-  `never_say_ai` — do literal do loader (`agent.py:169`) até `JudgeContext` — **não tem trava
+  `never_say_ai` — do literal do loader (`agent.py:202`; era `:169`, **reancorado pelo item 56 em
+  `ea5cbb35`**, que deslocou o arquivo +33 linhas) até `JudgeContext` — **não tem trava
   executável em tier nenhum**, e isso foi **provado por mutação**, não suposto: pinar `false` no
   loader deixa a suíte idêntica, e inverter os dois call sites (`not settings.never_say_ai`) também.
   O valor pode ser lido errado, invertido ou ignorado sem nada ficar vermelho. Mesma família do vão
   de `agent_llm_from_org_keys` acima: o caminho existe, a suíte não passa por ele.
+  **Acrescentado pelo item 56 (`ea5cbb35`):** a **seleção da missão pelo evento que abriu a conversa**
+  — a regra 2 da linha `agent_core` de `runtime/docs/testes-e-cicd.md:47` — ficou **sem trava
+  executável em tier nenhum** quando `test_prompt_layers.py` foi apagado. Mesma família dos dois vãos
+  acima. `repository/missions.py:43-56` (`load_active_mission`, `where event_type = %s`) e
+  `:62-...` (`load_mission_event_type`) são o mecanismo vivo, com três call sites de produção
+  (`responder.py:317,323,326`, `toucher.py:169`, `server.py:275`), e **`grep -rn missions
+  runtime/tests` devolve só fábrica (`tests/db/factories.py:671`), schema
+  (`tests/db/test_ai_missions_schema.py`) e RLS (`tests/db/test_rls_e2.py`) — nenhum chama os dois
+  loaders.** O único teste que restava do "o bloco de instrução extra é escolhido pelo que abriu a
+  conversa" era `test_prompt_layers.py:130-135`, e ele prendia o mecanismo **morto** (camada de
+  cenário por `origin_occasion`, que `repository/agent.py` fixa como `scenario_prompts={}` literal);
+  o mecanismo **vivo** que o substituiu nunca ganhou o seu. **`test_mission_resolver.py:121-153` não
+  fecha este vão**, e é importante que fique escrito por quê: ele é `TestArbitration` e exercita
+  `arbitrate()`, cujo corpo inteiro (`mission_resolver.py:133-150`) é `if owner … / if discovery … /
+  raise` — **não olha `event_type`**. Foi por acreditar nele que a contagem de órfãs do item 56 errou
+  pela terceira vez (5 → 2 → 0 → 1): *"parecida" não é sucessor*.
 
 - [ ] **64. Migrar cupom da Shopify de REST para GraphQL** `[proposto]` · *(descoberto no item 35)*
   `connectors/shopify.py` cria e busca cupom por três chamadas REST: `POST /price_rules.json`
@@ -4118,14 +4214,23 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
 
 - [ ] **83. `shadow_until` é carregado e não tem UM leitor — e o modo shadow do S9b não existe no
   runtime** `[confirmado]` · *(descoberto no item 53)*
-  Citações ancoradas em `8501637a`. O select do loader (`repository/agent.py:169`) projeta **três**
+  **REANCORADO em `59540569` + `ea5cbb35` pelo item 56.** As citações abaixo estavam ancoradas em
+  `8501637a`, eram exatas no HEAD `59540569`, e **todas as de `repository/agent.py` deslocaram
+  +33 linhas** quando o item 56 trouxe `AgentConfig`/`TenantPolicy` para o topo do arquivo (elas
+  precisam preceder `ActiveVersion`, porque `config: AgentConfig` é anotação de dataclass avaliada
+  na criação da classe). O offset foi **medido depois de mover**, não estimado antes:
+  `:64`→**`:97`**, `:67`→**`:100`**, `:165`→**`:198`**, `:166-167`→**`:199-200`**, `:169`→**`:202`**,
+  `:178`→**`:211`**. A sétima citação, `tests/unit/test_agent_block_has_one_producer.py:60`, deslocou
+  para **`:66`** — para **baixo**, não para cima: o mesmo commit acrescentou `import pytest` e abriu
+  o import de `repository.agent` em forma parentizada.
+  O select do loader (`repository/agent.py:202`) projeta **três**
   valores pinados — `'pt-BR'::text`, `true`, `null::timestamptz` — e o terceiro vira
-  `TenantSettings.shadow_until` (campo em `:67`, atribuído em `:178`). `primary_language` tem leitor
+  `TenantSettings.shadow_until` (campo em `:100`, atribuído em `:211`). `primary_language` tem leitor
   (`prompt_compiler.py:101`); `never_say_ai` tem um (`judges/pre_send.py:295`, e o item 53 passou a
   entregar o valor lido até lá); **`shadow_until` tem ZERO**. A varredura de `shadow` em `src/`,
-  `tests/` e `scripts/` devolve seis linhas e **nenhuma é leitura**: `agent.py:64` (docstring), `:67`
-  (o campo), `:165` (o comentário FORK), `:178` (a atribuição), `tests/db/test_agent_loaders.py:94` e
-  `tests/unit/test_agent_block_has_one_producer.py:60` — os dois últimos só asseram que é `None`.
+  `tests/` e `scripts/` devolve seis linhas e **nenhuma é leitura**: `agent.py:97` (docstring), `:100`
+  (o campo), `:198` (o comentário FORK), `:211` (a atribuição), `tests/db/test_agent_loaders.py:94` e
+  `tests/unit/test_agent_block_has_one_producer.py:66` — os dois últimos só asseram que é `None`.
   **É o "lido e ignorado" literal**, o título que o item 53 carregava para o valor errado: o
   `never_say_ai` ao menos tem consumidor.
   **O que ele deveria governar:** `runtime/docs/testes-e-cicd.md:18` define shadow como *"os 7
@@ -4134,7 +4239,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   existe no runtime:** nenhum código lê o campo, e nenhum caminho decide avaliar, enfileirar ou marcar
   em função dele.
   **A decisão é de produto, não de limpeza.** Ou o modo shadow é construído — e aí o campo ganha
-  leitor, e a Etapa 3 do FORK (`agent.py:166-167`) precisa de onde ler a data de verdade —, ou o
+  leitor, e a Etapa 3 do FORK (`agent.py:199-200`) precisa de onde ler a data de verdade —, ou o
   campo, a projeção `null::timestamptz` e os dois asserts saem juntos. **Não apagar sem decidir:**
   apagar é a saída barata que fecha a porta do RF-006 sem que ninguém tenha dito que quer fechá-la.
 

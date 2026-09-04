@@ -5,11 +5,15 @@ tool could be pointed at, and a stranger's conversation simply does not exist
 for a connection scoped to another tenant. That is the whole guard, and
 `tests/db/test_tools.py` is what watches it.
 
-What is NOT here is as important as what is: no orders. `total_orders`,
-`avg_ticket` and `first_order_at` — the fields RF-010 injects into the prompt —
-come from the store mirror, and that is `repository/orders.py` (E3), which owns
-the "no record" vs "no history" distinction (decisão 81b) so nobody here is
-tempted to return an invented zero.
+What is NOT here is as important as what is: no orders. Purchase history comes
+from the store mirror, and that is `repository/orders.py` (E3), which owns the
+"no record" vs "no history" distinction (decisão 81b) so nobody here is tempted
+to return an invented zero. `history_lines` is what reaches the model, inside
+the ESTADO block. (This line used to name `total_orders`, `avg_ticket` and
+`first_order_at` as "the fields RF-010 injects into the prompt": RF-010's
+layered prompt was deleted, and of the three only the order count ever reached
+production — `avg_ticket` exists nowhere, and `first_order_at` only inside the
+JSON of the `get_customer_context` tool.)
 """
 
 from dataclasses import dataclass

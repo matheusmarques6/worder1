@@ -478,7 +478,12 @@ Auditoria completa e fila de 63 correções: `docs/AUDITORIA-IA-2026-08-28-CHECK
 Notas vivas para a retomada:
 - O responder anexa CONHECIMENTO ao frame fora dos blocos tipados (recuperação, não área) —
   se o preview precisar exibir, expor via parâmetro opcional do compile_prompt.
-- `agent_core/prompt.py` (5 camadas do motor) ficou como legado testado e sem consumidor;
-  remoção junto com a limpeza pós-cutover.
+- ~~`agent_core/prompt.py` (5 camadas do motor) ficou como legado testado e sem consumidor;
+  remoção junto com a limpeza pós-cutover.~~ **FEITO** — item 56 da auditoria, commit `ea5cbb35`:
+  o módulo e `test_prompt_layers.py` foram apagados (495 linhas). A nota estava imprecisa em
+  "sem consumidor": `compose()`/`render()` não tinham nenhum, mas `AgentConfig`/`TenantPolicy`
+  tinham consumidor de produção desde sempre e por isso **migraram** para `repository/agent.py`,
+  junto com a validação de `__post_init__` (versão sem `base_prompt` não carrega) e com o único
+  teste dela.
 - `presentation_mode`/`client_adaptation` chegam em ai_agents na Etapa 7; o responder já lê
   persona/settings e usa 'nome_funcao' como default estrutural.
