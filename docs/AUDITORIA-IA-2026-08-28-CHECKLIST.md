@@ -1387,7 +1387,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   casos, no molde de `internal-auth.test.ts` do item 25): nega sem secret em dev e em produção, nega
   chave errada, libera por `?debug_key=`, por `x-debug-key` e por `Authorization: Bearer` — é a trava
   que quebra se alguém "consertar" o guard de volta para o fallback por `NODE_ENV` (verificado por
-  mutação: reintroduzir a linha derruba 2 dos 6 casos).
+  mutação: reintroduzir a linha derruba 2 dos **10** casos — o texto dizia "6", medido no item 58).
   **Consequência para quem roda o repo localmente (achado, não trabalho novo):** `scripts/test-ai-system.sh`
   e `scripts/test-commands.sh` batem em `/api/ai/test` e `/api/ai/test/webhook` por `curl` sem
   nenhuma chave, e os `curl` de `docs/TESTES-END-TO-END.md` também — todos passam a receber 404 até
@@ -2339,7 +2339,10 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
     (`guards.py:191,307`). E escopá-las por organização é **insanável hoje**: as variantes que leem
     `whatsapp_messages` batem numa tabela **sem coluna `organization_id`**, e as que leem
     `ai_usage_logs` batem numa tabela que **o stream não cria**. Versionar agora seria versionar para
-    o item 58 apagar. **Divergência de comportamento registrada de passagem:**
+    o item 58 apagar. **EXECUTADO no item 58 (`5deb8b75`):** o arquivo saiu, as duas RPCs ficaram com
+    **zero chamador** e **sem migration de DROP** — a DDL vive só em `sql/`, em três cópias
+    divergentes, duas com `GRANT EXECUTE` para `authenticated`. Nada de `drop function` sem o dono.
+    **Divergência de comportamento registrada de passagem:**
     `sql/ai-agents-rpc-functions.sql:61-102` lê `cooldown_after_transfer` para uma variável em
     `:75-79` e **nunca a usa** — essa variante não checa cooldown nenhum, só um intervalo fixo de 5 s.
     Não é divergência de estilo, é de o que a função responde.
@@ -3286,7 +3289,9 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   sido aplicada em produção, não verificável daqui"*. **Consequência obrigatória: apagar o código NÃO
   apaga a tabela**, e daqui não se sabe se ela existe (ou tem linhas) na base viva. Nada de
   `drop table` sem o dono decidir.
-  **Ordem entre itens: 55, 58 e 67 editam o mesmo `engine.ts` — não rodar em paralelo.**
+  **Ordem entre itens: 55 e 67 editam o mesmo `engine.ts` — não rodar em paralelo.**
+  *(Corrigido pelo item 58: o 58 saiu dessa lista. O acoplamento dele com `engine.ts` eram apenas
+  dois imports, e a deleção não precisou tocar no arquivo — medido em `3c4bcad6`.)*
 
   **Executado.** A base é a decisão **D8** de `core/agentes-por-evento.md:75` — *"`ai_agent_actions`
   morre — WHEN/DO migram para dentro das missões (a missão de `whatsapp.received` absorve os
@@ -3600,7 +3605,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `tests/db/test_rls_e2.py:39-40` e a fixture `create_eval_run` (`tests/db/factories.py:507`) viva
   por causa dele. Se o portão de ativação for feito um dia, `run_pack` é reescrito do zero.
 
-- [ ] **58. Apagar `whatsapp-integration.ts` + rota do simulador** — **697 linhas medidas** `[confirmado]` · *(âncora `3c4bcad6`)*
+- [x] **58. Apagar `whatsapp-integration.ts` + rota do simulador** — **697 linhas medidas** `[confirmado]` · *(âncora `3c4bcad6`)* · commits `b2abe500` `5deb8b75`
   **O mapa corrigido ANTES de andar por ele** — as quatro afirmações abaixo saíram erradas na
   conferência, e uma delas deixaria o commit vermelho.
   **(1) A conta ignora metade do trabalho.** `src/lib/ai/whatsapp-integration.ts` = **250** linhas;
@@ -3622,6 +3627,35 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `scripts/test-ai-system.sh:230` e `scripts/test-commands.sh:76,126` faz a asserção de `:337`
   falhar — **5 falhas, não 4**. Os `curl` saem no mesmo commit; os dois scripts não rodam em CI nem
   em `package.json`, e removê-los não os quebra.
+
+  **EXECUTADO.** Os dois arquivos saíram, e os `curl` foram **repontados** para
+  `/api/ai/test/cloud-webhook` em vez de apagados — o teste manual continua útil e a asserção de
+  `deletion-set.test.ts` fica satisfeita. Delta de suíte **zero**: `vitest` 1321 com as mesmas 4
+  falhas pré-existentes, `tsc` limpo, Python intocado. As listas de deleção **não** são
+  parametrizadas, ao contrário das travas AST do Python — foi isso que fez os itens 56 e 57 errarem
+  a previsão por 12 casos, e aqui não se repete.
+  **Por que apagar não removeu capacidade:** `cloud-runner.ts` declara por escrito que não importa o
+  legado e cobre os quatro guards — cooldown (`:500-512`), `max_messages` (`:537-546`),
+  `stop_on_human_reply` (`:550-559`) e transferência (`:966`). **Dois deles melhor**, e o segundo é o
+  mais eloquente: `stop_on_human_reply` era **inerte** no legado, porque `isAgentMessage` era
+  `return false` **literal**. Deleção de duplicata obsoleta, não perda de comportamento.
+  **A ressalva que a paridade não cobre, e que fica sem dono:** o legado passava a **etapa real do
+  pipeline**; o `cloud-runner` passa `p_pipeline_stage_id: null` **fixo** (`:433`), e pela RPC
+  (`20260903000002:170-176`) `null` satisfaz a cláusula para **todo** agente. **Roteamento de agente
+  por etapa de pipeline não existe no canal Cloud.** Não bloqueou a deleção — o legado era simulador
+  atrás de 404 —, mas alguém precisa decidir se a capacidade volta.
+  **A herança do item 49 chega aqui:** `check_agent_cooldown` e `count_agent_messages_in_conversation`
+  ficam agora com **zero chamador** e **sem migration de DROP** — a DDL vive só em `sql/`, em **três
+  cópias divergentes**, duas delas com `GRANT EXECUTE` para `authenticated`, e **nunca** em
+  `supabase/migrations/`. **Não se propõe `drop function`**: DDL fora do stream pode ter sido
+  aplicada em produção (mesma regra que o item 55 usou para a tabela).
+  **Documento que esta deleção tornou obsoleto:** `docs/AUDITORIA-LEGADO-WHATSAPP-IA.md:76-95` chama
+  o arquivo apagado de *"o cérebro a ser religado"*. É registro datado de análise, então **não se
+  corrige** (régua do item 52) — mas fica escrito aqui que ele descreve algo que não existe mais,
+  senão alguém o lê daqui a seis meses e tenta religar.
+  **Achado devolvido:** o padrão de organização vinda do corpo governando escrita com chave de
+  serviço **não morreu com a rota** — está vivo em duas rotas sem nem o segredo de debug. Virou o
+  **item 86**.
 
 - [ ] **59. Apagar `tools/registry.py` + `tools/customer.py`** — ~170 linhas `[confirmado]`
   O responder monta `turn_tools` à mão (`responder.py:499-518`) e nunca passa pelo registry; a grade
@@ -4434,6 +4468,29 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   leitor, e a Etapa 3 do FORK (`agent.py:199-200`) precisa de onde ler a data de verdade —, ou o
   campo, a projeção `null::timestamptz` e os dois asserts saem juntos. **Não apagar sem decidir:**
   apagar é a saída barata que fecha a porta do RF-006 sem que ninguém tenha dito que quer fechá-la.
+
+- [ ] **86. Organização vinda do CORPO da requisição governando escrita com chave de serviço** `[confirmado]` · *(descoberto no item 58)*
+  Citações ancoradas em `3c4bcad6`. O item 58 apagou uma rota em que o `organizationId` chegava **no
+  corpo** e mandava em `upsert`/`update` feitos com `supabaseAdmin` — que **não passa por RLS** —,
+  contida só pelo segredo de debug. Antes de fechar o achado como "morreu com a deleção", a revisão
+  da execução varreu o resto: **o padrão está vivo em duas rotas, e nelas não há nem o segredo.**
+  - **`src/app/api/queue/settings/route.ts`** — a org vem do corpo (`:57`) e vai para `upsert`
+    (`:88-95`); pior, o **`GET` cria linha** (`:33-36`) a partir de `organization_id` de query string
+    (`:18`), sem conferir se o usuário pertence a ela.
+  - **`src/app/api/queue/assign/route.ts`** — org do corpo (`:17-24`) alimentando RPC (`:31-33`) e
+    `update`s.
+  **A única barreira é o cookie de sessão:** nenhuma das duas está em `publicApiRoutes` nem em
+  `adminOnlyApis`, e nenhuma confere que a sessão pertence à organização que o corpo declara. Ou
+  seja, **um usuário autenticado de qualquer loja escreve na fila de atendimento de outra** informando
+  o id — que não é segredo, aparece em resposta de várias rotas.
+  **É a família do item 43** (org que vem de fora governando query com chave de serviço), em modo
+  pior: lá era leitura, aqui é **escrita**. Diferente do item 71 e do 80, aqui **exige sessão** — o
+  que reduz a superfície a quem já tem conta, não a qualquer um.
+  **Não corrigido de propósito:** achado de produto se registra e se devolve. O conserto é derivar a
+  organização da sessão em vez do corpo, como as rotas vizinhas já fazem — a decisão de qual delas é
+  a fonte da verdade é do dono.
+  *(Verificado sem dono antes de abrir: `grep` por `queue/settings`, `queue/assign` e "organização do
+  corpo" no checklist inteiro devolve zero.)*
 
 - [ ] **85. Chamadas de LLM que a plataforma paga e não contabiliza — o gasto invisível que o item 55 só tapou em parte** `[confirmado]` · *(descoberto no item 55)*
   Citações ancoradas em `e71d5cdb`. O item 55 apagou dois arquivos que faziam `fetch` direto a
