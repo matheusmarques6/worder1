@@ -215,21 +215,26 @@ export async function GET(request: NextRequest) {
       // are [since, until) — both sides explicit so 'today', 'ontem',
       // 'mês passado', and custom ranges only pull the right window.
       safeQuery(async () => {
-        if (storeId) {
-          return supabaseAdmin.from('shopify_orders')
-            .select('total_price, total_refunded, created_at, financial_status')
-            .eq('store_id', storeId)
-            .gte('created_at', since)
-            .lt('created_at', until);
-        }
+        // ⚠️ SEGURANÇA: o storeId chega pela querystring e esta query usa
+        // a chave de serviço (sem RLS). Filtrar só por store_id deixava
+        // qualquer usuário autenticado ler a receita de OUTRO tenant
+        // passando o storeId dele. O id pedido é sempre validado contra
+        // as lojas da própria organização antes de ser usado.
         const storesRes = await supabaseAdmin.from('shopify_stores').select('id').eq('organization_id', orgId);
-        const storeIds = (storesRes.data || []).map((s: any) => s.id);
+        const orgStoreIds = (storesRes.data || []).map((s: any) => s.id);
+        const storeIds = storeId
+          ? orgStoreIds.filter((id: string) => id === storeId)
+          : orgStoreIds;
         if (!storeIds.length) return { data: [], error: null };
         return supabaseAdmin.from('shopify_orders')
           .select('total_price, total_refunded, created_at, financial_status')
           .in('store_id', storeIds)
           .gte('created_at', since)
-          .lt('created_at', until);
+          .lt('created_at', until)
+          // PostgREST devolve no máximo 1000 linhas por padrão e a soma
+          // era feita em JS: acima disso a receita da loja era calculada
+          // sobre um recorte arbitrário, sem erro nenhum.
+          .limit(50000);
       }),
       // Pull last_sync_at + initial_sync_completed too so the auto-
       // sync trigger below can decide whether to refresh stale data.
@@ -237,20 +242,57 @@ export async function GET(request: NextRequest) {
     ]);
 
     // ── KPI aggregation ──
-    const campaignsRevenue = campaigns.reduce((s: number, c: any) => s + pickNum(c, 'attributed_revenue', 'revenue', 'total_revenue'), 0);
-    const campaignsOrders = campaigns.reduce((s: number, c: any) => s + pickNum(c, 'attributed_orders', 'orders'), 0);
+    //
+    // A fonte é o livro-razão order_attribution (uma linha por pedido,
+    // crédito único). O modelo anterior somava os contadores VITALÍCIOS
+    // de cada campanha/automação e filtrava pela data de CRIAÇÃO da
+    // campanha — uma campanha antiga que converteu hoje contribuía zero,
+    // e uma criada ontem despejava a receita inteira na janela. Além
+    // disso os quatro canais somavam o valor cheio do mesmo pedido, e o
+    // total podia passar de 100% do faturamento da loja.
+    const attrRows = await safeQuery(() => {
+      let q = supabaseAdmin
+        .from('order_attribution')
+        .select('channel, classification, net_revenue, order_at, store_id')
+        .eq('organization_id', orgId)
+        .is('revoked_at', null)
+        .gte('order_at', since)
+        .lt('order_at', until)
+        .limit(50000);
+      if (storeId) q = q.eq('store_id', storeId);
+      return q;
+    });
 
-    const automationsRevenue = automations.reduce((s: number, a: any) => s + pickNum(a, 'attributed_revenue', 'total_revenue', 'revenue'), 0);
-    const automationsOrders = automations.reduce((s: number, a: any) => s + pickNum(a, 'attributed_orders', 'orders'), 0);
+    const byChannel = (canal: string) =>
+      attrRows.filter((r: any) => r.channel === canal && r.classification === 'attributed');
+    const sumNet = (rows: any[]) => rows.reduce((s: number, r: any) => s + (Number(r.net_revenue) || 0), 0);
 
-    const whatsappRevenue = whatsappCampaigns.reduce((s: number, c: any) => s + pickNum(c, 'attributed_revenue', 'revenue', 'total_revenue'), 0);
-    const whatsappOrders = whatsappCampaigns.reduce((s: number, c: any) => s + pickNum(c, 'attributed_orders', 'orders'), 0);
+    const emailAttr = byChannel('email');
+    const whatsappAttr = byChannel('whatsapp');
+    const smsAttr = byChannel('sms');
+    const allAttr = attrRows.filter((r: any) => r.classification === 'attributed');
 
-    const smsRevenue = smsCampaigns.reduce((s: number, c: any) => s + pickNum(c, 'attributed_revenue', 'revenue', 'total_revenue'), 0);
-    const smsOrders = smsCampaigns.reduce((s: number, c: any) => s + pickNum(c, 'attributed_orders', 'orders'), 0);
+    const campaignsRevenue = sumNet(emailAttr);
+    const campaignsOrders = emailAttr.length;
+    const whatsappRevenue = sumNet(whatsappAttr);
+    const whatsappOrders = whatsappAttr.length;
+    const smsRevenue = sumNet(smsAttr);
+    const smsOrders = smsAttr.length;
+    // Automações e campanhas dividem o mesmo canal (e-mail); o razão
+    // separa por automation_id/campaign_id, então aqui a quebra por
+    // canal já é exaustiva e não há como somar o mesmo pedido duas vezes.
+    const automationsRevenue = 0;
+    const automationsOrders = 0;
 
-    const worderRevenue = campaignsRevenue + automationsRevenue + whatsappRevenue + smsRevenue;
-    const worderOrders = campaignsOrders + automationsOrders + whatsappOrders + smsOrders;
+    const worderRevenue = sumNet(allAttr);
+    const worderOrders = allAttr.length;
+
+    // Receita dos DESTINATÁRIOS: todo pedido de quem recebeu mensagem na
+    // janela, tenha engajado ou não. É a segunda métrica que Omnisend e
+    // Klaviyo mostram ao lado da atribuída — sem ela não dá para saber
+    // se o canal converteu ou apenas acompanhou a venda.
+    const recipientRevenue = attrRows.reduce((s: number, r: any) => s + (Number(r.net_revenue) || 0), 0);
+    const recipientOrders = attrRows.length;
 
     // Store totals (skip cancelled orders). financial_status='cancelled'
     // is the production marker — the legacy cancelled_at column was
@@ -490,6 +532,12 @@ export async function GET(request: NextRequest) {
       worderOrders,
       worderShare,
       worderDelta,
+      // As duas receitas, como no relatório da Omnisend/Klaviyo:
+      // worderRevenue  = pedidos que a mensagem de fato puxou;
+      // recipientRevenue = tudo que quem recebeu mensagem comprou.
+      // Por definição recipientRevenue >= worderRevenue.
+      recipientRevenue,
+      recipientOrders,
       campaignsRevenue,
       campaignsOrders,
       automationsRevenue,
@@ -511,6 +559,7 @@ export async function GET(request: NextRequest) {
     // Never 500 the dashboard — return an empty but well-formed payload.
     return NextResponse.json({
       worderRevenue: 0, worderOrders: 0, worderShare: 0, worderDelta: 0,
+      recipientRevenue: 0, recipientOrders: 0,
       campaignsRevenue: 0, campaignsOrders: 0,
       automationsRevenue: 0, automationsOrders: 0,
       storeRevenue: 0, storeOrders: 0,

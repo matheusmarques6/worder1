@@ -714,14 +714,21 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
   // engagement on each channel independently. Idempotent on
   // (org, order_id) so the orders/paid call later is a safe no-op.
   // ======================================
-  if (orderValue > 0) {
+  // Pedido de teste (Bogus Gateway) nunca entra na receita: chega com
+  // financial_status 'paid' e inflava campanha, loja e total do contato.
+  if (orderValue > 0 && !order.test) {
     try {
-      const { attributeAcrossChannels } = await import('@/lib/attribution');
-      await attributeAcrossChannels({
+      const { attributeOrder } = await import('@/lib/attribution');
+      await attributeOrder({
         contactId: contact.id,
         organizationId: store.organization_id,
         orderId: String(order.id),
         orderValue,
+        // A janela conta a partir da data REAL do pedido.
+        orderAt: order.created_at || order.processed_at,
+        refunded: parseFloat(order.total_refunded || '0') || 0,
+        currency: order.currency || 'BRL',
+        storeId: store.id,
       });
     } catch (attribErr) {
       console.error('[Shopify Webhook] Attribution failed (orders/create):', attribErr);
@@ -1183,14 +1190,18 @@ async function processOrderPaid(store: ShopifyStoreConfig, order: any) {
     // entry point for stores that use manual capture / COD where
     // orders/create runs before the order is actually paid.
     const orderValue = parseFloat(order.total_price || '0');
-    if (orderValue > 0) {
+    if (orderValue > 0 && !order.test) {
       try {
-        const { attributeAcrossChannels } = await import('@/lib/attribution');
-        await attributeAcrossChannels({
+        const { attributeOrder } = await import('@/lib/attribution');
+        await attributeOrder({
           contactId: contact.id,
           organizationId: store.organization_id,
           orderId: String(order.id),
           orderValue,
+          orderAt: order.created_at || order.processed_at,
+          refunded: parseFloat(order.total_refunded || '0') || 0,
+          currency: order.currency || 'BRL',
+          storeId: store.id,
         });
       } catch (attribErr) {
         console.error('[Shopify Webhook] Attribution failed (orders/paid):', attribErr);
@@ -1490,7 +1501,21 @@ async function processOrderCancelled(store: ShopifyStoreConfig, order: any) {
     })
     .eq('store_id', store.id)
     .eq('shopify_order_id', String(order.id));
-  
+
+  // Revogar a receita atribuída ANTES de qualquer busca de contato.
+  // Antes isto vivia dentro do `if (contact)`: pedido sem e-mail (PDV,
+  // telefone, balcão) ou com contato duplicado nunca era revogado e a
+  // receita cancelada ficava somada para sempre.
+  try {
+    const { revokeOrderAttribution } = await import('@/lib/attribution');
+    await revokeOrderAttribution({
+      organizationId: store.organization_id,
+      orderId: String(order.id),
+    });
+  } catch (revokeErr) {
+    console.error('[Shopify Webhook] Attribution revoke failed:', revokeErr);
+  }
+
   // Buscar contato e deal
   const { data: contact } = await supabase
     .from('contacts')
@@ -1498,7 +1523,7 @@ async function processOrderCancelled(store: ShopifyStoreConfig, order: any) {
     .eq('organization_id', store.organization_id)
     .ilike('email', escapeLike(order.email) as string)
     .maybeSingle();
-  
+
   if (contact) {
     // Tracking: Registrar atividade
     await trackActivity({
@@ -1516,20 +1541,6 @@ async function processOrderCancelled(store: ShopifyStoreConfig, order: any) {
       source: 'shopify',
       sourceId: String(order.id),
     });
-
-    // Refund / cancellation handling — revoke the attributed revenue
-    // across every channel that previously got credit. Klaviyo fires
-    // a "Refunded Order" event for the same purpose; without this,
-    // cancelled orders inflate every "Sales R$" tile forever.
-    try {
-      const { revokeAttributionAcrossChannels } = await import('@/lib/attribution');
-      await revokeAttributionAcrossChannels({
-        organizationId: store.organization_id,
-        orderId: String(order.id),
-      });
-    } catch (revokeErr) {
-      console.error('[Shopify Webhook] Attribution revoke failed:', revokeErr);
-    }
 
     if (store.default_pipeline_id) {
       // Marcar deal como perdido
@@ -2127,6 +2138,38 @@ async function processRefundCreated(store: ShopifyStoreConfig, refund: any) {
     (sum: number, t: any) => sum + parseFloat(t.amount || '0'),
     0
   ) || 0;
+
+  // Ajustar a receita atribuída. Antes só o CANCELAMENTO revogava:
+  // reembolso (total ou parcial) deixava o valor cheio creditado para
+  // sempre — e reembolso é muito mais comum que cancelamento.
+  // O total reembolsado é acumulado na tabela do pedido, então somamos
+  // o histórico e não apenas este reembolso.
+  if (refundAmount > 0) {
+    try {
+      const { data: acumulado } = await supabase
+        .from('shopify_orders')
+        .select('total_refunded')
+        .eq('store_id', store.id)
+        .eq('shopify_order_id', String(refund.order_id))
+        .maybeSingle();
+      const totalRefunded = Math.max(
+        refundAmount,
+        parseFloat((acumulado as any)?.total_refunded || '0') || 0
+      );
+      // Mantém a coluna em dia: até aqui só o full sync a escrevia, e o
+      // cálculo líquido do painel depende dela.
+      await supabase
+        .from('shopify_orders')
+        .update({ total_refunded: totalRefunded, updated_at: new Date().toISOString() })
+        .eq('store_id', store.id)
+        .eq('shopify_order_id', String(refund.order_id));
+
+      const { refundOrderAttribution } = await import('@/lib/attribution');
+      await refundOrderAttribution(store.organization_id, String(refund.order_id), totalRefunded);
+    } catch (refundErr) {
+      console.error('[Shopify Webhook] Refund attribution adjust failed:', refundErr);
+    }
+  }
 
   // Tracking: Registrar atividade na timeline do contato
   if (contactId) {
