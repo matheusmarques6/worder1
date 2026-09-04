@@ -242,17 +242,15 @@ curl -s -X POST https://SEU_DOMINIO.vercel.app/api/ai/test \
 
 Este é o teste mais importante - simula o fluxo completo sem enviar mensagem real.
 
-```bash
-curl -s -X POST https://SEU_DOMINIO.vercel.app/api/ai/test/cloud-webhook \
-  -H "Content-Type: application/json" \
-  -d '{
-    "organizationId": "SEU_ORGANIZATION_ID",
-    "phoneNumber": "5511999999999",
-    "message": "Olá, preciso de ajuda com meu pedido"
-  }' | jq
+```
+# A rota /api/ai/test/webhook foi REMOVIDA no item 58 da auditoria.
+# O simulador vivo e /api/ai/test/cloud-webhook, com OUTRO contrato:
+# exige accountId (uuid de whatsapp_business_accounts), deriva a org da
+# conta em vez de aceitar organizationId, e o campo de pular envio e
+# skipSend. Copiar o corpo antigo para la devolve 400.
 ```
 
-**Resposta esperada:**
+**Resposta esperada** *(shape da rota removida — mantido como registro, nao como contrato vivo)*:
 ```json
 {
   "success": true,
@@ -356,15 +354,12 @@ curl -s -X POST https://SEU_DOMINIO.vercel.app/api/ai/test \
 
 ⚠️ **ATENÇÃO:** Este teste ENVIA mensagem real no WhatsApp!
 
-```bash
-curl -s -X POST https://SEU_DOMINIO.vercel.app/api/ai/test/cloud-webhook \
-  -H "Content-Type: application/json" \
-  -d '{
-    "organizationId": "SEU_ORGANIZATION_ID",
-    "phoneNumber": "SEU_NUMERO_REAL",
-    "message": "Teste de integração",
-    "skipWhatsAppSend": false
-  }' | jq
+```
+# A rota /api/ai/test/webhook foi REMOVIDA no item 58 da auditoria.
+# O simulador vivo e /api/ai/test/cloud-webhook, com OUTRO contrato:
+# exige accountId (uuid de whatsapp_business_accounts), deriva a org da
+# conta em vez de aceitar organizationId, e o campo de pular envio e
+# skipSend. Copiar o corpo antigo para la devolve 400.
 ```
 
 **✅ Passou se:** Você recebeu a resposta no WhatsApp!
@@ -377,7 +372,7 @@ curl -s -X POST https://SEU_DOMINIO.vercel.app/api/ai/test/cloud-webhook \
 curl -s https://SEU_DOMINIO.vercel.app/api/whatsapp/webhook | jq
 ```
 
-**Resposta esperada:**
+**Resposta esperada** *(shape da rota removida — mantido como registro, nao como contrato vivo)*:
 ```json
 {
   "status": "Webhook WhatsApp ativo",
@@ -431,7 +426,7 @@ Execute todos os testes e marque:
 1. Verifique se conversa tem `ai_enabled = true`
 2. Verifique se existe agente ativo
 3. Verifique logs no Vercel
-4. Use o endpoint `/api/ai/test/cloud-webhook` para debug
+4. O endpoint `/api/ai/test/webhook` foi removido (item 58); o simulador vivo e `/api/ai/test/cloud-webhook`, com outro contrato
 
 ### Resposta demora muito
 - Normal: 2-5 segundos (inclui typing indicator)

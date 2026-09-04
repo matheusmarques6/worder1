@@ -71,16 +71,11 @@ curl -s -X POST "$BASE_URL/api/ai/test" \
 
 # =====================================================
 # TESTE 7: Simular Webhook (SEM enviar WhatsApp)
-# O simulador legado saiu no item 58 da auditoria; o vivo e o do canal Cloud.
+# O simulador legado saiu no item 58 da auditoria. NAO repontar para
+# /api/ai/test/cloud-webhook: aquela rota exige accountId e usa skipSend —
+# contrato diferente, o curl daria 400.
 # =====================================================
 
-curl -s -X POST "$BASE_URL/api/ai/test/cloud-webhook" \
-  -H "Content-Type: application/json" \
-  -d "{
-    \"organizationId\": \"$ORG_ID\",
-    \"phoneNumber\": \"$PHONE\",
-    \"message\": \"Olá, preciso de ajuda com meu pedido\"
-  }" | jq
 
 # =====================================================
 # TESTE 8: Status da Conversa
@@ -122,17 +117,10 @@ curl -s -X POST "$BASE_URL/api/ai/test" \
 # =====================================================
 # TESTE 11: Webhook Real (ENVIA WhatsApp!)
 # ⚠️ CUIDADO: Este teste envia mensagem real!
-# Simulador legado removido no item 58; o envio real passa pelo canal Cloud.
+# Simulador legado removido no item 58. Ver a nota do TESTE 7 sobre por que
+# nao se reponta para o cloud-webhook.
 # =====================================================
 
-curl -s -X POST "$BASE_URL/api/ai/test/cloud-webhook" \
-  -H "Content-Type: application/json" \
-  -d "{
-    \"organizationId\": \"$ORG_ID\",
-    \"phoneNumber\": \"$PHONE\",
-    \"message\": \"Teste de integração\",
-    \"skipWhatsAppSend\": false
-  }" | jq
 
 # =====================================================
 # TESTE 12: Status do Webhook

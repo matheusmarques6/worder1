@@ -3628,17 +3628,31 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   falhar — **5 falhas, não 4**. Os `curl` saem no mesmo commit; os dois scripts não rodam em CI nem
   em `package.json`, e removê-los não os quebra.
 
-  **EXECUTADO.** Os dois arquivos saíram, e os `curl` foram **repontados** para
-  `/api/ai/test/cloud-webhook` em vez de apagados — o teste manual continua útil e a asserção de
-  `deletion-set.test.ts` fica satisfeita. Delta de suíte **zero**: `vitest` 1321 com as mesmas 4
+  **EXECUTADO — e o fix round desfez uma decisão minha que estava errada duas vezes.** Eu repontei os
+  `curl` para `/api/ai/test/cloud-webhook` em vez de apagá-los, alegando que assim o teste manual
+  continuava útil **e** que a asserção de `deletion-set.test.ts` ficaria satisfeita. **As duas partes
+  eram falsas:**
+  (i) **os `curl` repontados dariam 400 garantido** — a rota viva exige `accountId` (uuid de
+  `whatsapp_business_accounts`, `cloud-webhook/route.ts:112,128-133`), **ignora `organizationId`**
+  porque deriva a org da conta (`:145`), e o campo é `skipSend`, não `skipWhatsAppSend`. Era
+  exatamente o cenário que o brief tinha previsto: teste manual quebrado **com cara de funcionando**,
+  pior do que remover;
+  (ii) **a asserção nunca estava em risco** — `DELETION_SET_ROUTES` ficou **vazia**
+  (`deletion-set.test.ts:66`), então `callersOf` não é chamada em lugar nenhum e o `flatMap` de
+  `:341-345` roda sobre array vazio. A armadilha do ruling B só dispara **se a rota for listada**, e
+  ela não foi. Apagar os `curl` teria sido igualmente verde.
+  O repontamento nem foi uniforme: `test-ai-system.sh` **apagou** o `curl` (a coisa certa) e só o
+  outro script e o documento repontaram. **Desfeito no fix round:** os `curl` saíram, e no lugar
+  ficou a nota do contrato divergente, para ninguém repontar de novo.
+  Delta de suíte **zero**: `vitest` 1321 com as mesmas 4
   falhas pré-existentes, `tsc` limpo, Python intocado. As listas de deleção **não** são
   parametrizadas, ao contrário das travas AST do Python — foi isso que fez os itens 56 e 57 errarem
   a previsão por 12 casos, e aqui não se repete.
   **Por que apagar não removeu capacidade:** `cloud-runner.ts` declara por escrito que não importa o
   legado e cobre os quatro guards — cooldown (`:500-512`), `max_messages` (`:537-546`),
-  `stop_on_human_reply` (`:550-559`) e transferência (`:966`). **Dois deles melhor**, e o segundo é o
-  mais eloquente: `stop_on_human_reply` era **inerte** no legado, porque `isAgentMessage` era
-  `return false` **literal**. Deleção de duplicata obsoleta, não perda de comportamento.
+  `stop_on_human_reply` (`:550-559`) e transferência (`:966`). **Um deles comprovadamente melhor**, e é o eloquente: `stop_on_human_reply` era **inerte** no
+  legado, porque `isAgentMessage` era `return false` **literal**. (O texto dizia "dois melhor" e
+  provava um — corrigido no fix round.) Deleção de duplicata obsoleta, não perda de comportamento.
   **A ressalva que a paridade não cobre, e que fica sem dono:** o legado passava a **etapa real do
   pipeline**; o `cloud-runner` passa `p_pipeline_stage_id: null` **fixo** (`:433`), e pela RPC
   (`20260903000002:170-176`) `null` satisfaz a cláusula para **todo** agente. **Roteamento de agente
@@ -4479,6 +4493,12 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
     (`:18`), sem conferir se o usuário pertence a ela.
   - **`src/app/api/queue/assign/route.ts`** — org do corpo (`:17-24`) alimentando RPC (`:31-33`) e
     `update`s.
+  - **`src/app/api/queue/items/route.ts`** — mesma família, com **escrita e leitura**. Achada pela
+    revisão da execução; a minha busca inicial parou nas duas primeiras.
+  **E existe precedente de conserto dentro do próprio repositório, que a minha busca por dono não
+  achou: o item 3**, na **mesma pasta**, com o **mesmo defeito**, já corrigido com
+  `requireOrgFromAuth`. Esse é o molde — quem executar o 86 não precisa desenhar nada, só aplicar o
+  que o 3 aplicou.
   **A única barreira é o cookie de sessão:** nenhuma das duas está em `publicApiRoutes` nem em
   `adminOnlyApis`, e nenhuma confere que a sessão pertence à organização que o corpo declara. Ou
   seja, **um usuário autenticado de qualquer loja escreve na fila de atendimento de outra** informando
@@ -4489,8 +4509,10 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   **Não corrigido de propósito:** achado de produto se registra e se devolve. O conserto é derivar a
   organização da sessão em vez do corpo, como as rotas vizinhas já fazem — a decisão de qual delas é
   a fonte da verdade é do dono.
-  *(Verificado sem dono antes de abrir: `grep` por `queue/settings`, `queue/assign` e "organização do
-  corpo" no checklist inteiro devolve zero.)*
+  *(A busca por dono achou zero para `queue/settings` e `queue/assign`, mas **perdeu o item 3** — que
+  é da mesma pasta e do mesmo defeito. O 3 está fechado e conserta rotas específicas; o 86 é o
+  resíduo que ele não alcançou. Registrado porque a lição vale: buscar pelo caminho do arquivo não
+  substitui buscar pelo defeito.)*
 
 - [ ] **85. Chamadas de LLM que a plataforma paga e não contabiliza — o gasto invisível que o item 55 só tapou em parte** `[confirmado]` · *(descoberto no item 55)*
   Citações ancoradas em `e71d5cdb`. O item 55 apagou dois arquivos que faziam `fetch` direto a
