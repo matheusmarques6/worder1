@@ -2468,10 +2468,15 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   próprio `contacts_org_email_lower_idx`** em `MIGRATIONS-MVP-RODAR.sql:175-177` (raiz do repo), que
   sozinha já desmentia o "único". O que sobrevive, e é o que o precedente precisa provar, é que
   `contacts_org_email_lower_idx` é o único com a forma **exata**
-  `(organization_id, lower(email)) where email is not null`. A cláusula parcial é segura pela mesma mecânica do `status = 'issued'` do item 46: ela
-  está **literalmente** no predicado (`o.email is not null`, `orders.py:54`, mesma coluna e mesmo
-  operador), então a prova de implicação do planner, que casa por igualdade de árvore, cai no caso
-  trivial. E é necessária, porque `email` é nullable (`20260815000001:22`).
+  `(organization_id, lower(email)) where email is not null`. A cláusula parcial é segura pela mesma mecânica do `status = 'issued'` do item 46 — **mas a
+  implicação vale por BRAÇO do `OR`, não pelo `WHERE` inteiro, e essa qualificação não é
+  decorativa.** No `WHERE` de nível superior de `orders.py:50-57` a cláusula `o.email is not null`
+  **não** está: ela está **dentro** de um braço da disjunção, e uma disjunção não implica nada que só
+  um dos braços garante. O índice parcial é usável porque o planner monta o caminho de bitmap **por
+  braço** (`generate_bitmap_or_paths`), e aí sim o braço implica `email is not null` trivialmente —
+  mesma coluna, mesmo operador, casamento por igualdade de árvore. **Quem repetir a frase "a cláusula
+  está literalmente no predicado" num predicado SEM `OR` chega a uma conclusão errada.** E a cláusula
+  é necessária, porque `email` é nullable (`20260815000001:22`).
 
   **O que o `where` parcial NÃO compra, e isto é contra-intuitivo:** não escreva que "o índice fica
   do tamanho dos pedidos com e-mail". O **webhook**, que é o caminho quente, grava `email:
@@ -2612,14 +2617,14 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
 
   **A pergunta aberta do `idx_orders_email` se responde, e a resposta muda o desenho — mas NÃO se
   age sobre ela.** Varri o lado TS: 33 arquivos de `src/` mencionam `shopify_orders`, e **quatro**
-  filtram por `email` — `jobs/abandoned-cart.ts:183` (`.or('email.eq.…, shopify_checkout_id.eq.…')`,
+  filtram por `email` — `src/lib/services/shopify/jobs/abandoned-cart.ts:183` (`.or('email.eq.…, shopify_checkout_id.eq.…')`,
   escopado por `store_id`), `shopify/profile-enricher.ts:44` (`.ilike('email', …)`, escopado por
   `store_id`), `ai/tools/handlers/order_status.ts:107` (`.or('email.ilike.…, customer_email.ilike.…')`,
   escopado por org+store) e `email/campaigns/send-batch/route.ts:340`
   (`.or('email.ilike.…, contact_id.eq.…')`). **O achado que ninguém tinha:** três dos quatro usam
   `ILIKE`, e **`ILIKE` também não é servível por b-tree simples** — nem por `idx_orders_email
   (email)`, nem pelo índice funcional novo (que serve `lower(email) = …`, não `ILIKE`). Sobra
-  `abandoned-cart.ts:183` como **único** leitor de igualdade sobre `email` puro em todo o
+  `src/lib/services/shopify/jobs/abandoned-cart.ts:183` como **único** leitor de igualdade sobre `email` puro em todo o
   repositório, e mesmo esse está dentro de um `OR`. **Não derrube `idx_orders_email` assim mesmo:**
   "nenhum leitor no repositório" não é "nenhum leitor", quem responde é
   `pg_stat_user_indexes.idx_scan`, e derrubar índice com base em `grep` é irreversível apoiado em
@@ -2633,7 +2638,18 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   no-op silencioso da falha de uma migration irmã — o argumento por negação de `20260903000001:56-66`.
   **Isto é o oposto do ruling E do item 49, e a diferença é factual, não contradição:** lá
   (`ai_usage_logs`) a tabela **não** nasce no stream, aqui nasce; quem ler os dois seguidos vai achar
-  que se contradizem. `CONCURRENTLY` **NÃO** — e o **precedente é positivo e versionado, não uma
+  que se contradizem.
+  **Mas o argumento do item 46 foi copiado com uma perna a menos, e a perna que falta não vale
+  aqui.** `20260903000001:56-64` se apoia em **duas** coisas: (1) `incentive_grants` nasce no stream
+  **e** (2) não tem DDL sombra em `sql/` nem em `migrations-archive/`. A perna (2) **não existe para
+  estas duas tabelas** — `shopify_orders` tem `CREATE TABLE` sombra em
+  `migrations-archive/20260406_flow_builder_complete_schema.sql:58` (com os índices em `:84-87`) e em
+  `supabase/sync-tables.sql:10` (índices em `:56-60`), mais índices em
+  `sql/SECURITY_PATCH_V3_SUPABASE.sql:465-466`; `whatsapp_cloud_conversations` tem `CREATE TABLE`
+  sombra em `docs/ALL-MIGRATIONS-CONSOLIDATED.sql:374` (índices em `:434-445`) e em
+  `worder-cloud-api-fixes/01-migration-cloud-api-schema.sql:201` (índices em `:261-275`). A conclusão continua certa,
+  porque o guard existe para tabela que **o CI não cria** e o CI cria as duas — mas o que a sustenta
+  é **só** a perna do "nasce no stream", não o argumento inteiro do 46. `CONCURRENTLY` **NÃO** — e o **precedente é positivo e versionado, não uma
   ausência**: `grep -rin concurrently supabase/migrations/` devolve **4 ocorrências**, todas
   comentários explicando por que não usá-lo, e **duas estão no stream versionado** —
   `20260828000002:28,33` e `20260903000001:53,70`, esta última a migration do **item 46**, que serviu
@@ -2671,7 +2687,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   skip scan no PG 17, e a regra do `OR` com braço inindexável); que o planner **usará** os índices
   novos é inferência da regra de implicação de predicado parcial e do `BitmapOr` — sólidas, mas
   leitura. Para `shopify_orders` em particular: sob baixa seletividade e numa consulta de agregação
-  (`orders.py:116-117` faz `count/sum/min/max`), o seq scan continua podendo ganhar, e não se sabe em
+  (`orders.py:112-115` faz `count/sum/min/max`; `:116` é o `from` e `:117` o `where`), o seq scan continua podendo ganhar, e não se sabe em
   que ponto vira. **A suíte:** `pytest -m unit` **1231 → 1233 coletados** e **1229 → 1231 passando**,
   o delta sendo exatamente os dois casos parametrizados que `tests/unit/test_no_max_seq.py` ganha por
   migration nova (`_scanned_files()`, `:49-50`, é `rglob("*.py")` do pacote + `glob("*.sql")` das
@@ -2688,7 +2704,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
 
   **Teto de prova específico destas tabelas, que pode matar qualquer uma das duas migrations:**
   `20260812000001:14-17` diz que o baseline **não** recria os índices de performance das tabelas
-  legadas, e `supabase/README.md:16-22` diz que `migrations-archive/` e `sql/` são DDL aplicado à mão
+  legadas, e `supabase/README.md:16-23` diz que `migrations-archive/` e `sql/` são DDL aplicado à mão
   e **não registrado** no schema de migrations. Logo o conjunto de índices que o CI vê é
   **estritamente menor** que o do banco vivo, e um índice "faltante" segundo `supabase/migrations/`
   pode existir em produção há meses. **Só um banco vivo responde, e estas quatro queries convertem a
@@ -3702,7 +3718,7 @@ você decidir se entram na fila.
   **O estado real da cobertura, para quem executar não reescrever o que já existe:**
   `runtime/tests/db/test_sender_preflight.py:55-67` já exercita **D1** e `:69-79` já exercita **D2**
   (grava sem `+`, consulta com `+`), mais a fábrica `create_opt_out` em `tests/db/factories.py:232-241`
-  e o caminho inteiro em `:233-255`. **Falta o D3** — nenhum caso grava com `+` e consulta sem. E o
+  e o caminho inteiro em `test_sender_preflight.py:233-255` (o arquivo precisa ser repetido: `:233-255` é do arquivo de teste, NÃO de `factories.py`). **Falta o D3** — nenhum caso grava com `+` e consulta sem. E o
   mais importante: **como D3 subsome D1 e D2, esses dois testes continuam verdes sobre o predicado
   reescrito**, isto é, **a suíte existente não distingue o predicado antigo do novo**. O teste que
   falta de verdade não é positivo, é **NEGATIVO** — um telefone que **não** pode casar, para pegar
@@ -3733,7 +3749,9 @@ item 49 — e a razão pela qual o item 49 importa mais do que parece.
 ## Não verificado (fazer antes de fechar itens que dependem disso)
 
 - [ ] Estado real do banco vivo — todo o levantamento saiu do repositório. Índices criados por DDL fora
-      de banda não aparecem aqui. Conferir antes dos itens 8 e 50.
+      de banda não aparecem aqui. Conferir antes dos itens 8 e 50. **O item 50 fechou com esta
+      conferência ainda pendente, registrada dentro dele** — as quatro queries estão no próprio item,
+      e ele diz por escrito que a query 1 pode matar qualquer uma das duas migrations.
 - [ ] Suítes `db`, `rls` e `pipeline` não foram executadas (exigem Postgres). Só a `unit` rodou.
 - [ ] Conteúdo real das envs na Vercel e no Render; se a linha da org piloto está em `ai_runtime_rollout`.
 - [ ] RLS real de `whatsapp_cloud_conversations` no vivo (só há evidência da migration arquivada).

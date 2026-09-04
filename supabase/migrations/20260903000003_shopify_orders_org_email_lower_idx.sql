@@ -48,10 +48,15 @@
 -- null, e nisso o precedente continua sendo o melhor que existe.
 --
 -- POR QUE O `where email is not null` É SEGURO: mesma mecânica do
--- status = 'issued' do item 46. A cláusula do índice está LITERALMENTE no
--- predicado — `o.email is not null`, orders.py:54, mesma coluna, mesmo operador
--- —, então a prova de implicação do planner (predicate_implied_by, que casa por
--- igualdade de árvore) cai no caso trivial, sem precisar de teoria nenhuma.
+-- status = 'issued' do item 46 — MAS A IMPLICAÇÃO VALE POR BRAÇO DO OR, NÃO
+-- PELO WHERE INTEIRO, e a qualificação não é decorativa. No WHERE de nível
+-- superior de orders.py:50-57 a cláusula `o.email is not null` NÃO está: ela
+-- está DENTRO de um braço da disjunção, e disjunção não implica o que só um dos
+-- braços garante. O índice parcial é usável porque o planner monta o caminho de
+-- bitmap POR BRAÇO (generate_bitmap_or_paths), e aí sim o braço implica
+-- `email is not null` trivialmente — mesma coluna, mesmo operador, casamento por
+-- igualdade de árvore em predicate_implied_by. Quem repetir "a cláusula está
+-- literalmente no predicado" num predicado SEM OR erra.
 -- E é necessária: email é nullable (20260815000001:22).
 -- O `%(email)s::text is not null` do mesmo braço é cláusula sem Var — não casa
 -- coluna alguma do índice e cai no recheck; não impede a indexação do braço.
@@ -75,6 +80,15 @@
 -- por negação de 20260903000001:56-66. ISTO É O OPOSTO DO RULING E DO ITEM 49,
 -- e a diferença é factual, não contradição: lá (ai_usage_logs) a tabela NÃO
 -- nasce no stream, aqui nasce.
+-- MAS o argumento do item 46 tem DUAS pernas e só UMA vale aqui.
+-- 20260903000001:56-64 se apoia em (1) incentive_grants nascer no stream E
+-- (2) não ter DDL sombra em sql/ nem em migrations-archive/. A perna (2) NÃO
+-- vale para shopify_orders: há CREATE TABLE sombra em
+-- migrations-archive/20260406_flow_builder_complete_schema.sql:58 (índices em
+-- :84-87) e supabase/sync-tables.sql:10 (índices em :56-60), mais índices em
+-- sql/SECURITY_PATCH_V3_SUPABASE.sql:465-466. A conclusão continua certa,
+-- porque o guard existe para tabela que O CI NÃO CRIA e o CI cria esta — mas o
+-- que a sustenta é só a perna do "nasce no stream", não o argumento inteiro.
 --
 -- Sem CONCURRENTLY: migration do Supabase roda em transação e CONCURRENTLY não
 -- pode rodar dentro de uma. O argumento está escrito por extenso em
@@ -116,8 +130,8 @@
 -- SEM PROVA EXECUTÁVEL: não há Postgres na máquina onde isto foi escrito.
 -- Nenhum EXPLAIN foi rodado — nem do plano de hoje nem do plano depois. Que
 -- este índice SERÁ usado é inferência: sob baixa seletividade (um contato com
--- metade dos pedidos da org) e numa consulta de agregação (orders.py:116-117
--- faz count/sum/min/max) o seq scan continua podendo ganhar, e não se sabe em
+-- metade dos pedidos da org) e numa consulta de agregação (orders.py:112-115
+-- faz count/sum/min/max; :116 é o from e :117 o where) o seq scan continua podendo ganhar, e não se sabe em
 -- que ponto ele vira.
 -- ============================================================================
 

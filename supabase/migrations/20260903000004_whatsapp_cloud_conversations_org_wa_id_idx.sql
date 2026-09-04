@@ -109,6 +109,14 @@
 -- seria cargo cult e transformaria em no-op silencioso a falha de uma migration
 -- irmã (20260903000001:56-66). É o OPOSTO do ruling E do item 49 pela diferença
 -- factual de a tabela nascer, ou não, no stream.
+-- MAS o argumento do item 46 tem DUAS pernas e só UMA vale aqui:
+-- 20260903000001:56-64 se apoia em (1) a tabela nascer no stream E (2) não ter
+-- DDL sombra fora dele. A perna (2) NÃO vale para whatsapp_cloud_conversations:
+-- há CREATE TABLE sombra em docs/ALL-MIGRATIONS-CONSOLIDATED.sql:374 (índices em
+-- :434-445) e em worder-cloud-api-fixes/01-migration-cloud-api-schema.sql:201
+-- (índices em :261-275). A conclusão continua certa — o guard existe para tabela
+-- que O CI NÃO CRIA e o CI cria esta —, mas o que a sustenta é só a perna do
+-- "nasce no stream".
 -- Sem CONCURRENTLY: argumento escrito em 20260903000001:53-55 e
 -- 20260828000002:28-33; nenhum dos 37 statements que criam índice no stream o
 -- usa (30 `create index` + 7 `create unique index` na âncora a6d6332d; 39 em
@@ -129,7 +137,7 @@
 -- SEM PROVA EXECUTÁVEL: não há Postgres na máquina onde isto foi escrito.
 -- Nenhum EXPLAIN, nem do plano de hoje nem do depois. E há um teto de prova
 -- específico destas tabelas legadas: 20260812000001:14-17 diz que o baseline
--- NÃO recria os índices de performance delas, e supabase/README.md:16-22 diz
+-- NÃO recria os índices de performance delas, e supabase/README.md:16-23 diz (o `sql/` está em :23)
 -- que migrations-archive/ e sql/ são DDL aplicado à mão e não registrado — logo
 -- o conjunto de índices que o CI vê é ESTRITAMENTE MENOR que o do banco vivo, e
 -- um `select indexname, indexdef from pg_indexes` pode matar esta migration.
