@@ -3600,8 +3600,28 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `tests/db/test_rls_e2.py:39-40` e a fixture `create_eval_run` (`tests/db/factories.py:507`) viva
   por causa dele. Se o portão de ativação for feito um dia, `run_pack` é reescrito do zero.
 
-- [ ] **58. Apagar `whatsapp-integration.ts` + rota do simulador** — 250 linhas `[confirmado]`
-  Escrevem em `whatsapp_conversations`, declarada morta no STATUS.
+- [ ] **58. Apagar `whatsapp-integration.ts` + rota do simulador** — **697 linhas medidas** `[confirmado]` · *(âncora `3c4bcad6`)*
+  **O mapa corrigido ANTES de andar por ele** — as quatro afirmações abaixo saíram erradas na
+  conferência, e uma delas deixaria o commit vermelho.
+  **(1) A conta ignora metade do trabalho.** `src/lib/ai/whatsapp-integration.ts` = **250** linhas;
+  `src/app/api/ai/test/webhook/route.ts` = **447**. Soma **697** — o "250" contava só a biblioteca e
+  esquecia a rota que o próprio título manda apagar. Números **medidos** (`wc -l`), não estimados.
+  **(2) A citação está certa; a inferência não.** `core/STATUS-agentes-por-evento.md:120`
+  **literalmente escreve "(morta)"** sobre `whatsapp_conversations` — o item não citou mal. O que não
+  se sustenta é o passo seguinte: aquela linha vive na tabela de **"Adiados"**, com estado
+  `roadmap`, e ali "morta" significa *fora do escopo do runtime v1*, **não** *sem leitor*. Medido:
+  **24 módulos alcançáveis** continuam citando a tabela depois de removidos os dois alvos.
+  **Esta deleção não libera tabela nenhuma** — quem vier depois não pode ler o item como permissão
+  para dropar.
+  **(3) `engine.ts` fica FORA.** O acoplamento inteiro são os imports `:6` e `:7`;
+  `createAgentEngine`, `EngineMessage` e `was_transferred` mantêm consumidores
+  (`cloud-runner.ts:805,966`), e `transfer_to` fica com um só (`api/ai/test/route.ts:267`).
+  **A nota herdada do item 55 — "55, 58 e 67 editam o mesmo `engine.ts`" — não vale para o 58.**
+  **(4) A armadilha, reproduzida antes de executar.** `deletion-set.test.ts` resolve chamadores
+  também por `SHELL_FILES`: listar a rota em `DELETION_SET_ROUTES` **sem** remover os `curl` de
+  `scripts/test-ai-system.sh:230` e `scripts/test-commands.sh:76,126` faz a asserção de `:337`
+  falhar — **5 falhas, não 4**. Os `curl` saem no mesmo commit; os dois scripts não rodam em CI nem
+  em `package.json`, e removê-los não os quebra.
 
 - [ ] **59. Apagar `tools/registry.py` + `tools/customer.py`** — ~170 linhas `[confirmado]`
   O responder monta `turn_tools` à mão (`responder.py:499-518`) e nunca passa pelo registry; a grade
