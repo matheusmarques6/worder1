@@ -3241,11 +3241,14 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `lint-imports` **3 kept, 0 broken**. Nenhum `-m db` e nenhum `-m pipeline` (sem Postgres eles
   penduram em vez de falhar). TS não foi tocado.
 
-- [x] **55. Apagar a cadeia `actions-engine`** — ~964 linhas `[confirmado]` · *(âncora `622180a1`)* ·
+- [x] **55. Apagar a cadeia `actions-engine`** — 978 linhas `[confirmado]` · *(âncora `622180a1`)* ·
   commits `46fbb324` (reancoragem) e `c76a29bb` (deleção)
   `src/lib/ai/actions-engine.ts` (332) + `intent-detector.ts` (199) + `sentiment-analyzer.ts` (186)
   = **717 apagadas inteiras**, mais ~112 de `engine.ts`, 122 de `types.ts` e ~13 de
-  `prompt-builder.ts` **editadas**: **~964 linhas em seis arquivos** (três apagados, três editados).
+  `prompt-builder.ts` **editadas**: **978 linhas apagadas em seis arquivos** (três apagados, três
+  editados), 8 inseridas, **970 líquidas**. Este é o número **medido** (`git show --numstat` de
+  `c76a29bb`); o "~964" que este item carregava era a **estimativa da recon**, e os dois artefatos
+  discordavam entre si — corrigido no fix round.
   O "~717" do texto original contava só os três arquivos e não contava o que o próprio item mandava
   apagar dentro de `engine.ts`, nem os tipos que ficam sem consumidor.
   **Três citações estavam deslocadas, e uma delas era arma carregada:** `engine.ts:389-401` **NÃO é
@@ -3260,6 +3263,9 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   retorna zero: são **33 ocorrências em 12 arquivos**, e a composição é o que importa — **22
   statements SQL** em 7 arquivos de `sql/` e `migrations-archive/` (a DDL, três definições de
   `increment_action_trigger` com `GRANT` divergente, dois índices, o trigger `enforce_actions_limit`,
+  **mais o segundo trigger `ai_agent_actions_updated_at` (`sql/ai-agents-complete-migration.sql:434-436`)
+  e a linha de inventário `:494`** — acrescentados no fix round, porque quem for executar o resíduo
+  encontraria mais objeto do que a nota listava,
   RLS/policies e um `TRUNCATE`) e **11 linhas de documentação** em 5 arquivos; **zero em `.ts`/`.tsx`
   e zero no stream versionado** (`supabase/migrations/`). (ii) A migration da tabela **não** está em
   `migrations-archive/`: o único `CREATE TABLE ai_agent_actions` do repositório está em
@@ -3286,7 +3292,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   parcial, pelas tools `save_customer`/`save_interests`. E `mission.forbidden` é coluna do stream
   versionado (`20260813000001_ai_missions.sql:29`), renderizada como *"Não fazer: {item}"* —
   literalmente WHEN/DO dentro das missões.
-  **O que se ganhou, além das ~964 linhas:** `intent-detector.ts:46` e `sentiment-analyzer.ts:38`
+  **O que se ganhou, além das 978 linhas:** `intent-detector.ts:46` e `sentiment-analyzer.ts:38`
   **A conclusão que este item quase não tira, e que suas próprias premissas sustentam:** o CRUD que
   **escrevia** `ai_agent_actions` existiu até `da9b074f` (2026-08-17, *"as engrenagens de uma tela
   que não existe mais"*). Ou seja: a tabela ficou sem escritor **em agosto**, não desde sempre —
@@ -3295,6 +3301,12 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   param de disparar. Não dá para saber quantas sem o banco vivo (`select organization_id, count(*)
   from ai_agent_actions group by 1`), e a decisão D8 já aceitou essa perda — mas ela tem de estar
   escrita, porque "delta zero na suíte" convida à leitura oposta.
+  **Resíduo SQL que já era morto ANTES deste item, e que ninguém tinha registrado:**
+  `sql/ai-agents-functions.sql:173` e `sql/ai-agents-stored-procedures.sql:118` calculam taxa de
+  transferência com `AND 'transfer' = ANY(actions_triggered)` — e isso nunca funcionou: a coluna
+  guardava `action_id` (UUID), nunca a string literal `'transfer'`. Duas funções de métrica que
+  sempre devolveram zero para essa taxa. **Não é dano desta deleção** (era morto antes), mas fica
+  registrado aqui porque foi ao apagar a cadeia que alguém finalmente olhou.
   **Campo morto que a deleção deixou:** `EngineResponse.transfer_to?` ficou com **zero produtores** e
   dois leitores vivos; o `tsc` cala porque é opcional. Não quebra nada (lê `undefined`), mas é o tipo
   de resíduo que só aparece procurando por *produtores*, não por nome removido.
