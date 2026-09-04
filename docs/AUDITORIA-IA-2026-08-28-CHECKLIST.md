@@ -2611,9 +2611,15 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   ausência**: `grep -rin concurrently supabase/migrations/` devolve **4 ocorrências**, todas
   comentários explicando por que não usá-lo, e **duas estão no stream versionado** —
   `20260828000002:28,33` e `20260903000001:53,70`, esta última a migration do **item 46**, que serviu
-  de molde a estas duas. E são **33** `create index` no stream, não 40 (o comentário de
-  `20260903000001:55` diz "~35", também impreciso, mas ele se protege com o "~"). Cite
-  `20260903000001:53` em vez de contar ocorrências.
+  de molde a estas duas. **A conta de `create index` na âncora é 37, não 33 e não 40** — 30
+  statements `create index` mais **7** `create unique index`, que o `grep` por "create index" não
+  pega porque a string contígua é outra. O "33" é contagem de **linhas**: inclui três comentários
+  (`20260902000003:55`, `20260903000001:55` e `:66`) e é cego para os sete únicos. Em HEAD são 39,
+  com as duas deste item. **E o "~35" do comentário de `20260903000001:55` não merece repreensão
+  nenhuma: está a 2 do valor real, enquanto o "33" que circulou estava a 4 e sem o "~" para se
+  proteger.** A decisão continua a mesma pelo motivo certo: cite `20260903000001:53`, onde o
+  argumento está escrito por extenso, **em vez de contar ocorrências** — contagem de `grep` sobre
+  DDL é exatamente o tipo de número que este item existe para desconfiar.
 
   **O custo do lock, com o alvo certo: é o WEBHOOK, não o sync.** A escrita quente de `shopify_orders`
   é `src/app/api/webhooks/shopify/route.ts:601-623`, um `.upsert(…, { onConflict:

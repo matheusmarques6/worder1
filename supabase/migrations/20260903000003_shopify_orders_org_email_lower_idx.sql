@@ -80,8 +80,13 @@
 -- pode rodar dentro de uma. O argumento está escrito por extenso em
 -- 20260903000001:53-55 (item 46, a migration que serve de molde a esta) e em
 -- 20260828000002:28-33; as quatro menções de CONCURRENTLY no stream versionado
--- são todas comentários explicando por que NÃO usá-lo, e nenhum dos 33
--- `create index` do stream o usa.
+-- são todas comentários explicando por que NÃO usá-lo, e nenhum dos 37
+-- statements que criam índice o usa (30 `create index` + 7 `create unique
+-- index`, contados na âncora a6d6332d; 39 em HEAD com as duas deste item).
+-- O "33" que circulou era contagem de LINHAS: três delas comentário e cega para
+-- os `create unique index`. O "~35" de 20260903000001:55 está mais perto da
+-- verdade que ele. Prefira citar 20260903000001:53, onde o argumento está
+-- escrito por extenso, a contar ocorrências.
 --
 -- CUSTO DE DEPLOY — e aqui o alvo é o WEBHOOK, não o sync. A escrita quente de
 -- shopify_orders é src/app/api/webhooks/shopify/route.ts:601-623, um

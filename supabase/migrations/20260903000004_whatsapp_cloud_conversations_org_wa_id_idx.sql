@@ -90,7 +90,11 @@
 -- irmã (20260903000001:56-66). É o OPOSTO do ruling E do item 49 pela diferença
 -- factual de a tabela nascer, ou não, no stream.
 -- Sem CONCURRENTLY: argumento escrito em 20260903000001:53-55 e
--- 20260828000002:28-33; nenhum dos 33 `create index` do stream o usa.
+-- 20260828000002:28-33; nenhum dos 37 statements que criam índice no stream o
+-- usa (30 `create index` + 7 `create unique index` na âncora a6d6332d; 39 em
+-- HEAD). O "33" que circulou contava LINHAS, três delas comentário, e era cego
+-- para os `create unique index` — o "~35" de 20260903000001:55 estava mais
+-- perto. Cite 20260903000001:53 em vez de contar ocorrências.
 -- Custo de deploy: o SHARE conflita com o ROW EXCLUSIVE dos UPDATE de
 -- last_message_at (20260813000003:263-268), que rodam a cada mensagem. A tabela
 -- é menor que shopify_orders (uma linha por WABA×telefone que já conversou),
