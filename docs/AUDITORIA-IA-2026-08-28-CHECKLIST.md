@@ -1842,7 +1842,12 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   fraqueza do argumento: **não existe neste repositório precedente positivo** de índice acrescentado
   por migration posterior a tabela nascida no stream — todos os casos de "índice em migration
   posterior" são tabelas legadas. O que sustenta a decisão é a ausência do motivo do guard, não um
-  caso igual.
+  caso igual. *(**Obsoleto desde o item 50:** o precedente positivo passou a existir, duas vezes —
+  `54d98f3f` (`shopify_orders`, que nasce em `20260815000001:17`) e `c2584b53`
+  (`whatsapp_cloud_conversations`, `20260812000001:522`), as duas migrations de índice sobre tabela
+  nascida no stream, as duas sem `to_regclass` pelo mesmo argumento. A decisão do 46 não muda; o que
+  muda é que ela deixou de ser sustentada só por ausência. Ressalva acrescentada no fix round do item
+  50 — é a mesma obsolescência que o item 49 corrigiu na citação do item 67.)*
 
   **O custo de deploy, que é a única coisa que alguém sente:** `CREATE INDEX` não-concurrent toma
   `SHARE`, que **conflita** com o `ROW EXCLUSIVE` do sweep de 1s e com o consumo de cupom
