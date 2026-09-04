@@ -1,7 +1,7 @@
 // =====================================================
 // JUDGE KEY RESOLVER (Onda 13.6 — BYO total)
 //
-// Usado por: proposals, test-runner, evals, store-analyzer, actions-engine.
+// Usado por: proposals, test-runner, evals, store-analyzer.
 // NUNCA cai pra process.env (BYO total). Worder nao paga IA.
 //
 // 1) tenta organization_api_keys do provider do agente

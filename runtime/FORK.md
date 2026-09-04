@@ -790,8 +790,14 @@ Era: `engine.ts:94-137` (o item citava `:96-134`, deslocado) carregava as regras
 responder uma mensagem exata antes de chamar o modelo; runtime, nada. Hoje os dois lados estão em
 paridade: `actions-engine.ts`, `intent-detector.ts` e `sentiment-analyzer.ts` não existem mais, e o
 que restava dos efeitos migrou para `settings.safety.{handoff_keywords,handoff_confirmation_message,
-blocked_topics}`, `persona.guidelines` e `mission.forbidden` — presentes nos **dois** motores. É a
-execução da decisão D8 de `core/agentes-por-evento.md:75`.
+blocked_topics}`, `persona.guidelines` e `mission.forbidden`. É a execução da decisão D8 de
+`core/agentes-por-evento.md:75`.
+**Correção do fix round:** a versão anterior desta linha dizia que os herdeiros estão "presentes nos
+**dois** motores". Falso para `mission.forbidden` — **o motor TS não lê missões em lugar nenhum**
+(`missions.ts` só tem consumidor de CRUD e de UI; `engine.ts`, `prompt-builder.ts` e
+`cloud-runner.ts` não a citam), e a entrada viva de `:132-133` deste mesmo arquivo já dizia isso:
+*"TS: não existe conceito de missão"*. Os outros herdeiros estão nos dois; `mission.forbidden` é só
+do runtime, e para org não migrada esse efeito **não tem herdeiro nenhum**.
 **Duas afirmações da versão anterior desta linha eram falsas e ficam corrigidas:** a migration da
 tabela **não** está em `migrations-archive/` — o único `CREATE TABLE ai_agent_actions` do
 repositório está em `sql/ai-agents-complete-migration.sql:147`, fora do stream versionado; e

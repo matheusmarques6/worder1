@@ -3287,7 +3287,19 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   versionado (`20260813000001_ai_missions.sql:29`), renderizada como *"Não fazer: {item}"* —
   literalmente WHEN/DO dentro das missões.
   **O que se ganhou, além das ~964 linhas:** `intent-detector.ts:46` e `sentiment-analyzer.ts:38`
-  faziam **`fetch` direto a `api.openai.com`**, fora de `ai-providers.ts` e **fora do cost-tracker** —
+  **A conclusão que este item quase não tira, e que suas próprias premissas sustentam:** o CRUD que
+  **escrevia** `ai_agent_actions` existiu até `da9b074f` (2026-08-17, *"as engrenagens de uma tela
+  que não existe mais"*). Ou seja: a tabela ficou sem escritor **em agosto**, não desde sempre —
+  então **linhas provavelmente existem** nas orgs que usaram a tela enquanto ela existiu. Para essas
+  orgs isto **não é remoção de código inerte, é mudança de comportamento no deploy**: as regras
+  param de disparar. Não dá para saber quantas sem o banco vivo (`select organization_id, count(*)
+  from ai_agent_actions group by 1`), e a decisão D8 já aceitou essa perda — mas ela tem de estar
+  escrita, porque "delta zero na suíte" convida à leitura oposta.
+  **Campo morto que a deleção deixou:** `EngineResponse.transfer_to?` ficou com **zero produtores** e
+  dois leitores vivos; o `tsc` cala porque é opcional. Não quebra nada (lê `undefined`), mas é o tipo
+  de resíduo que só aparece procurando por *produtores*, não por nome removido.
+  faziam **`fetch` direto a `api.openai.com`**, fora de `ai-providers.ts` e **fora do cost-tracker**
+  (o padrão sobrevive em cinco outros sítios vivos — **item 85**, aberto por este round) —
   duas chamadas de LLM por mensagem que nunca chegavam ao `ai_usage_logs`. Gasto invisível, e o
   melhor motivo para apagar hoje em vez de um dia. Some junto a query incondicional a
   `ai_agent_actions` por mensagem inbound no modo `legacy`, com o erro engolido em `console.error`.
@@ -3534,7 +3546,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   - **Virar fail-closed (lançar/bloquear nesses três `catch`):** qualquer soluço de `ai_budgets` ou
     `ai_usage_logs` — não só um orçamento realmente estourado — cala o agente pra TODOS os clientes
     da org até o banco voltar. `checkAiBudget` roda perto do início de `processMessage`
-    (`engine.ts:92`) e nos 4 outros chamadores (`evals.ts`, `proposals.ts`, `test-runner.ts` ×2,
+    (`engine.ts:89` — era `:92` antes de `c76a29bb`) e nos 4 outros chamadores (`evals.ts`, `proposals.ts`, `test-runner.ts` ×2,
     `process/document/route.ts`); um blip transitório de rede vira silêncio total no canal que o
     cliente final enxerga, não um erro interno.
 
@@ -4085,6 +4097,29 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   campo, a projeção `null::timestamptz` e os dois asserts saem juntos. **Não apagar sem decidir:**
   apagar é a saída barata que fecha a porta do RF-006 sem que ninguém tenha dito que quer fechá-la.
 
+- [ ] **85. Chamadas de LLM que a plataforma paga e não contabiliza — o gasto invisível que o item 55 só tapou em parte** `[confirmado]` · *(descoberto no item 55)*
+  Citações ancoradas em `e71d5cdb`. O item 55 apagou dois arquivos que faziam `fetch` direto a
+  `api.openai.com` fora de `ai-providers.ts` e **fora do `cost-tracker`**, e escreveu isso como ganho.
+  A revisão da execução perguntou se sobrava alguém no mesmo estado. **Sobra, e em caminho de
+  produto vivo.**
+  **Inferência com custo real, sem `trackAiUsage` (zero ocorrências em cada arquivo):**
+  `src/lib/services/whatsapp/ai-chatbot-service.ts:365` (o copiloto do inbox — chat completions),
+  `src/lib/segments/ai-generator.ts` (geração de segmento a partir de linguagem natural),
+  `src/lib/ai/embeddings.ts:97` e `:199` (embeddings do RAG, um por chunk indexado) e
+  `src/lib/ai/media/transcription.ts` (áudio recebido). Nenhum desses aparece em `ai_usage_logs`,
+  então **nenhum entra no `checkAiBudget`** — o teto mensal que o item 39 construiu não vê esse
+  consumo, e o lojista pode estourar orçamento por um caminho que o painel não mostra.
+  **Não confundir com chamada de metadado, que não tem custo de token e está certa como está:**
+  `api/ai/models/route.ts:49` e `api/api-keys/route.ts:160,171,245` só listam modelos e validam
+  chave.
+  **E `/api/ai/respond/route.ts` NÃO é caso deste item** — ele faz `fetch` direto (`:196`, `:231`,
+  `:350`) mas **chama `trackAiUsage` em `:394-395`**. É rota órfã, e o dono dela é o **item 61**.
+  **Por que não foi consertado aqui:** decidir se essas cinco chamadas devem debitar do orçamento do
+  lojista é decisão de produto — algumas podem ser deliberadamente por conta da plataforma. O que a
+  auditoria afirma é só que **hoje ninguém sabe**, porque não há registro. Registrado e devolvido.
+  **Só o banco vivo responde o tamanho:** `select provider, count(*), sum(total_tokens) from
+  ai_usage_logs group by 1` comparado com a fatura real do provedor mede a diferença.
+
 - [ ] **84. O CI do runtime só existe em Ubuntu — uma classe inteira de defeito é invisível para ele**
   `[confirmado]` · *(descoberto no item 54)*
   Citações ancoradas em `cae62fae`. `.github/workflows/runtime.yml` tem **quatro** jobs — `lint:40`,
@@ -4323,7 +4358,7 @@ você decidir se entram na fila.
   `# MISSÃO`). Um cliente que escreva `# MISSÃO` no WhatsApp escreve um bloco. O caminho TypeScript tem
   `src/lib/ai/prompt-sanitizer.ts` para exatamente isto — strip de control chars e zero-width, colapso de
   newline, remoção de `</`, truncamento por code point e bloco DATA com delimitador explícito — e
-  `prompt-builder.ts:235` o usa. O runtime não tem contraparte. Não é o item 39 (aquele é sobre o
+  `prompt-builder.ts:227` o usa (era `:235` antes de `c76a29bb`). O runtime não tem contraparte. Não é o item 39 (aquele é sobre o
   transcript ir duas vezes; este é sobre o que o transcript pode conter).
   *(descoberto no item 29)*
 
