@@ -2441,12 +2441,29 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   e-mail está num `OR`, e um braço inindexável derruba a disjunção inteira** — o planner não monta
   `BitmapOr` com um braço que nenhum índice serve, então não adianta `idx_orders_contact` (`:53`)
   existir; sobra bitmap por `idx_shopify_orders_org` (`:52`) e filtro em memória sobre todos os
-  pedidos da org. A forma é cópia do **único índice funcional do repositório inteiro**,
+  pedidos da org. A forma é cópia do **precedente com esta forma exata**,
   `contacts_org_email_lower_idx ON contacts (organization_id, lower(email)) WHERE email IS NOT NULL`
   — `migrations-archive/20260415_event_unification_and_indexes.sql:**166-168**` (`:166` é o `CREATE
   INDEX`, `:167` o `ON`, `:168` o `WHERE`; `:165` é o comentário `-- Contacts`, e a citação `:165-167`
   que circulou **corta fora a cláusula parcial**, justamente o que o precedente prova — mesma lição
-  do item 44). A cláusula parcial é segura pela mesma mecânica do `status = 'issued'` do item 46: ela
+  do item 44).
+  **NÃO escreva que ele é "o único índice funcional do repositório inteiro" — é FALSO**, e a
+  exclusividade era desnecessária, porque a evidência mais forte é justamente a que a frase falsa
+  deixava de fora: existe índice de expressão **dentro do stream versionado**, no arquivo que este
+  item cita seis vezes — `channel_template_policies_uniq on public.channel_template_policies
+  (organization_id, channel, coalesce(event_type, ''))`,
+  `supabase/migrations/20260813000003_sender_preflight.sql:32-33`. **Um índice funcional no stream
+  vale mais como precedente do que um em arquivo congelado.** Fora do stream há vários outros:
+  `migrations-archive/20260408_contacts_utm_data.sql:10-16` e
+  `20260414_consolidated_pending.sql:30-36` (`utm_data->>'utm_source'` e `utm_campaign`, e
+  **parciais**), `20260508_automation_runs_full_columns.sql:71` (`metadata->>'idempotency_key'`),
+  `20260415_product_interests_payment_links.sql:32` e `MIGRATIONS-MVP-RODAR.sql:455`
+  (`COALESCE(variant_id, '')`), os `to_tsvector` GIN de `supabase/complete-schema.sql:215`,
+  `supabase/schema.sql:133` e `supabase/integrations-v2-complete.sql:221` — e uma **segunda cópia do
+  próprio `contacts_org_email_lower_idx`** em `MIGRATIONS-MVP-RODAR.sql:175-177` (raiz do repo), que
+  sozinha já desmentia o "único". O que sobrevive, e é o que o precedente precisa provar, é que
+  `contacts_org_email_lower_idx` é o único com a forma **exata**
+  `(organization_id, lower(email)) where email is not null`. A cláusula parcial é segura pela mesma mecânica do `status = 'issued'` do item 46: ela
   está **literalmente** no predicado (`o.email is not null`, `orders.py:54`, mesma coluna e mesmo
   operador), então a prova de implicação do planner, que casa por igualdade de árvore, cai no caso
   trivial. E é necessária, porque `email` é nullable (`20260815000001:22`).

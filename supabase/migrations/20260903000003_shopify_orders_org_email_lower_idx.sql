@@ -27,12 +27,25 @@
 -- do item: um pedido por venda, para sempre, sem purga, retenção nem
 -- arquivamento em migration alguma.
 --
--- A FORMA é cópia do precedente da casa, e é o único índice funcional do
--- repositório inteiro: contacts_org_email_lower_idx ON contacts
--- (organization_id, lower(email)) WHERE email IS NOT NULL —
+-- A FORMA é cópia do precedente da casa com esta forma EXATA:
+-- contacts_org_email_lower_idx ON contacts (organization_id, lower(email))
+-- WHERE email IS NOT NULL —
 -- migrations-archive/20260415_event_unification_and_indexes.sql:166-168 (:166 é
 -- o CREATE INDEX, :167 o ON, :168 o WHERE; :165 é o comentário "-- Contacts").
 -- A cláusula parcial é parte do precedente, não enfeite.
+-- ELE NÃO É "o único índice funcional do repositório" — essa frase é FALSA e era
+-- desnecessária. Índice de expressão existe DENTRO do stream versionado:
+-- channel_template_policies_uniq on public.channel_template_policies
+-- (organization_id, channel, coalesce(event_type, '')) —
+-- 20260813000003_sender_preflight.sql:32-33, o arquivo que este item cita seis
+-- vezes. Um índice funcional NO STREAM é precedente mais forte que um em arquivo
+-- congelado. Fora do stream há vários outros (utm_data->>'utm_source' em
+-- migrations-archive/20260408_contacts_utm_data.sql:10-16, coalesce(variant_id,'')
+-- em 20260415_product_interests_payment_links.sql:32, os to_tsvector GIN de
+-- supabase/complete-schema.sql:215 etc.), e MIGRATIONS-MVP-RODAR.sql:175-177
+-- tem uma SEGUNDA CÓPIA do próprio contacts_org_email_lower_idx. O que
+-- sobrevive é a forma exata (organization_id, lower(email)) where email is not
+-- null, e nisso o precedente continua sendo o melhor que existe.
 --
 -- POR QUE O `where email is not null` É SEGURO: mesma mecânica do
 -- status = 'issued' do item 46. A cláusula do índice está LITERALMENTE no
