@@ -3107,7 +3107,9 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   **Defeito LATENTE, não ativo.** O único valor produzível era `true` e o hardcode era `True`: o
   comportamento em produção é **idêntico** ao que seria "certo", antes e depois de `7b43c62c`. Nenhum
   lojista foi prejudicado por isto — não priorize como se tivesse sido.
-  **Não é o formato do item 62 nem o do achado `AGENTS_WORKERS` (`:4159`).** Zero ocorrências de
+  **Não é o formato do item 62 nem o do achado `AGENTS_WORKERS`** (busque pelo título — a
+  numeração de linha deste checklist deriva a cada item fechado, e citar linha dele aqui já errou
+  duas vezes). Zero ocorrências de
   configuração em `src/`: nenhuma tela, label, toggle ou texto de ajuda menciona o flag — o único hit
   é string de prompt do motor TS legado (`src/lib/ai/prompt-builder.ts:282`, já catalogado como item
   19 do item 29). O knob vizinho que a UI de fato expõe na aba Identidade, `presentation_mode`
@@ -3116,7 +3118,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   promessa quebrada.
   **NÃO inventar a coluna.** Criar `never_say_ai` em tabela é capacidade nova e decisão de produto; o
   repositório já registrou que o pin em código é deliberado enquanto não houver `tenants`.
-  **`agent_core/prompt.py` é do item 56 (`:3152`), não deste item.** A camada onde o flag "deveria"
+  **`agent_core/prompt.py` é do item 56** (busque pelo título, não pela linha), **não deste item.** A camada onde o flag "deveria"
   pesar (`compose()`/`_base_layer()`) só tem chamador em teste, e o 56 já decidiu: apagar. O fato novo
   que este round levantou foi acrescentado **lá**. O **item 45 não cobre isso**: a fitness dele
   (`test_agent_block_has_one_producer.py`) conta construções de `AgentBlock`, e `prompt.py` produz
@@ -3221,7 +3223,10 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   **O baseline da fila muda daqui em diante.** As seis notas que gravam "as 2 falhas são do item 54,
   alheias a este" (`:340`, `:1572`, `:1738`, `:2920`, `:3061`, `:3138`) são instantâneos datados e
   continuam corretos como registro, mas **deixam de valer para todo item futuro**: o baseline passa a
-  ser **1254 coletados / zero falhas**. O `PYTHONUTF8=1` que os itens `:741` e `:790` usaram
+  ser **1254 coletados / zero falhas**. O `PYTHONUTF8=1` aparece em **nove** lugares deste
+  checklist como contorno — `:741`, `:790`, `:854`, `:939`, `:954`, `:1026`, `:1133`, `:1139` e
+  `:1217` (a revisão da execução contou; a primeira versão deste item dizia dois, e quem limpasse o
+  contorno teria limpado dois de nove). Ele
   justamente para contornar isto **deixa de ser necessário**.
   **Suíte.** Antes, árvore limpa, âncora `cae62fae`: **1244 coletados / 1242 passando / 2 falhas** (as
   **deste** item). Depois: **1254 coletados, todos passando**. O delta de +10 é +9 do arquivo novo
@@ -3989,9 +3994,17 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   Citações ancoradas em `cae62fae`. `.github/workflows/runtime.yml` tem **quatro** jobs — `lint:40`,
   `boundaries:53`, `tests-unit:67`, `tests-db:79` — e **todos os quatro** rodam em
   `runs-on: ubuntu-latest`. Não há `strategy.matrix`, não há runner Windows nem macOS em lugar nenhum
+  **Já existe um segundo caso desta MESMA estrutura, noutra dimensão, e a busca que abriu este item
+  não o achou porque procurou palavras de SO, não o assunto:** um achado da Fase 0 registra um teste
+  de relatórios que *"está CERTO e falha localmente; passa no CI só porque o runner é UTC"* — fuso,
+  não locale, e o mesmo mecanismo: o runner é o único ambiente onde o defeito não aparece, e o fuso
+  dos usuários do produto é o mesmo da máquina de dev. **Isto não é duplicata** (aquele achado é de
+  um teste específico; este é da ausência de matriz que os torna invisíveis em série), mas quem
+  decidir sobre a matriz decide sobre os dois — e a dimensão `TZ` é mais barata de cobrir que a de
+  SO, porque não precisa de runner novo.
   do arquivo. Varredura do checklist inteiro antes de abrir este item (`ubuntu`, `runs-on`,
   `windows-latest`, `matrix`, `matriz`, "sistema operacional"): **zero ocorrências** — as quatro
-  menções a "Windows" são o skip de event-loop do `:40` e três apontadores para o item 54. **Território
+  menções a "Windows" são o skip de event-loop do `:40` e apontadores para o item 54. **Território
   sem dono**, e explicitamente **não é do item 49**, que fala de CI nunca ter rodado e não menciona SO.
   **Por que isso é um achado e não uma preferência:** o desenvolvimento acontece em Windows e a
   entrega acontece em Linux, então toda a família de defeito que **muda de comportamento com o SO** —

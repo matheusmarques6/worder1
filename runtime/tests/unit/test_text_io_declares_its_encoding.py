@@ -62,6 +62,22 @@ def _scanned_files() -> list[Path]:
     )
 
 
+def _mode_is_second(call: ast.Call) -> bool:
+    """`open(arquivo, modo)` tem o modo em 1; `p.open(modo)` tem em 0.
+
+    `io.open` e `codecs.open` são `Attribute` e mesmo assim têm assinatura de
+    módulo — sem isto o índice sai errado e o modo lido vira o nome do arquivo.
+    """
+    func = call.func
+    if isinstance(func, ast.Name):
+        return True
+    return (
+        isinstance(func, ast.Attribute)
+        and isinstance(func.value, ast.Name)
+        and func.value.id in {"io", "codecs", "os"}
+    )
+
+
 def _called_name(node: ast.AST) -> str | None:
     """O nome invocado por uma Call — `p.read_text()` ou `open()` nu."""
     if not isinstance(node, ast.Call):
@@ -84,11 +100,45 @@ def _mode_of(call: ast.Call) -> str:
     for keyword in call.keywords:
         if keyword.arg == "mode" and isinstance(keyword.value, ast.Constant):
             return keyword.value.value if isinstance(keyword.value.value, str) else ""
-    index = 1 if isinstance(call.func, ast.Name) else 0
+    index = 1 if _mode_is_second(call) else 0
     if len(call.args) > index and isinstance(call.args[index], ast.Constant):
         value = call.args[index].value
         return value if isinstance(value, str) else ""
     return ""
+
+
+#: Posição do `encoding` quando passado SEM nome: `read_text(encoding, errors)`
+#: e `write_text(data, encoding, errors)`. Para `open` depende da assinatura.
+_ENCODING_POSITION = {"read_text": 0, "write_text": 1}
+
+
+def _encoding_argument(call: ast.Call, name: str) -> ast.expr | None:
+    """O nó do `encoding` desta chamada, por nome ou por posição.
+
+    Passar posicionalmente é legal e raro; sem isto o detector reprovaria
+    código correto, que é como uma fitness morre.
+    """
+    for keyword in call.keywords:
+        if keyword.arg == "encoding":
+            return keyword.value
+    if name == "open":
+        index = 3 if _mode_is_second(call) else 2
+    else:
+        index = _ENCODING_POSITION[name]
+    return call.args[index] if len(call.args) > index else None
+
+
+def _declares_a_codec(node: ast.expr | None) -> bool:
+    """Só literal de texto conta.
+
+    `encoding=None` é o default explicitado — mesmo locale, mesma corrupção,
+    com cara de conformidade. `encoding=locale.getpreferredencoding()` é o
+    defeito escrito por extenso. Os dois passavam pela primeira versão desta
+    fitness, que só perguntava se a CHAVE existia (achado da revisão da
+    execução do item 54). Qualquer coisa que não seja string literal falha
+    FECHADO: não dá para saber daqui o que uma variável carrega.
+    """
+    return isinstance(node, ast.Constant) and isinstance(node.value, str)
 
 
 def _violations(source: str, label: str = "<código>") -> list[str]:
@@ -98,11 +148,11 @@ def _violations(source: str, label: str = "<código>") -> list[str]:
         if name not in _TEXT_IO:
             continue
         assert isinstance(node, ast.Call)
-        if any(keyword.arg == "encoding" for keyword in node.keywords):
-            continue
         if name == "open" and "b" in _mode_of(node):
             continue
-        found.append(f"{label}:{node.lineno}: {name}(...) sem encoding")
+        if _declares_a_codec(_encoding_argument(node, name)):
+            continue
+        found.append(f"{label}:{node.lineno}: {name}(...) sem encoding literal")
     return found
 
 
@@ -161,3 +211,24 @@ class TestTheDetectorItself:
 
     def test_ignores_binary_reads_that_have_no_encoding_to_declare(self) -> None:
         assert not _violations('Path("x").read_bytes()\nb"x".decode()\n')
+
+    def test_catches_the_conformance_that_is_not_one(self) -> None:
+        # `encoding=None` e o default explicitado: mesmo locale, mesma
+        # corrupcao, com cara de conserto. Passava pela primeira versao.
+        assert _violations('Path("x").read_text(encoding=None)')
+        assert _violations('open("x", encoding=None)')
+
+    def test_catches_the_defect_written_out_in_full(self) -> None:
+        assert _violations('Path("x").read_text(encoding=locale.getpreferredencoding())')
+        assert _violations('Path("x").read_text(encoding=ENC)')
+
+    def test_accepts_an_encoding_passed_by_position(self) -> None:
+        assert not _violations('Path("x").read_text("utf-8")')
+        assert not _violations('Path("x").write_text("ola", "utf-8")')
+        assert not _violations('open("x", "r", -1, "utf-8")')
+        assert not _violations('Path("x").open("r", -1, "utf-8")')
+
+    def test_reads_the_mode_of_a_module_level_open(self) -> None:
+        # `io.open` e Attribute com assinatura de modulo: o modo esta em 1.
+        assert not _violations('io.open("x", "rb")')
+        assert _violations('io.open("x", "r")')
