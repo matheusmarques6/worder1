@@ -223,28 +223,10 @@ fi
 
 print_header "TESTE 7: SIMULAR WEBHOOK (SEM WHATSAPP)"
 
-if [[ "$ORGANIZATION_ID" == *"SEU_ORG"* ]]; then
-    print_skip "ORGANIZATION_ID não configurado"
-else
-    print_test "Simulando mensagem recebida"
-    RESPONSE=$(curl -s -X POST "$BASE_URL/api/ai/test/webhook" \
-        -H "Content-Type: application/json" \
-        -d "{
-            \"organizationId\": \"$ORGANIZATION_ID\",
-            \"phoneNumber\": \"$TEST_PHONE\",
-            \"message\": \"Teste automatizado $(date +%H:%M:%S)\"
-        }" 2>/dev/null)
-
-    check_response "$RESPONSE" '"success":true' "Simulação webhook"
-    
-    if echo "$RESPONSE" | grep -q '"replied":true'; then
-        echo "✅ IA respondeu à simulação"
-        AGENT=$(echo "$RESPONSE" | grep -o '"agentName":"[^"]*"' | cut -d'"' -f4)
-        echo "Agente: $AGENT"
-    elif echo "$RESPONSE" | grep -q '"processed":false'; then
-        echo -e "${YELLOW}⚠️ Mensagem não processada - verifique se existe agente ativo${NC}"
-    fi
-fi
+# O simulador legado (/api/ai/test/webhook) saiu no item 58 da auditoria. O
+# equivalente vivo é /api/ai/test/cloud-webhook, que roda contra as tabelas
+# Cloud — este script não o cobre.
+print_skip "Simulador legado removido (item 58); use /api/ai/test/cloud-webhook"
 
 # =====================================================
 # TESTE 8: STATUS CONVERSA

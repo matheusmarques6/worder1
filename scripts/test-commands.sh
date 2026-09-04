@@ -71,9 +71,10 @@ curl -s -X POST "$BASE_URL/api/ai/test" \
 
 # =====================================================
 # TESTE 7: Simular Webhook (SEM enviar WhatsApp)
+# O simulador legado saiu no item 58 da auditoria; o vivo e o do canal Cloud.
 # =====================================================
 
-curl -s -X POST "$BASE_URL/api/ai/test/webhook" \
+curl -s -X POST "$BASE_URL/api/ai/test/cloud-webhook" \
   -H "Content-Type: application/json" \
   -d "{
     \"organizationId\": \"$ORG_ID\",
@@ -121,9 +122,10 @@ curl -s -X POST "$BASE_URL/api/ai/test" \
 # =====================================================
 # TESTE 11: Webhook Real (ENVIA WhatsApp!)
 # ⚠️ CUIDADO: Este teste envia mensagem real!
+# Simulador legado removido no item 58; o envio real passa pelo canal Cloud.
 # =====================================================
 
-curl -s -X POST "$BASE_URL/api/ai/test/webhook" \
+curl -s -X POST "$BASE_URL/api/ai/test/cloud-webhook" \
   -H "Content-Type: application/json" \
   -d "{
     \"organizationId\": \"$ORG_ID\",

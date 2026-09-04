@@ -243,7 +243,7 @@ curl -s -X POST https://SEU_DOMINIO.vercel.app/api/ai/test \
 Este é o teste mais importante - simula o fluxo completo sem enviar mensagem real.
 
 ```bash
-curl -s -X POST https://SEU_DOMINIO.vercel.app/api/ai/test/webhook \
+curl -s -X POST https://SEU_DOMINIO.vercel.app/api/ai/test/cloud-webhook \
   -H "Content-Type: application/json" \
   -d '{
     "organizationId": "SEU_ORGANIZATION_ID",
@@ -357,7 +357,7 @@ curl -s -X POST https://SEU_DOMINIO.vercel.app/api/ai/test \
 ⚠️ **ATENÇÃO:** Este teste ENVIA mensagem real no WhatsApp!
 
 ```bash
-curl -s -X POST https://SEU_DOMINIO.vercel.app/api/ai/test/webhook \
+curl -s -X POST https://SEU_DOMINIO.vercel.app/api/ai/test/cloud-webhook \
   -H "Content-Type: application/json" \
   -d '{
     "organizationId": "SEU_ORGANIZATION_ID",
@@ -431,7 +431,7 @@ Execute todos os testes e marque:
 1. Verifique se conversa tem `ai_enabled = true`
 2. Verifique se existe agente ativo
 3. Verifique logs no Vercel
-4. Use o endpoint `/api/ai/test/webhook` para debug
+4. Use o endpoint `/api/ai/test/cloud-webhook` para debug
 
 ### Resposta demora muito
 - Normal: 2-5 segundos (inclui typing indicator)

@@ -5,8 +5,9 @@
 //
 // SEMPRE contra tabelas CLOUD (whatsapp_cloud_conversations /
 // whatsapp_cloud_messages / whatsapp_contacts). NÃO usa as tabelas legadas
-// (whatsapp_instances / whatsapp_conversations / whatsapp_messages) nem o
-// simulador legado api/ai/test/webhook.
+// (whatsapp_instances / whatsapp_conversations / whatsapp_messages).
+// O simulador legado api/ai/test/webhook saiu no item 58 da auditoria: este
+// é o único.
 // =====================================================
 
 import { NextRequest, NextResponse } from 'next/server';

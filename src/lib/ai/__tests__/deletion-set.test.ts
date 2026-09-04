@@ -52,6 +52,11 @@ const DELETION_SET: string[] = [
   // `sentiment-analyzer.ts` passaram por aqui — entraram na lista depois da
   // edição de `engine.ts`, o teste provou que nenhum código vivo os alcançava,
   // e saíram junto com os arquivos.
+  //
+  // Onda 5 (item 58): `whatsapp-integration.ts` e a rota
+  // `api/ai/test/webhook` — o herdeiro é `cloud-runner.ts` + a rota
+  // `api/ai/test/cloud-webhook`, e os `curl` dos dois scripts foram
+  // repontados no mesmo commit, senão o teste de rota abaixo ficaria vermelho.
 ];
 
 /**
@@ -274,8 +279,10 @@ function urlMatcher(url: string): RegExp {
 /**
  * PONTO CEGO 1 (onda 3): rota também é chamada por `curl` em shell script —
  * `scripts/test-ai-system.sh` e `scripts/test-commands.sh` batem em
- * `/api/ai/test` e `/api/ai/test/webhook`. O grafo de imports não vê isso, então
- * o script entra como fonte de caller ao lado do código alcançável.
+ * `/api/ai/test` e `/api/ai/test/cloud-webhook`. O grafo de imports não vê
+ * isso, então o script entra como fonte de caller ao lado do código
+ * alcançável. (A rota legada `/api/ai/test/webhook` que este comentário citava
+ * saiu no item 58, junto com os `curl` que a chamavam.)
  */
 const SHELL_FILES: string[] = (() => {
   const dir = path.join(ROOT, 'scripts');
