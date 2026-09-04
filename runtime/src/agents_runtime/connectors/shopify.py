@@ -6,8 +6,12 @@ code. Duas propriedades sustentam o retry seguro:
 
   * o código é o mesmo em toda tentativa (vem do grant), então "já existe"
     no provedor é SUCESSO idempotente, não erro — mas só no passo do DISCOUNT
-    CODE. "Já existe" na price rule não prova cupom nenhum: um 429 no meio
-    deixa a rule criada e o código não (item 33 da auditoria);
+    CODE, e só depois de a rule ter sido confirmada NOSSA nesta chamada.
+    "Já existe" na price rule não prova cupom nenhum: um 429 no meio deixa a
+    rule criada e o código não (item 33 da auditoria), e o código do grant
+    tem 32 bits sem unique no banco, então a rule que carrega aquele título
+    pode ser de OUTRO grant (item 51 da auditoria) — por isso a busca compara
+    os termos, não só o título;
   * nenhuma transação de banco está aberta durante estas chamadas (ADR-6) —
     quem chama grava o grant antes e o código depois.
 
@@ -155,6 +159,34 @@ async def _send(
     return response
 
 
+def _diverging_fields(expected: dict, rule: dict) -> list[str]:
+    """Campos em que a rule achada na loja NÃO é a que esta chamada pediu.
+
+    Campo ausente na resposta é divergência, não empate: um GET que não
+    devolve o campo não prova equivalência nenhuma, e falhar aberto aqui é
+    exatamente o buraco que o item 51 fecha.
+
+    `target_type` está na lista porque sem ele `free_shipping` e um `percent`
+    de 100 são indistinguíveis — os outros três campos são idênticos nos dois
+    (`_price_rule_payload:87-100`).
+    """
+    diverging = [
+        field
+        for field in ("target_type", "value_type", "usage_limit")
+        if field not in rule or rule[field] != expected[field]
+    ]
+    # `value` compara NUMERICAMENTE. `incentive_grants.value` é numeric(12,2),
+    # psycopg entrega Decimal('10.00') e montamos "-10.00"; a Shopify devolve
+    # "-10.0" para a MESMA rule. Igualdade de string reprovaria o nosso próprio
+    # retry idempotente e o cupom legítimo nunca sairia.
+    try:
+        if Decimal(str(rule["value"])) != Decimal(str(expected["value"])):
+            diverging.append("value")
+    except (KeyError, ArithmeticError):
+        diverging.append("value")
+    return diverging
+
+
 async def _find_price_rule_id(
     client: httpx.AsyncClient,
     clock: Clock,
@@ -163,8 +195,14 @@ async def _find_price_rule_id(
     *,
     code: str,
     validity_until: datetime,
+    price_rule: dict,
 ) -> int | None:
-    """Reencontra a price rule que o 422 'taken' disse existir, ou None."""
+    """Reencontra a price rule que o 422 'taken' disse existir, ou None.
+
+    `price_rule` é o corpo que ESTA chamada pediu (`_price_rule_payload`): a
+    comparação mora aqui dentro para a saída continuar sendo "id da rule certa
+    ou None" e o ramo fail-closed do chamador não mudar de forma.
+    """
     found = await _send(
         client,
         clock,
@@ -183,9 +221,28 @@ async def _find_price_rule_id(
         )
     for rule in found.json().get("price_rules", []):
         # título == código do grant: escopo de loja vem do token, escopo de
-        # grant vem daqui. Nunca pega a rule de outro grant.
-        if rule.get("title") == code:
-            return rule["id"]
+        # grant vem daqui. Mas o título NÃO basta para provar que a rule é
+        # deste grant: `coupon_code_for` (`commerce/offer_engine.py:214-217`)
+        # é `WD-` + 8 dígitos hex = 32 bits, e `incentive_grants.coupon_code`
+        # não tem unique. Dois grants da mesma loja podem cair no mesmo
+        # código, e aí esta busca acha a rule do OUTRO — com o percentual, o
+        # usage_limit e a validade dele. Item 51 da auditoria: era assim que
+        # o cliente B saía com o desconto de A no checkout.
+        if rule.get("title") != code:
+            continue
+        diverging = _diverging_fields(price_rule, rule)
+        if diverging:
+            # Nomes de campo, não valores: `failures.classify` lê status HTTP
+            # do TEXTO da exceção (`queueing/failures.py:95-98`,
+            # `\b(?:HTTP\s*)?([1-5]\d{2})\b`), e um "-100.0" cru viraria um
+            # falso HTTP 100 se algum dia esta exceção escapar da captura de
+            # `tools/coupon.py:190`.
+            raise ShopifyError(
+                f"price rule '{code}' já existe na loja com termos diferentes "
+                f"dos deste grant ({', '.join(diverging)}) — provável colisão "
+                "de código entre grants; o cupom NÃO está confirmado"
+            )
+        return rule["id"]
     return None
 
 
@@ -205,6 +262,10 @@ async def create_discount(
     # Saldo de espera das TRÊS chamadas juntas — ver `_RETRY_BUDGET_SECONDS`.
     budget = [_RETRY_BUDGET_SECONDS]
     base = f"https://{store.shop_domain}/admin/api/{API_VERSION}"
+    payload = _price_rule_payload(
+        code=code, kind=kind, value=value,
+        validity_until=validity_until, max_uses=max_uses,
+    )
     headers = {
         "X-Shopify-Access-Token": store.access_token,
         "Content-Type": "application/json",
@@ -218,18 +279,19 @@ async def create_discount(
             budget,
             "POST",
             f"{base}/price_rules.json",
-            json=_price_rule_payload(
-                code=code, kind=kind, value=value,
-                validity_until=validity_until, max_uses=max_uses,
-            ),
+            json=payload,
         )
         if created.status_code == 422 and "taken" in created.text.lower():
-            # A rule é nossa, de uma tentativa anterior — mas isso NÃO prova
-            # que o discount code saiu: um 429 no passo seguinte deixa a rule
-            # órfã. Sair com `code` aqui mandava ao cliente um cupom que não
-            # existe. Reencontra a rule e segue para o passo que confirma.
+            # A rule PODE ser nossa, de uma tentativa anterior — mas isso NÃO
+            # prova que o discount code saiu (um 429 no passo seguinte deixa a
+            # rule órfã), nem sequer que a rule é deste grant (colisão de
+            # código, item 51). Sair com `code` aqui mandava ao cliente um
+            # cupom que não existe, ou o cupom de outra pessoa. Reencontra a
+            # rule, confere os termos, e segue para o passo que confirma.
             rule_id = await _find_price_rule_id(
-                client, clock, budget, base, code=code, validity_until=validity_until
+                client, clock, budget, base,
+                code=code, validity_until=validity_until,
+                price_rule=payload["price_rule"],
             )
             if rule_id is None:
                 raise ShopifyError(
@@ -253,7 +315,20 @@ async def create_discount(
         )
         if coded.status_code == 422 and "taken" in coded.text.lower():
             # Aqui o "já existe" É sucesso: a rule foi confirmada nesta mesma
-            # chamada, e o código pendurado nela é o do grant.
+            # chamada — criada agora, ou achada com os termos DESTE grant — e
+            # o código pendurado nela é o do grant.
+            #
+            # O que este guard NÃO fecha, e não é "economicamente idêntico":
+            # numa colisão entre dois grants com os quatro campos iguais, é
+            # UMA rule, UM código e UM `usage_limit` (`:111`, alimentado por
+            # `max_uses`, default 1) — o primeiro que resgatar consome o cupom
+            # do outro, e o segundo cliente fica com um código que não
+            # funciona no checkout. E o dano contábil continua inteiro:
+            # `consume_incentive_grant` (`20260813000011:46-52,65`) casa pelo
+            # código com `order by created_at limit 1` e credita o pedido ao
+            # contato errado. O resíduo é inerente a o código do cupom ser a
+            # identidade; fechá-lo é o unique
+            # `(organization_id, upper(coupon_code))`, item próprio.
             return code
         if coded.status_code not in (200, 201):
             raise ShopifyError(

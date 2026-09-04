@@ -97,8 +97,11 @@ class TestIdempotentRetry:
                 return httpx.Response(
                     200,
                     json={"price_rules": [
-                        {"id": 7, "title": "OUTRO-GRANT"},
-                        {"id": 99, "title": "WD-DEJA"},
+                        # título diferente: descartada antes de comparar termos
+                        {"id": 7, "title": "OUTRO-GRANT", "target_type": "line_item",
+                         "value_type": "fixed_amount", "value": "-50.0", "usage_limit": 3},
+                        {"id": 99, "title": "WD-DEJA", "target_type": "line_item",
+                         "value_type": "percentage", "value": "-10.0", "usage_limit": 1},
                     ]},
                 )
             # discount code já lá da tentativa anterior: aqui 422 taken É sucesso
@@ -153,7 +156,10 @@ class TestIdempotentRetry:
             if request.method == "POST" and request.url.path.endswith("/price_rules.json"):
                 return httpx.Response(422, json=_TAKEN)
             if request.method == "GET":
-                return httpx.Response(200, json={"price_rules": [{"id": 42, "title": "WD-ORFA"}]})
+                return httpx.Response(200, json={"price_rules": [
+                    {"id": 42, "title": "WD-ORFA", "target_type": "line_item",
+                     "value_type": "percentage", "value": "-10.0", "usage_limit": 1},
+                ]})
             created_codes.append(json.loads(request.content)["discount_code"]["code"])
             return httpx.Response(201, json={"discount_code": {"code": "WD-ORFA"}})
 
@@ -178,6 +184,86 @@ class TestIdempotentRetry:
                 STORE, code="WD-SUMIU", kind="percent", value=Decimal("10"),
                 validity_until=UNTIL, transport=transport,
             )
+
+    async def test_a_rule_created_now_needs_no_terms_check(self) -> None:
+        """Rule criada nesta chamada + 422 no código: sucesso, sem busca.
+
+        O guard de termos (item 51) mora na BUSCA. Quando a rule nasce aqui,
+        ela é deste grant por construção e o 422 do discount code continua
+        sendo o sucesso idempotente que o item 33 deixou.
+        """
+
+        def created_then_taken(request: httpx.Request) -> httpx.Response:
+            if request.url.path.endswith("/price_rules.json"):
+                return httpx.Response(201, json={"price_rule": {"id": 42}})
+            return httpx.Response(422, json={"errors": {"code": ["has already been taken"]}})
+
+        transport, seen = _transport(created_then_taken)
+        code = await shopify.create_discount(
+            STORE, code="WD-NOVA", kind="percent", value=Decimal("10"),
+            validity_until=UNTIL, transport=transport,
+        )
+        assert code == "WD-NOVA"
+        assert [r.method for r in seen] == ["POST", "POST"]  # nenhum GET
+
+    async def test_a_different_decimal_scale_is_the_same_rule(self) -> None:
+        """`numeric(12,2)` vira "-10.00"; a Shopify devolve "-10.0".
+
+        É o NOSSO retry idempotente passando pela busca. Comparar `value` como
+        string reprovaria a própria rule que acabamos de criar e o cupom
+        legítimo nunca sairia — por isso a escala aqui é diferente DE PROPÓSITO.
+        """
+
+        def taken(request: httpx.Request) -> httpx.Response:
+            if request.method == "POST" and request.url.path.endswith("/price_rules.json"):
+                return httpx.Response(422, json=_TAKEN)
+            if request.method == "GET":
+                return httpx.Response(200, json={"price_rules": [
+                    {"id": 77, "title": "WD-ESCALA", "target_type": "line_item",
+                     "value_type": "percentage", "value": "-10.0", "usage_limit": 1},
+                ]})
+            return httpx.Response(422, json={"errors": {"code": ["has already been taken"]}})
+
+        transport, seen = _transport(taken)
+        code = await shopify.create_discount(
+            STORE, code="WD-ESCALA", kind="percent", value=Decimal("10.00"),
+            validity_until=UNTIL, transport=transport,
+        )
+        assert json.loads(seen[0].content)["price_rule"]["value"] == "-10.00"
+        assert code == "WD-ESCALA"
+        assert seen[-1].url.path == "/admin/api/2026-04/price_rules/77/discount_codes.json"
+
+    async def test_a_rule_with_other_terms_is_error_not_success(self) -> None:
+        """Colisão de código (item 51b): a rule achada é de OUTRO grant.
+
+        O caso escolhido é o que os três campos óbvios NÃO separam: um
+        `free_shipping` e um `percent` de 100 têm `value_type=percentage` e
+        `value` numericamente igual a -100. Quem separa é `target_type` — sem
+        ele, o cliente autorizado a frete grátis sairia com 100% de desconto
+        nos itens.
+        """
+
+        def other_grants_rule(request: httpx.Request) -> httpx.Response:
+            if request.method == "POST" and request.url.path.endswith("/price_rules.json"):
+                return httpx.Response(422, json=_TAKEN)
+            if request.method == "GET":
+                return httpx.Response(200, json={"price_rules": [
+                    {"id": 13, "title": "WD-COLIDE", "target_type": "shipping_line",
+                     "value_type": "percentage", "value": "-100.0", "usage_limit": 1},
+                ]})
+            raise AssertionError("não pode chegar ao discount code")
+
+        transport, seen = _transport(other_grants_rule)
+        with pytest.raises(shopify.ShopifyError, match="termos diferentes") as caught:
+            await shopify.create_discount(
+                STORE, code="WD-COLIDE", kind="percent", value=Decimal("100"),
+                validity_until=UNTIL, transport=transport,
+            )
+        assert "target_type" in str(caught.value)
+        # a mensagem não embute valor cru: `failures.classify` leria "-100.0"
+        # como um falso HTTP 100 (`queueing/failures.py:95-98`)
+        assert "100" not in str(caught.value)
+        assert len(seen) == 2  # parou na busca, não tocou o discount code
 
     async def test_any_other_failure_raises_for_the_retry(self) -> None:
         def broken(request: httpx.Request) -> httpx.Response:
