@@ -3472,7 +3472,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   metade de `pack.py` decide também o destino dele.
 
 - [x] **57. Decidir sobre `evals/`: o harness sai, o pack fica** — **949 linhas medidas**
-  `[confirmado]` · âncora `f4d19634` · relatório `task-57-report.md`
+  `[confirmado]` · âncora `f4d19634` · commits `dd51029b` `22a63f96` · relatório `task-57-report.md`
   *Enunciado original: "Ou wirar o harness (rota interna ou handler para `q_evals`), ou apagar*
   *`harness.py` + metade de `pack.py` + `repository/evals.py` + o pack JSON. Manter `load_rubrics`,*
   *que tem consumidor real." — ~400 linhas.*
@@ -3578,8 +3578,15 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   (produção incluída) **1 829 linhas**; os quatro alvos que o item nomeava somavam **589 de fonte**
   — 171 + **~142 estimadas** de `pack.py` (a metade que morreria; o coto de `load_rubrics` tem ~14) +
   146 + 130 — contra as "~400" do enunciado. Executado: **949 medidas** (317 fonte + 632 teste).
-  Suíte: `-m unit` **1232 → 1218** (−14, os casos de `test_eval_harness.py`), `-m db` **−8 métodos**
-  (`test_eval_persistence.py`, não executados: exigem Postgres). `ruff` segue em 10 (item 74),
+  Suíte: `-m unit` **1232 → 1206**, e o número **não** é o −14 que a recon previu. São **−26**, em
+  dois grupos: −14 dos casos de `test_eval_harness.py`, e **−12 de casos parametrizados das travas
+  AST por arquivo**, que iteram os módulos de `src/` e `tests/` e perderam duas entradas cada quando
+  os arquivos sumiram — `test_no_direct_clock` (2), `test_no_direct_randomness` (2),
+  `test_no_max_seq` (2), `test_no_provider_network` (5) e `test_no_sql_outside_repository` (1).
+  A recon contou os testes **de** evals e não os testes **sobre** todo arquivo; a diferença é
+  aritmética de parametrização, não travas perdidas — as cinco continuam de pé sobre todo o resto.
+  `-m db` **−8 métodos** (`test_eval_persistence.py`, não executados: exigem Postgres).
+  `ruff` segue em 10 (item 74),
   `lint-imports` em 3 kept — `agents_runtime.evals` continua nos `source_modules` do contrato
   (`runtime/pyproject.toml:118`) porque o pacote sobrevive. **O que se perde, dito:** a codificação de
   D3 (piso **por rubrica** nunca agregado, `critical` como veto e não subtração, rubrica sem cenário
@@ -3605,8 +3612,20 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
 - [ ] **60. Apagar sobras menores** `[confirmado]`
   Cache de embeddings sem consumidor (`clearEmbeddingsCache` e irmãs, ~90 l.) + `rag.ts::buildContext`
   (duplicata de `formatRAGAsContext`) + `pending_defaults.py` + os 4 pacotes vazios
-  (`dispatch/`, `inbox/`, `onboarding/`, `quota/`) + as filas `q_scheduled`/`q_evals` de `config.py:21,26`
+  (`dispatch/`, `inbox/`, `onboarding/`, `quota/`) + a fila `q_scheduled` de `config.py:21,26`
   e `polling.py:69-79` até existir handler.
+  **`q_evals` SAIU deste escopo — item 57 (`dd51029b`), com prova.** A fila não é sobra: **RNF-022
+  a reserva por requisito** (`core/requisitos-e-entidades.md:100` — *"weighted polling 8 (inbound) :
+  4 (domain events) : 2 (scheduled) : **1 (evals)**"*, que é literalmente `config.py:21`), e `:184`
+  lista `q_evals` entre as entidades de fila. `tests/unit/test_weighted_polling.py` a afirma em
+  **cinco asserções** (`:23` `ALL_BUSY`, `:44` a proporção, `:51` o conjunto polido, `:86`
+  `picked[EVALS] == 1`, `:120` `test_evaluation_never_gets_promoted`), e o **item 81** a inventaria
+  entre as 4 DLQs de `20260812000002:85-88` citando `config.py:26` (*"evals 2"*). Apagá-la
+  contradiria um requisito escrito e deixaria o inventário do 81 obsoleto — **não é decisão de
+  limpeza, é decisão sobre o requisito**, e ninguém a tomou. O item 57 apagou o harness sem tocar na
+  fila justamente por isso: a ordem 57→60 valia, e o resultado é que `q_evals` **fica**.
+  *(Assimetria registrada, sem mudar escopo: `q_scheduled` está no mesmo RNF-022 e no mesmo
+  inventário do item 81. Quem executar o 60 confere antes de apagar.)*
   **Acrescentado pelo item 56 (`f6cc4a79`, revisão da execução):** `AgentConfig.scenario_prompts` —
   campo **morto** que a migração do 56 carregou junto por disciplina de escopo (o brief mandava
   mover, não podar). Ele é escrito com `{}` **literal** em `repository/agent.py:181` e tem **zero
@@ -4273,7 +4292,15 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `engine_loop.py:104-123` — falha `PERMANENT` vai direto (`retries.py:43-45`), transitória vai
   depois de esgotar o limite da fila (`config.py:26`: inbound 5, domain_events 5, scheduled 3,
   evals 2), com `error_class` e `last_error[:500]` acrescentados ao payload
-  (`engine_loop.py:117-120`). **O dano não é a mensagem parada, é o silêncio:** `runtime/FORK.md:517-522`
+  (`engine_loop.py:117-120`).
+  **Este inventário de quatro DLQs continua válido — referência cruzada do item 57 (`dd51029b`).**
+  O 57 apagou o harness de evals, mas **não** a fila: `q_evals` saiu do escopo do **item 60** porque
+  RNF-022 (`core/requisitos-e-entidades.md:100,184`) a reserva por requisito e
+  `tests/unit/test_weighted_polling.py` a afirma em cinco asserções. Ou seja: `q_evals_dlq` e o
+  *"evals 2"* de `config.py:26` citados acima **não vão sumir por baixo deste item**. Se algum dia
+  alguém decidir sobre o requisito e apagar a fila, é aqui que o inventário e o `where` do dreno
+  seletivo precisam ser refeitos.
+  **O dano não é a mensagem parada, é o silêncio:** `runtime/FORK.md:517-522`
   já registrava que o TS desativava a conversa com `ai_disabled_reason` e disparava `sendAlert`, e o
   runtime manda para a DLQ **e nada mais** — *"o agente pode estar morrendo em toda mensagem há dias,
   com o inbox mostrando 'Bot ativo' e o sino em silêncio"*. A única observabilidade é o
