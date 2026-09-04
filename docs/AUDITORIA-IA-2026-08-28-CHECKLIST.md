@@ -2483,11 +2483,32 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `mirror_outbound_to_inbox` (`20260813000003:242-247`, o `OR` em **`:245`**),
   `emit_ai_run_step` (`20260817000002:69-74`, `OR` em `:72`), `legacy_conversation_guard_state`
   (`20260901000003:62-67`, `OR` em `:65`), `mark_ai_handoff` (`20260901000002:148-153`, `OR` em
-  `:151`) e `ingest_inbound_message` (`20260817000004:112-115`, igualdade simples). O mais próximo é
-  `idx_wcc_org_status (organization_id, status)` — coluna líder certa, segunda coluna errada, o que
-  dá **seq scan do tenant**, que numa org grande é seq scan com outro nome; e a única `unique` da
-  tabela, `(waba_id, wa_id)` (`20260812000001:554`), tem a liderança errada, com PG 17
-  (`supabase/config.toml:22`) sem skip scan de b-tree (entrou no 18).
+  `:151`) e `ingest_inbound_message` (`20260817000004:112-115`, igualdade simples). O mais próximo em
+  forma é `idx_wcc_org_status (organization_id, status)`
+  (`docs/ALL-MIGRATIONS-CONSOLIDATED.sql:437-438`, fonte congelada) — coluna líder certa, segunda
+  coluna errada, o que dá **seq scan do tenant**, que numa org grande é seq scan com outro nome; e a
+  única `unique` da tabela, `(waba_id, wa_id)` (`20260812000001:554`), tem a liderança errada, com PG
+  17 (`supabase/config.toml:22`) sem skip scan de b-tree (entrou no 18).
+
+  **O CONTRA-ARGUMENTO QUE ESTA MIGRATION TEM DE ENFRENTAR, e que a versão anterior deste item
+  ignorou: `idx_wcc_org_last_msg`.** Três linhas abaixo do `idx_wcc_org_status` que o parágrafo acima
+  escolheu, no **mesmo arquivo**, está
+  `idx_wcc_org_last_msg (organization_id, last_message_at DESC NULLS LAST)` —
+  `docs/ALL-MIGRATIONS-CONSOLIDATED.sql:440-441`, com cópia idêntica em
+  `worder-cloud-api-fixes/01-migration-cloud-api-schema.sql:267-268`. Ele **casa a ordenação da
+  consulta**: para `where organization_id = X and (wa_id = a or wa_id = b) order by last_message_at
+  desc nulls last limit 1`, esse índice permite um index scan **ordenado** dentro da org, com o
+  filtro de `wa_id` aplicado no heap e **parada na primeira linha que casar** — sem sort e sem
+  top-N. É exatamente o plano oposto ao que o índice novo dá (`BitmapOr` + sort/top-N), que é o que o
+  parágrafo do `order by`, abaixo, passa inteiro explicando que não tem como evitar. **Consequência
+  dita por extenso: numa org onde a conversa procurada é recente, o plano de hoje pode ser mais
+  barato que o de amanhã, e o planner pode simplesmente não escolher o índice novo.** A migration
+  fica de pé assim mesmo, e a decisão não muda — sem `EXPLAIN` ninguém sabe, e para org grande com
+  conversa antiga o índice novo ganha com folga, porque o scan ordenado varre todas as conversas
+  recentes da org até achar o `wa_id`. **Quem resolve isto é a query 1 da seção de banco vivo, abaixo:
+  se `idx_wcc_org_last_msg` existir em produção, esta migration precisa de `EXPLAIN` antes de
+  ganhar crédito.** Registrar isto é obrigação de auditoria: escolher, do mesmo arquivo, o índice que
+  ajuda a tese e ignorar o vizinho de três linhas que a enfraquece não é auditoria.
 
   **"Até 3× por envio" está errado para baixo: é piso, não teto.** `mirror_outbound_to_inbox` é
   chamado **dentro** do laço de bolhas (`sender.py:**552**`, `for wamid, bubble in delivered:`, com a
@@ -2668,6 +2689,10 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   pode existir em produção há meses. **Só um banco vivo responde, e estas quatro queries convertem a
   seção inteira de inferência em fato:**
   1. `select indexname, indexdef from pg_indexes where tablename in ('whatsapp_cloud_conversations','whatsapp_opt_status','shopify_orders','incentive_grants');`
+     — **é esta que decide o contra-argumento do `idx_wcc_org_last_msg`**, acima: se ele existir no
+     vivo, o plano de hoje pode ser um index scan **ordenado** com parada antecipada, e a migration 2
+     troca isso por `BitmapOr` + top-N, podendo não ser escolhida. Nesse caso, `EXPLAIN (analyze,
+     buffers)` dos dois planos antes de creditar o índice novo.
   2. `select count(*)` nas quatro tabelas.
   3. `select idx_scan from pg_stat_user_indexes where indexrelname = 'idx_orders_email';`
   4. `select count(*) filter (where email is null), count(*) filter (where email = '') from public.shopify_orders;`

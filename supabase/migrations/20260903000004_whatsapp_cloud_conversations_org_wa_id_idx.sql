@@ -31,6 +31,26 @@
 -- o predicado não a menciona, e PG 17 (supabase/config.toml:22) não tem skip
 -- scan de b-tree (entrou no 18).
 --
+-- O CONTRA-ARGUMENTO QUE ESTA MIGRATION TEM DE ENFRENTAR: idx_wcc_org_last_msg.
+-- Três linhas abaixo do idx_wcc_org_status citado acima, NO MESMO ARQUIVO, está
+--   CREATE INDEX IF NOT EXISTS idx_wcc_org_last_msg
+--     ON whatsapp_cloud_conversations (organization_id, last_message_at DESC NULLS LAST);
+-- (docs/ALL-MIGRATIONS-CONSOLIDATED.sql:440-441, cópia idêntica em
+-- worder-cloud-api-fixes/01-migration-cloud-api-schema.sql:267-268.)
+-- Ele CASA A ORDENAÇÃO DA CONSULTA: permite um index scan ORDENADO dentro da
+-- org, com o filtro de wa_id aplicado no heap e PARADA NA PRIMEIRA LINHA QUE
+-- CASAR — sem sort, sem top-N. É o plano OPOSTO ao que este índice novo dá
+-- (BitmapOr + sort/top-N, ver o bloco "SEM TERCEIRA COLUNA" abaixo).
+-- CONSEQUÊNCIA, dita por extenso: numa org onde a conversa procurada é RECENTE,
+-- o plano de hoje pode ser mais barato que o de amanhã, e O PLANNER PODE NÃO
+-- ESCOLHER ESTE ÍNDICE. A decisão não muda — sem EXPLAIN ninguém sabe, e para
+-- org grande com conversa antiga o índice novo ganha com folga, porque o scan
+-- ordenado varre todas as conversas recentes da org até achar o wa_id. Mas o
+-- crédito depende do banco vivo: o `select indexname, indexdef from pg_indexes`
+-- do rodapé é o que resolve isto, e se idx_wcc_org_last_msg existir lá, esta
+-- migration precisa de EXPLAIN (analyze, buffers) dos dois planos antes de
+-- ganhar crédito.
+--
 -- FREQUÊNCIA — o texto original do item dizia "até 3× por envio", e isso é
 -- PISO, não teto. mirror_outbound_to_inbox é chamado DENTRO do laço de bolhas
 -- (queueing/sender.py:552, `for wamid, bubble in delivered:`, chamada em :556),
