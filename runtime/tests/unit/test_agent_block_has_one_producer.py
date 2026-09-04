@@ -138,6 +138,5 @@ class TestTheConfigIsAValue:
             AgentConfig(
                 model="claude-sonnet-5",
                 base_prompt="   ",
-                scenario_prompts={},
                 enabled_tools=(),
             )

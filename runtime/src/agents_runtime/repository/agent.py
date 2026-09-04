@@ -14,8 +14,7 @@ A versão ativa vem do **índice parcial** do S2 (D6): não existe FK de cache e
 e dois mecanismos dizendo a mesma coisa divergiriam no pior dia.
 """
 
-from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
@@ -43,7 +42,6 @@ class AgentConfig:
 
     model: str
     base_prompt: str
-    scenario_prompts: Mapping[str, str] = field(default_factory=dict)
     enabled_tools: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
@@ -178,7 +176,6 @@ async def load_active_version(
             # então quebrava calado — mesma falha do juiz (17/ago).
             model=row[1] or "openai/gpt-4o-mini",
             base_prompt=row[2] or "",
-            scenario_prompts={},
             enabled_tools=enabled,
         ),
         agent_id=row[3],
