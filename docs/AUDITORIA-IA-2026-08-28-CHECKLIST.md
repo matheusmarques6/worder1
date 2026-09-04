@@ -2580,11 +2580,8 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   repositório, e mesmo esse está dentro de um `OR`. **Não derrube `idx_orders_email` assim mesmo:**
   "nenhum leitor no repositório" não é "nenhum leitor", quem responde é
   `pg_stat_user_indexes.idx_scan`, e derrubar índice com base em `grep` é irreversível apoiado em
-  evidência parcial. Fica a query abaixo. *(Nota lateral fora do escopo deste item, registrada porque
-  apareceu na varredura: `send-batch/route.ts:338-343` lê `shopify_orders` por `supabaseAdmin`
-  **sem nenhum filtro de `organization_id` ou `store_id`** — só o `OR` de e-mail/contato —, e
-  `supabaseAdmin` não passa por RLS. Não é índice; é escopo de tenant, e merece olhar de quem tocar
-  o item de multi-tenancy.)*
+  evidência parcial. Fica a query abaixo. **A varredura levantou de carona um vazamento cross-tenant
+  em `send-batch/route.ts` — não é índice, é escopo de tenant, e está no item 80.**
 
   **Convenções, com a conta do `CONCURRENTLY` corrigida.** `if not exists` **sim**, regra da casa
   (`20260903000001:79`). `to_regclass` **NÃO**: as quatro tabelas nascem no stream versionado
@@ -3193,6 +3190,78 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   instâncias vivas está lida no `render.yaml` (acima), mas o comportamento do Render em si não é
   verificável daqui. Crash-loop produz a mesma janela e **acontece** nesta casa. A frequência real é desconhecida: `select status, count(*) from
   internal.message_outbox group by status` num banco vivo mede isto direto.
+
+- [ ] **80. `send-batch` lê `shopify_orders` E `shopify_checkouts` sem escopo de tenant, por
+  `supabaseAdmin`, e manda o resultado por e-mail — pedido e carrinho da loja B saem pelo canal da
+  loja A** `[confirmado]` · *(descoberto no item 50)*
+  Citações ancoradas em `a6d6332d`.
+  **São DUAS consultas, não uma.** Em
+  `src/app/api/email/campaigns/send-batch/route.ts`, dentro do laço que monta o `mergeData` de cada
+  contato:
+  - **`:337-343`** — `supabaseAdmin.from('shopify_orders')` `.select('order_number, total_price,
+    created_at, tracking_url, tracking_number, currency, line_items, financial_status')`
+    `.or(\`email.ilike.${contact.email},contact_id.eq.${contact.id}\`)`
+    `.order('created_at', {ascending:false}).limit(1).maybeSingle()`.
+  - **`:366-374`** — `supabaseAdmin.from('shopify_checkouts')`
+    `.select('recovery_url, total_price, currency, line_items')` `.eq('status','abandoned')`
+    `.or(\`email.eq.${contact.email},contact_id.eq.${contact.id}\`)`, mesma ordenação e `limit 1`.
+
+  **Nenhuma das duas tem `.eq('organization_id', …)` nem `.eq('store_id', …)`**, nem um `in (...)` de
+  ids já escopados, nem guard anterior que restrinja a tabela. E `supabaseAdmin` (`:11`,
+  `@/lib/supabase-admin`) é service role: **não passa por RLS**. As duas leituras são, literalmente,
+  sobre a tabela inteira da plataforma.
+
+  **Por que o braço do e-mail vaza e o do `contact_id` não.** `contact_id` é uuid, globalmente único
+  — casar por ele nunca cruza tenant. O braço do e-mail casa **qualquer pedido/carrinho de qualquer
+  organização** com aquele endereço, e o `.order('created_at' desc).limit(1)` faz o registro **mais
+  recente entre todos os tenants** ganhar. Um cliente que comprou na loja A e na loja B tem o
+  registro da B escolhido sempre que ele for o mais novo.
+
+  **O que vaza, concretamente.** Da primeira consulta: número do pedido, valor, data,
+  `financial_status`, `tracking_url`, `tracking_number`, `currency` — tudo isso entra no `mergeData`
+  (`:345-361`) e é **renderizado no corpo do e-mail que a loja A dispara**. Da segunda, que é **pior
+  porque não é só exibição**: `checkout_url` / `cart_url` / `cart_first_item` /
+  `cart_first_item_price` / `cart_total` (`:376-391`) saem do `recovery_url` do carrinho — isto é, **o
+  e-mail de recuperação de carrinho da loja A pode mandar o cliente para o link de checkout do
+  carrinho da loja B**, com o nome e o preço do produto de lá, sob a marca da loja A.
+
+  **A rota SABE o `organizationId` e não o usa aqui.** Ele chega no corpo do POST (`:69`, campo
+  obrigatório em `:72`) e é usado em `:160`, `:176` (`email_sends`), `:417`, `:448`, `:475-476`,
+  `:485` e `:522`. Não é omissão de contexto: é **omissão de uma linha num lugar onde o valor estava na mão**.
+
+  **A superfície.** `/api/email/campaigns/send-batch` está em `publicApiRoutes`
+  (`src/middleware.ts:33`) — o middleware não pede sessão nenhuma —, e a rota tem uma verificação só:
+  `req.headers.get('X-Internal') !== 'true' → 401` (`:58-61`), header que qualquer cliente define.
+  Chamadores legítimos: `cron/email-queue-worker/route.ts:56-60`,
+  `cron/resolve-ab-winners/route.ts:175-177`, `campaigns/send/route.ts:404-408` e
+  `cron/send-scheduled-campaigns/route.ts:64`. **A fraqueza do `X-Internal` é de outro item** — o
+  próprio item 71 e o comentário de `cron/check-delayed-runs/route.ts:34-45` já registram que esse
+  header é client-settable —; aqui ela é citada como superfície, não reivindicada como achado.
+
+  **O conserto já existe no repositório, escrito de propósito, e não foi aplicado aqui.**
+  `src/lib/ai/tools/handlers/order_status.ts:104-107` faz a mesma consulta por e-mail em
+  `shopify_orders` e **sanitiza**, com o comentário na linha de cima: *"Sanitiza contra injeção de
+  filtro PostgREST (vírgula/parênteses)"* → `const safeEmail = sanitizeOrValue(email)`. Em
+  `send-batch` o `email.ilike.${contact.email}` entra **cru**: um `%` no e-mail do contato vira
+  curinga de `ILIKE` e **alarga o casamento sozinho**; vírgula ou parêntese quebram o `or(...)`.
+  Então há duas correções distintas — o escopo de tenant (a que importa) e a sanitização (a que já
+  tem irmão pronto).
+
+  **Menor, da mesma classe:** o `campaign` também é lido sem escopo (`:85-89`,
+  `.from('email_campaigns').eq('id', campaign_id).single()`, sem `organization_id`), embora o
+  `organizationId` esteja no corpo. Risco menor porque o id é uuid.
+
+  **A família é o item 71** (`:2932-2933`, "leitura cross-tenant sem sessão"; `:2942-2945`, rota em
+  `publicApiRoutes` + leitura "sem filtro de organização") — aqui estão as três coisas ao mesmo
+  tempo: rota em `publicApiRoutes`, cliente service role sem RLS, e nenhum `.eq('organization_id')`. **E há um agravante que o 71 não tem:** lá o dado cross-tenant volta num JSON de
+  debug; aqui ele **é enviado por e-mail a um terceiro, sob a marca do lojista errado**. É
+  exfiltração automática, não leitura.
+
+  **NÃO consertado no item 50, de propósito:** aquele item é sobre índice, e este é decisão de quem
+  é dono da multi-tenancy — achado de produto se registra e se devolve. O conserto óbvio (acrescentar
+  `.eq('organization_id', organizationId)` às duas consultas, e `sanitizeOrValue` nos dois filtros)
+  é de quatro linhas, mas muda o que os e-mails já enviados renderizavam, e por isso é decisão, não
+  rodapé.
 
 ---
 
