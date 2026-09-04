@@ -3089,6 +3089,13 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `LookupError` se a org não existir (`:173-174`), sem fallback nem segundo loader; `server.py:273`
   carrega mas **não constrói `JudgeContext`**. Nenhum teste de `-m unit` fixava o literal. O único
   teste que fixa o valor é `tests/db/test_agent_loaders.py:82-95` — `-m db`, **lido e não rodado**.
+  **E a fiação nova não tem trava executável NENHUMA, em tier nenhum — provado por mutação, não
+  suposto.** A revisão da execução rodou duas mutações em worktree isolada: pinar `false` no loader
+  (`agent.py:169`) → suíte **idêntica**; inverter os dois call sites para `not
+  settings.never_say_ai` → suíte **idêntica**. Ou seja, o valor pode ser lido errado, invertido ou
+  ignorado sem que nada fique vermelho. "Nenhum teste fixava o literal" (frase acima) é mais fraco do
+  que a verdade e não deve ser lido como se fosse tudo. **Levado para o item 63**, no mesmo formato
+  do vão que o item 52 registrou lá.
   **O nome mente sobre o alcance, e isto o item não dizia.** A `AI_DISCLOSURE_LINE`
   (`prompt_compiler.py:37-40`) é emitida **incondicionalmente** por `prompt_compiler.py:201`, última
   linha do bloco AGENTE, e `AgentBlock` (`:61-72`) **não tem o campo** — `agent_block()` recebe o
@@ -3118,7 +3125,8 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `responder.py:493` → **`:639`**, `toucher.py:311` → **`:424`**. As três **estavam certas** em
   `a7749f32`, a árvore da data do checklist — o defeito é **ancoragem ausente**, não leitura errada.
   Os itens 39/40/41/44/45 reescreveram os dois arquivos desde então; o item 52 responde por ~4% do
-  deslocamento (+6 de +146 no responder, +5 de +113 no toucher), não por "boa parte". **É a sexta vez
+  deslocamento (+6 de +146 no responder e +5 de +113 no toucher **contando `8501637a`**; pela lista de
+  commits que o próprio item 52 declara é +1 de +146 — a conclusão "~4%" vale nas duas leituras), não por "boa parte". **É a sexta vez
   nesta fila que uma citação sem âncora apodrece.** `FORK.md:370,372` carregava a quarta e a quinta
   versões erradas e foi corrigido em `f0bd017d`.
   **O irmão pior está no mesmo select: `shadow_until` — ver item 83.**
@@ -3151,20 +3159,24 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
 
 - [ ] **56. Apagar `agent_core/prompt.py` + `test_prompt_layers.py`** — ~450 linhas `[confirmado]`
   Mover `AgentConfig`/`TenantPolicy` para `repository/agent.py`, o único importador.
-  Ganho colateral: some a contradição de vocabulário entre `prompt.py:95` e `prompt_compiler.py:28`.
+  Ganho colateral: some a contradição de vocabulário entre `prompt.py:95` e `prompt_compiler.py:37-40`
+  (era `:28` — **a mesma deriva que `f0bd017d` corrigiu no `FORK.md:370`**, deixada de pé duas linhas
+  acima da própria inserção; âncora `8501637a`).
   **Acrescentado pelo item 53 (âncora `8501637a`):** `test_prompt_layers.py:205-236` é uma seção
   própria (`# --- never_say_ai ---`) com **três testes verdes que prendem comportamento de um caminho
-  que produção não executa** — `compose()` tem 17 chamadas em toda a árvore e **todas** estão nesse
+  que produção não executa** — `compose()` tem **19** chamadas em toda a árvore e **todas** estão nesse
   arquivo; produção usa `prompt_compiler.compile_prompt`. Um deles (`:227-236`) constrói
   `TenantPolicy(never_say_ai=False)` e exige que a regra da plataforma continue no corpo. Isso é
   argumento **a favor** de apagar, não contra: é suíte verde defendendo um caminho que nenhum lojista
   jamais executou.
   **Mas apagar cobra um passo no mesmo commit, e o dono dele é este item, não o 53:**
   `runtime/docs/testes-e-cicd.md:47` lista seis regras da linha `agent_core`, e
-  `test_prompt_layers.py:3` se declara textualmente *"one test per rule"* daquela linha. **Cinco das
-  seis** perdem o teste no dia em que o arquivo sumir (a sexta, o think-gate, vive em
-  `tests/unit/test_think_gate.py`). A linha 47 precisa ser reescrita junto — hoje ela está **correta**
-  e não deve ser tocada antes.
+  `test_prompt_layers.py:3` se declara textualmente *"one test per rule"* daquela linha. Das seis, a
+  do think-gate vive fora (`tests/unit/test_think_gate.py`) e **três continuam cobertas** por
+  `test_prompt_compiler_blocks.py` / `test_agent_block_has_one_producer.py` — as **órfãs de verdade
+  são duas**. (A revisão da execução corrigiu aqui um "cinco das seis" que era impreciso; o passo
+  continua obrigatório, o tamanho é que era outro.) A linha 47 precisa ser reescrita junto — hoje ela
+  está **correta** e não deve ser tocada antes.
   **O item 45 não cobre isto:** a fitness dele (`test_agent_block_has_one_producer.py`) conta
   construções de `AgentBlock`, e `prompt.py` produz `Layer`.
 
@@ -3222,6 +3234,12 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   também a cascata D4 em contexto real e a **emissão do alerta `no_org_llm_key`**, que aparece em
   teste apenas dentro de uma docstring. É o vão mais fundo desta lista, porque não se fecha com
   banco — precisa de um teste que exercite a função.
+  **Acrescentado pelo item 53 (revisão da execução, `89eca846`):** a fiação de
+  `never_say_ai` — do literal do loader (`agent.py:169`) até `JudgeContext` — **não tem trava
+  executável em tier nenhum**, e isso foi **provado por mutação**, não suposto: pinar `false` no
+  loader deixa a suíte idêntica, e inverter os dois call sites (`not settings.never_say_ai`) também.
+  O valor pode ser lido errado, invertido ou ignorado sem nada ficar vermelho. Mesma família do vão
+  de `agent_llm_from_org_keys` acima: o caminho existe, a suíte não passa por ele.
 
 - [ ] **64. Migrar cupom da Shopify de REST para GraphQL** `[proposto]` · *(descoberto no item 35)*
   `connectors/shopify.py` cria e busca cupom por três chamadas REST: `POST /price_rules.json`
