@@ -3063,9 +3063,76 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   lint-imports **3 kept**. Delta de +2 = os dois casos de posse. Nenhum `-m db` e nenhum
   `-m pipeline` (sem Postgres eles penduram em vez de falhar). TS não foi tocado.
 
-- [ ] **53. `never_say_ai` lido e ignorado** `[relatado]`
-  Carregado em `repository/agent.py:175`, mas responder e toucher hardcodam `never_say_ai=True`
-  (`responder.py:493`, `toucher.py:311`). Coluna de configuração sem efeito.
+- [x] **53. `never_say_ai` não é coluna: era o mesmo `true` afirmado em três lugares** `[relatado]`
+  · commits `7b43c62c` (call sites) `f0bd017d` (FORK.md) + este texto
+  **Todas as citações deste item estão ancoradas em `8501637a`.**
+  **A premissa antiga morre: não existe coluna `never_say_ai`.** `grep` por ela em todo `*.sql` do
+  repositório volta **vazio** — não está em `supabase/migrations/`, nem em `sql/`, nem em
+  `MIGRATIONS-MVP-RODAR.sql`, e `migrations-archive/` não existe nesta árvore. O valor nasce de um
+  **literal SQL dentro do loader**: `repository/agent.py:169`,
+  `select 'pt-BR'::text, true, null::timestamptz from public.organizations where id = %s`, em que
+  `public.organizations` entra **só como guarda de existência** — nenhuma coluna dela é projetada.
+  O comentário FORK de `:164-167` já explicava: Worder não tem tabela `tenants`, então os defaults do
+  motor ficam pinados em código até a Etapa 3. O enunciado antigo errava nas duas metades: **não é
+  coluna**, e **não era "sem efeito"** — só não tinha o efeito que o nome promete.
+  **O mesmo `true` era afirmado em três lugares.** (1) o literal do select, `agent.py:169` — **esta é
+  a fonte da verdade**; (2) o default `never_say_ai: bool = True` de `JudgeContext`,
+  `judges/pre_send.py:158`; (3) os dois kwargs literais dos call sites, `responder.py:639` e
+  `toucher.py:424`. `7b43c62c` trocou (3) por `settings.never_say_ai`, com `settings`
+  (`TenantSettings`) já em escopo a duas linhas dali. **Apagar os kwargs teria deixado as mesmas duas
+  afirmações que passar deixa** — a redução de contagem não é o argumento. O argumento é outro: **só
+  passando é que mexer no literal do loader muda comportamento ponta a ponta**; apagados, o pin do
+  loader viraria decorativo e a fonte da verdade seria o default de uma dataclass de juiz.
+  **O no-op foi declarado por LEITURA, não por prova executável.** Único construtor de produção de
+  `TenantSettings`: `agent.py:176-178`, com `row[1]` = o literal `true` de `:169`.
+  `TenantPolicy.never_say_ai` **não tem default**; existe um único `load_tenant_policy` e ele levanta
+  `LookupError` se a org não existir (`:173-174`), sem fallback nem segundo loader; `server.py:273`
+  carrega mas **não constrói `JudgeContext`**. Nenhum teste de `-m unit` fixava o literal. O único
+  teste que fixa o valor é `tests/db/test_agent_loaders.py:82-95` — `-m db`, **lido e não rodado**.
+  **O nome mente sobre o alcance, e isto o item não dizia.** A `AI_DISCLOSURE_LINE`
+  (`prompt_compiler.py:37-40`) é emitida **incondicionalmente** por `prompt_compiler.py:201`, última
+  linha do bloco AGENTE, e `AgentBlock` (`:61-72`) **não tem o campo** — `agent_block()` recebe o
+  `TenantSettings` inteiro e lê dele só `primary_language` (`:101`). Ligado e desligado produzem **o
+  mesmo prompt de agente**. O único consumidor real é `judges/pre_send.py:295`, que acrescenta **uma
+  linha ao prompt do juiz** e nada mais. A migration `20260814000001:4-7,23-25` já diz por escrito que
+  a linha de divulgação *"NÃO mora aqui — é do compiler, fora do alcance do lojista"*. **Com todas as
+  letras: quem mexer neste flag esperando calar a divulgação de IA vai mexer na coisa errada.**
+  **Defeito LATENTE, não ativo.** O único valor produzível era `true` e o hardcode era `True`: o
+  comportamento em produção é **idêntico** ao que seria "certo", antes e depois de `7b43c62c`. Nenhum
+  lojista foi prejudicado por isto — não priorize como se tivesse sido.
+  **Não é o formato do item 62 nem o do achado `AGENTS_WORKERS` (`:4159`).** Zero ocorrências de
+  configuração em `src/`: nenhuma tela, label, toggle ou texto de ajuda menciona o flag — o único hit
+  é string de prompt do motor TS legado (`src/lib/ai/prompt-builder.ts:282`, já catalogado como item
+  19 do item 29). O knob vizinho que a UI de fato expõe na aba Identidade, `presentation_mode`
+  (`AreaFields.tsx:30-34`, `api/ai/agents/[id]/route.ts:140-154`), **funciona** — lido em
+  `prompt_compiler.py:100-104`. Aqui **ninguém prometeu nada ao lojista**: é dívida silenciosa, não
+  promessa quebrada.
+  **NÃO inventar a coluna.** Criar `never_say_ai` em tabela é capacidade nova e decisão de produto; o
+  repositório já registrou que o pin em código é deliberado enquanto não houver `tenants`.
+  **`agent_core/prompt.py` é do item 56 (`:3152`), não deste item.** A camada onde o flag "deveria"
+  pesar (`compose()`/`_base_layer()`) só tem chamador em teste, e o 56 já decidiu: apagar. O fato novo
+  que este round levantou foi acrescentado **lá**. O **item 45 não cobre isso**: a fitness dele
+  (`test_agent_block_has_one_producer.py`) conta construções de `AgentBlock`, e `prompt.py` produz
+  `Layer` — é a distinção que faz o 56 continuar necessário.
+  **Reancoragem das três citações do texto antigo:** `repository/agent.py:175` → **`:177`**,
+  `responder.py:493` → **`:639`**, `toucher.py:311` → **`:424`**. As três **estavam certas** em
+  `a7749f32`, a árvore da data do checklist — o defeito é **ancoragem ausente**, não leitura errada.
+  Os itens 39/40/41/44/45 reescreveram os dois arquivos desde então; o item 52 responde por ~4% do
+  deslocamento (+6 de +146 no responder, +5 de +113 no toucher), não por "boa parte". **É a sexta vez
+  nesta fila que uma citação sem âncora apodrece.** `FORK.md:370,372` carregava a quarta e a quinta
+  versões erradas e foi corrigido em `f0bd017d`.
+  **O irmão pior está no mesmo select: `shadow_until` — ver item 83.**
+  **`runtime/docs/testes-e-cicd.md` NÃO foi tocado.** A acusação de que a linha 47 reivindicava
+  cobertura inexistente é **falsa**: os três tiers foram varridos, `test_prompt_layers.py:3` se
+  declara a implementação nominal daquela linha, as seis regras dela têm seis testes, e há cobertura
+  também em `-m db` e nas evals.
+  **Suíte.** Antes e depois, árvore limpa, âncora `8501637a`: `pytest -m unit` **1244 coletados /
+  1242 passando / 2 falhas** de encoding (item 54, não consertadas aqui); `ruff check .` **10**
+  (item 74); `lint-imports` **3 kept, 0 broken**. **Delta zero — nenhum teste acrescentado**, e o
+  motivo: o ramo `False` de `pre_send.py:295` já era inalcançável em produção antes da troca e
+  continua inalcançável depois dela, então **não há vão novo** e nada a acrescentar ao item 63.
+  Nenhum `-m db` e nenhum `-m pipeline` (sem Postgres eles penduram em vez de falhar). TS não foi
+  tocado.
 
 ---
 
@@ -3085,6 +3152,21 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
 - [ ] **56. Apagar `agent_core/prompt.py` + `test_prompt_layers.py`** — ~450 linhas `[confirmado]`
   Mover `AgentConfig`/`TenantPolicy` para `repository/agent.py`, o único importador.
   Ganho colateral: some a contradição de vocabulário entre `prompt.py:95` e `prompt_compiler.py:28`.
+  **Acrescentado pelo item 53 (âncora `8501637a`):** `test_prompt_layers.py:205-236` é uma seção
+  própria (`# --- never_say_ai ---`) com **três testes verdes que prendem comportamento de um caminho
+  que produção não executa** — `compose()` tem 17 chamadas em toda a árvore e **todas** estão nesse
+  arquivo; produção usa `prompt_compiler.compile_prompt`. Um deles (`:227-236`) constrói
+  `TenantPolicy(never_say_ai=False)` e exige que a regra da plataforma continue no corpo. Isso é
+  argumento **a favor** de apagar, não contra: é suíte verde defendendo um caminho que nenhum lojista
+  jamais executou.
+  **Mas apagar cobra um passo no mesmo commit, e o dono dele é este item, não o 53:**
+  `runtime/docs/testes-e-cicd.md:47` lista seis regras da linha `agent_core`, e
+  `test_prompt_layers.py:3` se declara textualmente *"one test per rule"* daquela linha. **Cinco das
+  seis** perdem o teste no dia em que o arquivo sumir (a sexta, o think-gate, vive em
+  `tests/unit/test_think_gate.py`). A linha 47 precisa ser reescrita junto — hoje ela está **correta**
+  e não deve ser tocada antes.
+  **O item 45 não cobre isto:** a fitness dele (`test_agent_block_has_one_producer.py`) conta
+  construções de `AgentBlock`, e `prompt.py` produz `Layer`.
 
 - [ ] **57. Decidir sobre `evals/`** — ~400 linhas `[confirmado]`
   Ou wirar o harness (rota interna ou handler para `q_evals`), ou apagar `harness.py` + metade de
@@ -3779,6 +3861,28 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   **A ordem em relação ao guard de `2b5236d8` importa nos dois sentidos:** com o guard aplicado **e**
   o unique criado, a colisão vira um par de falhas encadeadas — o `ShopifyError` do guard levanta
   antes de `record_coupon_code`, e a `UniqueViolation` nem chega a ser alcançada.
+
+- [ ] **83. `shadow_until` é carregado e não tem UM leitor — e o modo shadow do S9b não existe no
+  runtime** `[confirmado]` · *(descoberto no item 53)*
+  Citações ancoradas em `8501637a`. O select do loader (`repository/agent.py:169`) projeta **três**
+  valores pinados — `'pt-BR'::text`, `true`, `null::timestamptz` — e o terceiro vira
+  `TenantSettings.shadow_until` (campo em `:67`, atribuído em `:178`). `primary_language` tem leitor
+  (`prompt_compiler.py:101`); `never_say_ai` tem um (`judges/pre_send.py:295`, e o item 53 passou a
+  entregar o valor lido até lá); **`shadow_until` tem ZERO**. A varredura de `shadow` em `src/`,
+  `tests/` e `scripts/` devolve seis linhas e **nenhuma é leitura**: `agent.py:64` (docstring), `:67`
+  (o campo), `:165` (o comentário FORK), `:178` (a atribuição), `tests/db/test_agent_loaders.py:94` e
+  `tests/unit/test_agent_block_has_one_producer.py:60` — os dois últimos só asseram que é `None`.
+  **É o "lido e ignorado" literal**, o título que o item 53 carregava para o valor errado: o
+  `never_say_ai` ao menos tem consumidor.
+  **O que ele deveria governar:** `runtime/docs/testes-e-cicd.md:18` define shadow como *"os 7
+  primeiros dias de um tenant novo, com 100% das respostas avaliadas e fila de acompanhamento, sem
+  reter envio"*, e `:111` o lista dentro do gate duplo de ativação (RF-006 e RF-008). **Nada disso
+  existe no runtime:** nenhum código lê o campo, e nenhum caminho decide avaliar, enfileirar ou marcar
+  em função dele.
+  **A decisão é de produto, não de limpeza.** Ou o modo shadow é construído — e aí o campo ganha
+  leitor, e a Etapa 3 do FORK (`agent.py:166-167`) precisa de onde ler a data de verdade —, ou o
+  campo, a projeção `null::timestamptz` e os dois asserts saem juntos. **Não apagar sem decidir:**
+  apagar é a saída barata que fecha a porta do RF-006 sem que ninguém tenha dito que quer fechá-la.
 
 ---
 
