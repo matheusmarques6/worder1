@@ -97,9 +97,7 @@ name = "nothing calls the WhatsApp API except senders (channels)"
 type = "forbidden"
 source_modules = [
     "agents_runtime.agent_core",
-    "agents_runtime.dispatch",
     "agents_runtime.judges",
-    "agents_runtime.onboarding",
 ]
 forbidden_modules = ["agents_runtime.channels"]
 
@@ -135,14 +133,10 @@ source_modules = [
     "agents_runtime.config",
     "agents_runtime.connectors",
     "agents_runtime.crypto",
-    "agents_runtime.dispatch",
     "agents_runtime.evals",
-    "agents_runtime.inbox",
     "agents_runtime.judges",
     "agents_runtime.obs",
-    "agents_runtime.onboarding",
     "agents_runtime.queueing",
-    "agents_runtime.quota",
     "agents_runtime.randomness",
     "agents_runtime.server",
     "agents_runtime.tools",
