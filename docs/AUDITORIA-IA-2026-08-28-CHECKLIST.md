@@ -3334,11 +3334,26 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   nenhum teste morreu junto. Python intocado: `pytest -m unit` **1258/1258**, `ruff` **10** (item 74),
   `lint-imports` **3 kept, 0 broken**.
 
-- [ ] **56. Apagar `agent_core/prompt.py` + `test_prompt_layers.py`** — ~450 linhas `[confirmado]`
-  Mover `AgentConfig`/`TenantPolicy` para `repository/agent.py`, o único importador.
-  Ganho colateral: some a contradição de vocabulário entre `prompt.py:95` e `prompt_compiler.py:37-40`
-  (era `:28` — **a mesma deriva que `f0bd017d` corrigiu no `FORK.md:370`**, deixada de pé duas linhas
-  acima da própria inserção; âncora `8501637a`).
+- [ ] **56. Apagar `agent_core/prompt.py` + `test_prompt_layers.py`** — **495 linhas medidas** `[confirmado]`
+  **Âncora deste item: `59540569`** — toda citação `arquivo:linha` abaixo é nessa numeração, salvo
+  onde o texto diz outra coisa.
+  **"~450 linhas" era estimativa e estava 10% baixa: são 495, MEDIDAS por `wc -l`** (`prompt.py` 203
+  + `test_prompt_layers.py` 292). O item 55 já gravou estimativa como se fosse medição uma vez; aqui
+  o número é medido e está dito que é.
+  Mover `AgentConfig`/`TenantPolicy` para `repository/agent.py`. ~~o único importador~~ — **falso, e
+  seguir a frase ao pé da letra deixa a suíte vermelha por `ImportError`.** São **dois** importadores
+  que ficam: `repository/agent.py:25` **e** `tests/unit/test_agent_block_has_one_producer.py:28` — a
+  fitness do **item 45**, que importa os dois símbolos e os usa em `:59` e `:67`. Os dois imports têm
+  de ser reescritos no mesmo commit da mudança. Terceiro importador não existe: varredura por
+  `agent_core.prompt` / import dinâmico / `TYPE_CHECKING` / `__all__` / contrato de `lint-imports`
+  devolve só esses dois mais o próprio `test_prompt_layers.py:21`.
+  ~~Ganho colateral: some a contradição de vocabulário entre `prompt.py:95` e `prompt_compiler.py:37-40`~~
+  — **não há contradição, e o ganho colateral não existe.** `prompt.py:95` é o **meio de uma citação
+  histórica dentro de um comentário**: `:94-98` explica que a linha *"até aqui dizia o oposto"* (bug
+  corrigido em `71d738dc`). O texto **vivo** do módulo, `:107-111` (*"Nunca negue ser uma IA…"*),
+  **concorda** com `prompt_compiler.py:37-40`. O que some é uma **duplicata** da mesma regra em dois
+  módulos, um deles morto — não uma contradição. A citação, seguida ao pé da letra num commit,
+  descreveria errado o que o commit faz.
   **Acrescentado pelo item 53 (âncora `8501637a`):** `test_prompt_layers.py:205-236` é uma seção
   própria (`# --- never_say_ai ---`) com **três testes verdes que prendem comportamento de um caminho
   que produção não executa** — `compose()` tem **19** chamadas em toda a árvore e **todas** estão nesse
@@ -3348,12 +3363,26 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   jamais executou.
   **Mas apagar cobra um passo no mesmo commit, e o dono dele é este item, não o 53:**
   `runtime/docs/testes-e-cicd.md:47` lista seis regras da linha `agent_core`, e
-  `test_prompt_layers.py:3` se declara textualmente *"one test per rule"* daquela linha. Das seis, a
-  do think-gate vive fora (`tests/unit/test_think_gate.py`) e **três continuam cobertas** por
-  `test_prompt_compiler_blocks.py` / `test_agent_block_has_one_producer.py` — as **órfãs de verdade
-  são duas**. (A revisão da execução corrigiu aqui um "cinco das seis" que era impreciso; o passo
-  continua obrigatório, o tamanho é que era outro.) A linha 47 precisa ser reescrita junto — hoje ela
-  está **correta** e não deve ser tocada antes.
+  `test_prompt_layers.py:3` se declara textualmente *"one test per rule"* daquela linha.
+  **A contagem de regras órfãs errou QUATRO vezes seguidas, e a sequência é o registro mais útil
+  deste item: 5 → 2 → 0 → 1.** O texto original do 53 dizia **cinco das seis**; o fix round dele
+  corrigiu para **duas**; a recon deste item varreu os 54 arquivos de `tests/unit/` e disse **zero**;
+  a revisão do planejamento leu o suposto sucessor da regra 2 e achou que ele **não testa a regra
+  2** — a conta certa é **uma**. Cada etapa foi corrigida por quem leu o que o sucessor asserta, e
+  não por quem leu o nome do arquivo.
+  **As cinco com sucessor real:** ordem das camadas → `test_prompt_compiler_blocks.py:151`
+  (`test_block_order_is_fixed`); contexto de compras → `test_purchase_prompt.py:45-68`; idioma →
+  `test_agent_block_has_one_producer.py:101,110`; `never_say_ai` no corpo →
+  `test_prompt_compiler_blocks.py:131-147` (mais forte que a daqui: prova que a linha resiste a uma
+  guideline hostil do lojista); think-gate → `tests/unit/test_think_gate.py`, que sempre viveu fora.
+  **A órfã é a regra 2 — "seleção do prompt de cenário por `origin_occasion`".** O sucessor que a
+  recon alegou, `test_mission_resolver.py:121-153`, é `TestArbitration` e exercita `arbitrate()`,
+  cujo corpo inteiro (`mission_resolver.py:133-150`) é `if owner … / if discovery … / raise` — **não
+  olha `event_type`**. A seleção por evento mora em `repository/missions.py:43-56`
+  (`load_active_mission`, `where event_type = %s`), e `grep -rn missions runtime/tests` devolve só
+  fábrica, schema e RLS: **zero teste em tier nenhum**. *"Parecida" não é sucessor.* O vão foi
+  levado ao **item 63**.
+  A linha 47 precisa ser reescrita junto — hoje ela está **correta** e não deve ser tocada antes.
   **O item 45 não cobre isto:** a fitness dele (`test_agent_block_has_one_producer.py`) conta
   construções de `AgentBlock`, e `prompt.py` produz `Layer`.
 
