@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { executeWorkflow, Workflow } from '@/lib/automation/execution-engine';
 import { claimRun, releaseRun, withHeartbeat } from '@/lib/automation/run-lock';
+import { mergeNodeResults } from '@/lib/automation/node-results';
 export const dynamic = 'force-dynamic';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -226,12 +227,20 @@ export async function GET(request: NextRequest) {
           result.status === 'cancelled' ? 'cancelled' :
           'failed';
 
+        // Merge with the previous segments: a resumed run only executes
+        // the nodes after the pause, so overwriting the snapshot erased
+        // Email 1 the moment the run reached Email 2.
+        const mergedNodeResults = mergeNodeResults(
+          (metadata as any)?.result?.nodeResults,
+          result.nodeResults
+        );
+
         await releaseRun(
           run.id,
           lock.token,
           finalStatus as any,
           result.error || null,
-          { nodeResults: result.nodeResults } as any
+          { nodeResults: mergedNodeResults } as any
         );
 
         // CRITICAL: releaseRun's RPC doesn't write waiting_until /
@@ -250,7 +259,7 @@ export async function GET(request: NextRequest) {
                   current_node_id: waitingAt.nodeId,
                   metadata: {
                     ...metadata,
-                    result: { duration: result.duration, nodeResults: result.nodeResults },
+                    result: { duration: result.duration, nodeResults: mergedNodeResults },
                     waiting_at: {
                       nodeId: waitingAt.nodeId,
                       resumeAt: waitingAt.resumeAt,

@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { executeWorkflow, Workflow } from '@/lib/automation/execution-engine';
+import { mergeNodeResults } from '@/lib/automation/node-results';
 export const dynamic = 'force-dynamic';
 // Vercel default for cron is 60s on Pro. Action_email itself has a 60s
 // node timeout, plus DB writes + Resend round-trip — one slow run can
@@ -321,7 +322,13 @@ export async function GET(request: NextRequest) {
             ...metadata,
             result: {
               duration: result.duration,
-              nodeResults: result.nodeResults,
+              // Merge with the previous segments: a resumed run only
+              // executes the nodes after the pause, so overwriting here
+              // erased Email 1 the moment the run reached Email 2.
+              nodeResults: mergeNodeResults(
+                (metadata as any)?.result?.nodeResults,
+                result.nodeResults
+              ),
             },
             // Snapshot for the resume path above. rerunOnResume tells
             // the next pickup whether to re-execute the paused node
