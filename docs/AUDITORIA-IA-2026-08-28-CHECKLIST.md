@@ -1073,7 +1073,10 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `httpx.AsyncClient` interno. O fechamento em si mora em
   `agent_core/providers.py::scoped_agent_llm` — o único mecanismo que fecha o cliente resolvido por
   `resolve_agent_llm`, guardado por `owns`: só fecha o cliente que a cascata BYO construiu, nunca o
-  `llm` de plataforma do Judge 1. Nenhum gerenciador de ciclo de vida entre turnos, nenhum registro
+  `llm` de plataforma do Judge 1. **Reancorado pelo item 52 (commit `9e184ab3`):** quando este item
+  fechou, essa garantia era **acidente** — `owns` era `True` fixo nos dois call sites, e só valia
+  porque ninguém passava `platform` para o degrau 3. O item 52 fez `resolve_agent_llm` devolver a
+  posse junto com o port (`ResolvedAgentLlm.built_here`), e a frase acima passou a ser **estrutural**. Nenhum gerenciador de ciclo de vida entre turnos, nenhum registro
   global, nenhum pool — só um `finally` (por trás de um `@asynccontextmanager`) que cobre o corpo
   inteiro do turno, todo `return` intermediário incluído.
 
@@ -2948,10 +2951,107 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
      de checkout só ocorre entre grants cujas janelas de `ends_at` se sobrepõem dentro dos 60 s de
      `_ENDS_AT_MARGIN`.
 
-- [ ] **52. Degrau 3 da cascata: decidir** `[confirmado]`
-  `agent_core/providers.py:106-107` só usa `platform` se o parâmetro for passado, e nenhum dos dois
-  chamadores passa. `AGENTS_PLATFORM_LLM_ENABLED` é inalcançável. Ou passar nos dois call sites, ou
-  remover flag e parâmetro — manter os dois estados é a pior opção.
+- [x] **52. Degrau 3 da cascata: decidir** `[confirmado]` · âncora `8ca87d70` · commits `9e184ab3`
+  `9e51923f` · relatório `task-52-report.md`
+  **As duas citações do achado original estavam erradas por ~10 linhas.** `providers.py:106` é
+  `) -> LlmPort:` e `:107` é docstring; o degrau (3) mora em `providers.py:116-117` e o parâmetro é
+  `providers.py:105`. A premissa central sobrevive: **o degrau é inalcançável em produção**.
+
+  **"Os dois chamadores" está incompleto, e a palavra "inalcançável" precisa de qualificador.** São
+  **8 chamadas** de `resolve_agent_llm`: **2 de produção** (`responder.py::respond`,
+  `toucher.py::touch` — nenhuma passa `platform`) e **6 de teste**, das quais **duas passam**
+  (`test_provider_cascade.py`, degrau 3 desligado e ligado, com um sentinela). Ou seja: inalcançável
+  **em produção**, plenamente alcançável e coberto em `-m unit`. **Não é código morto — é capacidade
+  não entregue.** Apagar o parâmetro derrubaria dois testes verdes.
+
+  **A escolha binária do achado é falsa; a decisão tem quatro partes.**
+  1. **Não ligar** o degrau (não passar `platform`). Hoje isso seria um bug, não uma ativação — ver
+     a armadilha abaixo — e ligar capacidade comercial estacionada não é escopo de auditoria.
+  2. **Não remover** flag nem parâmetro. `core/agentes-por-evento.md:421` (ruling D9) manda que o
+     degrau *"permanece atrás de `AGENTS_PLATFORM_LLM_ENABLED=off` até decisão comercial futura"*, e
+     o documento é normativo neste repositório (`:3`, `:415`), reafirmado por
+     `core/STATUS-agentes-por-evento.md:114`. Apagar capacidade que o dono estacionou de propósito
+     pede consentimento, não conserto de auditoria.
+  3. **Desarmar a armadilha** — o único código de comportamento que muda, commit `9e184ab3`.
+  4. **Consertar o texto que engana** — commit `9e51923f`, e **é no código, não no documento de
+     produto**.
+
+  **"Manter os dois estados é a pior opção" continua verdade, mas o estado eliminado é a ARMADILHA,
+  não a flag.** Isto importa porque o achado do `AGENTS_WORKERS` (Fase de achados) dizia herdar "o
+  mesmo ruling do item 52" — e a herança cega inverteria a decisão de lá. Ver a correção naquele
+  achado.
+
+  **A armadilha (o achado que decide o item).** `owns_agent_llm = True` era setado
+  **incondicionalmente** logo depois de `resolve_agent_llm` retornar, nos dois call sites. Quem
+  fizesse a mudança "de duas linhas" que o achado recomendava — passar `platform=llm`, e o objeto
+  **já está em escopo** três linhas antes (`agent_llm: LlmPort = llm`) — faria `resolve_agent_llm`
+  poder devolver o **cliente de plataforma por processo**, que `scoped_agent_llm` então **fecha** no
+  `finally` do turno. Judge 1 e embeddings **de todas as organizações do processo** bateriam num
+  httpx fechado a partir do primeiro turno de org sem chave: **o item 40 reintroduzido,
+  cross-tenant**. A intenção correta já estava escrita na docstring de `scoped_agent_llm`
+  (*"`owns=False` nunca fecha: é o `llm` de plataforma do Judge 1, por processo"*) — os dois call
+  sites é que não a calculavam.
+
+  **O conserto: a cascata passou a reportar a posse.** `resolve_agent_llm` devolve
+  `ResolvedAgentLlm(port, built_here)` — `built_here=True` no degrau BYO (onde `client_for` acabou
+  de construir), `False` no degrau (3) (que devolve o objeto do chamador) —, e os dois call sites
+  passam esse booleano ao `owns` de `scoped_agent_llm`. **Não** derivamos a posse no call site com
+  `agent_llm is not llm`: essa expressão é correta só por **procedência do argumento**, e um degrau
+  futuro que devolvesse objeto compartilhado que o chamador **não** passou reintroduziria o
+  fechamento indevido. Quem sabe se construiu é a cascata, não o chamador.
+
+  **A mudança é no-op de comportamento hoje — e isto é conclusão de LEITURA, não de teste.** Nenhum
+  call site de produção passa `platform`, então a cascata sempre cai no degrau BYO e a posse
+  continua verdadeira. Sustentam a leitura: zero memoização em `runtime/src` (`lru_cache`, singleton
+  ou `__new__` = nenhum), `client_for` constrói incondicionalmente nos três ramos,
+  `openrouter.from_env` também constrói, e `llm` nunca é rebindado dentro de `respond`/`touch`.
+  **Prova comportamental é inexecutável aqui**: os dois call sites vivem em `respond()`/`touch()`,
+  que só rodam em `tests/db` — e, pior, **nenhum teste do repositório liga
+  `agent_llm_from_org_keys`** (`False` por default, `True` só nas fábricas de produção), então a
+  cascata inteira não é coberta por teste integrado nenhum. **O que muda com este round é que a
+  garantia deixa de ser acidente:** a posse virou valor de retorno de função pura, provável em
+  `-m unit` — e é o que os dois casos novos (`TestWhoBuiltThePort`) prendem. **Não** foi escrito
+  teste de AST sobre a forma da expressão: `test_agent_llm_closes_after_the_turn.py:4-16` documenta
+  esse anti-padrão como erro já cometido e já corrigido no fix round 1 do item 40.
+
+  **O texto que enganava era código, não o documento de produto.** `providers.py:107-108` dizia que
+  *"`platform` só entra quando o degrau (3) estiver ligado por config — hoje é stub desligado"*:
+  config sozinha não liga nada, porque falta o argumento, e "stub" é falso. A docstring foi
+  reescrita para dizer que **a flag é necessária e NÃO suficiente, e que o gate efetivo é o
+  argumento `platform`, que nenhum call site de produção passa**. Sem essa distinção, alguém liga a
+  env em produção esperando efeito e não tem nenhum, ou "conserta" passando o argumento e cai na
+  armadilha. `core/agentes-por-evento.md:378` **não** foi tocada: ela vive sob *"§A.1 Pendências
+  resolvidas na execução"*, que `:374` declara ser registro de decisões; "o degrau (3) fica
+  implementado atrás da flag (default off)" é registro de decisão, suas três afirmações são
+  verdadeiras nesta âncora, e a frase não contém "só" nem "basta" — estar atrás do portão A não é
+  falsificado por estar também atrás do portão B. (A mesma redação existe em `providers.py:4-5`,
+  `runtime/FORK.md:79` e `STATUS:114`: ou o conserto seria nos quatro, ou é desnecessário.)
+
+  **O caminho por trás da flag está COMPLETO, não é esqueleto.** Cliente (`OpenRouterLlm`),
+  credencial (`AGENTS_OPENROUTER_API_KEY`, `render.yaml:51`), modelo carregado no request —
+  `providers.py:117` devolve um objeto funcional, sem construir nada. Consequência para o dono do
+  produto: **uma futura decisão comercial não é "implementar o degrau 3", é "passar um parâmetro"**
+  — e a posse, que era a parte perigosa, já está acertada.
+
+  **O degrau 3 é fallback de AUSÊNCIA, não de falha.** Chave inválida, 5xx e chave cifrada sem
+  `ENCRYPTION_KEY` (`providers.py:111`, dentro do `if choice is not None`) **estouram antes** de
+  `:116-117`. Ligado, ele cobriria um único cenário: org com **zero** linhas utilizáveis em
+  `organization_api_keys` — exatamente o que o D9 manda tratar como "agente não ativa" (alerta
+  `no_org_llm_key`). **Remover custaria zero resiliência operacional:** a recusa da parte 2 é de
+  produto, não de risco técnico.
+
+  **Dependência com o item 62.** `:3009-3010` lista `AGENTS_PLATFORM_LLM_ENABLED` entre as envs
+  ausentes dos `runtime/.env.*.example`. Como este round **não removeu nem ligou** o degrau, aquela
+  linha **continua correta** — mas a leitura muda: a env não é drift de documentação a corrigir
+  copiando-a para o exemplo, é uma env **inerte por desenho**, e declará-la num `.env.example`
+  prometeria um efeito que ela não tem. Se algum dia o degrau for ligado, o item 62 ganha a
+  obrigação de declará-la também em `render.yaml`, onde ela igualmente não está.
+
+  **Suíte.** Antes (árvore limpa, âncora `8ca87d70`): `pytest -m unit` **1242 coletados / 1240
+  passando / 2 falhas** de encoding (item 54, não consertadas aqui); `ruff check .` **10** (item 74);
+  `lint-imports` **3 kept, 0 broken**. Depois: **1244 / 1242 / as mesmas 2**; ruff **10**;
+  lint-imports **3 kept**. Delta de +2 = os dois casos de posse. Nenhum `-m db` e nenhum
+  `-m pipeline` (sem Postgres eles penduram em vez de falhar). TS não foi tocado.
 
 - [ ] **53. `never_say_ai` lido e ignorado** `[relatado]`
   Carregado em `repository/agent.py:175`, mas responder e toucher hardcodam `never_say_ai=True`
@@ -3008,6 +3108,12 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   continuam ausentes.
   Ausentes dos `runtime/.env.*.example`: `AGENTS_LOGFIRE_TOKEN`, `AGENTS_PLATFORM_LLM_ENABLED`,
   `AGENTS_HUMANIZE_DELAYS`, `AGENTS_RUBRICS_DIR` e os knobs de fila.
+  **Dependência do item 52 (fechado, commits `9e184ab3` `9e51923f`):** `AGENTS_PLATFORM_LLM_ENABLED`
+  continua nesta lista — o item 52 não removeu nem ligou o degrau —, **mas não é drift do mesmo tipo
+  que as outras**. Ela é lida (`providers.py:97`) e inerte por desenho: o degrau (3) exige também um
+  argumento `platform` que nenhum call site de produção passa, então copiá-la para um
+  `.env.*.example` prometeria um efeito que ela não tem. Trate-a aqui como "documentar a inércia ou
+  não documentar", não como "acrescentar a env e pronto".
 
 - [ ] **63. Lacunas de teste** `[relatado]`
   Sem cobertura: `toucher._node_delta` com `success_criteria`/`enabled_tools`/`forbidden` (onde mora um
@@ -3936,7 +4042,15 @@ você decidir se entram na fila.
   produção. `grep -rn "AGENTS_WORKERS" runtime/src` dá **zero**; o único `workers=` do repositório
   está em `tests/pipeline/test_scenarios_b.py:355`. Quem tentar aliviar pressão de fila mexendo na env
   não muda nada e não recebe aviso. Ou ler a env em `_serve`, ou tirar a linha do `DEPLOY.md` — manter
-  os dois estados é a pior opção, que é o mesmo ruling do item 52. *(descoberto no item 48)*
+  os dois estados é a pior opção. **O que se herda do item 52, e o que NÃO se herda** (o item 52
+  fechou depois deste achado): herda-se o *método* — separar "a env é lida?" de "o chamador alimenta
+  o parâmetro?", e consertar o texto que engana em vez do estado que alguém estacionou de propósito.
+  **Não** se herda a conclusão: o item 52 decidiu **manter** os dois estados, porque lá há um ruling
+  de produto vivo (D9, `core/agentes-por-evento.md:421`) que manda a capacidade ficar parada atrás
+  da flag. Aqui não há D9 nenhum, e a gemelaridade é **inversa**: lá a env é **lida, testada e não
+  documentada em configuração nenhuma**; aqui ela é **documentada onde se configura e não lida**
+  (`grep runtime/src` = zero). Sem bloqueio de produto, tirar a linha do `DEPLOY.md` continua barata
+  — mas a decisão é pelos méritos daqui, não por herança. *(descoberto no item 48)*
 
 - [ ] **Divergência `aws-0` × `aws-1` no host do pooler: tudo que é versionado diz `aws-0`, e o
   arquivo local do operador diz `aws-1`.**
