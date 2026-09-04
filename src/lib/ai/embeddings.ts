@@ -22,7 +22,7 @@ const OPENAI_EMBEDDING_DIMENSIONS = 1536
 const MAX_TOKENS_PER_REQUEST = 8191
 
 // Estatísticas de cache (para monitoramento)
-let cacheStats = {
+const cacheStats = {
   hits: 0,
   misses: 0,
   errors: 0,
@@ -269,40 +269,6 @@ function truncateToTokenLimit(text: string, maxTokens: number): string {
 }
 
 /**
- * Calcula similaridade de cosseno entre dois embeddings
- */
-export function cosineSimilarity(a: number[], b: number[]): number {
-  if (a.length !== b.length) {
-    throw new Error('Embeddings devem ter o mesmo tamanho')
-  }
-
-  let dotProduct = 0
-  let normA = 0
-  let normB = 0
-
-  for (let i = 0; i < a.length; i++) {
-    dotProduct += a[i] * b[i]
-    normA += a[i] * a[i]
-    normB += b[i] * b[i]
-  }
-
-  normA = Math.sqrt(normA)
-  normB = Math.sqrt(normB)
-
-  if (normA === 0 || normB === 0) {
-    return 0
-  }
-
-  return dotProduct / (normA * normB)
-}
-
-/**
- * Constantes exportadas
- */
-export const EMBEDDING_MODEL = OPENAI_EMBEDDING_MODEL
-export const EMBEDDING_DIMENSIONS = OPENAI_EMBEDDING_DIMENSIONS
-
-/**
  * O espaço vetorial que ESTE embedador produz, qualificado pelo provedor.
  *
  * É o valor que vai em `ai_agent_chunks.embedding_model` (migration
@@ -325,63 +291,4 @@ export function getEmbeddingCacheStats() {
       ? Math.round((cacheStats.hits / (cacheStats.hits + cacheStats.misses)) * 100) 
       : 0,
   }
-}
-
-/**
- * Reseta estatísticas (para testes)
- */
-export function resetCacheStats() {
-  cacheStats = { hits: 0, misses: 0, errors: 0 }
-}
-
-/**
- * Limpa todo o cache de embeddings
- */
-export async function clearEmbeddingsCache(): Promise<number> {
-  if (!isRedisConfigured()) {
-    return 0
-  }
-
-  try {
-    const redis = getRedis()
-    const keys = await redis.keys(`${CACHE_PREFIX.EMBEDDING}*`)
-    
-    if (keys.length === 0) {
-      return 0
-    }
-
-    await redis.del(...keys)
-    console.log(`[Embeddings] 🗑️ Cache limpo: ${keys.length} chaves removidas`)
-    return keys.length
-  } catch (error) {
-    console.error('[Embeddings] Erro ao limpar cache:', error)
-    return 0
-  }
-}
-
-/**
- * Busca embedding do cache (sem gerar se não existir)
- */
-export async function getEmbeddingFromCache(text: string): Promise<number[] | null> {
-  if (!isRedisConfigured()) {
-    return null
-  }
-
-  const cleanText = text.trim().replace(/\n+/g, ' ')
-  const truncated = truncateToTokenLimit(cleanText, MAX_TOKENS_PER_REQUEST)
-  const hash = hashText(truncated)
-  const cacheKey = `${CACHE_PREFIX.EMBEDDING}${hash}`
-
-  try {
-    const redis = getRedis()
-    const cached = await redis.get<number[]>(cacheKey)
-    
-    if (cached && Array.isArray(cached) && cached.length === OPENAI_EMBEDDING_DIMENSIONS) {
-      return cached
-    }
-  } catch (error) {
-    // Ignorar
-  }
-
-  return null
 }

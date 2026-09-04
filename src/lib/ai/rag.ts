@@ -112,26 +112,6 @@ export class RAGService {
       similarity: r.similarity,
     }))
   }
-
-  /**
-   * Monta contexto para o prompt a partir dos resultados RAG
-   */
-  buildContext(results: RAGResult[]): string {
-    if (!results || results.length === 0) {
-      return ''
-    }
-
-    const contextParts = results.map((r, i) => {
-      return `[Fonte ${i + 1}: ${r.source_name}]\n${r.content}`
-    })
-
-    return `
-Informações relevantes encontradas na base de conhecimento:
-
-${contextParts.join('\n\n---\n\n')}
-
-Use as informações acima para responder a pergunta do usuário. Se a informação não estiver disponível, informe educadamente.`
-  }
 }
 
 // =====================================================
