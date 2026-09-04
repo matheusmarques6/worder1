@@ -3671,15 +3671,64 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   serviço **não morreu com a rota** — está vivo em duas rotas sem nem o segredo de debug. Virou o
   **item 86**.
 
-- [ ] **59. Apagar `tools/registry.py` + `tools/customer.py`** — ~170 linhas `[confirmado]`
-  O responder monta `turn_tools` à mão (`responder.py:499-518`) e nunca passa pelo registry; a grade
-  prometida na docstring não vale em produção.
-  **Dependência registrada pelo item 56 (`ea5cbb35`):** `tools/customer.py:78-81` é hoje o **último**
-  lugar de produção onde `first_order_at` ("primeira compra") chega ao modelo, e ele chega no JSON de
-  uma tool, não no prompt — `tests/db/test_tools.py:172-230` (`TestGetCustomerContext`) asserta
-  `name`, `language`, `opt_status` e `conversations`, **nunca `purchases` nem `first_order_at`**.
-  Apagar `customer.py` remove o vestígio sem quebrar teste nenhum. **`runtime/docs/testes-e-cicd.md:47`
-  já foi reescrita pelo 56 sem o campo**, então este item **não** precisa mexer nela de novo.
+- [ ] **59. Apagar `tools/registry.py` + `tools/customer.py`** — **130 linhas medidas** `[confirmado]`
+  **Toda citação de linha deste item está reancorada na âncora `a22700db`.** O "~170 linhas" do texto
+  anterior não correspondia a recorte executável nenhum — quarto item seguido em que a conta estava
+  errada. **Medido (`wc -l`):** `registry.py` **39** + `customer.py` **91** = **130**. O trabalho é
+  maior pelo outro lado, e é lá que ficam os números **estimados** (contagem manual de intervalo,
+  margem de 2-3 linhas em branco): +**54** medidas de `tests/unit/test_tool_registry.py` (exclusivo —
+  é o único importador de `registry.py` na árvore); ~**60** da excisão de `TestGetCustomerContext`
+  (`tests/db/test_tools.py:172-230` + o import `:30`) — o **arquivo fica**, tem outras três classes
+  vivas; ~**62** da poda órfã em `repository/contacts.py`. Recorte executável inteiro: **~306**.
+  **O responder monta `turn_tools` à mão (`responder.py:642-664`) e nunca passa pelo registry:**
+  `grep build_registry src/` devolve zero, e `responder.py:109-111` importa `tools.coupon`,
+  `tools.custom_http` e `tools.knowledge` — `tools.registry` não está lá. *(A citação
+  `responder.py:499-518` do texto anterior estava podre: hoje aquilo é o alerta `NO_ACTIVE_MISSION` +
+  `merge_mission`. Os itens 52, 53 e 56 moveram o arquivo.)*
+  **A grade de permissão NÃO é o que se perde — ela existe em produção, inline.** Dizer que "a grade
+  prometida na docstring não vale em produção" era mais forte do que os fatos aguentam, e é o tipo de
+  frase que faz o próximo achar que produção está sem trava. A grade missão∩agente é
+  `responder.py:512-514` (`merge_mission(..., agent_tools=version.config.enabled_tools)`), `:647`
+  (`"create_coupon" in resolved.tools`) e `:1022` (`if "search_knowledge" not in enabled_tools`).
+  **Mecanismo separado**, em tempo de chamada: `:667-669` recusa nome que o modelo inventou
+  (`turn_tools.get(call.name)` → `None` → *"tool desconhecida"*) — é por ele que a promessa da
+  docstring de `registry.py:1-11` (*"uma tool ausente não pode ser chamada"*) **continua verdadeira**
+  depois da deleção, por outra via. O que de fato se perde são **duas propriedades estreitas**: (1) um
+  nome desconhecido em `enabled_tools` morre **calado** em vez de levantar na composição
+  (`registry.py:28-33`), e (2) `get_customer_context` deixa de existir como tool oferecível.
+  **`first_order_at`: "existe" ≠ "é alcançável", e a frase falsa era DESTE item, não do 56.** O texto
+  anterior afirmava que `tools/customer.py:78-81` é *"o último lugar de produção onde `first_order_at`
+  chega ao modelo"*. **Falso.** O item 56 (`ea5cbb35`) diz o mais fraco e correto — *"o campo nunca
+  chegou ao prompt"* — e avisa que a reescrita dele já cobre este futuro. O caminho **existia** no
+  código e **não era alcançável**, por dois elos independentes: quem transforma `PurchaseHistory` em
+  texto de prompt é `history_lines` (`orders.py:188-219`), **único** produtor de `purchase_lines`, e
+  ela usa `last_order_at` — `first_order_at` não aparece no corpo; e nada instancia
+  `GetCustomerContext` fora de `registry.py:37`, que ninguém chama, nem existe spec dela em
+  `tool_specs` (`responder.py:646,655,664`, passados ao modelo em `:707`). **Apagar não remove
+  capacidade.** O candidato óbvio a herdeiro foi buscado pelo efeito e descartado:
+  `contact_fact_pairs` (`repository/agent.py:126-136`) emite *"cliente desde"* a partir de
+  `state.contact_since`, que é `contact.created_at` — data de criação do contato, não primeira compra.
+  **Sai junto, e o item não declarava — esquecer QUEBRA o baseline:** `runtime/pyproject.toml:173`
+  (`"agents_runtime.tools.customer -> psycopg"`, em `ignore_imports` do contrato *forbidden*
+  `:106-108`). O `import-linter` instalado é a **2.13**, `contracts/forbidden.py:73` declara
+  `unmatched_ignore_imports_alerting` com default **`ERROR`**, e o `pyproject` não sobrescreve (`grep
+  unmatched` → zero). Medido com config-sonda: ele levanta `MissingImport` e **aborta o `lint-imports`
+  inteiro** — exit 1, **nenhuma tabela**, os outros dois contratos deixam de ser checados. Não é
+  "2 kept / 1 broken".
+  **Poda órfã que este item CRIA, e também não declarava:** `CustomerFacts` (`contacts.py:26-37`) e
+  `load_customer_facts` (`:54-103`) ficam com **zero consumidor** — `tools/customer.py:37` é o único
+  chamador de produção e não há teste direto (`grep load_customer_facts tests/` → zero). Sem podar,
+  `dataclass` e `datetime` (`:19-20`) viram **2 F401** e o `ruff` sai de 10 (item 74) para **12**:
+  o `ruff` decide, não há terceira opção. **`contact_id_of_conversation` (`:39-53`) FICA** —
+  `tools/coupon.py:108` a usa.
+  **Delta MEDIDO por id, não estimado: unit 1206 → 1190 (−16).** Cada arquivo de `src/` apagado leva
+  **5** ids das travas AST (elas parametrizam por arquivo varrido); `test_tool_registry.py` leva
+  **6** — os 5 próprios **mais**
+  `test_no_provider_network::test_no_blocking_test_reaches_a_provider[unit/test_tool_registry.py]`,
+  porque essa trava parametriza **também por arquivo de teste**. É a armadilha que fez os itens 56 e
+  57 errarem a previsão. `-m db` perde **2** (contado por leitura; não foi rodado, sem Postgres).
+  **`runtime/docs/testes-e-cicd.md:47` já foi reescrita pelo 56 sem o campo**, então este item **não**
+  precisa mexer nela de novo.
 
 - [ ] **60. Apagar sobras menores** `[confirmado]`
   Cache de embeddings sem consumidor (`clearEmbeddingsCache` e irmãs, ~90 l.) + `rag.ts::buildContext`
