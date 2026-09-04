@@ -9,7 +9,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import {
-  normalizePublicHost, publicStoreHost, publicStoreUrl, refreshPrimaryDomain,
+  normalizePublicHost, publicStoreHost, publicStoreUrl, refreshPrimaryDomain, normalizePhone,
 } from '../store-url';
 
 describe('normalizePublicHost', () => {
@@ -142,6 +142,65 @@ describe('refreshPrimaryDomain', () => {
     const { client } = supabaseGravador();
     await refreshPrimaryDomain(client, { id: 's1', shop_domain: 'manual-x.worder.local', access_token: 'manual' });
     expect(fetchMock).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+});
+
+describe('normalizePhone — {{store_phone}} tinha coluna e nenhuma fonte', () => {
+  it('mantém formato legível e tira lixo', () => {
+    expect(normalizePhone(' +55 (31) 99999-9999 ')).toBe('+55 (31) 99999-9999');
+    expect(normalizePhone('tel: 31 3333-4444 ramal')).toBe('31 3333-4444');
+  });
+
+  it('curto demais ou vazio vira vazio — não entra no rodapé', () => {
+    expect(normalizePhone('123')).toBe('');
+    expect(normalizePhone('')).toBe('');
+    expect(normalizePhone(null)).toBe('');
+  });
+});
+
+describe('refreshPrimaryDomain também traz o telefone', () => {
+  function supabaseGravador() {
+    const updates: any[] = [];
+    const client = { from: () => ({ update: (patch: any) => { updates.push(patch); return { eq: async () => ({ error: null }) }; } }) };
+    return { client, updates };
+  }
+
+  it('grava o telefone da Shopify quando existe', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ data: { shop: { primaryDomain: { host: 'drgroot.com' }, billingAddress: { phone: '+55 31 99999-0000' } } } }),
+    })));
+    const { client, updates } = supabaseGravador();
+    await refreshPrimaryDomain(client, { id: 's1', shop_domain: 'x.myshopify.com', access_token: 'tok' }, { force: true });
+    expect(updates[0].shop_phone).toBe('+55 31 99999-0000');
+    expect(updates[0].primary_domain).toBe('drgroot.com');
+    vi.unstubAllGlobals();
+  });
+
+  it('sem telefone na Shopify, não apaga o que já tinha', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true, json: async () => ({ data: { shop: { primaryDomain: { host: 'drgroot.com' }, billingAddress: { phone: null } } } }),
+    })));
+    const { client, updates } = supabaseGravador();
+    await refreshPrimaryDomain(client, {
+      id: 's1', shop_domain: 'x.myshopify.com', access_token: 'tok', shop_phone: '+55 31 1111-1111',
+    }, { force: true });
+    expect(updates[0].shop_phone).toBeUndefined();
+    vi.unstubAllGlobals();
+  });
+
+  it('telefone igual ao salvo não gera gravação redundante', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true, json: async () => ({ data: { shop: { primaryDomain: { host: 'drgroot.com' }, billingAddress: { phone: '+55 31 1111-1111' } } } }),
+    })));
+    const { client, updates } = supabaseGravador();
+    await refreshPrimaryDomain(client, {
+      id: 's1', shop_domain: 'x.myshopify.com', access_token: 'tok',
+      primary_domain: 'drgroot.com', shop_phone: '+55 31 1111-1111',
+    }, { force: true });
+    expect(updates[0].shop_phone).toBeUndefined();
+    expect(updates[0].primary_domain).toBeUndefined();
     vi.unstubAllGlobals();
   });
 });

@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient, getAuthClient, authError } from '@/lib/api-utils';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { SupabaseClient } from '@supabase/supabase-js';
-import { normalizePublicHost, publicStoreHost } from '@/lib/shopify/store-url';
+import { normalizePublicHost, publicStoreHost, normalizePhone } from '@/lib/shopify/store-url';
 import { isTombstoneStore } from '@/lib/stores/placeholder';
 export const dynamic = 'force-dynamic';
 
@@ -91,6 +91,7 @@ export async function POST(request: NextRequest) {
           // sai do primeiro.
           primary_domain: normalizePublicHost(shopData.domain) || null,
           primary_domain_checked_at: new Date().toISOString(),
+          shop_phone: normalizePhone(shopData.phone) || null,
           currency: shopData.currency,
           timezone: shopData.timezone,
           is_active: true,
@@ -125,6 +126,7 @@ export async function POST(request: NextRequest) {
         shop_email: shopData.email,
         primary_domain: normalizePublicHost(shopData.domain) || null,
         primary_domain_checked_at: new Date().toISOString(),
+        shop_phone: normalizePhone(shopData.phone) || null,
         access_token: accessToken.trim(),
         api_secret: apiSecret?.trim() || null,
         currency: shopData.currency,

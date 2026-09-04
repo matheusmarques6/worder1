@@ -18,7 +18,7 @@
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { normalizePublicHost } from '@/lib/shopify/store-url';
+import { normalizePublicHost, normalizePhone } from '@/lib/shopify/store-url';
 import { getAuthClient, authError } from '@/lib/api-utils';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { getAccessTokenViaClientCredentials } from '@/lib/shopify/client-credentials';
@@ -145,6 +145,7 @@ export async function POST(request: NextRequest) {
     // for either domain resolve to the same store row.
     let permanentDomain: string | null = null;
     let publicPrimaryDomain: string | null = null;
+    let shopPhone: string | null = null;
     // Shopify Shop GID — the ONE identifier that never changes. We use
     // this to deduplicate reconnections: same shop_id = same store row,
     // even if the merchant typed a different domain. Without this,
@@ -163,7 +164,7 @@ export async function POST(request: NextRequest) {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            query: `{ shop { id name email currencyCode timezoneAbbreviation myshopifyDomain primaryDomain { host } plan { displayName } } }`,
+            query: `{ shop { id name email currencyCode timezoneAbbreviation myshopifyDomain primaryDomain { host } billingAddress { phone } plan { displayName } } }`,
           }),
         }
       );
@@ -180,6 +181,7 @@ export async function POST(request: NextRequest) {
           permanentDomain = (s.myshopifyDomain || '').toLowerCase() || null;
           // Domínio principal público — a fonte de {{store_url}}.
           publicPrimaryDomain = normalizePublicHost(s.primaryDomain?.host) || null;
+          shopPhone = normalizePhone(s.billingAddress?.phone) || null;
           // Strip the gid:// prefix so we store just the numeric ID,
           // which is the format Shopify uses everywhere outside GraphQL.
           if (s.id) {
@@ -310,6 +312,7 @@ export async function POST(request: NextRequest) {
       shop_email: shopEmail,
       primary_domain: publicPrimaryDomain,
       primary_domain_checked_at: new Date().toISOString(),
+      shop_phone: shopPhone,
       access_token: accessToken,
       // api_secret holds the Client Secret — used to:
       //  (a) verify HMAC on inbound webhooks, and

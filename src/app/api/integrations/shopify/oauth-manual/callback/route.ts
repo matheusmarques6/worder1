@@ -15,7 +15,7 @@
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { normalizePublicHost } from '@/lib/shopify/store-url';
+import { normalizePublicHost, normalizePhone } from '@/lib/shopify/store-url';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import crypto from 'crypto';
 
@@ -166,6 +166,7 @@ export async function GET(request: NextRequest) {
     let timezone = '';
     let permanentDomain: string | null = null;
     let publicPrimaryDomain: string | null = null;
+    let shopPhone: string | null = null;
     let shopifyShopId: string | null = null;
     try {
       const infoRes = await fetch(`https://${shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
@@ -175,7 +176,7 @@ export async function GET(request: NextRequest) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          query: `{ shop { id name email currencyCode timezoneAbbreviation myshopifyDomain primaryDomain { host } plan { displayName } } }`,
+          query: `{ shop { id name email currencyCode timezoneAbbreviation myshopifyDomain primaryDomain { host } billingAddress { phone } plan { displayName } } }`,
         }),
       });
       if (infoRes.ok) {
@@ -190,6 +191,7 @@ export async function GET(request: NextRequest) {
           permanentDomain = (s.myshopifyDomain || '').toLowerCase() || null;
           // Domínio principal público — a fonte de {{store_url}}.
           publicPrimaryDomain = normalizePublicHost(s.primaryDomain?.host) || null;
+          shopPhone = normalizePhone(s.billingAddress?.phone) || null;
           if (s.id) {
             const m = String(s.id).match(/Shop\/(\d+)/);
             shopifyShopId = m ? m[1] : String(s.id);
@@ -301,6 +303,7 @@ export async function GET(request: NextRequest) {
       shop_email: shopEmail,
       primary_domain: publicPrimaryDomain,
       primary_domain_checked_at: new Date().toISOString(),
+      shop_phone: shopPhone,
       access_token: accessToken,
       api_secret: clientSecret,
       client_id: clientId,

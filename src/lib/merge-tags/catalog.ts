@@ -98,11 +98,11 @@ const PLATFORM: CatalogTag[] = [
   { tag: 'store_name', label: 'Nome da loja', family: 'platform', group: 'store', sample: 'Minha Loja',
     description: 'Configurações da loja.' },
   { tag: 'store_url', label: 'URL da loja', family: 'platform', group: 'store', sample: 'https://minhaloja.com',
-    description: 'Configurações da loja.', isUrl: true },
+    description: 'Domínio principal da loja na Shopify. Se você trocar o domínio, atualiza sozinho.', isUrl: true },
   { tag: 'store_email', label: 'E-mail da loja', family: 'platform', group: 'store', sample: 'contato@loja.com',
     description: 'Configurações da loja.' },
   { tag: 'store_phone', label: 'Telefone da loja', family: 'platform', group: 'store', sample: '+5531999999999',
-    description: 'Configurações da loja.' },
+    description: 'Telefone cadastrado na Shopify (endereço de cobrança da loja). Atualiza a cada sincronização.' },
 
   // Sistema
   { tag: 'unsubscribe_url', label: 'Link de descadastro', family: 'platform', group: 'system', sample: 'https://…',

@@ -13,7 +13,7 @@
 // =============================================
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError } from '@/lib/api-utils';
-import { normalizePublicHost } from '@/lib/shopify/store-url';
+import { normalizePublicHost, normalizePhone } from '@/lib/shopify/store-url';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { ensureFreshToken } from '@/lib/shopify/ensure-fresh-token';
 
@@ -157,7 +157,7 @@ export async function POST(request: NextRequest) {
           'X-Shopify-Access-Token': store.access_token,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ query: `{ shop { myshopifyDomain primaryDomain { host } } }` }),
+        body: JSON.stringify({ query: `{ shop { myshopifyDomain primaryDomain { host } billingAddress { phone } } }` }),
       }
     );
     if (canonRes.ok) {
@@ -168,15 +168,14 @@ export async function POST(request: NextRequest) {
       // "Reinstalar tudo": é o momento em que a loja acaba de ser ligada
       // ou o lojista acabou de mexer nela.
       const primaryHost = normalizePublicHost(j.data?.shop?.primaryDomain?.host) || null;
-      if (primaryHost && primaryHost !== store.primary_domain) {
-        const { error: pdErr } = await supabase
-          .from('shopify_stores')
-          .update({ primary_domain: primaryHost, primary_domain_checked_at: new Date().toISOString() })
-          .eq('id', store.id);
-        if (!pdErr) store.primary_domain = primaryHost;
-      } else if (primaryHost) {
-        await supabase.from('shopify_stores')
-          .update({ primary_domain_checked_at: new Date().toISOString() }).eq('id', store.id);
+      const shopPhone = normalizePhone(j.data?.shop?.billingAddress?.phone) || null;
+      const identidade: Record<string, any> = { primary_domain_checked_at: new Date().toISOString() };
+      if (primaryHost && primaryHost !== store.primary_domain) identidade.primary_domain = primaryHost;
+      if (shopPhone && shopPhone !== store.shop_phone) identidade.shop_phone = shopPhone;
+      const { error: pdErr } = await supabase.from('shopify_stores').update(identidade).eq('id', store.id);
+      if (!pdErr) {
+        if (identidade.primary_domain) store.primary_domain = identidade.primary_domain;
+        if (identidade.shop_phone) store.shop_phone = identidade.shop_phone;
       }
       const typed = String(store.shop_domain || '').toLowerCase();
       if (canonical && canonical !== typed) {

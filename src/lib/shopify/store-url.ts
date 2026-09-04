@@ -68,6 +68,20 @@ export interface ShopDomains {
   primaryHost: string | null;
   /** *.myshopify.com permanente. */
   myshopifyHost: string | null;
+  /**
+   * Telefone público da loja (shop.billingAddress.phone). Alimenta
+   * {{store_phone}}, que tinha coluna e nenhuma fonte.
+   */
+  phone: string | null;
+}
+
+/** Telefone só com o que faz sentido num rodapé: dígitos, +, espaços, ( ) -. */
+export function normalizePhone(input?: string | null): string {
+  if (!input || typeof input !== 'string') return '';
+  // Limpa primeiro, apara depois: "tel: 31 3333-4444 ramal" perde as
+  // letras e só então perde os espaços que elas deixaram nas pontas.
+  const s = input.replace(/[^\d+()\-\s]/g, '').replace(/\s+/g, ' ').trim();
+  return s.replace(/\D/g, '').length >= 8 ? s : '';
 }
 
 /**
@@ -88,7 +102,7 @@ export async function fetchShopDomains(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        query: `{ shop { myshopifyDomain primaryDomain { host } } }`,
+        query: `{ shop { myshopifyDomain primaryDomain { host } billingAddress { phone } } }`,
       }),
     });
     if (!res.ok) return null;
@@ -98,6 +112,7 @@ export async function fetchShopDomains(
     return {
       primaryHost: normalizePublicHost(shop.primaryDomain?.host) || null,
       myshopifyHost: normalizePublicHost(shop.myshopifyDomain) || null,
+      phone: normalizePhone(shop.billingAddress?.phone) || null,
     };
   } catch {
     return null;
@@ -110,8 +125,9 @@ const REFRESH_TTL_MS = 6 * 60 * 60_000;
 type MinimalClient = { from: (t: string) => any };
 
 /**
- * Reconsulta o domínio principal e grava quando mudou. Silenciosa em
- * erro: a sincronização que a chama não pode falhar por causa disto.
+ * Reconsulta o domínio principal (e o telefone público) e grava quando
+ * mudaram. Silenciosa em erro: a sincronização que a chama não pode
+ * falhar por causa disto.
  *
  * `force` ignora o intervalo mínimo — usado logo depois de conectar,
  * quando a linha acabou de nascer e ainda não tem domínio principal.
@@ -125,6 +141,7 @@ export async function refreshPrimaryDomain(
     api_version?: string | null;
     primary_domain?: string | null;
     primary_domain_checked_at?: string | null;
+    shop_phone?: string | null;
   },
   opts: { force?: boolean } = {}
 ): Promise<string | null> {
@@ -144,6 +161,10 @@ export async function refreshPrimaryDomain(
   // Só grava o principal quando a Shopify respondeu um de fato. Uma
   // resposta sem primaryDomain não pode apagar o que já sabíamos.
   if (primary && primary !== store.primary_domain) patch.primary_domain = primary;
+  // Telefone segue a mesma regra: acompanha a Shopify quando ela informa,
+  // nunca apaga por resposta vazia. Não há tela para editar à mão, então
+  // a Shopify é a única fonte — se um dia houver, ela ganha desta.
+  if (domains.phone && domains.phone !== (store.shop_phone || '')) patch.shop_phone = domains.phone;
 
   try {
     await supabase.from('shopify_stores').update(patch).eq('id', store.id);

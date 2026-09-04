@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
     const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const { data: paraConferir } = await supabase
       .from('shopify_stores')
-      .select('id, shop_domain, access_token, api_version, primary_domain, primary_domain_checked_at')
+      .select('id, shop_domain, access_token, api_version, primary_domain, primary_domain_checked_at, shop_phone')
       .eq('is_active', true)
       .not('access_token', 'eq', 'manual')
       .not('shop_domain', 'like', '%.worder.local')
