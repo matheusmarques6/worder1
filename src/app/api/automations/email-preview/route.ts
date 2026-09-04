@@ -330,8 +330,21 @@ export async function POST(request: NextRequest) {
         // Remetente DA LOJA do fluxo (nome, e-mail, reply-to). Antes era o
         // da organização — e numa organização com várias lojas isso é a
         // identidade de outra loja: o teste da Medicube saiu como "Based".
+        // Sem loja resolvida numa organização com várias, o teste NÃO sai
+        // com a identidade da organização: pede a loja.
+        const senderStoreId = testStore.id || requestedStoreId;
+        if (!senderStoreId) {
+          const { pickStore } = await import('@/lib/stores/pick-store');
+          const picked = await pickStore<{ id: string }>(supabase, { orgIds: [organizationId], select: 'id' });
+          if (!picked.store) {
+            return NextResponse.json({
+              error: 'Selecione a loja antes de enviar o teste: a organização tem mais de uma loja e o remetente é por loja.',
+              code: 'store_required',
+            }, { status: 400 });
+          }
+        }
         const { getStoreSender } = await import('@/lib/email/sender');
-        const sender = await getStoreSender(organizationId, testStore.id || requestedStoreId);
+        const sender = await getStoreSender(organizationId, senderStoreId);
 
         const res = await fetch('https://api.resend.com/emails', {
           method: 'POST',

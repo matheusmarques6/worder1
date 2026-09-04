@@ -43,6 +43,14 @@ export async function POST(req: NextRequest) {
         select: 'id, organization_id, shop_name, shop_email, shop_domain, primary_domain',
       })
       if (picked.store) { storeRow = picked.store; storeId = picked.store.id }
+      else if (picked.reason === 'ambiguous' || picked.reason === 'not_found') {
+        // Várias lojas e nenhuma selecionada: o teste não pode sair com a
+        // identidade da organização (que é a de outra loja).
+        return NextResponse.json({
+          error: 'Selecione a loja antes de enviar o teste: a organização tem mais de uma loja e o remetente é por loja.',
+          code: 'store_required',
+        }, { status: 400 })
+      }
     } catch { /* sem loja: segue com o remetente neutro/organização */ }
 
     const { getStoreSender } = await import('@/lib/email/sender')

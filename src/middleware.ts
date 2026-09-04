@@ -11,6 +11,8 @@ const publicRoutes = ['/', '/signup', '/login', '/register', '/forgot-password',
 
 // Public API routes (webhooks, etc)
 const publicApiRoutes = [
+  // Versão publicada (commit/branch) — sem dados sensíveis.
+  '/api/health',
   '/api/auth',
   '/api/shopify',
   '/api/klaviyo',

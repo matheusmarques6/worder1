@@ -91,6 +91,10 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, stor
   const [testEmail, setTestEmail] = useState('');
   const [sending, setSending] = useState(false);
   const [sendResult, setSendResult] = useState<'success' | 'error' | null>(null);
+  // Quem assinou o teste (a API devolve) — a pessoa vê na hora se saiu
+  // com a identidade da loja certa.
+  const [sentFrom, setSentFrom] = useState<string>('');
+  const [sendMessage, setSendMessage] = useState<string>('');
 
   // 1. Load events on mount
   useEffect(() => {
@@ -175,9 +179,14 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, stor
           testEmail,
         }),
       });
+      const data = await res.json().catch(() => ({}));
       setSendResult(res.ok ? 'success' : 'error');
+      setSentFrom(res.ok ? (data.from || '') : '');
+      setSendMessage(res.ok ? (data.hint || '') : (data.error || 'Erro ao enviar. Verifique as configurações.'));
     } catch {
       setSendResult('error');
+      setSentFrom('');
+      setSendMessage('Erro de conexão.');
     }
     setSending(false);
   };
@@ -402,13 +411,17 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, stor
                   {sendResult === 'success' && (
                     <div className="flex items-start gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
                       <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                      <p className="text-[12px] text-emerald-800">Email de teste enviado com sucesso</p>
+                      <div className="min-w-0">
+                        <p className="text-[12px] text-emerald-800">Email de teste enviado com sucesso</p>
+                        {sentFrom && <p className="text-[11px] text-emerald-700/90 mt-0.5 font-mono break-all">Remetente: {sentFrom}</p>}
+                        {sendMessage && <p className="text-[11px] text-amber-700 mt-1">{sendMessage}</p>}
+                      </div>
                     </div>
                   )}
                   {sendResult === 'error' && (
                     <div className="flex items-start gap-2 p-3 bg-rose-50 border border-rose-200 rounded-lg">
                       <XCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                      <p className="text-[12px] text-rose-800">Erro ao enviar. Verifique as configurações.</p>
+                      <p className="text-[12px] text-rose-800">{sendMessage || 'Erro ao enviar. Verifique as configurações.'}</p>
                     </div>
                   )}
                 </div>
