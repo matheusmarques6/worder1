@@ -3523,6 +3523,10 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
      Python não há equivalente: `test_pre_send_judge.py` testa o mecanismo do juiz com dublê, nunca
      um ataque. *Ressalva honesta:* escrito não é aferido — sem harness ligado a um modelo os 12
      casos são **especificação versionada**, não trava executada.
+  **Citação podre a herdar, registrada aqui porque o relatório é git-ignored:** `pack.py:24` cita
+  `conversations.origin_occasion`, coluna que `20260812000003:15` diz **não existir**. Não nasceu
+  neste item, mas o ponto 3 abaixo aumenta o peso dela ao tornar `OCCASIONS` o único dono do
+  vocabulário — quem for mexer no pack encontra a citação errada primeiro.
   3. **`OCCASIONS`** (`pack.py:27`): com `prompt.py` fora pelo item 56, é a única lista escrita desse
      vocabulário. `internal.scenarios.occasion` é `text not null` **sem CHECK**
      (`20260813000002_internal_llm_trail.sql:23`) — e a coluna irmã `origin` (`:22`) **tem** CHECK,
@@ -3560,7 +3564,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   **6. Três documentos apontam para manter o pack — nenhum tinha sido citado.**
   `core/requisitos-e-entidades.md:100` (RNF-022) reserva `1 (evals)` na proporção do weighted polling
   **por requisito**, e `:184` lista `q_evals` entre as entidades de fila;
-  `runtime/docs/testes-e-cicd.md:163` declara o portão de ativação **bloqueante** (*"Sim — versão não
+  `runtime/docs/testes-e-cicd.md:171` declara o portão de ativação **bloqueante** (*"Sim — versão não
   ativa sem pontuação"*); `runtime/FORK.md:14-17` descreve `validate_pack` +
   `test_pack_traceability.py` como a trava viva de rastreabilidade. É o que sustenta o §2 contra quem
   reabrir isto.
@@ -3618,14 +3622,21 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   a reserva por requisito** (`core/requisitos-e-entidades.md:100` — *"weighted polling 8 (inbound) :
   4 (domain events) : 2 (scheduled) : **1 (evals)**"*, que é literalmente `config.py:21`), e `:184`
   lista `q_evals` entre as entidades de fila. `tests/unit/test_weighted_polling.py` a afirma em
-  **cinco asserções** (`:23` `ALL_BUSY`, `:44` a proporção, `:51` o conjunto polido, `:86`
+  **quatro asserções** (`:44` a proporção, `:51` o conjunto polido, `:86`
   `picked[EVALS] == 1`, `:120` `test_evaluation_never_gets_promoted`), e o **item 81** a inventaria
   entre as 4 DLQs de `20260812000002:85-88` citando `config.py:26` (*"evals 2"*). Apagá-la
   contradiria um requisito escrito e deixaria o inventário do 81 obsoleto — **não é decisão de
   limpeza, é decisão sobre o requisito**, e ninguém a tomou. O item 57 apagou o harness sem tocar na
   fila justamente por isso: a ordem 57→60 valia, e o resultado é que `q_evals` **fica**.
-  *(Assimetria registrada, sem mudar escopo: `q_scheduled` está no mesmo RNF-022 e no mesmo
-  inventário do item 81. Quem executar o 60 confere antes de apagar.)*
+  **`q_scheduled` está no MESMO estado, e a prova dela é mais forte — não apague sem decidir.**
+  A revisão da execução do item 57 mediu: mesmo RNF-022, mesmo inventário do item 81, **quatro**
+  asserções em `test_weighted_polling.py`, **e** lógica de produção dedicada que `q_evals` não tem —
+  `polling.py:69,76-77`, a promoção por idade que só existe para `SCHEDULED`. As duas filas estão sem
+  handler (`app.py:208-212`), e é **só isso** que elas têm em comum com código morto.
+  **Não é limpeza, é decisão sobre o requisito** — a mesma que tirou `q_evals` daqui. Fica no escopo
+  porque ninguém decidiu ainda, mas com a prova escrita: quem executar o 60 **não apaga** sem
+  responder o RNF-022 antes. (A versão anterior desta nota era uma linha dizendo "confere antes de
+  apagar", o que convidava o próximo a refazer a medição.)
   **Acrescentado pelo item 56 (`f6cc4a79`, revisão da execução):** `AgentConfig.scenario_prompts` —
   campo **morto** que a migração do 56 carregou junto por disciplina de escopo (o brief mandava
   mover, não podar). Ele é escrito com `{}` **literal** em `repository/agent.py:181` e tem **zero
@@ -4296,7 +4307,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   **Este inventário de quatro DLQs continua válido — referência cruzada do item 57 (`dd51029b`).**
   O 57 apagou o harness de evals, mas **não** a fila: `q_evals` saiu do escopo do **item 60** porque
   RNF-022 (`core/requisitos-e-entidades.md:100,184`) a reserva por requisito e
-  `tests/unit/test_weighted_polling.py` a afirma em cinco asserções. Ou seja: `q_evals_dlq` e o
+  `tests/unit/test_weighted_polling.py` a afirma em quatro asserções (`:23` é constante de fixture, não asserção — corrigido no fix round). Ou seja: `q_evals_dlq` e o
   *"evals 2"* de `config.py:26` citados acima **não vão sumir por baixo deste item**. Se algum dia
   alguém decidir sobre o requisito e apagar a fila, é aqui que o inventário e o `where` do dreno
   seletivo precisam ser refeitos.
