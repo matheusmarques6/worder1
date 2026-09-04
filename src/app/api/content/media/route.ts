@@ -9,10 +9,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError } from '@/lib/api-utils';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { buildMediaUrl, EMAIL_IMAGES_BUCKET } from '@/lib/media/public-url';
 
 export const dynamic = 'force-dynamic';
 
-const BUCKET = 'email-images';
+const BUCKET = EMAIL_IMAGES_BUCKET;
+
+// A URL que a biblioteca mostra, o lojista copia e o editor salva no
+// template é a da CDN (cdn.worder.email), nunca a do Supabase. Antes
+// esta rota devolvia getPublicUrl() cru — <projeto>.supabase.co — e a
+// troca para a CDN só acontecia no envio, invisível para quem via a
+// URL no editor. Ver src/lib/media/public-url.ts.
+function publicUrlFor(storagePath: string): string {
+  const url = buildMediaUrl(storagePath);
+  // Sem host nenhum configurado (ambiente local sem .env), cai no
+  // Supabase para a tela não ficar sem imagem.
+  return url || supabaseAdmin.storage.from(BUCKET).getPublicUrl(storagePath).data.publicUrl;
+}
 
 export async function GET(request: NextRequest) {
   const auth = await getAuthClient();
@@ -53,12 +66,11 @@ export async function GET(request: NextRequest) {
           if (file.id === null && !file.metadata) continue;
 
           const filePath = `${folder}/${file.name}`;
-          const { data: urlData } = supabaseAdmin.storage.from(BUCKET).getPublicUrl(filePath);
 
           allFiles.push({
             id: file.id || filePath,
             name: file.name,
-            url: urlData.publicUrl,
+            url: publicUrlFor(filePath),
             size: file.metadata?.size || 0,
             type: file.metadata?.mimetype || 'image/png',
             created_at: file.created_at || new Date().toISOString(),
@@ -112,21 +124,27 @@ export async function POST(request: NextRequest) {
 
     const buffer = Buffer.from(await file.arrayBuffer());
 
+    // Cache de um ano: o nome do arquivo é único por upload, então
+    // nunca precisa invalidar. O proxy de imagens do Gmail respeita o
+    // Cache-Control da primeira busca e serve as aberturas seguintes
+    // da própria borda — sem isto o padrão do Storage é ~1h.
     const { error: uploadError } = await supabaseAdmin.storage
       .from(BUCKET)
-      .upload(storagePath, buffer, { contentType: file.type, upsert: false });
+      .upload(storagePath, buffer, {
+        contentType: file.type,
+        upsert: false,
+        cacheControl: '31536000, immutable',
+      });
 
     if (uploadError) {
       console.error('[Media] Upload error:', uploadError);
       return NextResponse.json({ error: uploadError.message }, { status: 500 });
     }
 
-    const { data: urlData } = supabaseAdmin.storage.from(BUCKET).getPublicUrl(storagePath);
-
     const result = {
       id: storagePath,
       name: file.name,
-      url: urlData.publicUrl,
+      url: publicUrlFor(storagePath),
       size: file.size,
       type: file.type,
       created_at: new Date().toISOString(),

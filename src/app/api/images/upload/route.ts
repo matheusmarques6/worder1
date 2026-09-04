@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthClient, authError } from '@/lib/api-utils'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { buildMediaUrl } from '@/lib/media/public-url'
 
 export async function POST(req: NextRequest) {
   try {
@@ -53,37 +54,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: uploadError.message }, { status: 500 })
     }
 
-    // Default response uses the transform/CDN endpoint so the URL
-    // saved into email templates is the optimised one — auto-resized
-    // to email width, served as WebP when supported, cached at the
-    // edge. The raw /object/public URL is too slow for Gmail's image
-    // proxy on mobile (broken-image icons). render-html rewriter
-    // also catches legacy templates that still reference the raw URL.
-    //
-    // When CDN_IMAGES_DOMAIN is set, the returned URL swaps the
-    // Supabase host for the Cloudflare-proxied CDN host. Same
-    // /render/image path — Cloudflare CNAMEs straight at Supabase
-    // and caches everything for a year, so subsequent fetches
-    // from Gmail proxy hit the Cloudflare edge instead of the
-    // Supabase origin.
+    // A URL salva no template é a canônica da CDN (cdn.worder.email):
+    // /render/image para raster — redimensionada para a largura do
+    // e-mail, WebP quando o cliente aceita, cacheada na borda — e
+    // /object para SVG/GIF, que o transformador não processa. A mesma
+    // regra da biblioteca de mídia; ver src/lib/media/public-url.ts.
     const { data: rawUrlData } = supabaseAdmin.storage.from('email-images').getPublicUrl(fileName)
-    const { data: transformUrlData } = supabaseAdmin.storage.from('email-images').getPublicUrl(fileName, {
-      transform: {
-        width: 1200,
-        quality: 85,
-      },
-    })
-
-    const cdnDomain = (process.env.CDN_IMAGES_DOMAIN || '')
-      .replace(/^https?:\/\//i, '')
-      .replace(/\/+$/, '')
-      .trim()
-    const primaryUrl = cdnDomain
-      ? (transformUrlData?.publicUrl || rawUrlData.publicUrl).replace(
-          /https:\/\/[a-z0-9-]+\.supabase\.co/i,
-          `https://${cdnDomain}`
-        )
-      : transformUrlData?.publicUrl || rawUrlData.publicUrl
+    const primaryUrl = buildMediaUrl(fileName) || rawUrlData.publicUrl
 
     return NextResponse.json({
       url: primaryUrl,
