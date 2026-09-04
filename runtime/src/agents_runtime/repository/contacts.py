@@ -11,8 +11,10 @@ What is NOT here is as important as what is: no orders. Purchase history comes
 from the store mirror, and that is `repository/orders.py` (E3), which owns the
 "no record" vs "no history" distinction (decisão 81b) so nobody here is tempted
 to return an invented zero. `history_lines` is what reaches the model, inside
-the ESTADO block — and it reads `last_order_at`, never `first_order_at`, which
-since item 59 has no reader at all (item 60 owns that leftover).
+the ESTADO block — and it reads `last_order_at`. `first_order_at` was carried
+alongside it with no reader at all after item 59, and item 60 deleted it: the
+field, the `min(coalesce(...))` column that fed it, and the fourth name in the
+unpack of `load_purchase_history`.
 """
 
 from uuid import UUID

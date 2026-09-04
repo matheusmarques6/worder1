@@ -23,7 +23,6 @@ def a_history(**overrides) -> PurchaseHistory:
         total_orders=2,
         total_spent=Decimal("200.00"),
         currency="BRL",
-        first_order_at=datetime(2026, 6, 1, 12, 0),
         last_order_at=datetime(2026, 8, 10, 12, 0),
         recent=(
             OrderSummary(

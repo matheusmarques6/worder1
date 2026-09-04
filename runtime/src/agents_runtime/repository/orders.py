@@ -41,7 +41,6 @@ class PurchaseHistory:
     total_spent: Decimal
     """Soma de total_price - total_refunded: o que de fato ficou pago."""
     currency: str
-    first_order_at: datetime | None
     last_order_at: datetime | None
     recent: tuple[OrderSummary, ...]
 
@@ -111,14 +110,13 @@ async def load_purchase_history(
         f"""
         select count(*),
                coalesce(sum(coalesce(o.total_price, 0) - coalesce(o.total_refunded, 0)), 0),
-               min(coalesce(o.shopify_created_at, o.created_at)),
                max(coalesce(o.shopify_created_at, o.created_at))
           from public.shopify_orders o
          where {_LINKED}
         """,
         params,
     )
-    total_orders, total_spent, first_at, last_at = await cursor.fetchone()
+    total_orders, total_spent, last_at = await cursor.fetchone()
 
     recent: list[OrderSummary] = []
     if total_orders:
@@ -157,7 +155,6 @@ async def load_purchase_history(
         total_orders=int(total_orders),
         total_spent=Decimal(total_spent),
         currency=recent[0].currency if recent else "BRL",
-        first_order_at=first_at,
         last_order_at=last_at,
         recent=tuple(recent),
     )

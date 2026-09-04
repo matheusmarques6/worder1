@@ -95,9 +95,7 @@ class TestTheLinkIsPreciseNeverFuzzy:
 
         assert history.total_orders == 2
         assert history.total_spent == Decimal("200.00")
-        assert history.first_order_at is not None
         assert history.last_order_at is not None
-        assert history.first_order_at < history.last_order_at
         # Mais novo primeiro; o rótulo é o `name` da loja; itens legíveis.
         assert [o.label for o in history.recent] == ["#1002", "#1001"]
         assert history.recent[0].items == ("2x Meia",)
