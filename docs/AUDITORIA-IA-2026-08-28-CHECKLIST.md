@@ -3848,7 +3848,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `:43` (o `SCHEDULED: 2` dentro do `Counter(poll(ALL_BUSY, WINDOW))` de `:40-45`, a proporção),
   `:51` (o `set` polido, que proíbe prioridade estrita), `:85` (`picked[SCHEDULED] == 2`, o
   empréstimo de slot com `q_inbound` vazia) e `:113` (`effective_queue(SCHEDULED,
-  timedelta(minutes=11), …) == DOMAIN_EVENTS`, dentro de `TestPromotionByAge` `:109`); **`:23` é
+  timedelta(minutes=11), …) == DOMAIN_EVENTS`, dentro de `TestPromotionByAge` (`:97`), no teste de `:109`); **`:23` é
   fixture (`ALL_BUSY`), não asserção** — a mesma correção que o **item 81** já registrou para
   `q_evals`. **E** lógica de produção dedicada que `q_evals` não tem —
   `polling.py:69,76-77`, a promoção por idade que só existe para `SCHEDULED`. As duas filas estão sem
@@ -3918,13 +3918,24 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
      `runtime/scripts/measure_transcript_duplication.py:71` — script versionado pelo item 39, fora
      de toda trava e invisível ao `ruff`, cujo esquecimento quebraria a ferramenta em silêncio.
      O comentário `server.py:295-301` foi **reescrito**, não apagado.
-  **Gates, medidos a cada commit:** `pytest -m unit` **1170** (1190 − 20, o delta previsto: 16 ids
+  **Gates, medidos a cada commit no tier que ele toca, e os cinco na árvore final:** `pytest -m unit` **1170** (1190 − 20, o delta previsto: 16 ids
   por caminho relativo nas quatro travas de fitness + 4 escondidos em `test_no_max_seq.py`, que usa
   `ids=lambda p: p.name`), zero falhas; `ruff check .` **10** (item 74, intocado); `lint-imports`
   **3 kept, 0 broken**; `npx vitest run` **1321 com as mesmas 4 falhas pré-existentes e alheias**;
   `npx tsc --noEmit` limpo. **Aviso para quem vier depois:** os 12 ids `__init__.pyN` que
   sobreviveram foram **remapeados** pela deleção dos quatro pacotes — nenhum id `__init__.pyN`
   anotado antes de `e337adc7` continua apontando para o mesmo arquivo.
+  **E as deleções desta série deslocaram linhas citadas em outros itens.** Medido depois de podar,
+  não por aritmética: `repository/agent.py` **−1** acima de `:18`, **−2** acima de `:46`, **−3**
+  acima de `:181`; `agent_core/responder.py` **−1** acima de `:592`; `agent_core/toucher.py` **−1**
+  acima de `:394`; `agent_core/prompt_compiler.py` **−1** acima de `:132` e **−2** acima de `:281`;
+  `repository/orders.py` **−1/−2/−3** acima de `:44`/`:114`/`:160`; `repository/contacts.py` **+2**
+  acima de `:13`; `server.py` **+2** acima de `:301` e **+1** acima de `:320`. Atingidos os itens
+  **63, 72, 73, 75, 76, 77 e 83** (abertos) e o **59** (`contacts.py:1-17` virou `:1-18`, porque o
+  commit 5 acrescentou duas linhas ao docstring). **Some o offset antes de abrir qualquer uma
+  dessas citações.** As seis do item 83 vão reancoradas lá dentro, porque o item inteiro se
+  sustenta nelas — e é o que o item 56 (`ea5cbb35`) fez quando estava do outro lado desta mesma
+  conta, ao deslocar `repository/agent.py` em +33.
   **O que NÃO foi provado, e por quê:** `pytest -m db` e `-m pipeline` não são executáveis nesta
   máquina — sem Postgres eles penduram em vez de falhar. A reescrita do `select` de
   `repository/orders.py` é **inspeção, não prova**. O modo de falha silencioso não é o
@@ -3998,7 +4009,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   teste apenas dentro de uma docstring. É o vão mais fundo desta lista, porque não se fecha com
   banco — precisa de um teste que exercite a função.
   **Acrescentado pelo item 53 (revisão da execução, `89eca846`):** a fiação de
-  `never_say_ai` — do literal do loader (`agent.py:202`; era `:169`, **reancorado pelo item 56 em
+  `never_say_ai` — do literal do loader (`agent.py:199`; era `:169`, **reancorado pelo item 56 em
   `ea5cbb35`**, que deslocou o arquivo +33 linhas) até `JudgeContext` — **não tem trava
   executável em tier nenhum**, e isso foi **provado por mutação**, não suposto: pinar `false` no
   loader deixa a suíte idêntica, e inverter os dois call sites (`not settings.never_say_ai`) também.
@@ -4021,7 +4032,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   3. **"`tool_calls.tool_name` vem da tool, não da chave por onde ela foi buscada"**
      (`test_tool_registry.py:45-54`). Cobertura **parcial** sobrevive em
      `tests/db/test_tools.py::TestTheTrail`, que confere que **existe** linha na trilha, e
-     `responder.py:663` (`turn_tools[row.name]`) casa chave e nome por construção nas custom. O que
+     `responder.py:664` (`turn_tools[row.name]`) casa chave e nome por construção nas custom. O que
      fica sem afirmador é "chave ≠ nome seria detectado".
   4. **A amostra de escopo por RLS numa tool que não é `search_knowledge`.** Morreu com
      `TestGetCustomerContext::test_it_never_reads_a_conversation_of_another_tenant` (`-m db`):
@@ -4049,6 +4060,17 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `arbitrate()`, cujo corpo inteiro (`mission_resolver.py:133-150`) é `if owner … / if discovery … /
   raise` — **não olha `event_type`**. Foi por acreditar nele que a contagem de órfãs do item 56 errou
   pela terceira vez (5 → 2 → 0 → 1): *"parecida" não é sucessor*.
+  **Acrescentado pelo item 60 (`0cead265`):** `tests/db/test_purchase_history.py` não tem mais
+  nenhuma asserção que prenda `last_order_at` ao `max(coalesce(...))`. A poda de `first_order_at`
+  levou junto `assert history.first_order_at < history.last_order_at`, que era **a única** a
+  distinguir os dois agregados; o que sobrou (`:98`, `assert history.last_order_at is not None`)
+  passa igual se a coluna errada for projetada, e `:100` prende o `order by` de `recent`, não o
+  agregado. É exatamente o modo de falha que o item 60 isolou e declarou não conseguir provar nesta
+  máquina — e o commit que o declarou é o mesmo que apagou o último contraditor. O caso já monta
+  duas datas distintas (`:80-90`), então fechar o vão é **uma linha**:
+  `assert history.last_order_at.date() == history.recent[0].placed_at.date()` — `recent` vem
+  ordenado do mais novo para o mais velho (`:100`), e `OrderSummary.placed_at` existe
+  (`repository/orders.py:29`). Não escrito aqui porque `-m db` não roda sem Postgres.
   **Acrescentado pelo item 60 (`b8e979d6`) — e é a primeira entrada de TS desta lista:**
   `src/lib/ai/embeddings.ts` **não tem arquivo de teste nenhum**. Não existe `embeddings.test.ts`
   em `src/lib/ai/__tests__/` (conferido por `ls`), e a única trava que toca o arquivo é **textual**:
@@ -4751,13 +4773,18 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `:178`→**`:211`**. A sétima citação, `tests/unit/test_agent_block_has_one_producer.py:60`, deslocou
   para **`:66`** — para **baixo**, não para cima: o mesmo commit acrescentou `import pytest` e abriu
   o import de `repository.agent` em forma parentizada.
-  O select do loader (`repository/agent.py:202`) projeta **três**
+  **Reancorado pelo item 60 (`b8e979d6`), que encolheu `repository/agent.py` em 3 linhas:**
+  `:97`→**`:95`**, `:100`→**`:98`**, `:198`→**`:195`**, `:199-200`→**`:196-197`**, `:202`→**`:199`**,
+  `:211`→**`:208`**. As seis foram conferidas **por conteúdo**, não por aritmética. O parágrafo acima
+  narra o reancoramento do item 56 e continua verdadeiro como história; os números **correntes** são
+  estes.
+  O select do loader (`repository/agent.py:199`) projeta **três**
   valores pinados — `'pt-BR'::text`, `true`, `null::timestamptz` — e o terceiro vira
-  `TenantSettings.shadow_until` (campo em `:100`, atribuído em `:211`). `primary_language` tem leitor
+  `TenantSettings.shadow_until` (campo em `:98`, atribuído em `:208`). `primary_language` tem leitor
   (`prompt_compiler.py:101`); `never_say_ai` tem um (`judges/pre_send.py:295`, e o item 53 passou a
   entregar o valor lido até lá); **`shadow_until` tem ZERO**. A varredura de `shadow` em `src/`,
-  `tests/` e `scripts/` devolve seis linhas e **nenhuma é leitura**: `agent.py:97` (docstring), `:100`
-  (o campo), `:198` (o comentário FORK), `:211` (a atribuição), `tests/db/test_agent_loaders.py:94` e
+  `tests/` e `scripts/` devolve seis linhas e **nenhuma é leitura**: `agent.py:95` (docstring), `:98`
+  (o campo), `:195` (o comentário FORK), `:208` (a atribuição), `tests/db/test_agent_loaders.py:94` e
   `tests/unit/test_agent_block_has_one_producer.py:66` — os dois últimos só asseram que é `None`.
   **É o "lido e ignorado" literal**, o título que o item 53 carregava para o valor errado: o
   `never_say_ai` ao menos tem consumidor.
@@ -4767,7 +4794,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   existe no runtime:** nenhum código lê o campo, e nenhum caminho decide avaliar, enfileirar ou marcar
   em função dele.
   **A decisão é de produto, não de limpeza.** Ou o modo shadow é construído — e aí o campo ganha
-  leitor, e a Etapa 3 do FORK (`agent.py:199-200`) precisa de onde ler a data de verdade —, ou o
+  leitor, e a Etapa 3 do FORK (`agent.py:196-197`) precisa de onde ler a data de verdade —, ou o
   campo, a projeção `null::timestamptz` e os dois asserts saem juntos. **Não apagar sem decidir:**
   apagar é a saída barata que fecha a porta do RF-006 sem que ninguém tenha dito que quer fechá-la.
 
