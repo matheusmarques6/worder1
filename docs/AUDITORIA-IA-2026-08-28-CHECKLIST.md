@@ -3662,7 +3662,17 @@ você decidir se entram na fila.
   que ele parou em `(organization_id, wa_id)` e não tentou consertar a semântica de carona. O
   conserto certo é passar o `waba_id` (ou o `phone_number_id`) até essas funções e casar pela
   `unique` que já existe, o que é mudança de assinatura em cinco funções e nos call sites do runtime
-  — decisão de produto antes de DDL. **Quantas orgs têm mais de um WABA hoje só o banco vivo diz:**
+  — decisão de produto antes de DDL.
+  **ARMADILHA DE NOME, leia antes de executar: `waba_id` são DUAS colunas diferentes, com tipos
+  diferentes, em tabelas diferentes.** `whatsapp_cloud_conversations.waba_id` é
+  **`uuid not null references public.whatsapp_business_accounts(id)`** (`20260812000001:525`) — é o
+  **id da linha da conta**, não o WABA id da Meta. O WABA id da Meta é outra coluna, **`waba_id text`
+  em `whatsapp_business_accounts`** (`20260812000001:479`, nullable e sem unique). A `unique`
+  `(waba_id, wa_id)` (`:554`) usa a **primeira**, e todo o `src/` já opera assim —
+  `.eq('waba_id', account.id)` em todos os sítios. Portanto "passe o `waba_id`" significa **passar o
+  `uuid` da linha de `whatsapp_business_accounts`**, não o `text` da Meta. Quem passar o `text` leva
+  erro de tipo — ou, pior, "conserta" o predicado para casar `text` com `text` e passa a casar a
+  coluna errada, que é exatamente o bug que este item existe para não repetir. **Quantas orgs têm mais de um WABA hoje só o banco vivo diz:**
   `select organization_id, count(*) from public.whatsapp_business_accounts group by 1 having count(*) > 1;`
 
 - [ ] **Reescrever o predicado do guard de opt-out para o disjunto que já o subsome — e o teste que
