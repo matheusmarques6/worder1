@@ -267,6 +267,8 @@ export async function GET(request: NextRequest) {
               customFields: contact.custom_fields || {},
               createdAt: contact.created_at,
               updatedAt: contact.updated_at,
+              totalOrders: contact.total_orders ?? 0,
+              totalSpent: contact.total_spent ?? 0,
             } : undefined,
             deal,
             // Variable engine expects {type, data, timestamp}; passing

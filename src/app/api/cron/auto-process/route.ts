@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
     
     const { data: pendingRuns, error: runsError } = await supabase
       .from('automation_runs')
-      .select('id, automation_id, contact_id, created_at, metadata')
+      .select('id, automation_id, contact_id, created_at, metadata, trigger_type')
       .eq('status', 'pending')
       .lt('created_at', threeSecondsAgo)
       .order('created_at', { ascending: true })
@@ -194,9 +194,25 @@ export async function GET(request: NextRequest) {
                 customFields: contact.custom_fields || {},
                 createdAt: contact.created_at,
                 updatedAt: contact.updated_at,
+                totalOrders: contact.total_orders ?? 0,
+                totalSpent: contact.total_spent ?? 0,
               } : undefined,
               deal,
-              trigger: metadata.trigger_data || {},
+              // Mesma correção já aplicada no process-runs: o motor de
+              // variáveis espera {type, data, timestamp}. Passar o
+              // trigger_data cru aqui apagava todo {{event.*}} e
+              // {{trigger.data.*}} nos runs que caíam neste cron.
+              trigger: {
+                type: (metadata as any).trigger_type || (run as any).trigger_type || 'unknown',
+                data: metadata.trigger_data || {},
+                timestamp: run.created_at || new Date().toISOString(),
+              },
+              workflow: {
+                id: automation.id,
+                name: automation.name,
+                executionId: run.id,
+                startedAt: run.created_at || new Date().toISOString(),
+              },
             },
           })
         );

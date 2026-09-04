@@ -72,6 +72,10 @@ export interface VariableContext {
     customFields: Record<string, any>;
     createdAt: string;
     updatedAt?: string;
+    /** Alimentam {{total_orders}} / {{total_spent}}. Sem eles no contexto
+     *  as duas tags saíam sempre 0 no envio real. */
+    totalOrders?: number;
+    totalSpent?: number;
   };
   
   deal?: {

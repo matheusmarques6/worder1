@@ -847,16 +847,26 @@ const actionExecutors: Record<string, NodeExecutor> = {
         // because the HTML/subject were pre-rendered by the variable
         // engine above — prepareEmailHtml still adds tracking + footer.
         const contact = context.contact as any;
+        // O contexto canônico (VariableContext) é camelCase — é o que os
+        // dois crons montam. Ler só snake_case aqui zerava {{first_name}},
+        // {{last_name}} e {{full_name}} em TODO envio real de automação
+        // (o preview e o /execute passam a linha crua do banco, por isso
+        // funcionavam e o bug só aparecia na caixa de entrada: o assunto
+        // "{{first_name}}, seu pedido..." chegava como ", seu pedido...").
+        // Aceitar as duas formas cobre os quatro chamadores.
+        const firstName = contact?.firstName || contact?.first_name || '';
+        const lastName = contact?.lastName || contact?.last_name || '';
+        const customFields = contact?.customFields || contact?.custom_fields;
         const triggerData = context.trigger?.data || {};
         const triggerProps = triggerData.properties || triggerData;
         const mergeData: Record<string, string> = {
-          first_name: contact?.first_name || '',
-          last_name: contact?.last_name || '',
-          full_name: [contact?.first_name, contact?.last_name].filter(Boolean).join(' '),
+          first_name: firstName,
+          last_name: lastName,
+          full_name: [firstName, lastName].filter(Boolean).join(' '),
           email: email || '',
           phone: contact?.phone || '',
-          total_orders: String(contact?.total_orders || 0),
-          total_spent: String(contact?.total_spent || 0),
+          total_orders: String(contact?.totalOrders ?? contact?.total_orders ?? 0),
+          total_spent: String(contact?.totalSpent ?? contact?.total_spent ?? 0),
           store_name: (context as any)?.store?.name || '',
           store_url: (context as any)?.store?.domain ? `https://${(context as any).store.domain}` : '',
         };
@@ -894,7 +904,7 @@ const actionExecutors: Record<string, NodeExecutor> = {
           mergeData['tracking_number'] = triggerProps.TrackingNumber || '';
           mergeData['event.ItemCount'] = String(triggerProps.ItemCount || triggerProps.item_count || '');
           mergeData['event.DiscountCode'] = (triggerProps.DiscountCodes || triggerProps.discount_codes || [])[0]?.code || '';
-          mergeData['event.customer_name'] = triggerProps.CustomerName || [contact?.first_name, contact?.last_name].filter(Boolean).join(' ');
+          mergeData['event.customer_name'] = triggerProps.CustomerName || [firstName, lastName].filter(Boolean).join(' ');
           mergeData['event.email'] = triggerProps.CustomerEmail || email || '';
           // Also flatten top-level trigger data keys
           for (const [k, v] of Object.entries(triggerData)) {
@@ -922,8 +932,8 @@ const actionExecutors: Record<string, NodeExecutor> = {
           }
         }
         // Custom fields
-        if (contact?.custom_fields && typeof contact.custom_fields === 'object') {
-          for (const [k, v] of Object.entries(contact.custom_fields)) {
+        if (customFields && typeof customFields === 'object') {
+          for (const [k, v] of Object.entries(customFields as Record<string, unknown>)) {
             mergeData[`custom.${k}`] = String(v ?? '');
             mergeData[`custom_${k}`] = String(v ?? '');
           }
