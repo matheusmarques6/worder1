@@ -2459,9 +2459,19 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   último: `lower(email)` em `shopify_orders`. É a tabela mais volumosa das quatro (um pedido por
   venda, para sempre, sem purga, retenção nem arquivamento em migration alguma) e o predicado mais
   quente: `load_purchase_history` dispara **duas** queries por chamada (`orders.py:116` e `:134`) e é
-  chamada em `responder.py:342` (**todo turno de resposta**), `toucher.py:185` (todo toque) e
-  `customer.py:41` (toda invocação de `get_customer_context`) — 1-2 varreduras do tenant **por
-  turno**, na tabela grande. Já o primeiro caso (`whatsapp_cloud_conversations`) é ~5 lookups por
+  chamada em `responder.py:342` (**todo turno de resposta**) e `toucher.py:185` (todo toque) — 1-2
+  varreduras do tenant **por turno**, na tabela grande.
+  **Reancorado pelo item 59 (`5f5dba63`):** havia um **terceiro** chamador aqui, `customer.py:41`
+  (*"toda invocação de `get_customer_context`"*), e o item 59 apagou o módulo. O índice **continua
+  justificado** — responder e toucher já são "todo turno" e "todo toque" —, mas a justificativa
+  perdeu um terço. **A metade que NÃO se conserta:** o comentário `20260903000003:22-25` da migration
+  aplicada cita o mesmo `tools/customer.py:41`, e migration não se reescreve por comentário
+  (expand-contract, roll-forward only) — fica sendo citação permanentemente podre no stream, dita
+  aqui para que ninguém a "conserte" nem conclua que o índice ficou sem dono.
+  *(Rot anterior, fora do escopo do 59 e não mexida, mas medida na âncora `a22700db`: `orders.py:116`
+  e `:134` não são `conn.execute` nenhum — são as linhas `from public.shopify_orders o` dentro dos
+  dois SQL. As duas queries que varrem `shopify_orders` abrem em `:110` e `:125`, dentro de
+  `load_purchase_history` (`:79-182`).)* Já o primeiro caso (`whatsapp_cloud_conversations`) é ~5 lookups por
   turno numa tabela menor. Os dois viraram migration, nesta ordem.
 
   **Migration 1 — `20260903000003_shopify_orders_org_email_lower_idx.sql`**, `on
@@ -3472,6 +3482,13 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   imprecisa: o mecanismo é que nunca existiu; a **trava** (`test_prompt_layers.py:158-165`, que
   assertava `"189.90"` e `"2025-03-14"`) existia e foi **este** item que a apagou. Como o mecanismo
   nunca existiu, o conserto é a reescrita, não um substituto de trava.
+  **Resolvida pelo item 59 (`5f5dba63`), e a nota acima estava certa — não foi reescrita.** O 59
+  apagou `customer.py`, e a resolução veio por **não-alcançabilidade**, não por deleção de caminho
+  vivo: nada instanciava `GetCustomerContext` fora do registry que ninguém chamava. A frase forte
+  (*"último lugar de produção onde `first_order_at` **chega ao modelo**"*) era do enunciado do
+  **próprio item 59**, não desta nota — corrigida lá. **O resíduo `agent_core/responder.py:21-24`
+  que esta nota parqueou para "os itens 58 e 67" foi corrigido pelo 59**, porque a deleção o
+  transformava de vocabulário velho em referência a módulo inexistente: sai da fila do 67.
   **Vizinho registrado, item 57:** com `prompt.py` fora, `evals/pack.py:27` — que tinha uma **cópia
   literal** de `OCCASIONS` — vira o **único** dono do vocabulário de ocasiões. Quem decidir apagar
   metade de `pack.py` decide também o destino dele.
@@ -3517,6 +3534,10 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
      `repository/contacts.py:13`, `tools/customer.py:9`) ou literal de fixture (`pre_send.py:118`,
      `tests/support/judged.py:39`, `test_merchant_judges.py:31`) — **nenhuma é conferida contra
      nada**. É a única ponte mecânica entre o documento de requisitos e código.
+     **A enumeração envelheceu com o item 59 (`5f5dba63`); a propriedade, não.** `tools/customer.py:9`
+     deixou de existir (módulo apagado) e `repository/contacts.py:13` deslocou com a reescrita do
+     docstring — `responder.py:22` também foi reescrita. A conclusão *"nenhuma é conferida contra
+     nada"* continua valendo para as que sobraram; é a **lista** que não se relê, não o argumento.
   2. **O comportamento esperado do MODELO sob ataque** — e a propriedade é mais estreita do que
      "ninguém mais testa injeção". O lado TS **tem** teste de injeção
      (`src/lib/ai/__tests__/prompt-builder.test.ts:10-37`, alimentando `contactInfo.name` e
@@ -3671,7 +3692,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   serviço **não morreu com a rota** — está vivo em duas rotas sem nem o segredo de debug. Virou o
   **item 86**.
 
-- [ ] **59. Apagar `tools/registry.py` + `tools/customer.py`** — **130 linhas medidas** `[confirmado]`
+- [x] **59. Apagar `tools/registry.py` + `tools/customer.py`** — **130 linhas medidas** `[confirmado]` · commits `5f1b3d48` `5f5dba63` · relatório `task-59-report.md`, que é **gitignored** — por isso o que precisa sobreviver está AQUI
   **Toda citação de linha deste item está reancorada na âncora `a22700db`.** O "~170 linhas" do texto
   anterior não correspondia a recorte executável nenhum — quarto item seguido em que a conta estava
   errada. **Medido (`wc -l`):** `registry.py` **39** + `customer.py` **91** = **130**. O trabalho é
@@ -3730,6 +3751,36 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   **`runtime/docs/testes-e-cicd.md:47` já foi reescrita pelo 56 sem o campo**, então este item **não**
   precisa mexer nela de novo.
 
+  **EXECUTADO (`5f5dba63`). A previsão bateu casa a casa:** unit **1206 → 1190** (−16, exatamente os
+  16 ids previstos); **deselecionados 512 → 510**, o que transforma o "−2 no tier `db`" de contado
+  por leitura em **medido por coleta** (sem Postgres, sem rodar `-m db`); `ruff` **10 → 10** (os do
+  item 74, não consertados aqui de propósito — a poda de `contacts.py` foi o que impediu os 12);
+  `lint-imports` **3 kept / 0 broken** (a linha 173 saiu no mesmo commit); TS **1321 com as mesmas 4
+  falhas pré-existentes** e `tsc --noEmit` exit 0. **Diff medido:** −329/+23 em 9 arquivos, dos quais
+  −130 são os dois módulos nomeados, −54 o teste exclusivo, −61 a excisão em `test_tools.py` (a
+  estimativa era ~60) e −62 os dois símbolos órfãos de `contacts.py` (a estimativa era ~62).
+  **Residuos que foram junto, porque sobra de deleção é dívida nova:** `tools/__init__.py:1` (dizia
+  *"Tool registry"*), o docstring de `repository/contacts.py:1-17`, o comentário
+  `hub-runtime-parity.test.ts:42-46` e **`agent_core/responder.py:21-24`** — este último parqueado
+  pelo item 56 (`:3441-3444`) *"para os itens 58 e 67"*, **e o 58 fechou sem tocá-lo**; a deleção o
+  transformava de vocabulário velho em referência a módulo inexistente, então foi corrigido aqui e
+  **sai da fila do 67**. Os contadores do comentário de `pyproject.toml:158,176` foram de 10 para 9
+  pela mesma razão. *(O "os 11" de `:160` já estava inconsistente com o "10" antes deste item —
+  rot anterior, não mexido.)*
+  **Não corrigido, de propósito (régua do item 52 — registro datado não se reescreve):**
+  `core/STATUS-agentes-por-evento.md:167` e `runtime/FORK.md:270-290`, que descreve a ausência nº 12
+  **pela ausência** e fica **mais** certo depois da deleção. Aviso para o próximo: as citações de
+  linha do FORK ali (`responder.py:512-531`, `:748-749`) estão podres nesta âncora — o vivo é
+  `:642-664` e `:1022` —, e ficam **mais** podres agora; isso não é convite para "consertar" o
+  registro. **Impossível de corrigir:** os comentários das migrations aplicadas
+  `20260813000004_contacts_rls_for_runtime.sql:29` e
+  `20260903000003_shopify_orders_org_email_lower_idx.sql:25` nomeiam o alvo apagado e viram citação
+  permanentemente podre no stream — expand-contract é roll-forward, não se reescreve migration por
+  comentário. Registrado no item 50, cuja **metade viva e editável** (`:2461-2463`) foi corrigida.
+  **Entregue aos vizinhos:** o órfão `PurchaseHistory.first_order_at` ao **item 60**; os quatro vãos
+  de trava ao **item 63**; a enumeração `RF-` do **item 57** (`:3515-3519`) fica obsoleta em uma
+  entrada; e os dois territórios sem dono que a recon achou viraram o **item 87**.
+
 - [ ] **60. Apagar sobras menores** `[confirmado]`
   Cache de embeddings sem consumidor (`clearEmbeddingsCache` e irmãs, ~90 l.) + `rag.ts::buildContext`
   (duplicata de `formatRAGAsContext`) + `pending_defaults.py` + os 4 pacotes vazios
@@ -3762,6 +3813,18 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   arquivo **só para anotar um campo que ninguém lê**. Podar mexe no construtor de produção, então
   não cabia no mesmo commit de 495 linhas apagadas — cabe aqui.
   *(Verificado sem dono antes de entrar: o item 57 é sobre `evals/` e este escopo não o listava.)*
+  **Acrescentado pelo item 59 (`5f5dba63`): `PurchaseHistory.first_order_at`** — campo calculado por
+  SQL (`repository/orders.py:44`, escrito em `:160` a partir do `min(coalesce(...))` de `:114`) que,
+  depois da deleção de `tools/customer.py`, **não tem UM leitor**. Mesma classe de
+  `AgentConfig.scenario_prompts` acima, e **mais cara de detectar**, porque ainda tem trava
+  afirmando-o: `tests/db/test_purchase_history.py:98,100` (`assert history.first_order_at is not
+  None` e `assert history.first_order_at < history.last_order_at`). Uma trava sobre campo morto é
+  pior que nenhuma — dá a impressão de que o campo tem uso. **A borda que muda o orçamento:** podar
+  **não** é "`orders.py` + duas asserções `-m db`". O campo não tem default, então também é
+  construído em `-m unit`: `tests/unit/test_purchase_prompt.py:26`
+  (`first_order_at=datetime(2026, 6, 1, 12, 0)`). São **três** tiers de edição, um deles rodável sem
+  Postgres. O item 59 não o podou de propósito — mexe em `repository/orders.py`, que não está no
+  título dele, e em teste `db` que ele não podia rodar.
 
 - [ ] **61. Rotas órfãs** `[relatado]`
   `whatsapp/conversations/[id]/ai` (duplicata insegura do toggle, apagar primeiro), `ai/respond`,
@@ -3807,6 +3870,34 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   loader deixa a suíte idêntica, e inverter os dois call sites (`not settings.never_say_ai`) também.
   O valor pode ser lido errado, invertido ou ignorado sem nada ficar vermelho. Mesma família do vão
   de `agent_llm_from_org_keys` acima: o caminho existe, a suíte não passa por ele.
+  **Acrescentado pelo item 59 (`5f5dba63`) — quatro vãos que a deleção ABRIU, declarados na saída em
+  vez de descobertos depois.** Os três primeiros existiam só em `tools/registry.py` +
+  `tests/unit/test_tool_registry.py`; nenhum é regressão de comportamento (a produção já era assim),
+  mas nenhum tem mais quem o afirme:
+  1. **"Um nome de tool desconhecido em `agent_versions.enabled_tools` é erro."** Era
+     `registry.py:28-33` + `test_tool_registry.py:32-36`, o **único** lugar da árvore onde isso
+     estava escrito. Em produção o nome desconhecido sempre foi **ignorado em silêncio** — agora esse
+     comportamento fica sem contraditor executável. `runtime/FORK.md:274-275` o descreve por escrito,
+     mas doc não é trava.
+  2. **O catálogo de tools do lado Python.** `AVAILABLE` (`registry.py:22`) +
+     `test_tool_registry.py:39-42` eram a única lista escrita. O vocabulário Python passa a existir
+     só **derivado**: `hub-runtime-parity.test.ts:34-38` o extrai varrendo `name = "…"` nos
+     `tools/*.py`. A trava de paridade continua verde, mas compara contra uma lista que ninguém
+     escreveu — acrescentar uma tool sem tabela deixa de ter teste que pergunte "cadê as tabelas?".
+  3. **"`tool_calls.tool_name` vem da tool, não da chave por onde ela foi buscada"**
+     (`test_tool_registry.py:45-54`). Cobertura **parcial** sobrevive em
+     `tests/db/test_tools.py::TestTheTrail`, que confere que **existe** linha na trilha, e
+     `responder.py:663` (`turn_tools[row.name]`) casa chave e nome por construção nas custom. O que
+     fica sem afirmador é "chave ≠ nome seria detectado".
+  4. **A amostra de escopo por RLS numa tool que não é `search_knowledge`.** Morreu com
+     `TestGetCustomerContext::test_it_never_reads_a_conversation_of_another_tenant` (`-m db`):
+     conversa de outro tenant simplesmente não existe, e a tool dizia isso em vez de inventar
+     cliente. O irmão `TestSearchKnowledge::test_the_scope_never_comes_from_the_arguments`
+     (`test_tools.py:103`) prova a **mesma política sobre a outra tool** — perde-se a **amostra**,
+     não a propriedade. Dito assim de propósito: no item 56, chamar de "sucessor" um teste
+     "parecido" custou três contagens erradas. O que resta exercitando
+     `contacts.contact_id_of_conversation` é `tests/db/test_create_coupon_tool.py`, por dentro do
+     `create_coupon` — indiretamente, e sem asserção de tenant estranho.
   **Acrescentado pelo item 56 (`ea5cbb35`):** a **seleção da missão pelo evento que abriu a conversa**
   — a regra 2 da linha `agent_core` de `runtime/docs/testes-e-cicd.md:47` — ficou **sem trava
   executável em tier nenhum** quando `test_prompt_layers.py` foi apagado. Mesma família dos dois vãos
@@ -4630,6 +4721,42 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   engole a discrepância em silêncio. Só morde o tier `-m pipeline`, e só se o filho emitir não-ASCII.
   **Não verificado** — `-m pipeline` não roda aqui (sem Postgres) e em Linux passaria de qualquer
   jeito. É exatamente o tipo de coisa que a matriz existiria para responder.
+
+- [ ] **87. A aba Ferramentas oferece ao lojista seis tools que o runtime não sabe executar, e o
+  placeholder ensina a digitar uma sétima que já nem existe** `[confirmado]` · *(descoberto no item
+  59)*
+  Citações ancoradas em `a22700db`. **Não é dívida nova nem foi criada pelo item 59** — é dívida que
+  estava declarada em `runtime/FORK.md:268-290` (ausência nº 12) **fechando com literalmente
+  *"Dívida — sem dono (os itens 30-38 não cobrem tools)"*** e que **nenhum item deste checklist
+  reivindicava**. Entra aqui para deixar de ser órfã, não porque o 59 a tenha piorado.
+  **Procurado dono pelo DEFEITO, não pelo caminho do arquivo** (a régua que faltou no item 58):
+  `grep` no checklist por `catalog.ts`, `MissionEditorModal`, `placeholder`, `aba Ferramentas`,
+  `order_status`, `product_lookup`, `transfer_to_human`, `save_interests` — **zero** ocorrências para
+  os cinco primeiros; `order_status` e `transfer_to_human` só aparecem em contexto alheio
+  (`:2650` e `:4328` são consultas SQL do lado TS; `:1496-1499` é o retorno descartado do toucher).
+  O item **30** é sobre guards de comportamento, o **61** lista rotas órfãs e não cita nem
+  `catalog.ts` nem a aba, e o **5** cita `hub-runtime-parity.test.ts` pela **outra** metade do
+  arquivo (divergência de modelo de embedding). Não há item redundante a abrir.
+  **Os dois são o mesmo defeito em duas superfícies** — o painel promete vocabulário que o runtime
+  não honra — e por isso viram **um** item, não dois:
+  1. **`src/lib/ai/tools/catalog.ts` + `tools/registry.ts` expõem 7 tools na aba Ferramentas**
+     (`agent-hub.ts:40,169`); o turno oferece ao modelo `create_coupon` + as HTTP custom, mais
+     `search_knowledge`, que nem é tool no runtime (a busca roda sem o modelo pedir). `grep` das
+     outras seis em `runtime/src` devolve zero. **Marcar a caixa não dá erro**: nome desconhecido é
+     ignorado em silêncio — e o item 59 apagou justamente o `build_registry` que recusaria, então
+     hoje **nada** no Python contradiz a caixa marcada. Efeito por tool, na ordem do FORK:
+     `transfer_to_human` (a loja fica sem caminho automático para humano), `order_status`
+     ("cadê meu pedido?" sem dado real), `product_lookup`, `save_customer`, `save_interests`,
+     `timeline`. `hub-runtime-parity.test.ts:71-84` (*"DIVERGÊNCIA CONHECIDA: o painel oferece 6
+     ferramentas que o runtime ignora"*) **trava a divergência** — ela é consciente e
+     verde, não um bug escondido; o que falta é alguém **decidir**: implementar no runtime, tirar da
+     aba, ou marcar as seis como indisponíveis na UI.
+  2. **`src/components/flow-builder/panels/MissionEditorModal.tsx:307`** — o `placeholder` ensina o
+     lojista a digitar `search_knowledge, get_customer_context, create_coupon`. Depois do item 59,
+     **um dos três nomes não existe em lado nenhum** (o outro é honrado, o terceiro roda sem ser
+     tool). Uma linha; não vale item próprio, e é por isso que está aqui e não sozinho.
+  **É decisão de produto, não de limpeza.** O item 59 não a tomou de propósito: apagar código morto
+  do Python não autoriza remover capacidade prometida na UI.
 
 ---
 
