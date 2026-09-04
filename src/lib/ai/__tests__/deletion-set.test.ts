@@ -47,6 +47,11 @@ const DELETION_SET: string[] = [
   // Onda 3 executada. A lista fica aqui, vazia, porque é ela que a próxima
   // rodada preenche — e porque o teste de "todo caminho listado existe" impede
   // que ela apodreça com nome de arquivo que já morreu.
+  //
+  // Onda 4 (item 55): `actions-engine.ts`, `intent-detector.ts` e
+  // `sentiment-analyzer.ts` passaram por aqui — entraram na lista depois da
+  // edição de `engine.ts`, o teste provou que nenhum código vivo os alcançava,
+  // e saíram junto com os arquivos.
 ];
 
 /**

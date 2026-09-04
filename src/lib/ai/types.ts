@@ -134,77 +134,6 @@ export interface AgentChunk {
 }
 
 // =====================================================
-// AÇÕES (WHEN/DO RULES)
-// =====================================================
-
-export interface AgentAction {
-  id: string
-  organization_id: string
-  agent_id: string
-  name: string
-  description?: string
-  is_active: boolean
-  priority: number
-  conditions: ActionConditions
-  actions: ActionDo[]
-  times_triggered: number
-  last_triggered_at?: string
-  created_at: string
-  updated_at?: string
-}
-
-export interface ActionConditions {
-  match_type: 'all' | 'any'
-  items: ActionCondition[]
-}
-
-export interface ActionCondition {
-  id: string
-  type: 'intent' | 'sentiment' | 'contains' | 'time' | 'custom'
-  intent?: string
-  custom_intent?: string
-  sentiment?: string
-  keywords?: string[]
-  time_range?: { start: string; end: string }
-  days?: string[]
-}
-
-export interface ActionDo {
-  id: string
-  type: 'transfer' | 'exact_message' | 'use_source' | 'ask_for' | 'dont_mention' | 'bring_up'
-  transfer_to?: 'queue' | string
-  agent_id?: string
-  message?: string
-  source_id?: string
-  ask_field?: 'email' | 'phone' | 'name' | 'address' | string
-  custom_field?: string
-  topic?: string
-}
-
-// Intents pré-definidos
-export type PredefinedIntent =
-  | 'buy'
-  | 'support'
-  | 'refund'
-  | 'human'
-  | 'price'
-  | 'delivery'
-  | 'availability'
-  | 'complaint'
-  | 'greeting'
-  | 'farewell'
-  | 'other'
-
-// Sentimentos
-export type Sentiment =
-  | 'frustrated'
-  | 'confused'
-  | 'happy'
-  | 'neutral'
-  | 'sad'
-  | 'angry'
-
-// =====================================================
 // INTEGRAÇÕES
 // =====================================================
 
@@ -300,20 +229,10 @@ export interface EngineResponse {
   response_time_ms: number
   was_transferred: boolean
   transfer_to?: string
-  action_result?: ActionExecutionResult
   /** Tool calls executadas no turno (Fase 2b) — gravadas em agent_traces.tool_calls. */
   tool_calls?: Array<{ name: string; args: any; result: any }>
   /** Como o tool-loop terminou (Fase 2b): final | max_iterations | max_tokens | rate_limited | control_stop. */
   stopped_by?: string
-}
-
-export interface ActionExecutionResult {
-  action_id: string
-  action_type: string
-  executed: boolean
-  result?: any
-  should_stop: boolean
-  instructions?: string[]
 }
 
 // =====================================================
@@ -335,27 +254,6 @@ export interface RAGResult {
   content: string
   metadata: Record<string, any>
   similarity: number
-}
-
-// =====================================================
-// DETECÇÃO DE INTENÇÃO
-// =====================================================
-
-export interface DetectedIntent {
-  intent: PredefinedIntent | string
-  confidence: number
-  custom_intent?: string
-  all_intents?: Array<{ intent: string; confidence: number }>
-}
-
-// =====================================================
-// ANÁLISE DE SENTIMENTO
-// =====================================================
-
-export interface SentimentResult {
-  sentiment: Sentiment
-  confidence: number
-  score: number // -1 (muito negativo) a 1 (muito positivo)
 }
 
 // =====================================================
@@ -452,26 +350,3 @@ export const RESPONSE_LENGTH_TOKENS = {
   medium: { min: 100, max: 250 },
   long: { min: 150, max: 400 },
 }
-
-export const PREDEFINED_INTENTS: PredefinedIntent[] = [
-  'buy',
-  'support',
-  'refund',
-  'human',
-  'price',
-  'delivery',
-  'availability',
-  'complaint',
-  'greeting',
-  'farewell',
-  'other',
-]
-
-export const SENTIMENTS: Sentiment[] = [
-  'frustrated',
-  'confused',
-  'happy',
-  'neutral',
-  'sad',
-  'angry',
-]

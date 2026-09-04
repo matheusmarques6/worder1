@@ -7,7 +7,6 @@ import { SupabaseClient } from '@supabase/supabase-js'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import {
   AIAgent,
-  AgentAction,
   EngineConfig,
   EngineContext,
   EngineMessage,
@@ -15,7 +14,6 @@ import {
   UsageLog,
 } from './types'
 import { RAGService, createRAGServiceForOrg } from './rag'
-import { ActionsEngine } from './actions-engine'
 import { PromptBuilder, formatRAGAsContext } from './prompt-builder'
 import { callAI, AIProvider } from '@/lib/whatsapp/ai-providers'
 import { getActiveTools } from './tools/registry'
@@ -34,7 +32,6 @@ export class AIAgentEngine {
   private organizationId: string
   private supabase: SupabaseClient
   private ragService: RAGService | null
-  private actionsEngine: ActionsEngine | null = null
   private promptBuilder: PromptBuilder
   private apiKey: string
   private baseUrl?: string
@@ -91,51 +88,6 @@ export class AIAgentEngine {
       // 2b. Verificar budget mensal (lança AiBudgetExceededError se excedido)
       await checkAiBudget(this.organizationId, { throwOnExceeded: true })
 
-      // 3. Carregar ações e criar engine.
-      // Intent/sentiment do ActionsEngine chamam api.openai.com direto; se o
-      // provider do agente nao for openai (ex: openrouter), a chave nao serve.
-      // Resolvemos uma chave openai-da-org especifica (BYO total, Onda 13.6);
-      // sem ela, ActionsEngine cai pro modo "simple" (heuristica local).
-      const actions = await this.loadActions()
-      if (actions.length > 0) {
-        const openaiKey = this.agent.provider === 'openai'
-          ? this.apiKey
-          : await this.resolveOpenaiKeyForActions()
-        this.actionsEngine = new ActionsEngine(actions, openaiKey)
-      }
-
-      // 4. Avaliar ações (When/Do)
-      let actionInstructions: string[] = []
-      let actionResult = null
-
-      if (this.actionsEngine) {
-        actionResult = await this.actionsEngine.evaluate({
-          message: currentMessage,
-          conversationHistory: conversationHistory as EngineMessage[],
-          contactInfo,
-        })
-
-        if (actionResult) {
-          // Verificar se deve parar (transfer ou exact_message)
-          if (actionResult.should_stop) {
-            // Transfer
-            if (actionResult.result?.transfer) {
-              return this.buildTransferResponse(actionResult, startTime)
-            }
-
-            // Exact message
-            if (actionResult.result?.exact_message) {
-              return this.buildExactMessageResponse(actionResult, startTime)
-            }
-          }
-
-          // Coletar instruções para incluir no prompt
-          if (actionResult.instructions) {
-            actionInstructions = actionResult.instructions
-          }
-        }
-      }
-
       // 4b. Resolver tools ativas (Fase 2b). Só roda o tool-loop quando há
       // toolContext (passado pelo runner) E o agente tem tools habilitadas.
       const toolContext = context.toolContext
@@ -185,12 +137,11 @@ export class AIAgentEngine {
         conversationHistory: conversationHistory as EngineMessage[],
         currentMessage,
         contactInfo,
-        actionInstructions,
       })
 
       const responseTimeMs0 = startTime
       const sourcesUsed = ragResults.map(r => r.source_id)
-      const actionsTriggered = actionResult ? [actionResult.action_id] : []
+      const actionsTriggered: string[] = []
 
       // 7. Chamar LLM — tool-loop (se há tools ativas) ou callAI simples.
       if (useTools && toolContext) {
@@ -236,7 +187,6 @@ export class AIAgentEngine {
           tokens_used: loopResult.tokens,
           response_time_ms: responseTimeMs,
           was_transferred: loopResult.transferred,
-          action_result: actionResult || undefined,
           tool_calls: loopResult.toolCalls.map(c => ({
             name: c.name,
             args: c.args,
@@ -282,7 +232,6 @@ export class AIAgentEngine {
         tokens_used: llmResponse.usage?.totalTokens || 0,
         response_time_ms: responseTimeMs,
         was_transferred: false,
-        action_result: actionResult || undefined,
       }
 
     } catch (error: any) {
@@ -313,71 +262,6 @@ export class AIAgentEngine {
    */
   private checkSchedule(): boolean {
     return isWithinSchedule(this.agent.settings?.schedule)
-  }
-
-  /**
-   * Carrega ações do agente
-   */
-  private async loadActions(): Promise<AgentAction[]> {
-    const { data: actions, error } = await this.supabase
-      .from('ai_agent_actions')
-      .select('*')
-      .eq('agent_id', this.agent.id)
-      .eq('is_active', true)
-      .order('priority', { ascending: true })
-
-    if (error) {
-      console.error('Error loading actions:', error)
-      return []
-    }
-
-    return actions || []
-  }
-
-  /**
-   * Resolve a chave OpenAI da propria org (usada por intent/sentiment do
-   * ActionsEngine quando o provider do agente nao e openai). Null se nao tem.
-   */
-  private async resolveOpenaiKeyForActions(): Promise<string | null> {
-    const { data } = await this.supabase
-      .from('organization_api_keys')
-      .select('api_key')
-      .eq('organization_id', this.organizationId)
-      .eq('provider', 'openai')
-      .eq('is_active', true)
-      .maybeSingle()
-    return data?.api_key ? decodeProviderKey(data.api_key) : null
-  }
-
-  /**
-   * Constrói resposta de transferência
-   */
-  private buildTransferResponse(actionResult: any, startTime: number): EngineResponse {
-    return {
-      response: '',
-      sources_used: [],
-      actions_triggered: [actionResult.action_id],
-      tokens_used: 0,
-      response_time_ms: Date.now() - startTime,
-      was_transferred: true,
-      transfer_to: actionResult.result.transfer_to,
-      action_result: actionResult,
-    }
-  }
-
-  /**
-   * Constrói resposta com mensagem exata
-   */
-  private buildExactMessageResponse(actionResult: any, startTime: number): EngineResponse {
-    return {
-      response: actionResult.result.exact_message,
-      sources_used: [],
-      actions_triggered: [actionResult.action_id],
-      tokens_used: 0,
-      response_time_ms: Date.now() - startTime,
-      was_transferred: false,
-      action_result: actionResult,
-    }
   }
 
   /**

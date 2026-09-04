@@ -34,15 +34,13 @@ export class PromptBuilder {
     conversationHistory: EngineMessage[]
     currentMessage: string
     contactInfo?: ContactInfo
-    actionInstructions?: string[]
   }): { systemPrompt: string; messages: EngineMessage[] } {
-    const { ragContext, conversationHistory, currentMessage, contactInfo, actionInstructions } = params
+    const { ragContext, conversationHistory, currentMessage, contactInfo } = params
 
     // Construir system prompt
     const systemPrompt = this.buildSystemPrompt({
       ragContext,
       contactInfo,
-      actionInstructions,
     })
 
     // Formatar histórico de mensagens
@@ -57,9 +55,8 @@ export class PromptBuilder {
   buildSystemPrompt(params: {
     ragContext?: string
     contactInfo?: ContactInfo
-    actionInstructions?: string[]
   }): string {
-    const { ragContext, contactInfo, actionInstructions } = params
+    const { ragContext, contactInfo } = params
     const parts: string[] = []
 
     // Usar system_prompt customizado se existir
@@ -92,11 +89,6 @@ export class PromptBuilder {
     // Informações do contato
     if (contactInfo) {
       parts.push(this.buildContactSection(contactInfo))
-    }
-
-    // Instruções de ações
-    if (actionInstructions && actionInstructions.length > 0) {
-      parts.push(this.buildActionInstructions(actionInstructions))
     }
 
     // Contexto RAG (conhecimento)
@@ -251,15 +243,6 @@ ${guidelines}`
     if (lines.length === 0) return '## Informações do Cliente\n(nenhum dado disponível)'
 
     return `## Informações do Cliente\n${wrapAsDataBlock('dados_cliente', lines.join('\n'))}`
-  }
-
-  /**
-   * Instruções de ações ativadas
-   */
-  private buildActionInstructions(instructions: string[]): string {
-    return `## INSTRUÇÕES ESPECIAIS (IMPORTANTE)
-As seguintes instruções foram ativadas e DEVEM ser seguidas:
-${instructions.map(i => `- ${i}`).join('\n')}`
   }
 
   /**
