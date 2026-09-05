@@ -3970,7 +3970,8 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   limpeza e é do dono do produto: **item 89**.
   **Dependência do item 61 — CONFERIDA, não "não verificada".** O corpo do 61 lista oito alvos e
   `api/ai/test` não é nenhum deles; e `DELETION_SET`, `DELETION_SET_ROUTES`, `DELETION_SET_PENDING`
-  e `DELETION_SET_PENDING_ROUTES` (`src/lib/ai/__tests__/deletion-set.test.ts:46,66,78,79`) estão
+  e `DELETION_SET_PENDING_ROUTES` (`src/lib/ai/__tests__/deletion-set.test.ts:46,71,98,99` — **reancoradas pelo item 61**, ver a
+  tabela de offset lá) estão
   **todos vazios**. Nada pendente ameaça a rota hoje. **Se um dia o 61 apagar `api/ai/test`,
   `getEmbeddingCacheStats` perde o único consumidor e volta à fila de deleção** — junto com
   `cacheStats`, que só ela lê.
@@ -3978,7 +3979,10 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   existe no repositório virou o **item 88**; a ausência total de teste de `src/lib/ai/embeddings.ts`
   foi para o **item 63** (lacunas de teste), que é o dono pelo defeito.
 
-- [ ] **61. Rotas órfãs** `[relatado]`
+- [x] **61. Rotas órfãs** — **3386 linhas medidas** `[confirmado]` · *(âncora `b87992f1`)* ·
+  commits `c082c5c3` (checklist antes do código) `0a83b756` `3301eb40` `f9f0dd24` `3f523f8f` ·
+  relatório `task-61-report.md`, que é **gitignored** — por isso o que precisa sobreviver está AQUI.
+  **Seis alvos executados; os alvos 7 e 8 saíram do escopo com a prova escrita** (ver o fechamento).
   *Enunciado original: `whatsapp/conversations/[id]/ai` (duplicata insegura do toggle, apagar
   primeiro), `ai/respond`, `ai/knowledge`, `ai/models` + `hooks/useAgents.ts`,
   `ai/agents/[id]/integrations` (base), `components/whatsapp/analytics/ai/*`, forwarders
@@ -4026,7 +4030,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
 
   **2. `src/app/api/ai/respond/route.ts` (409) + `route.test.ts` (192) = 601 linhas, 4 ids.** Zero
   chamadores, inclusive nos shell scripts. O próprio teste declara a órfandade e o dono
-  (`route.test.ts:2-3`), e os itens **23** (`:408-416`) e **85** (`:5002-5004`) apontam para o 61 —
+  (`route.test.ts:2-3`), e os itens **23** (`:408-416`) e **85** (`:5147-5149`) apontam para o 61 —
   duas atribuições explícitas, nenhuma disputa. **Nenhuma tabela fica sem leitor.**
 
   **3. `src/app/api/ai/knowledge/route.ts` (196) + `route.test.ts` (134) = 330 linhas, 3 ids.** Zero
@@ -4041,7 +4045,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   o hook é alcançável **só** pelo barril `src/hooks/index.ts:34-35` — nenhum componente importa
   `useAgents`, `useAIModels` ou `useApiKeys`, e nenhum dos seis importadores de `@/hooks` pega os
   cinco tipos do `:35`. É **letra por letra** o precedente que o próprio teste documenta em
-  `deletion-set.test.ts:74-76` (`useAgent.ts`), então o par vai para `DELETION_SET_PENDING` +
+  `deletion-set.test.ts:86-88` (`useAgent.ts`), então o par vai para `DELETION_SET_PENDING` +
   `DELETION_SET_PENDING_ROUTES`, e **`hooks/index.ts:34-35` sai no MESMO commit**, senão
   `tsc --noEmit` quebra por re-export de módulo inexistente — é o ponto cego **(b)** do cabeçalho do
   teste (`:24-25`).
@@ -4051,14 +4055,14 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
 
   **5. `src/app/api/ai/agents/[id]/integrations/route.ts` (195 linhas, zero chamadores) — e SÓ ela.**
   O item diz "(base)", e é a base que sai. **`…/integrations/[integrationId]/sync/route.ts` (306) NÃO
-  sai**: está protegida **por nome** em `KEPT_WITHOUT_CALLER` (`deletion-set.test.ts:136-139`,
+  sai**: está protegida **por nome** em `KEPT_WITHOUT_CALLER` (`deletion-set.test.ts:156-159`,
   *"sync de produtos Shopify → ai_agent_chunks; o pacote B conta com ele"*), e o `it.each` de
-  `:368-370` afirma que o arquivo continua existindo — apagá-la seria falha vermelha e violação de
+  `:388-390` afirma que o arquivo continua existindo — apagá-la seria falha vermelha e violação de
   decisão anterior. **`…/integrations/[integrationId]/route.ts` (183) também NÃO sai**: está sem
   chamador real — o único "caller" medido é o `console.error` de `sync/route.ts:192`, cuja string de
   log contém a URL-pai como prefixo —, mas está **fora do recorte deste item**. Medida e com
   destinatário no fechamento. **Estreitar uma deleção com evidência é seguro; alargar não seria**
-  (`:3544`), e alargar aqui apagaria código que o item nunca nomeou.
+  (`:3551`), e alargar aqui apagaria código que o item nunca nomeou.
   O consumidor histórico das três era `IntegrationsTab.tsx`, que **já morreu**
   (`grep -rn IntegrationsTab src/` = zero); as rotas ficaram. Apagando só a base,
   `ai_agent_integrations` continua lida pelas outras duas: **nenhuma tabela fica sem leitor aqui.**
@@ -4119,6 +4123,147 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   renderizando"* — três arquivos, três frases, não a mesma). Apagar converteria "nó que funcionava"
   em "automação quebrada", para fluxos que o repositório não consegue enumerar. O achado de produto
   que mora aí ganhou dono: item **90**.
+
+  **FECHAMENTO — o que saiu, commit a commit, com as linhas medidas.** Total **3386 linhas**: 3381 de
+  **doze arquivos apagados inteiros** + 5 de sobra em **dois barris**.
+  1. `c082c5c3` — a correção do texto acima, **antes do código**; nada em `src/`.
+  2. `0a83b756` — **133**: `src/app/api/whatsapp/conversations/[id]/ai/route.ts`.
+  3. `3301eb40` — **931**: `api/ai/respond/route.ts` (409) + `route.test.ts` (192) +
+     `api/ai/knowledge/route.ts` (196) + `route.test.ts` (134). Mais as declarações nos itens 22 e
+     23, cujo trabalho deixou de existir.
+  4. `f9f0dd24` — **1085**: `api/ai/models/route.ts` (682) + `src/hooks/useAgents.ts` (401) +
+     `src/hooks/index.ts:34-35` (2). Mais duas edições que **não** são deleção: o comentário vivo de
+     `src/lib/ai/cost-tracker.ts`, que citava a rota por linha, e a isenção de metadado do item 85.
+  5. `3f523f8f` — **1237**: `api/ai/agents/[id]/integrations/route.ts` (195) + os cinco de
+     `components/whatsapp/analytics/ai/` (1039) + `analytics/index.ts` (3). Mais a correção da
+     superfície do item 67.
+  6. O commit de fechamento é este; ele não se cita a si mesmo.
+  **Divergência de contagem, declarada:** o plano previa **3383**, contando **uma** linha em
+  `analytics/index.ts`. Saíram **três** — o `export * from './ai';`, o cabeçalho `// AI Analytics`
+  que só a ele servia e a linha em branco do bloco. **+3**, e a sobra é dívida se ficar.
+
+  **O protocolo das listas `DELETION_SET*`, e por que ele não é detalhe.** `deletion-set.test.ts` tem
+  um `it` que afirma que **todo caminho listado existe no repo** (hoje `:333-340`, filtrado por
+  `existsSync` sobre `ALL_DOOMED`). Apagar o arquivo **e** deixar o caminho na lista deixaria a suíte
+  em **5 falhas, não 4**. A lista é **artefato de revisão, não estado final**: em cada commit ela foi
+  **preenchida com os arquivos ainda no lugar**, e **essa rodada é a prova de alcance** — as quatro
+  passaram **41/41**, com a lista não-vazia:
+  `0a83b756` (a rota do alvo 1), `3301eb40` (`respond` + `knowledge`), `f9f0dd24` (as duas listas
+  `PENDING`, com o hook, a rota e o barril todos ainda presentes) e `3f523f8f`
+  (`analytics/ai/` como prefixo de diretório + a rota de integrações). Só depois os arquivos saíram
+  **e as listas foram esvaziadas**, deixando o comentário de onda. **O gate "suíte verde" vale para o
+  estado final do commit.** É o mesmo padrão dos itens 58 (`:3688-3691`) e 60 (`:3972-3975`).
+
+  **Gates, medidos no estado final de cada commit.** `0a83b756`: `vitest` **1321** (1314 passed, 4
+  failed, 3 skipped) — Δ 0 ids, porque as listas `DELETION_SET*` são **agregadas**, não `it.each`.
+  `3301eb40`, `f9f0dd24` e `3f523f8f`: `vitest` **1314** (1307 passed, 4 failed, 3 skipped).
+  **As duas colunas, porque "1314" é ambíguo e os itens 56/57/60 já erraram nessa linha:** total
+  1321 → **1314** (−7); passando 1314 → **1307**; falhando **4 → 4**, as mesmas
+  pré-existentes e alheias (`src/tests/reports-utils.test.ts` 3, `file-extractor.integration.test.ts`
+  1); skipped 3 → 3. Os −7 são **só** os dois `route.test.ts` (4 + 3).
+  `npx tsc --noEmit` **exit 0** em todos. **Nada foi acrescentado a `PROTECTED_*`,
+  `KEPT_WITHOUT_CALLER` nem às listas de tabela** — essas são `it.each` e cada entrada custaria +1 id.
+  **Python intocado, nenhum alvo era Python:** `pytest -m unit` **1170**, `ruff check .` **10**
+  (item 74, não consertado de propósito), `lint-imports` **3 kept, 0 broken**.
+  **`-m db` e `-m pipeline` não foram executados** — sem Postgres eles penduram em vez de falhar.
+  Nada aqui depende deles: a série é de deleção TS.
+
+  **Dois alvos SAÍRAM do escopo com a prova escrita, e é por isso que o item fecha.** O precedente é
+  o mesmo do item 60 (`:3955-3957`), que é do item 57 com `q_evals`: **removeu do escopo, manteve o
+  registro aqui dentro, fechou**. **Mas a forma do argumento é OUTRA, e isso importa.** No item 60 a
+  pergunta *"apagar?"* tinha um **não** definitivo, escrito num requisito (RNF-022). Aqui, para os
+  alvos **7** e **8**, a resposta é **"não agora"**: nos dois casos a pergunta que decidiria depende
+  de coisa que o repositório não vê — o painel da Meta de cada lojista (alvo 7) e os fluxos gravados
+  no banco (alvo 8) —, e no alvo 7 o portão que a responderia (`deprecated_hit == 0`) **nunca foi
+  instrumentado**. Isso justifica sair do escopo do mesmo jeito; é outra frase, e cada um ganhou
+  destinatário (itens **92** e **90**).
+
+  **Sobras MEDIDAS e deixadas de fora, com DONO — a próxima onda de `DELETION_SET` é a dona, e os
+  números estão aqui para ela não remedir.** São **1386 linhas** medidas nesta âncora, todas
+  inalcançáveis pelo grafo do CI:
+  - `src/components/whatsapp/analytics/campaigns/*` **977** (`CampaignErrorBreakdown` 130,
+    `CampaignFunnel` 162, `CampaignKPICards` 262, `CampaignPerformanceChart` 156, `CampaignTable`
+    262, `index.ts` 5);
+  - `src/components/whatsapp/analytics/shared/*` **221** (`HourlyHeatmap` 220, `index.ts` 1);
+  - `src/components/whatsapp/analytics/index.ts` **5** (o que sobrou do barril depois deste item);
+  - `src/app/api/ai/agents/[id]/integrations/[integrationId]/route.ts` **183** — sem chamador real,
+    o único hit é o `console.error` de `sync/route.ts:192`.
+  *(O plano media **1389** porque contava o barril com 8 linhas; ele perdeu 3 neste item.)*
+  Estão fora **porque o item não os nomeia**, e é a mesma disciplina do item 56 — e o item 60 é
+  explícito (`:3869`) em que um `[ ]` sem dono é pior que um item errado; isso vale para sobra sem
+  dono também. Não abrem item novo: seguem o molde do próprio item 60 (`:3873-3878`), que carregou o
+  campo morto do 56 dentro do próprio corpo.
+  **Cuidado que a próxima onda precisa herdar:** `…/integrations/[integrationId]/sync/route.ts`
+  (306 linhas) **continua protegida por nome** em `KEPT_WITHOUT_CALLER` e **não** entra nessa conta.
+
+  **Quatro tabelas ficam sem leitor, e NENHUMA é liberada para drop.** `knowledge_bases`,
+  `knowledge_documents`, `knowledge_chunks` (alvo 3) e `ai_models` (alvo 4). **Nenhuma foi
+  acrescentada a `TABLES_MARKED_FOR_DROP`** — a lista se chama "liberadas para drop" e este item não
+  está autorizado a liberar nada. As quatro **não existem em `supabase/migrations/`**; vivem em
+  `sql/` e em `supabase/migrations-archive/001_enable_rls.sql:324` (`ai_models`) e `:326-328` (as
+  três de knowledge). **DDL fora do stream pode estar aplicada em produção** — régua dos itens 55 e
+  58, e classe do item 49. **Registrado, não liberado.**
+
+  **Deslocamento de linha, MEDIDO depois de podar — e a vítima principal CRESCEU.**
+  `src/lib/ai/__tests__/deletion-set.test.ts` foi editado em quatro commits desta série (preencher e
+  esvaziar as listas, mais os comentários de onda) e passou de **396 para 416 linhas** (+20).
+  As quatro citações do **item 60** (`:3973`) estavam **certas** e foram **reancoradas lá**:
+
+  | citado como | agora | offset |
+  |---|---|---|
+  | `:46` `DELETION_SET` | `:46` | 0 |
+  | `:66` `DELETION_SET_ROUTES` | `:71` | +5 |
+  | `:78` `DELETION_SET_PENDING` | `:98` | +20 |
+  | `:79` `DELETION_SET_PENDING_ROUTES` | `:99` | +20 |
+
+  Outras âncoras do mesmo arquivo, para quem for citá-lo: o precedente do `useAgent.ts` `:74-76` →
+  **`:86-88`**; a entrada do `sync` em `KEPT_WITHOUT_CALLER` `:136-139` → **`:156-159`**; o `it.each`
+  que afirma que ela existe `:368-370` → **`:388-390`**; `callersOf` `:300-308` → **`:320-328`**; o
+  `it` de "todo caminho listado existe" `:313-320` → **`:333-340`**. O cabeçalho não se moveu:
+  os pontos cegos (a) e (b) continuam em `:23` e `:24-25`.
+  **Duas citações a este mesmo arquivo JÁ ESTAVAM PODRES antes desta série — declaradas, não
+  consertadas**, porque consertar citação que já estava errada antes é alargar escopo:
+  - **item 58** (`:3675`) cita `:337` para a asserção de rota. `:337` era
+    `expect(vivos).toEqual([])`, que é a de **módulos**; a de rota era `:344`. Hoje são `:357` e
+    `:364`.
+  - **item 43** (`:1409`) cita `:269`. `:269` era `const body = url`, dentro de `urlMatcher`; a busca
+    por URL como texto é `callersOf`, então era `:300-308`. Hoje são `:289` e `:320-328`.
+  **E uma terceira, alheia a este arquivo, achada na varredura e igualmente pré-existente:** o item
+  87 (`:5225`) cita `:2650` e `:4328` como os sítios de `order_status`/`transfer_to_human` em
+  contexto alheio; na âncora `b87992f1` eles já eram `:2680` e `:4638`. **Declarada, não
+  consertada** — a série não a criou. *(Varredura feita: nenhuma outra citação do checklist a si
+  mesmo aponta para baixo do item 61.)*
+
+  **Registro datado — declarar, não reescrever (régua do item 52).** Estas citações a arquivos que
+  este item apagou **não** foram tocadas, porque são registro de quando foram escritas:
+
+  | Citação | Alvo |
+  |---|---|
+  | `docs/AUDITORIA-LEGADO-WHATSAPP-IA.md:188` e `:245` | 1 — **as duas já estavam podres antes desta série**: `grep AIToggleButton src/` = zero e `ChatPanel.tsx:554` é `setShowMoreMenu(false)`; e `:245` atribui `conversations/[id]/ai/route.ts:21` a `whatsapp_conversations` quando `:21` era `whatsapp_cloud_conversations` |
+  | `docs/superpowers/plans/2026-07-27-agent-safety-guards.md:291` | 1 |
+  | `docs/plano-prompt-agente.md:128,131,256` | 2 |
+  | `docs/plano-prompt-xml.md:38,114,232` | 2 — o `:114` planeja trabalho que deixou de existir |
+  | `docs/ANALISE-CODIGO-AI-AGENTS.md:76` | 2 |
+  | `docs/AUDITORIA-LEGADO-WHATSAPP-IA.md:201` | 3 e 4 |
+  | `docs/AUDIT_RLS_MIGRATION.md:160` | 4 |
+  | `docs/AUDIT_RLS_MIGRATION.md:33` | 5 |
+  | `docs/INTEGRACAO-FRONTEND-BACKEND.md:90-92,134` | 5 |
+  | `docs/superpowers/plans/2026-06-10-p1-ai-security.md:55,66,374,377` | 5 |
+
+  **Citação permanentemente podre, que não se corrige nem declarando-a datada:**
+  `supabase/migrations-archive/20260727_ai_transfer_cooldown.sql:3` nomeia a rota do alvo 1 dentro de
+  um comentário de DDL arquivada — mesma situação do item 59.
+  **Fora da lista, com razão:** `docs/AUDIT_RLS_MIGRATION.md:152` é
+  `src/app/api/whatsapp/conversations/route.ts`, a **rota-pai viva** (chamadores em
+  `src/app/(dashboard)/inbox/page.tsx:99` e `src/hooks/useWhatsApp.ts:37,51,67`) — não é alvo de
+  nada, e listá-la seria declarar podre uma citação boa; `:144` é `src/app/api/integrations/route.ts`,
+  **outra rota**, não a do agente; e `PROGRESSO.md:29` cita `action_whatsapp_ai`, que não saiu.
+
+  **Achados devolvidos com dono, todos procurados pelo DEFEITO e não pelo caminho do arquivo:**
+  itens **90** (`action_whatsapp_ai` é no-op para org Cloud), **91** (`route-permissions.ts`, arquivo
+  morto com cara de configuração viva), **92** (o portão de depreciação dos forwarders nunca
+  instrumentado — é ele que desbloqueia o alvo 7) e **93** (o `curl` que afirma o que a rota nunca
+  devolveu).
 
 - [ ] **62. Env drift** `[confirmado]`
   Lidas em código e ausentes do `.env.example`: `AGENTS_RUNTIME_URL` e `AGENTS_PREVIEW_TOKEN`
@@ -5173,6 +5318,86 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `promote_scheduled`, `handler`, `RNF-022`): **não há.** O item 81 cita `q_scheduled_dlq` no
   inventário de DLQs e o item 57 cita RNF-022 pela metade do `q_evals` — nenhum dos dois é dono da
   decisão; os hits de "arbitragem" são sobre `mission_resolver.arbitrate()`, mecanismo diferente.
+
+- [ ] **90. O nó "IA Responder" já é no-op para org no canal Cloud** `[confirmado]` · *(descoberto no item 61)*
+  Citações ancoradas em `b87992f1`. **Destinatário: o dono do cutover D8, não a limpeza.**
+  O executor `action_whatsapp_ai` (`src/lib/automation/node-executors.ts:1857`) escreve
+  `whatsapp_conversations.bot_active` (`:1868-1871`, com `supabaseAdmin`) — **tabela legada e coluna
+  legada**. O toggle canônico de hoje escreve `whatsapp_cloud_conversations.ai_enabled`
+  (`src/app/api/whatsapp/inbox/conversations/[id]/bot/route.ts:105-106`).
+  **Medido:** a única função que **lê** `bot_active` num caminho de decisão é
+  `handleAIResponse` (`src/lib/services/whatsapp/ai-chatbot-service.ts:283`, a leitura em `:298`), e
+  ela **não tem um importador** — `grep -rn ai-chatbot-service src/` devolve só
+  `src/app/api/whatsapp/ai/copilot/route.ts:7`, que importa `getCopilotSuggestion`, e dois
+  comentários. Os outros sítios da coluna são escrita (`conversation-service.ts:564`) e tipo
+  (`types.ts:48`). *(Não confundir com `is_bot_active`, que é campo de API de outra família e está
+  vivo.)* **Conclusão: para org no canal Cloud, o lojista liga o nó "IA Responder" num fluxo e nada
+  acontece — ele grava numa coluna que nenhum caminho vivo lê.**
+  **Por que não é limpeza e por que o item 61 não o apagou:** os comentários D8 dizem que o executor
+  fica vivo *"para fluxos antigos até o pós-cutover"* (`node-executors.ts:1854-1856`), e
+  `src/lib/automation/execution-engine.ts:338-339` despacha por string vinda do JSON do fluxo salvo
+  **no banco**, com `:356-363` transformando nó sem executor em **erro** que pode parar o fluxo
+  inteiro. O repositório não enumera os fluxos gravados. Apagar é decisão de cutover; **consertar**
+  (fazer o nó escrever na tabela viva) é decisão de produto. As duas são de fora da limpeza.
+  **Procurado dono pelo DEFEITO, com variação de vocabulário** (`action_whatsapp_ai`, `bot_active`,
+  `D8`, `cutover`, `palette`, `node-executors`, `flow-builder`, `IA Responder`, `no-op`,
+  `tabela legada`): os hits de "no-op" são de outros mecanismos, e `whatsapp_conversations` só
+  aparece no item 58 num contexto que é *"esta deleção não libera tabela nenhuma"*. **Território sem
+  dono.**
+
+- [ ] **91. `src/lib/route-permissions.ts` é arquivo morto com cara de configuração viva** `[confirmado]` · *(descoberto no item 61)*
+  Citações ancoradas em `b87992f1`. **77 linhas**, `reachable=false` pelo grafo do CI e
+  `grep -rn route-permissions src/` = **zero importadores**. É uma cópia **divergente** das listas do
+  `src/middleware.ts`: `ADMIN_ONLY_APIS` (`:48-56`) termina em `/api/ai/models`, enquanto o
+  `adminOnlyApis` do middleware (`:89-97`) tem o prefixo genérico `/api/ai` (`:96`).
+  **O perigo não é a linha morta, é a confusão:** alguém edita este arquivo achando que muda
+  permissão de rota e **nada acontece** — a permissão real mora no `middleware.ts`.
+  **Sobra do item 61, declarada aqui em vez de consertada:** `route-permissions.ts:55` nomeia
+  `/api/ai/models`, rota que o item 61 apagou. Não foi editada de propósito — o remédio deste item é
+  o arquivo inteiro, não a linha, e consertar a lista de um arquivo morto seria dar a ele aparência
+  de vivo.
+  **O remédio provável não é decisão de produto: é entrar no `DELETION_SET` de uma onda futura** —
+  fica escrito para este item não virar `[ ]` filosófico. **Procurado dono pelo defeito**
+  (`route-permissions`, `publicApiRoutes`, `adminOnlyApis`, `permissão`, `middleware`): todos os
+  hits são sobre o `middleware.ts`, nunca sobre a cópia. **Território sem dono.**
+
+- [ ] **92. O portão de depreciação dos webhooks legados nunca foi instrumentado** `[confirmado]` · *(descoberto no item 61)*
+  Citações ancoradas em `b87992f1`. **É este item que desbloqueia o alvo 7 do item 61**, e é por isso
+  que ele existe: sem ele o alvo 7 sairia do escopo sem ter para onde voltar.
+  `docs/superpowers/plans/whatsapp-scale/phase7-cleanup-observability.md:253` condiciona a deleção de
+  `src/app/api/whatsapp/webhook/route.ts` e `src/app/api/whatsapp/meta/webhook/route.ts` a
+  `whatsapp.webhook.deprecated_hit == 0` (GET **e** POST) por ≥ 8 dias, **e** a uma plataforma
+  externa de log para avaliar o portão. O passo que emitiria a métrica está no mesmo plano (`:138`),
+  marcado **"now"**, e **não landou**: os quatro sítios continuam `console.warn`
+  (`webhook/route.ts:32,51` e `meta/webhook/route.ts:32,51`), e `grep deprecated_hit src/` = **zero**.
+  **Ou seja: o portão não pode ser avaliado porque ninguém o construiu** — não é que a telemetria diga
+  "ainda há hits"; é que ela não existe. Enquanto isso, as duas rotas ficam vivas por precaução, e a
+  precaução está certa: quem configura o destino é o painel da Meta, fora deste repositório, e a
+  documentação de produto mandou cadastrar a URL legada (`docs/WHATSAPP-CRM.md:52,251`,
+  `PROGRESSO.md:98`).
+  **Não é trabalho de limpeza:** trocar `console.warn` por `wlog.warn` é uma linha por sítio, mas o
+  portão só vale com destino de log e uma janela de observação — **decisão de infra e de custo, do
+  dono**, da mesma família do item 84. **Território sem dono** (procurado por `deprecated_hit`,
+  `forwarder`, `webhook legado`, `telemetria`, `depreciação`, `wlog`).
+
+- [ ] **93. Dois `curl` de teste manual batem num forwarder e afirmam o que a rota nunca devolveu** `[confirmado]` · *(descoberto no item 61)*
+  Citações ancoradas em `b87992f1`. **É outro território que o item 92, e por isso é outro item:** o
+  92 é observabilidade de webhook em produção e bloqueia uma deleção; este vive em `scripts/`, não
+  bloqueia nada, e quem for instrumentar o `deprecated_hit` não é quem vai mexer em `.sh`.
+  `scripts/test-ai-system.sh:265` faz `curl -s "$BASE_URL/api/whatsapp/webhook"` e afirma **duas**
+  coisas sobre a resposta: `:267` (`'"ai_enabled":true'`) e `:268` (`'"version":"2.0"'`). O forwarder
+  repassa o GET para `cloud/webhook`, cuja primeira decisão é
+  `if (mode !== 'subscribe') return new Response('Invalid mode', { status: 403 })`
+  (`src/app/api/whatsapp/cloud/webhook/route.ts:33-36`) — sem `hub.mode`, a resposta é **403 "Invalid
+  mode"**, nunca aquele JSON. **INFERIDO por leitura**; executar exigiria servidor.
+  `scripts/test-commands.sh:129` faz o mesmo `curl` **sem asserção nenhuma** — é `curl | jq`, saída
+  para o olho humano: **não quebra, só não mostra o que promete.**
+  É a classe do quase-acidente do item 58 — *teste manual quebrado com cara de funcionando* —, e
+  nenhum dos dois scripts roda em CI nem em `package.json`. **Não foi consertado pelo item 61 de
+  propósito:** mexer neles exige decidir o que o script deveria afirmar, e o alvo 7 não foi
+  executado. **Território sem dono:** o hit mais próximo é o item 43 (`:1404-1410`), que fala dos
+  **mesmos dois scripts** mas de `curl` **diferentes** (`/api/ai/test` e `/api/ai/test/webhook`,
+  sobre `DEBUG_ENDPOINT_SECRET`) — não é o mesmo defeito.
 
 ---
 
