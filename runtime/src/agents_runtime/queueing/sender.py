@@ -103,8 +103,11 @@ async def _mark_read_and_typing(
         return
     try:
         await channel.mark_read_and_typing(conn, send)
-    except Exception:
+    except Exception as error:
+        await _report_to_guard(conn, send, error)
         logger.debug("mark-read/typing falhou", exc_info=True)
+    else:
+        await _report_to_guard(conn, send, None)
 
 
 async def _send_reporting(

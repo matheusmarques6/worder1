@@ -149,7 +149,11 @@ class CloudApiChannel:
         wamid = send.last_inbound_wamid
         if not wamid:
             return
-        token = await self._load_token(conn, send.organization_id)
+        try:
+            token = await self._load_token(conn, send.organization_id)
+        except BaseException as error:
+            mark_before_the_provider(error)
+            raise
         response = await self._client.post(
             f"/{send.channel_external_id}/messages",
             json={
@@ -160,7 +164,13 @@ class CloudApiChannel:
             },
             headers={"Authorization": f"Bearer {token}"},
         )
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as error:
+            code = meta_error_code(response.text)
+            if code:
+                error.args = (f"{error} meta_code={code}",)
+            raise
 
     async def _payload_for(self, conn: psycopg.AsyncConnection, send: ClaimedSend) -> dict:
         base = {
