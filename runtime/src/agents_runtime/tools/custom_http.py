@@ -204,11 +204,11 @@ class CustomHttpTool:
             total += min(len(chunk), remaining)
             if len(chunk) >= remaining:
                 break
-        text = b"".join(chunks).decode(response.encoding or "utf-8", errors="replace")
+        raw_body = b"".join(chunks)
         try:
-            body: Any = json.loads(text)
+            body: Any = json.loads(raw_body)
         except ValueError:
-            body = text
+            body = raw_body.decode(response.encoding or "utf-8", errors="replace")
         serialized = body if isinstance(body, str) else json.dumps(body, ensure_ascii=False)
         if len(serialized) > MAX_BODY_CHARS:
             return serialized[:MAX_BODY_CHARS] + "…(truncado)"

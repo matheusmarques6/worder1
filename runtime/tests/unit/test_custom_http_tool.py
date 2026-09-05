@@ -161,6 +161,21 @@ class TestTheCall:
         assert result.success is True
         assert len(json.dumps(result.output)) < 5_000
 
+    async def test_a_bom_marked_utf16_json_body_stays_structured(self) -> None:
+        content = json.dumps({"ok": "Ã©"}, ensure_ascii=False).encode("utf-16")
+        tool = CustomHttpTool(
+            ROW,
+            transport=httpx.MockTransport(
+                lambda _request: httpx.Response(200, content=content)
+            ),
+            resolver=_resolve_public,
+        )
+
+        result = await tool(None, None, {"cep": "01310-100"})
+
+        assert result.success is True
+        assert result.output == {"status": 200, "body": {"ok": "Ã©"}}
+
     async def test_a_small_text_body_stays_text(self) -> None:
         tool = CustomHttpTool(
             ROW, transport=capturing_text({}, "resposta curta"), resolver=_resolve_public
