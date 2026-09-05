@@ -401,12 +401,19 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
 
 - [x] **22. Ordem do delete em `/api/ai/knowledge`** `[relatado]` · commit `4f0110c1`
   `:147-156` apaga chunks e documentos por `knowledge_base_id` sem filtro de org; só `:159-163` escopa.
+  **O trabalho deste item deixou de existir:** o item 61 apagou
+  `src/app/api/ai/knowledge/route.ts` inteira (rota órfã, zero chamadores). O conserto de `4f0110c1`
+  continua no histórico; o arquivo, não. Nada a refazer.
 
 - [x] **23. Fallback sem escopo em `/api/ai/respond`** `[relatado]` · commit `5c7a6774`
   `:293-297` lê `ai_agent_configs` só por `agent_id`. Rota órfã — ~~resolver junto com o item 55~~
   **o dono é o item 61**, corrigido pelo item 55: `src/app/api/ai/respond/route.ts` **não importa
   nada** da cadeia `actions-engine` (é autocontida, lê `profiles` e `ai_agent_configs`), e o item 61
   já a lista entre as rotas órfãs. A delegação para o 55 era dupla atribuição.
+  **O trabalho deste item deixou de existir, e a frase acima está no presente sobre um arquivo que
+  não existe mais:** o item 61 apagou `src/app/api/ai/respond/route.ts` (409 linhas) e o
+  `route.test.ts` (192). O conserto de `5c7a6774` e a citação `:293-297` ficam no histórico; a rota,
+  não. Nada a refazer.
 
 - [x] **24. Filtro de org nas views de atividade** `[confirmado]` · commit `84fc4c62`
   Nenhuma view tem `security_invoker` (`grep` em todas as migrations: zero), então a RLS das tabelas-base
@@ -4019,7 +4026,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
 
   **2. `src/app/api/ai/respond/route.ts` (409) + `route.test.ts` (192) = 601 linhas, 4 ids.** Zero
   chamadores, inclusive nos shell scripts. O próprio teste declara a órfandade e o dono
-  (`route.test.ts:2-3`), e os itens **23** (`:405-409`) e **85** (`:4983-4984`) apontam para o 61 —
+  (`route.test.ts:2-3`), e os itens **23** (`:408-416`) e **85** (`:4990-4991`) apontam para o 61 —
   duas atribuições explícitas, nenhuma disputa. **Nenhuma tabela fica sem leitor.**
 
   **3. `src/app/api/ai/knowledge/route.ts` (196) + `route.test.ts` (134) = 330 linhas, 3 ids.** Zero

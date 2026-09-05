@@ -64,11 +64,12 @@ const DELETION_SET: string[] = [
  * código vivo cita a URL.
  */
 const DELETION_SET_ROUTES: string[] = [
-  // Onda 6 (item 61): `api/whatsapp/conversations/[id]/ai` passou por aqui —
-  // a lista foi preenchida com o arquivo ainda no lugar, o teste provou que
-  // nenhum código vivo cita a URL (a UI já usa `inbox/conversations/[id]/bot`),
-  // e a entrada saiu junto com o arquivo. A lista volta a ficar vazia porque é
-  // o teste de "todo caminho listado existe" que impede que ela apodreça.
+  // Onda 6 (item 61): `api/whatsapp/conversations/[id]/ai`, `api/ai/respond` e
+  // `api/ai/knowledge` passaram por aqui. Cada uma entrou com o arquivo ainda
+  // no lugar — é essa rodada que prova o alcance, e ela passou —, e saiu da
+  // lista junto com o arquivo. A lista volta a ficar vazia porque é o teste de
+  // "todo caminho listado existe no repo" que impede que ela apodreça com nome
+  // de arquivo já morto.
 ];
 
 /**
