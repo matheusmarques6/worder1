@@ -174,8 +174,10 @@ export async function POST(req: NextRequest) {
     // UTM + identificação de todo link: configuração da LOJA da campanha,
     // carregada uma vez por lote e resolvida por destinatário abaixo.
     const { getUtmSettings } = await import('@/lib/tracking/utm-settings');
-    const { makeLinkParamsResolver } = await import('@/lib/tracking/link-params');
+    const { makeLinkParamsResolver, normalizeMessageUtmConfig } = await import('@/lib/tracking/link-params');
     const { settings: utmSettings } = await getUtmSettings(organizationId, campaign.store_id || null);
+    // Sobrescrita desta campanha (etapa de configurações), como na Omnisend.
+    const campaignUtm = normalizeMessageUtmConfig((campaign as any).settings?.utm);
 
     // ──────────────────────────────────────────
     // Suppression list
@@ -516,7 +518,7 @@ export async function POST(req: NextRequest) {
           storeDomain: storeUrl,
           sentAt: new Date(),
           extra: mergeData,
-        });
+        }, { utmOverrides: campaignUtm?.overrides || null, utmDisabled: campaignUtm?.disabled === true });
 
         // Prep final HTML (merge tags + tracking pixel + click tracking + unsubscribe)
         let finalHtml = prepareEmailHtml({

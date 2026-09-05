@@ -180,6 +180,12 @@ export async function POST(request: NextRequest) {
     if (typeof body.skip_unengaged === 'boolean') insertData.skip_unengaged = body.skip_unengaged
     if (typeof body.skip_unengaged_days === 'number') insertData.skip_unengaged_days = body.skip_unengaged_days
     if (typeof body.send_time_optimization === 'boolean') insertData.send_time_optimization = body.send_time_optimization
+    // UTM desta campanha (sobrescreve o padrão da loja só nela) — settings.utm
+    if (body.utm !== undefined) {
+      const { normalizeMessageUtmConfig } = await import('@/lib/tracking/link-params')
+      const utm = normalizeMessageUtmConfig(body.utm)
+      if (utm) insertData.settings = { ...(insertData.settings || {}), utm }
+    }
     // Agendamento
     if (body.scheduled_at) {
       insertData.scheduled_at = body.scheduled_at

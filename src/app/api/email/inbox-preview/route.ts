@@ -49,10 +49,13 @@ export async function POST(req: NextRequest) {
   // When campaignId is provided pull the latest saved version.
   let campaignStoreId: string | null = null
   let campaignName: string | null = null
+  // Sobrescrita de UTM: a salva na campanha ou a que o assistente ainda
+  // não salvou (body.utm), para o preview refletir o que vai sair.
+  let campaignUtmRaw: unknown = body.utm ?? null
   if (campaignId) {
     const { data: camp } = await supabaseAdmin
       .from('email_campaigns')
-      .select('id, name, subject, preheader, html, organization_id, store_id')
+      .select('id, name, subject, preheader, html, organization_id, store_id, settings')
       .eq('id', campaignId)
       .eq('organization_id', auth.user.organization_id)
       .maybeSingle()
@@ -64,6 +67,7 @@ export async function POST(req: NextRequest) {
     finalPreheader = camp.preheader || preheader || ''
     campaignStoreId = camp.store_id || null
     campaignName = camp.name || null
+    campaignUtmRaw = (camp as any).settings?.utm ?? null
   }
 
   if (!finalHtml) {
@@ -92,19 +96,20 @@ export async function POST(req: NextRequest) {
   let linkParams: any = null
   try {
     const { getUtmSettings } = await import('@/lib/tracking/utm-settings')
-    const { makeLinkParamsResolver } = await import('@/lib/tracking/link-params')
+    const { makeLinkParamsResolver, normalizeMessageUtmConfig } = await import('@/lib/tracking/link-params')
     const { settings } = await getUtmSettings(auth.user.organization_id, campaignStoreId)
+    const campaignUtm = normalizeMessageUtmConfig(campaignUtmRaw)
     linkParams = makeLinkParamsResolver(settings, {
       channel: 'email',
       messageType: 'campaign',
-      campaignName: campaignName || 'Campanha',
+      campaignName: campaignName || body.campaignName || 'Campanha',
       campaignId: campaignId || 'preview',
       emailSubject: renderMergeTags(finalSubject, merge, { escape: false }),
       sendId: previewSendId,
       storeName: merge.store_name,
       storeDomain: merge.store_url,
       extra: merge,
-    })
+    }, { utmOverrides: campaignUtm?.overrides || null, utmDisabled: campaignUtm?.disabled === true })
   } catch { /* preview segue sem UTM no href */ }
 
   const processedHtml = prepareEmailHtml({

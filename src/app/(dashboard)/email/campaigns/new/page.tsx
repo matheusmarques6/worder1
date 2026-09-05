@@ -10,7 +10,9 @@ import Link from 'next/link'
 import { useStoreStore, useAuthStore } from '@/stores'
 import ABTestPanel, { type ABTestConfig } from '@/components/email/ABTestPanel'
 import SmartSendingPanel, { type SmartSendingConfig } from '@/components/email/SmartSendingPanel'
+import UtmPanel from '@/components/email/UtmPanel'
 import InboxPreview from '@/components/email/InboxPreview'
+import { normalizeMessageUtmConfig, type MessageUtmConfig } from '@/lib/tracking/link-params'
 
 interface Template {
   id: string
@@ -80,6 +82,8 @@ export default function NewCampaignPage() {
     skipUnengaged: false, skipUnengagedDays: 120,
     sendTimeOptimization: false,
   })
+  // UTM desta campanha (sobrescreve o padrão da loja só aqui).
+  const [utmConfig, setUtmConfig] = useState<MessageUtmConfig>({})
 
   // Send
   const [sendType, setSendType] = useState<'now' | 'schedule'>('now')
@@ -216,6 +220,7 @@ export default function NewCampaignPage() {
           skip_unengaged: smartConfig.skipUnengaged,
           skip_unengaged_days: smartConfig.skipUnengagedDays,
           send_time_optimization: smartConfig.sendTimeOptimization,
+          utm: normalizeMessageUtmConfig(utmConfig),
         }),
       })
       if (!res.ok) {
@@ -678,6 +683,15 @@ export default function NewCampaignPage() {
               <div className="mt-4">
                 <SmartSendingPanel config={smartConfig} onChange={setSmartConfig} />
               </div>
+              <div className="mt-4">
+                <UtmPanel
+                  storeId={currentStore?.id || null}
+                  campaignName={name || subject}
+                  subject={subject}
+                  value={utmConfig}
+                  onChange={setUtmConfig}
+                />
+              </div>
 
               {/* Send */}
               <div className="bg-white border border-gray-200 rounded-xl p-5 mt-4">
@@ -755,6 +769,7 @@ export default function NewCampaignPage() {
                       reply_to: replyTo || null,
                       store_id: currentStore?.id || null,
                       status: 'draft',
+                      utm: normalizeMessageUtmConfig(utmConfig),
                     }),
                   })
                 } catch {}

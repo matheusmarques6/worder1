@@ -61,6 +61,15 @@ interface CampaignData {
   total_spam?: number
   attributed_revenue?: number
   created_at: string
+  settings?: { utm?: { disabled?: boolean; overrides?: Record<string, string> } } | null
+}
+
+function utmSummary(settings: CampaignData['settings']): string {
+  const utm = settings?.utm
+  if (utm?.disabled) return 'Desligada nesta campanha (só identificação)'
+  const keys = Object.keys(utm?.overrides || {})
+  if (keys.length > 0) return `Personalizada: ${keys.join(', ')}`
+  return 'Padrão da loja'
 }
 
 const statusConfig: Record<string, { label: string; color: string }> = {
@@ -302,6 +311,10 @@ export default function CampaignDetailPage() {
           <div>
             <p className="text-xs text-gray-500 mb-1">Criada em</p>
             <p className="text-sm text-gray-700">{new Date(campaign.created_at).toLocaleDateString('pt-BR')}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500 mb-1">UTM dos links</p>
+            <p className="text-sm text-gray-700">{utmSummary(campaign.settings)}</p>
           </div>
           <div>
             <p className="text-xs text-gray-500 mb-1">ID da Campanha</p>

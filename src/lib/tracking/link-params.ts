@@ -225,6 +225,36 @@ export function utmSettingsFromLegacy(emailSettings: Record<string, any> | null 
 }
 
 // -------------------------------------------------------------
+// Sobrescrita por mensagem (campanha ou nó de fluxo) — o "UTM tags" da
+// etapa de configurações da campanha na Omnisend.
+// -------------------------------------------------------------
+
+export interface MessageUtmConfig {
+  /** Esta mensagem sai sem UTM (a identificação continua). */
+  disabled?: boolean;
+  /** Só as chaves preenchidas substituem o padrão da loja. */
+  overrides?: Partial<UtmTemplates>;
+}
+
+/** Normaliza o que vem do cliente/banco; devolve null quando não há nada a aplicar. */
+export function normalizeMessageUtmConfig(raw: unknown): MessageUtmConfig | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const src = raw as Record<string, any>;
+  const out: MessageUtmConfig = {};
+  if (src.disabled === true) out.disabled = true;
+  const overridesSrc = src.overrides && typeof src.overrides === 'object' ? src.overrides : {};
+  const overrides: Partial<UtmTemplates> = {};
+  for (const key of UTM_KEYS) {
+    const v = overridesSrc[key];
+    if (typeof v !== 'string') continue;
+    const clean = cleanTemplate(v, '');
+    if (clean) overrides[key] = clean;
+  }
+  if (Object.keys(overrides).length > 0) out.overrides = overrides;
+  return out.disabled || out.overrides ? out : null;
+}
+
+// -------------------------------------------------------------
 // Resolução de variáveis
 // -------------------------------------------------------------
 

@@ -15,6 +15,7 @@ import {
   stampTextLinks,
   utmSettingsFromLegacy,
   linkVariables,
+  normalizeMessageUtmConfig,
   type LinkContext,
 } from '../link-params'
 
@@ -159,6 +160,25 @@ describe('padrões e variáveis (modelo Omnisend/Klaviyo)', () => {
     expect(legacy?.campaign.utm_source).toBe('minha-loja')
     expect(legacy?.automation.utm_medium).toBe('newsletter')
     expect(utmSettingsFromLegacy({ tracking_domain: 'x' })).toBeNull()
+  })
+
+  it('sobrescrita por campanha: só chaves preenchidas contam; vazio total vira null', () => {
+    expect(normalizeMessageUtmConfig(null)).toBeNull()
+    expect(normalizeMessageUtmConfig({})).toBeNull()
+    expect(normalizeMessageUtmConfig({ overrides: { utm_source: '  ', utm_medium: '' } })).toBeNull()
+    expect(normalizeMessageUtmConfig({ disabled: false, overrides: {} })).toBeNull()
+    expect(normalizeMessageUtmConfig({ disabled: true })).toEqual({ disabled: true })
+    expect(
+      normalizeMessageUtmConfig({ overrides: { utm_campaign: 'bf-{{campaign_id}}', utm_bogus: 'x', utm_term: 42 } })
+    ).toEqual({ overrides: { utm_campaign: 'bf-{{campaign_id}}' } })
+
+    const cfg = normalizeMessageUtmConfig({ overrides: { utm_campaign: 'bf-2026' } })!
+    const { utm } = buildLinkParams(DEFAULT_UTM_SETTINGS, CAMPAIGN, undefined, {
+      utmOverrides: cfg.overrides,
+      utmDisabled: cfg.disabled === true,
+    })
+    expect(utm.utm_campaign).toBe('bf-2026')
+    expect(utm.utm_source).toBe('worder')
   })
 
   it('identificação: campanha leva worderCampaignID, automação leva worderAutomationID', () => {

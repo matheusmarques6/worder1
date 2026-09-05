@@ -67,8 +67,9 @@ export async function POST(request: NextRequest) {
     let linkParams: any = null;
     try {
       const { getUtmSettings } = await import('@/lib/tracking/utm-settings');
-      const { makeLinkParamsResolver } = await import('@/lib/tracking/link-params');
+      const { makeLinkParamsResolver, normalizeMessageUtmConfig } = await import('@/lib/tracking/link-params');
       const { settings } = await getUtmSettings(user.organization_id, campaign.store_id || null);
+      const campaignUtm = normalizeMessageUtmConfig((campaign as any).settings?.utm);
       linkParams = makeLinkParamsResolver(settings, {
         channel: 'email',
         messageType: 'campaign',
@@ -79,7 +80,7 @@ export async function POST(request: NextRequest) {
         storeName: sampleData.store_name,
         storeDomain: sampleData.store_url,
         extra: sampleData,
-      });
+      }, { utmOverrides: campaignUtm?.overrides || null, utmDisabled: campaignUtm?.disabled === true });
     } catch { /* teste segue sem UTM no href */ }
 
     const finalHtml = prepareEmailHtml({
