@@ -91,7 +91,7 @@ describe('generateEmbeddingsBatch', () => {
     }))
     vi.stubGlobal('fetch', fetchMock)
 
-    // O `catch` de :236-238 reembrulha tudo o que sai do `try`, então a
+    // O `catch` de :234-237 reembrulha tudo o que sai do `try`, então a
     // asserção é sobre a mensagem embrulhada — contém, não é igual.
     await expect(generateEmbeddingsBatch(['a'], 'sk-teste')).rejects.toThrow(/insufficient_quota/)
   })

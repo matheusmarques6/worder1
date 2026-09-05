@@ -4534,8 +4534,11 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   critério de aceite já escrito (os quatro casos são `xfail(strict=True)`).
   **Segue aberta:** contagem de duplicação do transcript; `server._read_request` malformado.
   **O bug de tipo que morava na primeira lacuna NÃO foi consertado aqui, e o critério é a data.**
-  `toucher.py:114` (era citado como `:92` — **citação podre**: `:92` hoje é `mission_version_id`,
-  campo de outro dataclass) faz `tuple(...)` sobre o `str | None` que `mission_resolver.py:63`
+  `toucher.py:114` (era citado como `:92` — **citação podre**: `:92` é **linha em branco**; o campo
+  `mission_version_id`, que a v1 desta nota atribuía a `:92`, está em `:100`. A correção do sítio
+  certo, `:114`, sobrevive — o que estava errado era a descrição do que morava no lugar antigo, e
+  ela nasceu errada, herdada do parecer sem reconferência) faz `tuple(...)` sobre o `str | None`
+  que `mission_resolver.py:63`
   declara, e `"pessoa volta ao checkout"` vira tupla de 24 caracteres que vence a da missão em
   `mission_resolver.py:118` e chega interpolada ao prompt em `prompt_compiler.py:219-220`.
   **Critério escrito, porque ele separa contra a conveniência:** *data de nascimento do defeito ×
@@ -5728,6 +5731,71 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `optin-token.ts:26` aceita `SUPABASE_SERVICE_ROLE_KEY` como material de assinatura HMAC — reúso de
   segredo de altíssimo privilégio para outra finalidade.)*
 
+- [ ] **95. Contratos de tipo que ninguém verifica num runtime sem type checker — um já mordeu produção** `[confirmado]` · *(descoberto no item 63)*
+  **Procurado dono pelo DEFEITO, não pelo caminho do arquivo:** `grep` no checklist inteiro por
+  `mypy`, `pyright`, `ty`, `type checker`, `erro de tipo`, `defeito de tipo`, `checagem de tipo`,
+  `anotação de tipo`, `tipagem`, `str | None`, `tupla de caracteres`, `fatia a string` — **quatro
+  hits, nenhum dono**: `:1567` (*"funciona por tipagem"*, item 44), `:2354` (*"não há tipagem
+  gerada"* sobre `supabaseAdmin`, TypeScript), o próprio item **63** (que é "lacunas de teste":
+  registrou os defeitos, nunca se declarou dono do conserto) e um *"erro de tipo"* num predicado SQL,
+  assunto alheio. `runtime/pyproject.toml` não tem `mypy`, `pyright` nem `ty` — só `ruff` e
+  `importlinter`.
+  **(a) EVIDÊNCIA, não trabalho — já consertado.** A colisão de nome em `resolved`
+  (`ResolvedAgentLlm` ligado ao nome que já era a `ResolvedMission`) era `AttributeError` em todo
+  turno que chegasse à cascata D4 com `agent_llm_from_org_keys=True` — que é exatamente o que a
+  fábrica de produção passa. Nasceu em `8501637a`, commit do item 52, **dentro** desta auditoria →
+  regressão, consertada em `ef5c5f1b` com a fitness `test_resolved_names_do_not_collide.py`, que
+  afirma a **propriedade** por AST e não a grafia. Fica aqui porque é a prova de que a família custa
+  produção, não porque haja o que fazer.
+  **(b) ABERTO — `toucher.py:114` × `mission_resolver.py:63`.**
+  `success_criteria=tuple(raw.get("success_criteria") or ())` faz `tuple(...)` sobre o `str | None`
+  que a declaração do outro lado promete. `"pessoa volta ao checkout"` vira tupla de 24 caracteres;
+  ela é *truthy*, então `mission_resolver.py:118` (`delta.success_criteria or
+  mission.success_criteria`) a deixa **vencer** a da missão, e `prompt_compiler.py:219-220` a
+  interpola — o bloco MISSÃO do toque proativo passa a dizer `Sucesso observável: ('p', 'e', 's',
+  …)`. **Provado por execução**, sem banco e sem rede.
+  **Conserto: uma linha** — `success_criteria=raw.get("success_criteria")`.
+  **Critério de aceite JÁ ESCRITO no repositório:**
+  `runtime/tests/unit/test_node_delta.py::test_success_criteria_stays_the_string_the_node_wrote`,
+  hoje `@pytest.mark.xfail(strict=True)`. Ao consertar, ele vira **XPASS**, a suíte fica **vermelha**
+  e obriga a remover o marcador — o teste não tem como ser esquecido.
+  **Por que não foi consertado no item 63, sendo uma linha:** os **dois** lados nasceram em
+  **11/08/2026** (`44d7f927` e `f01a7511`), dezessete dias **antes** de esta auditoria abrir
+  (28/08/2026). O critério é data de nascimento × data de abertura, e ele separa contra a
+  conveniência: defeito de produto pré-existente se registra e se devolve.
+  **(c) ABERTO — `classify` não reconhece os erros de transporte do httpx.** Mesma família: um
+  contrato de tipo que ninguém verifica. `queueing/failures.py:30` casa os **builtins**
+  `TimeoutError`/`ConnectionError`; as exceções do httpx descem de `httpx.TransportError`, de nenhum
+  dos dois. `failures.py:33` procura o texto `"timeout"` e o httpx escreve **`"timed out"`**. E
+  `agent_core/openrouter.py` não tem `except httpx.*` (só `:109-112`, para `status_code >= 400`),
+  então a exceção chega **crua**. Medido, sem rede: `ConnectError`, `ConnectTimeout`, `ReadTimeout` e
+  `PoolTimeout` caem os quatro em `Failure.UNKNOWN`.
+  **Datado, pelo mesmo critério que separa (a) de (b):** nasceu em `33f3737d`, **11/08/2026** — 17
+  dias antes de a auditoria abrir. **Pré-existente, logo devolve-se.** A revisão da execução mediu a
+  data; a v1 desta entrada a devolvia sem ela, o que deixava o leitor sem o teste que distingue
+  defeito herdado de regressão nossa.
+  **Consequência, medida e não inflada:** `failures.py:18-21` diz que `UNKNOWN` repete como
+  transitório e o limite de tentativas continua valendo — **nenhuma mensagem se perde**. O que se
+  perde é o aviso: o mesmo comentário diz que `UNKNOWN` existe separado *"para permitir alertar
+  quando a tabela abaixo envelhecer"*, e `grep -rn "Failure.UNKNOWN" runtime/src/` **não devolve nada
+  fora de `failures.py`**. Timeout de provedor — a falha transitória de manual — cai calado no balde
+  do não-mapeado, que é a definição de tabela envelhecida. **O aviso que existe para detectar
+  envelhecimento é o que o envelhecimento desliga.**
+  **Critério de aceite JÁ ESCRITO:** `runtime/tests/unit/test_llm_port.py::TestErrors::`
+  `test_a_transport_error_is_transient`, 4 casos `xfail(strict=True)`. A mensagem das exceções vai
+  **vazia** de propósito: o que tem de decidir é o **tipo** — hoje o único acerto possível é acidente
+  de texto (`httpx.PoolTimeout("pool timeout")` sai `TRANSIENT` porque a palavra caiu na string).
+  Conserto provável: pôr `httpx.TransportError` em `_TRANSIENT_TYPES`, ou embrulhar em
+  `openrouter.py`. **Decisão do dono, não ordem** — pôr `httpx` dentro de `queueing/` acopla a
+  camada de fila a um cliente HTTP.
+  **(d) A RECOMENDAÇÃO QUE FECHA OS TRÊS: adotar um type checker em `runtime/`.** Os três defeitos
+  são exatamente o que `mypy`/`pyright` pega de graça, e nenhum deles foi pego por teste — (a) só
+  apareceu porque a auditoria leu o diff, e (b) e (c) só apareceram porque alguém executou a função
+  à mão. O comentário que o item 52 deixou em `responder.py` (*"sem type checker no repositório…"*)
+  advertia contra o modo de falha **errado** enquanto introduzia o certo. **É recomendação, não
+  ordem:** adotar um checker num pacote sem anotações completas tem custo próprio, e o preço de
+  entrada (ignores, `Any` em massa, ruído no CI) é decisão de quem mantém o runtime.
+
 ---
 
 ## REABERTO — item 1 reprovado em review (28/08)
@@ -6134,67 +6202,6 @@ você decidir se entram na fila.
   funcional não paga nem o DDL; e **(ii)** o item 49 registrou que **nenhuma migration `20260902*`
   nem `20260903*` jamais foi aplicada por CI algum**. Mexer em duas funções de compliance nesse
   estado é a troca que os itens 47 e 48 recusaram.
-
-- [ ] **95. Contratos de tipo que ninguém verifica num runtime sem type checker — um já mordeu produção** `[confirmado]` · *(descoberto no item 63)*
-  **Procurado dono pelo DEFEITO, não pelo caminho do arquivo:** `grep` no checklist inteiro por
-  `mypy`, `pyright`, `ty`, `type checker`, `erro de tipo`, `defeito de tipo`, `checagem de tipo`,
-  `anotação de tipo`, `tipagem`, `str | None`, `tupla de caracteres`, `fatia a string` — **quatro
-  hits, nenhum dono**: `:1567` (*"funciona por tipagem"*, item 44), `:2354` (*"não há tipagem
-  gerada"* sobre `supabaseAdmin`, TypeScript), o próprio item **63** (que é "lacunas de teste":
-  registrou os defeitos, nunca se declarou dono do conserto) e um *"erro de tipo"* num predicado SQL,
-  assunto alheio. `runtime/pyproject.toml` não tem `mypy`, `pyright` nem `ty` — só `ruff` e
-  `importlinter`.
-  **(a) EVIDÊNCIA, não trabalho — já consertado.** A colisão de nome em `resolved`
-  (`ResolvedAgentLlm` ligado ao nome que já era a `ResolvedMission`) era `AttributeError` em todo
-  turno que chegasse à cascata D4 com `agent_llm_from_org_keys=True` — que é exatamente o que a
-  fábrica de produção passa. Nasceu em `8501637a`, commit do item 52, **dentro** desta auditoria →
-  regressão, consertada em `ef5c5f1b` com a fitness `test_resolved_names_do_not_collide.py`, que
-  afirma a **propriedade** por AST e não a grafia. Fica aqui porque é a prova de que a família custa
-  produção, não porque haja o que fazer.
-  **(b) ABERTO — `toucher.py:114` × `mission_resolver.py:63`.**
-  `success_criteria=tuple(raw.get("success_criteria") or ())` faz `tuple(...)` sobre o `str | None`
-  que a declaração do outro lado promete. `"pessoa volta ao checkout"` vira tupla de 24 caracteres;
-  ela é *truthy*, então `mission_resolver.py:118` (`delta.success_criteria or
-  mission.success_criteria`) a deixa **vencer** a da missão, e `prompt_compiler.py:219-220` a
-  interpola — o bloco MISSÃO do toque proativo passa a dizer `Sucesso observável: ('p', 'e', 's',
-  …)`. **Provado por execução**, sem banco e sem rede.
-  **Conserto: uma linha** — `success_criteria=raw.get("success_criteria")`.
-  **Critério de aceite JÁ ESCRITO no repositório:**
-  `runtime/tests/unit/test_node_delta.py::test_success_criteria_stays_the_string_the_node_wrote`,
-  hoje `@pytest.mark.xfail(strict=True)`. Ao consertar, ele vira **XPASS**, a suíte fica **vermelha**
-  e obriga a remover o marcador — o teste não tem como ser esquecido.
-  **Por que não foi consertado no item 63, sendo uma linha:** os **dois** lados nasceram em
-  **11/08/2026** (`44d7f927` e `f01a7511`), dezessete dias **antes** de esta auditoria abrir
-  (28/08/2026). O critério é data de nascimento × data de abertura, e ele separa contra a
-  conveniência: defeito de produto pré-existente se registra e se devolve.
-  **(c) ABERTO — `classify` não reconhece os erros de transporte do httpx.** Mesma família: um
-  contrato de tipo que ninguém verifica. `queueing/failures.py:30` casa os **builtins**
-  `TimeoutError`/`ConnectionError`; as exceções do httpx descem de `httpx.TransportError`, de nenhum
-  dos dois. `failures.py:33` procura o texto `"timeout"` e o httpx escreve **`"timed out"`**. E
-  `agent_core/openrouter.py` não tem `except httpx.*` (só `:109-112`, para `status_code >= 400`),
-  então a exceção chega **crua**. Medido, sem rede: `ConnectError`, `ConnectTimeout`, `ReadTimeout` e
-  `PoolTimeout` caem os quatro em `Failure.UNKNOWN`.
-  **Consequência, medida e não inflada:** `failures.py:18-21` diz que `UNKNOWN` repete como
-  transitório e o limite de tentativas continua valendo — **nenhuma mensagem se perde**. O que se
-  perde é o aviso: o mesmo comentário diz que `UNKNOWN` existe separado *"para permitir alertar
-  quando a tabela abaixo envelhecer"*, e `grep -rn "Failure.UNKNOWN" runtime/src/` **não devolve nada
-  fora de `failures.py`**. Timeout de provedor — a falha transitória de manual — cai calado no balde
-  do não-mapeado, que é a definição de tabela envelhecida. **O aviso que existe para detectar
-  envelhecimento é o que o envelhecimento desliga.**
-  **Critério de aceite JÁ ESCRITO:** `runtime/tests/unit/test_llm_port.py::TestErrors::`
-  `test_a_transport_error_is_transient`, 4 casos `xfail(strict=True)`. A mensagem das exceções vai
-  **vazia** de propósito: o que tem de decidir é o **tipo** — hoje o único acerto possível é acidente
-  de texto (`httpx.PoolTimeout("pool timeout")` sai `TRANSIENT` porque a palavra caiu na string).
-  Conserto provável: pôr `httpx.TransportError` em `_TRANSIENT_TYPES`, ou embrulhar em
-  `openrouter.py`. **Decisão do dono, não ordem** — pôr `httpx` dentro de `queueing/` acopla a
-  camada de fila a um cliente HTTP.
-  **(d) A RECOMENDAÇÃO QUE FECHA OS TRÊS: adotar um type checker em `runtime/`.** Os três defeitos
-  são exatamente o que `mypy`/`pyright` pega de graça, e nenhum deles foi pego por teste — (a) só
-  apareceu porque a auditoria leu o diff, e (b) e (c) só apareceram porque alguém executou a função
-  à mão. O comentário que o item 52 deixou em `responder.py` (*"sem type checker no repositório…"*)
-  advertia contra o modo de falha **errado** enquanto introduzia o certo. **É recomendação, não
-  ordem:** adotar um checker num pacote sem anotações completas tem custo próprio, e o preço de
-  entrada (ignores, `Any` em massa, ruído no CI) é decisão de quem mantém o runtime.
 
 ---
 
