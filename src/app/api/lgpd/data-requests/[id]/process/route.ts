@@ -10,6 +10,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { getAuthClient } from '@/lib/api-utils'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -26,8 +27,15 @@ export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  // Cron/interno (CRON_SECRET) ou um administrador logado da MESMA
+  // organização (botão "Processar" em Configurações → Privacidade e LGPD).
+  let orgScope: string | null = null
   if (!isAuthorized(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const auth = await getAuthClient()
+    if (!auth || !['owner', 'admin'].includes(String(auth.user.role || ''))) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    orgScope = auth.user.organization_id
   }
 
   const { data: request } = await supabaseAdmin
@@ -36,7 +44,7 @@ export async function POST(
     .eq('id', params.id)
     .maybeSingle()
 
-  if (!request) {
+  if (!request || (orgScope && request.organization_id !== orgScope)) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
   if (!request.verified_at) {

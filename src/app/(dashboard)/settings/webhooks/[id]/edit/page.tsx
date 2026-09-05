@@ -1,131 +1,43 @@
-'use client';
+'use client'
 
-import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
-import { Loader2 } from 'lucide-react';
-import WebhookForm from '@/components/webhooks/WebhookForm';
-import { useToast } from '@/components/ui/Toast';
-import { useConfirm } from '@/components/ui/ConfirmDialog';
+import { useState } from 'react'
+import Link from 'next/link'
+import { useParams } from 'next/navigation'
+import { useToast } from '@/components/ui/Toast'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
+import { Card, Row, Title, LoadingCard, Modal, CopyBtn } from '@/components/settings/ui'
+import { I } from '@/components/settings/icons'
+import { api } from '@/components/settings/format'
+import { useApi, useAction } from '@/components/settings/hooks'
+import WebhookEditor, { type WebhookSub } from '@/components/settings/WebhookEditor'
 
 export default function EditWebhookPage() {
-  const toast = useToast();
-  const { confirm } = useConfirm();
-  const params = useParams();
-  const id = params?.id as string;
-  const [sub, setSub] = useState<any | null>(null);
-  const [rotating, setRotating] = useState(false);
-  const [newSecret, setNewSecret] = useState<string | null>(null);
-  const [testing, setTesting] = useState(false);
-  const [testMessage, setTestMessage] = useState<string | null>(null);
+  const params = useParams()
+  const id = String(params?.id || '')
+  const { data, loading, error, reload } = useApi<{ subscription: WebhookSub }>(id ? `/api/webhooks-admin/subscriptions/${id}` : null)
+  const toast = useToast()
+  const confirm = useConfirm()
+  const { busy, run } = useAction()
+  const [secret, setSecret] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (!id) return;
-    fetch(`/api/webhooks-admin/subscriptions/${id}`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(r.statusText)))
-      .then((d) => setSub(d.subscription))
-      .catch(() => setSub(null));
-  }, [id]);
-
-  const rotateSecret = async () => {
-    const ok = await confirm({
-      title: 'Rotacionar o secret?',
-      description: 'O secret antigo continua válido por 24h para assinatura dupla.',
-      confirmLabel: 'Rotacionar',
-      cancelLabel: 'Cancelar',
-    });
-    if (!ok) return;
-    setRotating(true);
-    try {
-      const res = await fetch(`/api/webhooks-admin/subscriptions/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ regenerate_secret: true }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setNewSecret(data.secret);
-        toast.success('Secret rotacionado');
-      } else {
-        toast.error('Falha ao rotacionar', data.error ?? 'Tente novamente.');
-      }
-    } finally {
-      setRotating(false);
-    }
-  };
-
-  const sendTest = async () => {
-    setTesting(true);
-    setTestMessage(null);
-    try {
-      const res = await fetch(`/api/webhooks-admin/subscriptions/${id}/test`, {
-        method: 'POST',
-      });
-      const data = await res.json();
-      setTestMessage(
-        res.ok
-          ? 'Teste disparado. Veja os logs em alguns segundos.'
-          : data.error ?? 'falha ao testar'
-      );
-    } finally {
-      setTesting(false);
-    }
-  };
-
-  if (!sub) {
-    return (
-      <div className="p-6 flex items-center gap-2 text-sm text-gray-500">
-        <Loader2 className="w-4 h-4 animate-spin" /> Carregando...
-      </div>
-    );
+  const rotate = async () => {
+    if (!(await confirm.confirm({ title: 'Rotacionar o segredo?', description: 'O segredo antigo continua válido por 24 h (assinatura dupla) para você trocar sem derrubar a integração.', confirmLabel: 'Rotacionar' }))) return
+    const r = await run('rot', async () => api<{ secret: string }>(`/api/webhooks-admin/subscriptions/${id}`, { method: 'PATCH', json: { regenerate_secret: true } }), { error: 'Não foi possível rotacionar' })
+    if (r?.secret) setSecret(r.secret)
   }
+  const test = () => run('test', async () => { await api(`/api/webhooks-admin/subscriptions/${id}/test`, { method: 'POST' }); toast.success('Teste disparado', 'Veja o resultado em Logs em alguns segundos.') }, { error: 'Não foi possível testar' })
 
   return (
-    <div>
-      <div className="px-6 pt-6 flex items-start justify-between max-w-2xl">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Editar webhook</h1>
-          <p className="text-sm text-gray-500 mt-1">{sub.name}</p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={sendTest}
-            disabled={testing}
-            className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
-          >
-            {testing ? 'Enviando...' : 'Testar entrega'}
-          </button>
-          <button
-            onClick={rotateSecret}
-            disabled={rotating}
-            className="px-3 py-1.5 text-sm border border-orange-300 text-orange-700 rounded-lg hover:bg-orange-50 disabled:opacity-50"
-          >
-            {rotating ? 'Rotacionando...' : 'Rotacionar secret'}
-          </button>
-        </div>
-      </div>
-
-      {testMessage && (
-        <div className="px-6 pt-4 max-w-2xl">
-          <div className="bg-blue-50 border border-blue-200 text-blue-700 text-sm rounded p-3">
-            {testMessage}
-          </div>
-        </div>
+    <>
+      <Title h="Editar endpoint" p={data?.subscription?.name || ''} right={<><Link href={`/settings/webhooks/${id}/deliveries`} className="btn"><I n="list" s={15} />Logs</Link><button type="button" className="btn" onClick={test} disabled={busy === 'test'}><I n="send" s={15} />Testar entrega</button><button type="button" className="btn" onClick={rotate} disabled={busy === 'rot'}><I n="refresh" s={15} className={busy === 'rot' ? 'spin' : ''} />Rotacionar segredo</button></>} />
+      {loading && !data ? <LoadingCard rows={4} /> : error || !data?.subscription ? (
+        <Card><div className="empty2"><b>Webhook não encontrado</b>{error}<div><button className="btn" onClick={() => reload()}>Tentar de novo</button></div></div></Card>
+      ) : <WebhookEditor initial={data.subscription} />}
+      {secret && (
+        <Modal title="Novo segredo" desc="Copie agora. O antigo expira em 24 horas." onClose={() => setSecret(null)} footer={<button type="button" className="btn btn-primary" onClick={() => setSecret(null)}>Já copiei</button>}>
+          <Row label="Segredo"><div style={{ display: 'flex', gap: 8 }}><input className="in mono" readOnly value={secret} onFocus={(e) => e.currentTarget.select()} /><CopyBtn text={secret} /></div></Row>
+        </Modal>
       )}
-
-      {newSecret && (
-        <div className="px-6 pt-4 max-w-2xl">
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-            <p className="text-sm font-medium text-green-800 mb-2">
-              Novo secret gerado. Copie agora; o antigo expira em 24h.
-            </p>
-            <code className="block bg-white rounded px-3 py-2 text-xs font-mono border border-green-200 break-all">
-              {newSecret}
-            </code>
-          </div>
-        </div>
-      )}
-
-      <WebhookForm initial={sub} />
-    </div>
-  );
+    </>
+  )
 }

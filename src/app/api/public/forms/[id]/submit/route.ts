@@ -532,7 +532,15 @@ export async function POST(
     // UTM data for contact profile (if behavior.utm.storeOnConsent is true)
     const popupBehavior = (form.behavior as any) || (designJson.behavior as any) || {}
     const audienceCfg: any = (popupBehavior as any)?.audience || {}
-    const doubleOptInEnabled = !!audienceCfg.doubleOptIn
+    // Padrão da organização (Configurações → Privacidade e LGPD) vale quando
+    // o formulário não define a confirmação dupla explicitamente.
+    let doubleOptInEnabled = !!audienceCfg.doubleOptIn
+    if (audienceCfg.doubleOptIn === undefined || audienceCfg.doubleOptIn === null) {
+      try {
+        const { data: orgRow } = await supabase.from('organizations').select('settings').eq('id', form.organization_id).maybeSingle()
+        doubleOptInEnabled = !!(orgRow?.settings as any)?.privacy?.double_opt_in
+      } catch { /* mantém o padrão do formulário */ }
+    }
     const storeUtmOnConsent = popupBehavior?.utm?.storeOnConsent === true
     const utmPayload: Record<string, any> = {}
     if (storeUtmOnConsent) {

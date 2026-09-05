@@ -141,6 +141,26 @@ export interface RenderMergeTagsOptions {
  * Para injetar HTML confiável use a prefix tag `raw.`, ex: `{{raw.html_block}}`.
  * Para contexto de TEXTO (assunto/preheader) use options.escape = false.
  */
+function formatMoneyTag(raw: string, currency: string): string {
+  const n = Number(String(raw).replace(/[^\d.,-]/g, '').replace(/\.(?=\d{3}(?:\D|$))/g, '').replace(',', '.'))
+  if (!Number.isFinite(n)) return raw
+  try { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: currency.toUpperCase() }).format(n) } catch { return `${currency} ${n.toFixed(2)}` }
+}
+
+function formatDateTag(raw: string, pattern: string): string {
+  let d = new Date(raw)
+  if (Number.isNaN(d.getTime())) {
+    const br = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+    if (br) d = new Date(Number(br[3]), Number(br[2]) - 1, Number(br[1]))
+  }
+  if (Number.isNaN(d.getTime())) return raw
+  const pad = (v: number) => String(v).padStart(2, '0')
+  const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
+  return pattern
+    .replace(/%d/g, pad(d.getDate())).replace(/%m/g, pad(d.getMonth() + 1)).replace(/%Y/g, String(d.getFullYear())).replace(/%y/g, String(d.getFullYear()).slice(-2))
+    .replace(/%H/g, pad(d.getHours())).replace(/%M/g, pad(d.getMinutes())).replace(/%B/g, MESES[d.getMonth()]).replace(/%b/g, MESES[d.getMonth()].slice(0, 3))
+}
+
 export function renderMergeTags(
   html: string,
   data: Record<string, string>,
@@ -215,9 +235,25 @@ export function renderMergeTags(
   // {{ checkout_url | loja.com }} work — matches Klaviyo/Omnisend
   // tolerance and lines up with how the variable picker generates
   // tags ({{ trigger.path }} format).
+  //
+  // Filtros nomeados (Configurações → Variáveis → "Filtros e padrões"):
+  //   {{ first_name | default: "cliente" }}
+  //   {{ order_total | money: "BRL" }}      → R$ 74,20
+  //   {{ last_order_at | date: "%d/%m/%Y" }} → 27/08/2026
+  // Sem filtro nomeado, o texto depois do | continua sendo o fallback.
   let result = html.replace(
     /\{\{\s*([a-zA-Z0-9_.\[\]]+)\s*\|\s*([^}]*?)\s*\}\}/g,
-    (_, tag: string, fallback: string) => resolve(tag, fallback)
+    (_, tag: string, expr: string) => {
+      const m = expr.match(/^(default|money|date)\s*:\s*(?:"([^"]*)"|'([^']*)'|([^\s]+))?\s*$/i)
+      if (!m) return resolve(tag, expr)
+      const filter = m[1].toLowerCase()
+      const arg = m[2] ?? m[3] ?? m[4] ?? ''
+      const raw = resolve(tag, '')
+      if (filter === 'default') return raw || (shouldEscape ? escapeHtml(arg) : arg)
+      if (filter === 'money') return raw ? formatMoneyTag(raw, arg || 'BRL') : ''
+      if (filter === 'date') return raw ? formatDateTag(raw, arg || '%d/%m/%Y') : ''
+      return raw
+    }
   )
 
   // Replace {{tag}} (no fallback) — same whitespace tolerance.

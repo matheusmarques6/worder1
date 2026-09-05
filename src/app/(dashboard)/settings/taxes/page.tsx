@@ -1,612 +1,136 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
-import {
-  Settings,
-  DollarSign,
-  Percent,
-  CreditCard,
-  Plus,
-  Trash2,
-  Edit2,
-  Save,
-  X,
-  Loader2,
-  CheckCircle,
-  AlertCircle,
-  Info,
-} from 'lucide-react'
+// Configurações → Custos e taxas: custo dos produtos, taxas de pagamento,
+// impostos e taxas personalizadas usadas no cálculo de lucro dos relatórios.
+
+import { useEffect, useState } from 'react'
 import { useToast } from '@/components/ui/Toast'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
+import { Card, Row, SaveBar, Title, LoadingCard, Modal, Field, IconBtn, Badge, Tog, useForm } from '@/components/settings/ui'
+import { I } from '@/components/settings/icons'
+import { api, nf } from '@/components/settings/format'
+import { useApi, useSave, useAction } from '@/components/settings/hooks'
 
-interface TaxSettings {
-  default_cost_percentage: number
-  default_cost_currency: string
-  payment_gateway_fee: number
-  payment_fixed_fee: number
-  sales_tax_percentage: number
-  marketplace_fee: number
-  default_shipping_cost: number
-  monthly_fixed_costs: number
-}
+interface Tax { default_cost_percentage: number; default_cost_currency: string; payment_gateway_fee: number; payment_fixed_fee: number; sales_tax_percentage: number; marketplace_fee: number; default_shipping_cost: number; monthly_fixed_costs: number }
+interface Fee { id?: string; name: string; description: string; fee_type: 'percentage' | 'fixed'; fee_value: number; applies_to: string; per_order: boolean; is_active: boolean }
+interface Resp { settings: Tax | null; customFees: Fee[]; currencies?: string[] }
 
-interface CustomFee {
-  id?: string
-  name: string
-  description: string
-  fee_type: 'percentage' | 'fixed'
-  fee_value: number
-  applies_to: string
-  per_order: boolean
-  is_active: boolean
-}
+const DEF: Tax = { default_cost_percentage: 40, default_cost_currency: 'BRL', payment_gateway_fee: 3.99, payment_fixed_fee: 0.39, sales_tax_percentage: 0, marketplace_fee: 0, default_shipping_cost: 0, monthly_fixed_costs: 0 }
+const CUR = ['BRL', 'USD', 'EUR', 'GBP', 'CNY']
 
-const CURRENCIES = ['BRL', 'USD', 'EUR', 'GBP', 'CNY']
-
-const InfoTooltip = ({ text }: { text: string }) => (
-  <div className="group relative inline-block ml-1">
-    <Info className="w-4 h-4 text-gray-400 cursor-help" />
-    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-100 rounded-lg text-xs text-gray-600 w-48 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
-      {text}
-      <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-dark-700" />
-    </div>
-  </div>
-)
-
-const InputField = ({
-  label,
-  value,
-  onChange,
-  type = 'number',
-  prefix,
-  suffix,
-  tooltip,
-  step = '0.01',
-}: {
-  label: string
-  value: number | string
-  onChange: (value: string) => void
-  type?: string
-  prefix?: string
-  suffix?: string
-  tooltip?: string
-  step?: string
-}) => (
-  <div>
-    <label className="flex items-center text-sm text-gray-500 mb-2">
-      {label}
-      {tooltip && <InfoTooltip text={tooltip} />}
-    </label>
-    <div className="relative">
-      {prefix && (
-        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">{prefix}</span>
-      )}
-      <input
-        type={type}
-        step={step}
-        min="0"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className={`w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:border-primary-500 ${
-          prefix ? 'pl-10' : ''
-        } ${suffix ? 'pr-10' : ''}`}
-      />
-      {suffix && (
-        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">{suffix}</span>
-      )}
-    </div>
-  </div>
-)
-
-const CustomFeeModal = ({
-  fee,
-  onSave,
-  onClose,
-}: {
-  fee?: CustomFee
-  onSave: (fee: CustomFee) => void
-  onClose: () => void
-}) => {
-  const [formData, setFormData] = useState<CustomFee>(
-    fee || {
-      name: '',
-      description: '',
-      fee_type: 'percentage',
-      fee_value: 0,
-      applies_to: 'revenue',
-      per_order: true,
-      is_active: true,
-    }
-  )
-
+export default function TaxesSettingsPage() {
+  const { data, loading, error, reload } = useApi<Resp>('/api/settings/taxes')
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-    >
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <motion.div
-        initial={{ scale: 0.95, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        className="relative bg-white rounded-2xl border border-gray-200 p-6 w-full max-w-md"
-      >
-        <button onClick={onClose} className="absolute top-4 right-4 text-gray-500 hover:text-white">
-          <X className="w-5 h-5" />
-        </button>
-
-        <h3 className="text-lg font-semibold text-gray-900 mb-6">
-          {fee?.id ? 'Editar Taxa' : 'Nova Taxa Customizada'}
-        </h3>
-
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm text-gray-500 mb-2">Nome da Taxa</label>
-            <input
-              type="text"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              placeholder="Ex: Taxa Shopify, Embalagem"
-              className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:border-primary-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm text-gray-500 mb-2">Descrição (opcional)</label>
-            <input
-              type="text"
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              placeholder="Descrição da taxa"
-              className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:border-primary-500"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm text-gray-500 mb-2">Tipo</label>
-              <select
-                value={formData.fee_type}
-                onChange={(e) => setFormData({ ...formData, fee_type: e.target.value as 'percentage' | 'fixed' })}
-                className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:border-primary-500"
-              >
-                <option value="percentage">Porcentagem (%)</option>
-                <option value="fixed">Valor Fixo (R$)</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm text-gray-500 mb-2">Valor</label>
-              <div className="relative">
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={formData.fee_value}
-                  onChange={(e) => setFormData({ ...formData, fee_value: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:border-primary-500 pr-10"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
-                  {formData.fee_type === 'percentage' ? '%' : 'R$'}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {formData.fee_type === 'percentage' && (
-            <div>
-              <label className="block text-sm text-gray-500 mb-2">Aplicar sobre</label>
-              <select
-                value={formData.applies_to}
-                onChange={(e) => setFormData({ ...formData, applies_to: e.target.value })}
-                className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:border-primary-500"
-              >
-                <option value="revenue">Receita Total</option>
-                <option value="subtotal">Subtotal (sem frete)</option>
-                <option value="shipping">Apenas Frete</option>
-              </select>
-            </div>
-          )}
-
-          <div className="flex items-center justify-between py-2">
-            <span className="text-sm text-gray-500">Taxa ativa</span>
-            <button
-              onClick={() => setFormData({ ...formData, is_active: !formData.is_active })}
-              className={`w-12 h-6 rounded-full transition-colors ${
-                formData.is_active ? 'bg-primary-500' : 'bg-gray-100'
-              }`}
-            >
-              <div
-                className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${
-                  formData.is_active ? 'translate-x-6' : 'translate-x-0.5'
-                }`}
-              />
-            </button>
-          </div>
-
-          <button
-            onClick={() => onSave(formData)}
-            disabled={!formData.name}
-            className="w-full py-3 bg-primary-500 hover:bg-primary-600 disabled:bg-gray-100 disabled:text-gray-400 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
-          >
-            <Save className="w-4 h-4" />
-            Salvar Taxa
-          </button>
-        </div>
-      </motion.div>
-    </motion.div>
+    <>
+      <Title h="Custos e taxas" p="Usados para calcular lucro e margem nos relatórios. Nada aqui altera preços na loja." />
+      {loading && !data ? <><LoadingCard rows={4} /><LoadingCard rows={2} /></> : error || !data ? (
+        <Card><div className="empty2"><b>Não foi possível carregar</b>{error}<div><button className="btn" onClick={() => reload()}>Tentar de novo</button></div></div></Card>
+      ) : (
+        <>
+          <CostsCard s={{ ...DEF, ...(data.settings || {}) }} onSaved={() => reload(true)} />
+          <FeesCard fees={data.customFees || []} onChanged={() => reload(true)} />
+        </>
+      )}
+    </>
   )
 }
 
-export default function TaxSettingsPage() {
+function Num({ id, value, onChange, suffix, step = '0.01' }: { id: string; value: number; onChange: (n: number) => void; suffix?: string; step?: string }) {
+  return (
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+      <input id={id} className="in" type="number" step={step} min={0} value={Number.isFinite(value) ? value : ''} onChange={(e) => onChange(e.target.value === '' ? 0 : Number(e.target.value))} style={{ maxWidth: 200 }} />
+      {suffix && <span className="muted" style={{ fontSize: 13 }}>{suffix}</span>}
+    </div>
+  )
+}
+
+function CostsCard({ s, onSaved }: { s: Tax; onSaved: () => void }) {
+  const f = useForm<Tax>({ ...s })
+  useEffect(() => { f.reset({ ...s }) }, [JSON.stringify(s)]) // eslint-disable-line react-hooks/exhaustive-deps
+  const { saving, error, save } = useSave()
+  const v = f.val!
+  const cur = v.default_cost_currency || 'BRL'
+  return (
+    <Card title="Custos padrão" desc="Aplicados quando o produto não tem custo cadastrado." foot={<SaveBar dirty={f.dirty} saving={saving} error={error} onSave={() => save(async () => { await api('/api/settings/taxes', { method: 'POST', json: v }); onSaved() }, 'Custos salvos')} onCancel={f.cancel} />}>
+      <Row label="Custo do produto" help="Porcentagem do preço de venda considerada como custo (CMV)." htmlFor="tx-cost"><Num id="tx-cost" value={v.default_cost_percentage} onChange={(n) => f.set('default_cost_percentage', n)} suffix="% do preço" /></Row>
+      <Row label="Moeda dos custos" htmlFor="tx-cur"><select id="tx-cur" className="in" style={{ maxWidth: 200 }} value={cur} onChange={(e) => f.set('default_cost_currency', e.target.value)}>{CUR.map((c) => <option key={c}>{c}</option>)}</select></Row>
+      <Row label="Taxa do gateway" help="Cobrada pelo meio de pagamento em cada venda.">
+        <div className="in2">
+          <div><span className="inl">Percentual</span><Num id="tx-gw" value={v.payment_gateway_fee} onChange={(n) => f.set('payment_gateway_fee', n)} suffix="%" /></div>
+          <div><span className="inl">Fixa por transação</span><Num id="tx-fix" value={v.payment_fixed_fee} onChange={(n) => f.set('payment_fixed_fee', n)} suffix={cur} /></div>
+        </div>
+      </Row>
+      <Row label="Impostos sobre vendas" htmlFor="tx-tax"><Num id="tx-tax" value={v.sales_tax_percentage} onChange={(n) => f.set('sales_tax_percentage', n)} suffix="%" /></Row>
+      <Row label="Taxa de marketplace" help="Se vende também em marketplaces." htmlFor="tx-mk"><Num id="tx-mk" value={v.marketplace_fee} onChange={(n) => f.set('marketplace_fee', n)} suffix="%" /></Row>
+      <Row label="Frete padrão por pedido" htmlFor="tx-ship"><Num id="tx-ship" value={v.default_shipping_cost} onChange={(n) => f.set('default_shipping_cost', n)} suffix={cur} /></Row>
+      <Row label="Custos fixos mensais" help="Aluguel, equipe, ferramentas — distribuídos nos relatórios de lucro." htmlFor="tx-fixed"><Num id="tx-fixed" value={v.monthly_fixed_costs} onChange={(n) => f.set('monthly_fixed_costs', n)} suffix={`${cur}/mês`} step="1" /></Row>
+    </Card>
+  )
+}
+
+function FeesCard({ fees, onChanged }: { fees: Fee[]; onChanged: () => void }) {
+  const confirm = useConfirm()
   const toast = useToast()
-  const { confirm } = useConfirm()
-  const [settings, setSettings] = useState<TaxSettings>({
-    default_cost_percentage: 35,
-    default_cost_currency: 'BRL',
-    payment_gateway_fee: 0,
-    payment_fixed_fee: 0,
-    sales_tax_percentage: 0,
-    marketplace_fee: 0,
-    default_shipping_cost: 0,
-    monthly_fixed_costs: 0,
-  })
-  const [customFees, setCustomFees] = useState<CustomFee[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [isSaving, setIsSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
-  const [editingFee, setEditingFee] = useState<CustomFee | null>(null)
-  const [showFeeModal, setShowFeeModal] = useState(false)
-
-  useEffect(() => {
-    fetchSettings()
-  }, [])
-
-  const fetchSettings = async () => {
-    try {
-      setIsLoading(true)
-      const response = await fetch('/api/settings/taxes')
-      const data = await response.json()
-
-      if (response.ok) {
-        setSettings(data.settings)
-        setCustomFees(data.customFees || [])
-      }
-    } catch (error) {
-      console.error('Error fetching settings:', error)
-    } finally {
-      setIsLoading(false)
-    }
+  const { busy, run } = useAction()
+  const [modal, setModal] = useState<{ fee?: Fee } | null>(null)
+  const remove = async (fee: Fee) => {
+    if (!(await confirm.confirm({ title: `Excluir “${fee.name}”?`, confirmLabel: 'Excluir', destructive: true }))) return
+    await run(`d-${fee.id}`, async () => { await api('/api/settings/taxes', { method: 'PUT', json: { action: 'delete', fee } }); onChanged() }, { success: 'Taxa excluída' })
   }
-
-  const saveSettings = async () => {
-    try {
-      setIsSaving(true)
-      const response = await fetch('/api/settings/taxes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settings),
-      })
-
-      if (response.ok) {
-        setSaved(true)
-        setTimeout(() => setSaved(false), 3000)
-        toast.success('Configurações salvas')
-      } else {
-        toast.error('Erro ao salvar', 'Não foi possível salvar as configurações de custos. Tente novamente.')
-      }
-    } catch (error) {
-      console.error('Error saving settings:', error)
-      toast.error('Erro ao salvar', 'Não foi possível salvar as configurações de custos. Tente novamente.')
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
-  const saveCustomFee = async (fee: CustomFee) => {
-    try {
-      const response = await fetch('/api/settings/taxes', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: fee.id ? 'update' : 'create',
-          fee,
-        }),
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        if (fee.id) {
-          setCustomFees(prev => prev.map(f => f.id === fee.id ? data.fee : f))
-        } else {
-          setCustomFees(prev => [...prev, data.fee])
-        }
-        setShowFeeModal(false)
-        setEditingFee(null)
-        toast.success('Taxa salva')
-      } else {
-        toast.error('Erro ao salvar taxa', 'Não foi possível salvar a taxa. Tente novamente.')
-      }
-    } catch (error) {
-      console.error('Error saving custom fee:', error)
-      toast.error('Erro ao salvar taxa', 'Não foi possível salvar a taxa. Tente novamente.')
-    }
-  }
-
-  const deleteCustomFee = async (feeId: string) => {
-    const ok = await confirm({
-      title: 'Excluir esta taxa?',
-      description: 'Esta taxa deixará de ser aplicada nos cálculos de custo.',
-      confirmLabel: 'Excluir',
-      cancelLabel: 'Cancelar',
-      destructive: true,
-    })
-    if (!ok) return
-
-    try {
-      const response = await fetch('/api/settings/taxes', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'delete',
-          fee: { id: feeId },
-        }),
-      })
-
-      if (response.ok) {
-        setCustomFees(prev => prev.filter(f => f.id !== feeId))
-        toast.success('Taxa excluída')
-      } else {
-        toast.error('Erro ao excluir', 'Não foi possível excluir a taxa. Tente novamente.')
-      }
-    } catch (error) {
-      console.error('Error deleting custom fee:', error)
-      toast.error('Erro ao excluir', 'Não foi possível excluir a taxa. Tente novamente.')
-    }
-  }
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="w-8 h-8 animate-spin text-gray-500" />
-      </div>
-    )
-  }
-
+  const toggle = (fee: Fee) => run(`t-${fee.id}`, async () => { await api('/api/settings/taxes', { method: 'PUT', json: { action: 'update', fee: { ...fee, is_active: !fee.is_active } } }); onChanged() })
   return (
-    <div className="space-y-6 max-w-4xl">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Configurações de Taxas</h1>
-          <p className="text-gray-500 mt-1">Configure as taxas para cálculo de lucro real</p>
-        </div>
-
-        <button
-          onClick={saveSettings}
-          disabled={isSaving}
-          className="flex items-center gap-2 px-6 py-2.5 bg-primary-500 hover:bg-primary-600 disabled:bg-gray-100 text-gray-900 rounded-xl font-medium transition-colors"
-        >
-          {isSaving ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : saved ? (
-            <CheckCircle className="w-4 h-4" />
-          ) : (
-            <Save className="w-4 h-4" />
-          )}
-          {saved ? 'Salvo!' : 'Salvar Configurações'}
-        </button>
-      </div>
-
-      {/* Custo Padrão */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="p-6 bg-gray-50 rounded-2xl border border-gray-200/30"
-      >
-        <div className="flex items-center gap-3 mb-6">
-          <div className="p-2 rounded-lg bg-brand-100">
-            <Percent className="w-5 h-5 text-brand-600" />
-          </div>
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">Custo Padrão</h2>
-            <p className="text-sm text-gray-500">Para produtos sem custo cadastrado</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <InputField
-            label="Porcentagem do Preço de Venda"
-            value={settings.default_cost_percentage}
-            onChange={(v) => setSettings({ ...settings, default_cost_percentage: parseFloat(v) || 0 })}
-            suffix="%"
-            tooltip="Porcentagem do preço de venda que será considerada como custo para produtos sem custo cadastrado"
-          />
-
-          <div>
-            <label className="block text-sm text-gray-500 mb-2">Moeda Padrão para Custos</label>
-            <select
-              value={settings.default_cost_currency}
-              onChange={(e) => setSettings({ ...settings, default_cost_currency: e.target.value })}
-              className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:border-primary-500"
-            >
-              {CURRENCIES.map(c => (
-                <option key={c} value={c}>{c}</option>
+    <>
+      <Card title="Taxas personalizadas" desc="Outras deduções por pedido ou sobre a receita (embalagem, comissão, antifraude…)." right={<button type="button" className="btn btn-sm" onClick={() => setModal({})}><I n="plus" s={14} />Nova taxa</button>} flush>
+        {fees.length === 0 ? <div className="empty2"><b>Nenhuma taxa personalizada</b>Adicione custos específicos do seu negócio para o lucro ficar mais preciso.</div> : (
+          <div className="tw"><table className="stbl">
+            <thead><tr><th>Taxa</th><th>Valor</th><th>Aplicação</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+              {fees.map((fee) => (
+                <tr key={fee.id}>
+                  <td className="fx"><span className="nm">{fee.name}</span>{fee.description && <span className="mt">{fee.description}</span>}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{fee.fee_type === 'percentage' ? `${nf(fee.fee_value, 2)}%` : nf(fee.fee_value, 2)}</td>
+                  <td style={{ color: 'var(--text-2)' }}>{fee.fee_type === 'percentage' ? (fee.applies_to === 'profit' ? 'sobre o lucro' : 'sobre a receita') : fee.per_order ? 'por pedido' : 'por mês'}</td>
+                  <td><div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>{fee.is_active ? <Badge k="ok">Ativa</Badge> : <Badge k="off">Inativa</Badge>}<Tog on={fee.is_active} disabled={busy === `t-${fee.id}`} set={() => toggle(fee)} label={`Ativar ${fee.name}`} /></div></td>
+                  <td className="r"><div className="acts"><IconBtn n="edit" s={15} title="Editar" onClick={() => setModal({ fee })} /><IconBtn n="x" title="Excluir" danger onClick={() => remove(fee)} disabled={busy === `d-${fee.id}`} /></div></td>
+                </tr>
               ))}
-            </select>
-          </div>
-        </div>
-      </motion.div>
-
-      {/* Taxas de Pagamento */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        className="p-6 bg-gray-50 rounded-2xl border border-gray-200/30"
-      >
-        <div className="flex items-center gap-3 mb-6">
-          <div className="p-2 rounded-lg bg-green-500/20">
-            <CreditCard className="w-5 h-5 text-green-400" />
-          </div>
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">Taxas de Pagamento</h2>
-            <p className="text-sm text-gray-500">Gateway de pagamento e taxas por transação</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <InputField
-            label="Taxa do Gateway (%)"
-            value={settings.payment_gateway_fee}
-            onChange={(v) => setSettings({ ...settings, payment_gateway_fee: parseFloat(v) || 0 })}
-            suffix="%"
-            tooltip="Taxa percentual cobrada pelo gateway (ex: Mercado Pago, PagSeguro)"
-          />
-
-          <InputField
-            label="Taxa Fixa por Transação"
-            value={settings.payment_fixed_fee}
-            onChange={(v) => setSettings({ ...settings, payment_fixed_fee: parseFloat(v) || 0 })}
-            prefix="R$"
-            tooltip="Valor fixo cobrado por cada transação"
-          />
-        </div>
-      </motion.div>
-
-      {/* Outras Taxas */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-        className="p-6 bg-gray-50 rounded-2xl border border-gray-200/30"
-      >
-        <div className="flex items-center gap-3 mb-6">
-          <div className="p-2 rounded-lg bg-orange-500/20">
-            <DollarSign className="w-5 h-5 text-orange-400" />
-          </div>
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">Outras Taxas</h2>
-            <p className="text-sm text-gray-500">Impostos, marketplace e custos fixos</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <InputField
-            label="Impostos sobre Vendas (%)"
-            value={settings.sales_tax_percentage}
-            onChange={(v) => setSettings({ ...settings, sales_tax_percentage: parseFloat(v) || 0 })}
-            suffix="%"
-            tooltip="Porcentagem de impostos sobre as vendas (ICMS, ISS, etc)"
-          />
-
-          <InputField
-            label="Taxa de Marketplace (%)"
-            value={settings.marketplace_fee}
-            onChange={(v) => setSettings({ ...settings, marketplace_fee: parseFloat(v) || 0 })}
-            suffix="%"
-            tooltip="Taxa cobrada por marketplaces (Shopify, etc)"
-          />
-
-          <InputField
-            label="Custo de Frete Padrão"
-            value={settings.default_shipping_cost}
-            onChange={(v) => setSettings({ ...settings, default_shipping_cost: parseFloat(v) || 0 })}
-            prefix="R$"
-            tooltip="Custo médio de frete quando não informado no pedido"
-          />
-
-          <InputField
-            label="Custos Fixos Mensais"
-            value={settings.monthly_fixed_costs}
-            onChange={(v) => setSettings({ ...settings, monthly_fixed_costs: parseFloat(v) || 0 })}
-            prefix="R$"
-            tooltip="Custos fixos mensais que serão rateados pelos pedidos"
-          />
-        </div>
-      </motion.div>
-
-      {/* Taxas Customizadas */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
-        className="p-6 bg-gray-50 rounded-2xl border border-gray-200/30"
-      >
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-purple-500/20">
-              <Settings className="w-5 h-5 text-purple-400" />
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900">Taxas Customizadas</h2>
-              <p className="text-sm text-gray-500">Adicione taxas específicas do seu negócio</p>
-            </div>
-          </div>
-
-          <button
-            onClick={() => { setEditingFee(null); setShowFeeModal(true); }}
-            className="flex items-center gap-2 px-4 py-2 bg-gray-900 hover:bg-gray-800 text-white rounded-xl text-sm font-medium transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Adicionar Taxa
-          </button>
-        </div>
-
-        {customFees.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
-            <p>Nenhuma taxa customizada cadastrada</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {customFees.map((fee) => (
-              <div
-                key={fee.id}
-                className="flex items-center justify-between p-4 bg-gray-50 rounded-xl"
-              >
-                <div className="flex items-center gap-3">
-                  <div className={`w-2 h-2 rounded-full ${fee.is_active ? 'bg-green-400' : 'bg-gray-300'}`} />
-                  <div>
-                    <p className="font-medium text-gray-900">{fee.name}</p>
-                    <p className="text-sm text-gray-500">
-                      {fee.fee_type === 'percentage'
-                        ? `${fee.fee_value}% sobre ${fee.applies_to === 'revenue' ? 'receita' : fee.applies_to === 'subtotal' ? 'subtotal' : 'frete'}`
-                        : `R$ ${fee.fee_value.toFixed(2)} por ${fee.per_order ? 'pedido' : 'item'}`
-                      }
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => { setEditingFee(fee); setShowFeeModal(true); }}
-                    className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-gray-900 transition-colors"
-                  >
-                    <Edit2 className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => fee.id && deleteCustomFee(fee.id)}
-                    className="p-2 hover:bg-red-500/20 rounded-lg text-gray-500 hover:text-red-400 transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+            </tbody>
+          </table></div>
         )}
-      </motion.div>
+      </Card>
+      {modal && <FeeModal fee={modal.fee} onClose={() => setModal(null)} onDone={() => { setModal(null); toast.success(modal.fee ? 'Taxa atualizada' : 'Taxa criada'); onChanged() }} />}
+    </>
+  )
+}
 
-      {/* Fee Modal */}
-      {showFeeModal && (
-        <CustomFeeModal
-          fee={editingFee || undefined}
-          onSave={saveCustomFee}
-          onClose={() => { setShowFeeModal(false); setEditingFee(null); }}
-        />
-      )}
-    </div>
+function FeeModal({ fee, onClose, onDone }: { fee?: Fee; onClose: () => void; onDone: () => void }) {
+  const [f, setF] = useState<Fee>(fee ? { ...fee } : { name: '', description: '', fee_type: 'percentage', fee_value: 0, applies_to: 'revenue', per_order: true, is_active: true })
+  const [err, setErr] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const set = <K extends keyof Fee>(k: K, v: Fee[K]) => setF((o) => ({ ...o, [k]: v }))
+  const ok = f.name.trim().length >= 2 && Number.isFinite(f.fee_value) && f.fee_value >= 0
+  const submit = async () => {
+    setBusy(true); setErr(null)
+    try { await api('/api/settings/taxes', { method: 'PUT', json: { action: fee ? 'update' : 'create', fee: { ...f, name: f.name.trim() } } }); onDone() }
+    catch (e: any) { setErr(e.message) } finally { setBusy(false) }
+  }
+  return (
+    <Modal title={fee ? 'Editar taxa' : 'Nova taxa personalizada'} onClose={onClose}
+      footer={<><button type="button" className="btn" onClick={onClose}>Cancelar</button><button type="button" className="btn btn-primary" disabled={!ok || busy} onClick={submit}>{busy && <I n="refresh" s={14} className="spin" />}{fee ? 'Salvar' : 'Criar'}</button></>}>
+      <div style={{ display: 'grid', gap: 14 }}>
+        <Field label="Nome" error={err}><input className={'in' + (err ? ' err' : '')} autoFocus value={f.name} onChange={(e) => set('name', e.target.value)} placeholder="Embalagem" /></Field>
+        <Field label="Descrição (opcional)"><input className="in" value={f.description} onChange={(e) => set('description', e.target.value)} /></Field>
+        <div className="in2">
+          <Field label="Tipo"><select className="in" value={f.fee_type} onChange={(e) => set('fee_type', e.target.value as Fee['fee_type'])}><option value="percentage">Percentual</option><option value="fixed">Valor fixo</option></select></Field>
+          <Field label={f.fee_type === 'percentage' ? 'Percentual (%)' : 'Valor'}><input className="in" type="number" step="0.01" min={0} value={f.fee_value} onChange={(e) => set('fee_value', Number(e.target.value))} /></Field>
+        </div>
+        {f.fee_type === 'percentage' ? (
+          <Field label="Aplicar sobre"><select className="in" value={f.applies_to} onChange={(e) => set('applies_to', e.target.value)}><option value="revenue">Receita</option><option value="profit">Lucro</option></select></Field>
+        ) : (
+          <Field label="Cobrança"><select className="in" value={f.per_order ? 'order' : 'month'} onChange={(e) => set('per_order', e.target.value === 'order')}><option value="order">Por pedido</option><option value="month">Por mês</option></select></Field>
+        )}
+        <Row tg label="Ativa"><Tog on={f.is_active} set={(v) => set('is_active', v)} label="Ativa" /></Row>
+      </div>
+    </Modal>
   )
 }

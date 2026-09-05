@@ -46,6 +46,8 @@ const publicApiRoutes = [
   //   /api/storefront  — popup loader.js for manual integrations
   '/api/pixel',
   '/api/identity',
+  // API pública v1 — autenticada por chave de API (Authorization: Bearer wk_live_…)
+  '/api/v1/',
   '/api/recommendations',
   '/api/storefront',
 ];

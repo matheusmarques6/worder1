@@ -1,342 +1,61 @@
-'use client';
+'use client'
 
-import { useState, useEffect } from 'react';
-import { Link2, Save, Loader2, CheckCircle, AlertCircle, Info } from 'lucide-react';
+// Configurações → Atribuição (desenho PAtrib): janela por canal, modelo e sinais.
 
-interface AttributionSettings {
-  email_window_days: number;
-  whatsapp_window_days: number;
-  sms_window_days: number;
-  // Klaviyo/Omnisend-style toggles. count_opens controls whether
-  // opens (in addition to clicks) qualify as engagement for the
-  // attribution window. exclude_mpp_opens hides Apple Mail Privacy
-  // Protection auto-opens (pre-fetched the moment the email is
-  // delivered) from both reporting and attribution — matches
-  // Klaviyo's default.
-  count_opens: boolean;
-  exclude_mpp_opens: boolean;
-  // Attribution model: last_touch = credits the most recent engagement
-  // before the conversion; first_touch = credits the first engagement
-  // within the window.
-  model: 'last_touch' | 'first_touch';
-}
+import { useEffect } from 'react'
+import { Card, Row, SaveBar, Title, LoadingCard, Tog, RadioCard, useForm } from '@/components/settings/ui'
+import { api } from '@/components/settings/format'
+import { useApi, useSave } from '@/components/settings/hooks'
 
-const DEFAULTS: AttributionSettings = {
-  email_window_days: 5,
-  whatsapp_window_days: 2,
-  sms_window_days: 2,
-  count_opens: true,
-  exclude_mpp_opens: true,
-  model: 'last_touch',
-};
-
-// Extended window options: up to 90 days to support longer B2B cycles.
-const WINDOW_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 10, 14, 21, 30, 60, 90];
+interface Attr { email_window_days: number; whatsapp_window_days: number; sms_window_days: number; count_opens: boolean; exclude_mpp_opens: boolean; model: 'last_touch' | 'first_touch' }
+const WINDOWS = [1, 2, 3, 4, 5, 6, 7, 10, 14, 21, 30, 60, 90]
+const dias = (n: number) => `${n} ${n === 1 ? 'dia' : 'dias'}`
 
 export default function AttributionSettingsPage() {
-  const [settings, setSettings] = useState<AttributionSettings>(DEFAULTS);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
-
-  useEffect(() => {
-    async function fetchSettings() {
-      try {
-        const res = await fetch('/api/settings/attribution');
-        if (res.ok) {
-          const data = await res.json();
-          setSettings((prev: AttributionSettings) => ({ ...prev, ...data }));
-        }
-      } catch {
-        // use defaults
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchSettings();
-  }, []);
-
-  async function handleSave() {
-    setSaving(true);
-    setStatus('idle');
-    try {
-      const res = await fetch('/api/settings/attribution', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settings),
-      });
-      setStatus(res.ok ? 'success' : 'error');
-    } catch {
-      setStatus('error');
-    } finally {
-      setSaving(false);
-      setTimeout(() => setStatus('idle'), 3000);
-    }
-  }
-
-  if (loading) {
-    return (
-      <div className="p-8 flex items-center justify-center">
-        <Loader2 className="w-6 h-6 animate-spin text-orange-500" />
-      </div>
-    );
-  }
-
+  const { data, loading, error, reload } = useApi<Attr>('/api/settings/attribution')
   return (
-    <div className="p-8 max-w-2xl">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Atribuição</h1>
-        <p className="text-gray-500 mt-1">
-          Configure as janelas de atribuição por canal para medir conversões corretamente.
-        </p>
-      </div>
+    <>
+      <Title h="Atribuição" p="Como o Worder decide que uma venda veio de uma campanha ou automação." />
+      {loading && !data ? <><LoadingCard rows={3} /><LoadingCard rows={2} /><LoadingCard rows={2} /></> : error || !data ? (
+        <Card><div className="empty2"><b>Não foi possível carregar</b>{error}<div><button className="btn" onClick={() => reload()}>Tentar de novo</button></div></div></Card>
+      ) : <Form data={data} onSaved={() => reload(true)} />}
+    </>
+  )
+}
 
-      <div className="space-y-6">
-        {/* Info box */}
-        <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 flex gap-3">
-          <Info className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
-          <p className="text-sm text-blue-700">
-            A janela de atribuição define por quantos dias uma conversão é creditada ao canal que
-            gerou o último contato antes da compra. Janelas maiores atribuem mais conversões; janelas
-            menores são mais conservadoras. <strong>Última interação ganha</strong> — modelo last-touch
-            por canal, igual ao Klaviyo e Omnisend.
-          </p>
+function Form({ data, onSaved }: { data: Attr; onSaved: () => void }) {
+  const f = useForm<Attr>({ ...data })
+  useEffect(() => { f.reset({ ...data }) }, [JSON.stringify(data)]) // eslint-disable-line react-hooks/exhaustive-deps
+  const w = useSave(); const m = useSave(); const s = useSave()
+  const v = f.val!
+  const persist = async () => { await api('/api/settings/attribution', { method: 'POST', json: f.val }); onSaved() }
+  const dirtyW = v.email_window_days !== data.email_window_days || v.whatsapp_window_days !== data.whatsapp_window_days || v.sms_window_days !== data.sms_window_days
+  const dirtyM = v.model !== data.model
+  const dirtyS = v.count_opens !== data.count_opens || v.exclude_mpp_opens !== data.exclude_mpp_opens
+  const cancel = (keys: (keyof Attr)[]) => () => { const p: any = {}; for (const k of keys) p[k] = data[k]; f.patch(p) }
+  const sel = (k: 'email_window_days' | 'whatsapp_window_days' | 'sms_window_days', opts: number[]) => (
+    <select className="in" style={{ maxWidth: 200 }} value={v[k]} onChange={(e) => f.set(k, Number(e.target.value))} aria-label={k}>
+      {!opts.includes(v[k]) && <option value={v[k]}>{dias(v[k])}</option>}
+      {opts.map((d) => <option key={d} value={d}>{dias(d)}</option>)}
+    </select>
+  )
+  return (
+    <>
+      <Card title="Janela de atribuição" desc="Por quantos dias uma compra pode ser creditada após a interação." foot={<SaveBar dirty={dirtyW} saving={w.saving} error={w.error} onSave={() => w.save(persist, 'Janela salva')} onCancel={cancel(['email_window_days', 'whatsapp_window_days', 'sms_window_days'])} />}>
+        <Row label="E-mail" help="Padrão do mercado: 5 dias.">{sel('email_window_days', WINDOWS)}</Row>
+        <Row label="WhatsApp" help="Conversas convertem rápido.">{sel('whatsapp_window_days', [1, 2, 3, 5, 7, 14])}</Row>
+        <Row label="SMS">{sel('sms_window_days', [1, 2, 3, 5, 7])}</Row>
+      </Card>
+      <Card title="Modelo" foot={<SaveBar dirty={dirtyM} saving={m.saving} error={m.error} onSave={() => m.save(persist, 'Modelo salvo')} onCancel={cancel(['model'])} />}>
+        <div style={{ display: 'grid', gap: 10, padding: '14px 0 18px' }} role="radiogroup">
+          <RadioCard on={v.model === 'last_touch'} onClick={() => f.set('model', 'last_touch')} title="Último toque" desc="Credita a venda à última mensagem clicada ou aberta antes da compra. Padrão do mercado." />
+          <RadioCard on={v.model === 'first_touch'} onClick={() => f.set('model', 'first_touch')} title="Primeiro toque" desc="Credita à primeira mensagem dentro da janela. Útil para medir o que trouxe o cliente de volta." />
         </div>
-
-        {/* Attribution windows */}
-        <div className="bg-white border border-gray-200 rounded-xl p-6">
-          <div className="flex items-center gap-3 mb-5">
-            <div className="p-2 bg-orange-50 rounded-lg">
-              <Link2 className="w-5 h-5 text-orange-500" />
-            </div>
-            <h2 className="text-lg font-semibold text-gray-900">Janelas de Atribuição</h2>
-          </div>
-
-          <div className="space-y-5">
-            {/* Email */}
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-900">E-mail</p>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  Padrão de 5 dias. Klaviyo recomenda 5–7, Omnisend usa 7.
-                </p>
-              </div>
-              <select
-                value={settings.email_window_days}
-                onChange={e =>
-                  setSettings(s => ({ ...s, email_window_days: Number(e.target.value) }))
-                }
-                className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white"
-              >
-                {WINDOW_OPTIONS.map(d => (
-                  <option key={d} value={d}>
-                    {d} {d === 1 ? 'dia' : 'dias'}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="border-t border-gray-100 pt-5 flex items-center justify-between gap-4">
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-900">WhatsApp</p>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  Conversas convertem rápido; janela curta (2–3 dias) é o sweet spot.
-                </p>
-              </div>
-              <select
-                value={settings.whatsapp_window_days}
-                onChange={e =>
-                  setSettings(s => ({ ...s, whatsapp_window_days: Number(e.target.value) }))
-                }
-                className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white"
-              >
-                {WINDOW_OPTIONS.map(d => (
-                  <option key={d} value={d}>
-                    {d} {d === 1 ? 'dia' : 'dias'}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="border-t border-gray-100 pt-5 flex items-center justify-between gap-4">
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-900">SMS</p>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  SMS convertem em horas; Klaviyo usa 5 dias, Omnisend 24h.
-                </p>
-              </div>
-              <select
-                value={settings.sms_window_days}
-                onChange={e =>
-                  setSettings(s => ({ ...s, sms_window_days: Number(e.target.value) }))
-                }
-                className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white"
-              >
-                {WINDOW_OPTIONS.map(d => (
-                  <option key={d} value={d}>
-                    {d} {d === 1 ? 'dia' : 'dias'}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Attribution model */}
-        <div className="bg-white border border-gray-200 rounded-xl p-6">
-          <div className="flex items-center gap-3 mb-5">
-            <div className="p-2 bg-orange-50 rounded-lg">
-              <Link2 className="w-5 h-5 text-orange-500" />
-            </div>
-            <h2 className="text-lg font-semibold text-gray-900">Modelo de Atribuição</h2>
-          </div>
-
-          <div className="space-y-4">
-            <label className="flex items-start gap-3 cursor-pointer p-3 rounded-lg border border-gray-200 hover:border-orange-200 transition-colors has-[:checked]:border-orange-400 has-[:checked]:bg-orange-50/30">
-              <input
-                type="radio"
-                name="attribution_model"
-                value="last_touch"
-                checked={settings.model === 'last_touch'}
-                onChange={() => setSettings(s => ({ ...s, model: 'last_touch' }))}
-                className="w-4 h-4 mt-0.5 border-gray-300 text-orange-500 focus:ring-orange-500"
-              />
-              <div>
-                <p className="text-sm font-medium text-gray-900">Último toque (last touch)</p>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  Credita a conversão à <strong>última</strong> interação (clique ou abertura) antes da
-                  compra. Modelo padrão do Klaviyo e Omnisend — ideal para e-commerce onde a
-                  mensagem mais recente costuma ser o gatilho direto da compra.
-                </p>
-              </div>
-            </label>
-
-            <label className="flex items-start gap-3 cursor-pointer p-3 rounded-lg border border-gray-200 hover:border-orange-200 transition-colors has-[:checked]:border-orange-400 has-[:checked]:bg-orange-50/30">
-              <input
-                type="radio"
-                name="attribution_model"
-                value="first_touch"
-                checked={settings.model === 'first_touch'}
-                onChange={() => setSettings(s => ({ ...s, model: 'first_touch' }))}
-                className="w-4 h-4 mt-0.5 border-gray-300 text-orange-500 focus:ring-orange-500"
-              />
-              <div>
-                <p className="text-sm font-medium text-gray-900">Primeiro toque (first touch)</p>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  Credita a conversão à <strong>primeira</strong> interação dentro da janela de
-                  atribuição. Útil para medir qual campanha original trouxe o cliente de volta ao
-                  funil, independente de lembretes posteriores.
-                </p>
-              </div>
-            </label>
-          </div>
-        </div>
-
-        {/* Engagement signals */}
-        <div className="bg-white border border-gray-200 rounded-xl p-6">
-          <div className="flex items-center gap-3 mb-5">
-            <div className="p-2 bg-orange-50 rounded-lg">
-              <Info className="w-5 h-5 text-orange-500" />
-            </div>
-            <h2 className="text-lg font-semibold text-gray-900">Sinais de Engajamento</h2>
-          </div>
-
-          <div className="space-y-4">
-            <label className="flex items-start gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={settings.count_opens}
-                onChange={e => setSettings(s => ({ ...s, count_opens: e.target.checked }))}
-                className="w-4 h-4 mt-0.5 rounded border-gray-300 text-orange-500 focus:ring-orange-500"
-              />
-              <div>
-                <p className="text-sm font-medium text-gray-900">Contar aberturas para atribuição</p>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  Quando desligado, só cliques entram na janela. Útil pra negócios onde abertura
-                  não é um sinal forte (transacional, B2B).
-                </p>
-              </div>
-            </label>
-
-            <label className="flex items-start gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={settings.exclude_mpp_opens}
-                onChange={e =>
-                  setSettings(s => ({ ...s, exclude_mpp_opens: e.target.checked }))
-                }
-                className="w-4 h-4 mt-0.5 rounded border-gray-300 text-orange-500 focus:ring-orange-500"
-              />
-              <div>
-                <p className="text-sm font-medium text-gray-900">
-                  Excluir aberturas falsas do Apple MPP
-                </p>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  Apple Mail Privacy Protection pré-carrega imagens assim que o email é entregue —
-                  isso registra uma "abertura" falsa que não corresponde a engajamento real. Quando
-                  marcado, essas aberturas ficam separadas (em <code>mpp_opened_at</code>) e não
-                  qualificam pra atribuição. Klaviyo aplica esse filtro por padrão.
-                </p>
-              </div>
-            </label>
-          </div>
-        </div>
-
-        {/* Summary */}
-        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Resumo</p>
-          <ul className="space-y-1 text-sm text-gray-600">
-            <li>
-              E-mail:{' '}
-              <span className="font-medium text-gray-900">
-                {settings.email_window_days} {settings.email_window_days === 1 ? 'dia' : 'dias'}
-              </span>
-            </li>
-            <li>
-              WhatsApp:{' '}
-              <span className="font-medium text-gray-900">
-                {settings.whatsapp_window_days}{' '}
-                {settings.whatsapp_window_days === 1 ? 'dia' : 'dias'}
-              </span>
-            </li>
-            <li>
-              SMS:{' '}
-              <span className="font-medium text-gray-900">
-                {settings.sms_window_days} {settings.sms_window_days === 1 ? 'dia' : 'dias'}
-              </span>
-            </li>
-            <li>
-              Engajamento:{' '}
-              <span className="font-medium text-gray-900">
-                {settings.count_opens ? 'aberturas + cliques' : 'somente cliques'}
-                {settings.count_opens && settings.exclude_mpp_opens ? ' (MPP excluído)' : ''}
-              </span>
-            </li>
-          </ul>
-        </div>
-
-        {/* Save */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
-          >
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            Salvar Configurações
-          </button>
-          {status === 'success' && (
-            <span className="flex items-center gap-1 text-sm text-green-600">
-              <CheckCircle className="w-4 h-4" /> Salvo!
-            </span>
-          )}
-          {status === 'error' && (
-            <span className="flex items-center gap-1 text-sm text-red-500">
-              <AlertCircle className="w-4 h-4" /> Erro ao salvar
-            </span>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+      </Card>
+      <Card title="Sinais considerados" foot={<SaveBar dirty={dirtyS} saving={s.saving} error={s.error} onSave={() => s.save(persist, 'Sinais salvos')} onCancel={cancel(['count_opens', 'exclude_mpp_opens'])} />}>
+        <Row tg label="Contar aberturas" help="Desligado: só cliques contam. Recomendado para B2B ou e-mails transacionais."><Tog on={v.count_opens} set={(x) => f.set('count_opens', x)} label="Contar aberturas" /></Row>
+        <Row tg label="Ignorar aberturas do Apple Mail Privacy" help="Aberturas automáticas do iOS não contam como engajamento real."><Tog on={v.exclude_mpp_opens} set={(x) => f.set('exclude_mpp_opens', x)} disabled={!v.count_opens} label="Ignorar aberturas do Apple Mail Privacy" /></Row>
+      </Card>
+    </>
+  )
 }
