@@ -27,7 +27,8 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 // =============================================
 
 // Google: o OpenRouter inverte o sufixo de versão (`gemini-flash-1.5`, não
-// `gemini-1.5-flash` — ver src/app/api/ai/models/route.ts:598,612) e o
+// `gemini-1.5-flash` — o catálogo que provava isso vivia em
+// src/app/api/ai/models/route.ts, rota órfã apagada pelo item 61) e o
 // provider do agente pode vir como 'google' OU 'gemini' (AIProvider aceita
 // os dois). As duas grafias e os dois namespaces apontam pro mesmo preço.
 const GEMINI_20_FLASH = { in: 0.10, out: 0.40 }

@@ -4026,7 +4026,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
 
   **2. `src/app/api/ai/respond/route.ts` (409) + `route.test.ts` (192) = 601 linhas, 4 ids.** Zero
   chamadores, inclusive nos shell scripts. O próprio teste declara a órfandade e o dono
-  (`route.test.ts:2-3`), e os itens **23** (`:408-416`) e **85** (`:4990-4991`) apontam para o 61 —
+  (`route.test.ts:2-3`), e os itens **23** (`:408-416`) e **85** (`:4991-4993`) apontam para o 61 —
   duas atribuições explícitas, nenhuma disputa. **Nenhuma tabela fica sem leitor.**
 
   **3. `src/app/api/ai/knowledge/route.ts` (196) + `route.test.ts` (134) = 330 linhas, 3 ids.** Zero
@@ -4985,10 +4985,12 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   então **nenhum entra no `checkAiBudget`** — o teto mensal que o item 39 construiu não vê esse
   consumo, e o lojista pode estourar orçamento por um caminho que o painel não mostra.
   **Não confundir com chamada de metadado, que não tem custo de token e está certa como está:**
-  `api/ai/models/route.ts:49` e `api/api-keys/route.ts:160,171,245` só listam modelos e validam
-  chave.
-  **E `/api/ai/respond/route.ts` NÃO é caso deste item** — ele faz `fetch` direto (`:196`, `:231`,
-  `:350`) mas **chama `trackAiUsage` em `:394-395`**. É rota órfã, e o dono dela é o **item 61**.
+  `api/api-keys/route.ts:160,171,245` só valida chave. *(A isenção citava também
+  `api/ai/models/route.ts:49`, que só listava modelos — **rota apagada pelo item 61**, órfã. A
+  isenção continua verdadeira para `api/api-keys`; o segundo sujeito deixou de existir.)*
+  **E `/api/ai/respond/route.ts` NÃO era caso deste item** — ele fazia `fetch` direto (`:196`,
+  `:231`, `:350`) mas **chamava `trackAiUsage` em `:394-395`**. Era rota órfã, e o dono dela era o
+  **item 61**, que a **apagou**: as três citações de linha acima valem só para o histórico.
   **Por que não foi consertado aqui:** decidir se essas cinco chamadas devem debitar do orçamento do
   lojista é decisão de produto — algumas podem ser deliberadamente por conta da plataforma. O que a
   auditoria afirma é só que **hoje ninguém sabe**, porque não há registro. Registrado e devolvido.

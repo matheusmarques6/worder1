@@ -82,6 +82,14 @@ const DELETION_SET_ROUTES: string[] = [
  * `hooks/index.ts` o re-exportava, e era ele quem mantinha
  * `/api/ai/agents/[id]/test` "chamada".
  */
+/*
+ * Onda 6 (item 61): `useAgents.ts` + `/api/ai/models` foram o caso seguinte, e
+ * letra por letra o mesmo do `useAgent.ts` acima — a rota tinha um chamador só,
+ * o hook, e o hook só era alcançável pelas duas linhas de re-export do barril.
+ * O par entrou aqui com tudo no lugar (a rodada que prova o alcance passou),
+ * saiu junto com `hooks/index.ts:34-35` no mesmo commit — sem isso o
+ * `tsc --noEmit` quebraria —, e as listas voltaram a ficar vazias.
+ */
 const DELETION_SET_PENDING: string[] = [];
 const DELETION_SET_PENDING_ROUTES: string[] = [];
 
