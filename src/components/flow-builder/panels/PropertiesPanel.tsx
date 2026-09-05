@@ -3093,28 +3093,55 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
             </div>
           )}
 
-          {/* UTM Tracking — always on by default. Toggle unlocks the
-              custom utm_source / utm_medium / utm_campaign fields. */}
+          {/* UTM — todo link já sai com as 6 UTMs da loja (Configurações →
+              UTM) + identificação do contato/envio. O toggle só permite
+              SOBRESCREVER os templates neste e-mail, campo a campo. */}
           <label className="flex items-start gap-2.5 cursor-pointer">
-            <input type="checkbox" checked={config.utmTracking || false} onChange={(e) => onUpdate('utmTracking', e.target.checked)}
+            <input type="checkbox" checked={config.utmTracking === true} onChange={(e) => onUpdate('utmTracking', e.target.checked)}
               className="w-4 h-4 mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
             <div>
-              <p className="text-sm text-gray-900">Personalizar UTMs</p>
+              <p className="text-sm text-gray-900">Personalizar UTMs deste e-mail</p>
               <p className="text-xs text-gray-500 mt-0.5">
-                Todos os links já saem com <span className="text-blue-600">utm_source=worder</span> + <span className="text-blue-600">utm_medium=email</span>. Ative pra trocar os valores ou adicionar uma <span className="text-blue-600">utm_campaign</span>.
+                Todos os links já saem com as UTMs da loja (padrão: <span className="text-blue-600">automation: nome do fluxo (id)</span>,
+                conteúdo = nome deste e-mail) e com a identificação do contato e do envio. Ative para trocar
+                os valores só aqui. Variáveis: <span className="text-blue-600">{'{{automation_name}}'}</span>,{' '}
+                <span className="text-blue-600">{'{{message_name}}'}</span>, <span className="text-blue-600">{'{{channel}}'}</span>,{' '}
+                <span className="text-blue-600">{'{{send_date}}'}</span>, <span className="text-blue-600">{'{{link_text}}'}</span>…
+                <a href="/settings/utm" target="_blank" rel="noreferrer" className="ml-1 text-blue-600 underline">Ver padrão da loja</a>
               </p>
             </div>
           </label>
-          {config.utmTracking && (
+          {config.utmTracking === true && (
             <div className="space-y-2 ml-6">
-              <input type="text" value={config.utmSource || 'worder'} onChange={(e) => onUpdate('utmSource', e.target.value)}
-                placeholder="utm_source" className="w-full px-2 py-1.5 rounded border border-gray-200 text-xs text-gray-700 focus:outline-none focus:border-blue-500" />
-              <input type="text" value={config.utmMedium || 'email'} onChange={(e) => onUpdate('utmMedium', e.target.value)}
-                placeholder="utm_medium" className="w-full px-2 py-1.5 rounded border border-gray-200 text-xs text-gray-700 focus:outline-none focus:border-blue-500" />
-              <input type="text" value={config.utmCampaign || ''} onChange={(e) => onUpdate('utmCampaign', e.target.value)}
-                placeholder="utm_campaign" className="w-full px-2 py-1.5 rounded border border-gray-200 text-xs text-gray-700 focus:outline-none focus:border-blue-500" />
+              {([
+                ['utmSource', 'utm_source', 'worder'],
+                ['utmMedium', 'utm_medium', '{{channel}}'],
+                ['utmCampaign', 'utm_campaign', 'automation: {{automation_name}} ({{automation_id}})'],
+                ['utmContent', 'utm_content', '{{message_name}} ({{message_id}})'],
+                ['utmTerm', 'utm_term', '{{send_date}}'],
+                ['utmId', 'utm_id', '{{automation_id}}'],
+              ] as Array<[string, string, string]>).map(([field, key, def]) => (
+                <div key={field} className="flex items-center gap-2">
+                  <span className="w-[92px] shrink-0 text-[11px] font-mono text-gray-500">{key}</span>
+                  <input type="text" value={config[field] || ''} onChange={(e) => onUpdate(field, e.target.value)}
+                    placeholder={`padrão da loja: ${def}`}
+                    className="flex-1 min-w-0 px-2 py-1.5 rounded border border-gray-200 text-xs text-gray-700 focus:outline-none focus:border-blue-500" />
+                </div>
+              ))}
+              <p className="text-[11px] text-gray-400">Campo vazio = usa o padrão da loja.</p>
             </div>
           )}
+          <label className="flex items-start gap-2.5 cursor-pointer">
+            <input type="checkbox" checked={config.utmDisabled === true} onChange={(e) => onUpdate('utmDisabled', e.target.checked)}
+              className="w-4 h-4 mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+            <div>
+              <p className="text-sm text-gray-900">Não adicionar UTM neste e-mail</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Os links saem sem <span className="text-blue-600">utm_*</span>. A identificação do contato/envio
+                (<span className="text-blue-600">worderContactID</span>, <span className="text-blue-600">worderSendID</span>) continua — é ela que atribui as vendas.
+              </p>
+            </div>
+          </label>
         </div>
       </div>
 

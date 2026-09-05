@@ -269,7 +269,7 @@ function captureClickIds() {
 
 function captureUtms() {
   var qs = getQS();
-  var keys = ['utm_source','utm_medium','utm_campaign','utm_content','utm_term'];
+  var keys = ['utm_source','utm_medium','utm_campaign','utm_content','utm_term','utm_id'];
   var u = {};
   for (var i = 0; i < keys.length; i++) {
     if (qs[keys[i]]) {
@@ -281,6 +281,42 @@ function captureUtms() {
     }
   }
   return u;
+}
+
+// =============================================================
+// Identificação vinda de link da Worder (e-mail, SMS, WhatsApp).
+// Todo link enviado carrega worderContactID / worderSendID /
+// worderCampaignID / worderAutomationID / worderMessageID. Guardamos por
+// 90 dias e ecoamos em todo evento: o servidor amarra este visitante ao
+// contato exato (mesmo sem e-mail/cookie) e atribui a compra ao envio.
+// Mesmo mecanismo do _kx da Klaviyo e do omnisendContactID da Omnisend.
+// =============================================================
+var ATTRIB_KEY = 'attribution';
+var ATTRIB_DAYS = 90;
+function captureAttribution() {
+  var qs = getQS();
+  var contactId = qs.worderContactID, sendId = qs.worderSendID;
+  var campaignId = qs.worderCampaignID, automationId = qs.worderAutomationID, messageId = qs.worderMessageID;
+  if (contactId || sendId || campaignId || automationId) {
+    var a = {
+      contactId: contactId || null,
+      sendId: sendId || null,
+      campaignId: campaignId || null,
+      automationId: automationId || null,
+      messageId: messageId || null,
+      capturedAt: Date.now(),
+      source: 'worder_link',
+    };
+    setStore(ATTRIB_KEY, JSON.stringify(a), ATTRIB_DAYS);
+    return a;
+  }
+  try {
+    var raw = getStore(ATTRIB_KEY);
+    if (!raw) return null;
+    var parsed = JSON.parse(raw);
+    if (parsed.capturedAt && Date.now() - parsed.capturedAt > ATTRIB_DAYS * 86400000) return null;
+    return parsed;
+  } catch (_) { return null; }
 }
 
 // =============================================================
@@ -306,6 +342,7 @@ var fingerprintRich = richFingerprint();
 
 var clickIds = captureClickIds();
 var utmParams = captureUtms();
+var attribution = captureAttribution();
 
 // User identity restored from prior page / popup capture
 var knownEmail = getStore('em');
@@ -369,6 +406,13 @@ function send(eventType, properties) {
       source: 'storefront_tracker',
       timestamp: new Date().toISOString(),
     };
+    // Identificação do link da Worder: o servidor usa attribution.contactId
+    // para amarrar visitante → contato (verificando a organização) e
+    // sendId/campaignId/automationId como touchpoint de atribuição.
+    if (attribution) {
+      payload.attribution = attribution;
+      if (attribution.contactId) payload.contactId = attribution.contactId;
+    }
     var body = JSON.stringify(payload);
     if (navigator.sendBeacon) {
       var blob = new Blob([body], { type: 'application/json' });

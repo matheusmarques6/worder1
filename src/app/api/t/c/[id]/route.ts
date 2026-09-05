@@ -162,18 +162,26 @@ interface ClickAttribution {
   campaignId: string | null;
   organizationId: string | null;
   abVariant: string | null;
+  /** Fluxo (automation_id / flow_id) quando o envio veio de uma automação. */
+  automationId: string | null;
+  /** Nó do fluxo que enviou (email_sends.metadata.node_id). */
+  messageId: string | null;
 }
+
+const EMPTY_ATTRIBUTION: ClickAttribution = {
+  contactId: null, campaignId: null, organizationId: null, abVariant: null, automationId: null, messageId: null,
+};
 
 async function resolveAttribution(emailSendId: string): Promise<ClickAttribution> {
   try {
     const { supabaseAdmin } = await import('@/lib/supabase-admin');
     const { data: send } = await supabaseAdmin
       .from('email_sends')
-      .select('id, campaign_id, contact_id, organization_id, ab_variant')
+      .select('id, campaign_id, contact_id, organization_id, ab_variant, automation_id, flow_id, metadata')
       .eq('id', emailSendId)
       .maybeSingle();
     if (!send) {
-      return { contactId: null, campaignId: null, organizationId: null, abVariant: null };
+      return EMPTY_ATTRIBUTION;
     }
 
     // email_sends.organization_id is populated on every new send via
@@ -189,15 +197,20 @@ async function resolveAttribution(emailSendId: string): Promise<ClickAttribution
       organizationId = campaign?.organization_id || null;
     }
 
+    const automationId = (send as any).automation_id || (send as any).flow_id || null;
     return {
       contactId: send.contact_id || null,
-      campaignId: send.campaign_id || null,
+      // Num envio de automação, campaign_id é só o id do fluxo como
+      // substituto — não é campanha.
+      campaignId: automationId ? null : send.campaign_id || null,
       organizationId,
       abVariant: send.ab_variant || null,
+      automationId,
+      messageId: (send as any).metadata?.node_id || null,
     };
   } catch (err) {
     console.error('[ClickTracker] resolveAttribution failed:', err);
-    return { contactId: null, campaignId: null, organizationId: null, abVariant: null };
+    return EMPTY_ATTRIBUTION;
   }
 }
 
@@ -219,9 +232,14 @@ function stampDestination(
 
   const sp = target.searchParams;
 
-  // Worder identifiers — always stamp when present, never duplicate.
-  // These are what the theme app embed reads on page load to attach
-  // the visitor's identity to this exact contact.
+  // O destino normalmente JÁ chega completo: o render do e-mail carimba
+  // UTM + identificação em todo link (src/lib/tracking/link-params.ts).
+  // Este passo é a rede de segurança — e-mails antigos, links que o
+  // render não conseguiu tocar — e só preenche o que falta, nunca
+  // sobrescreve (uma UTM colocada à mão pelo lojista vence).
+  //
+  // Identificação: o que o pixel da loja lê para amarrar o visitante a
+  // este contato/envio, mesmo em outro dispositivo.
   if (attribution.contactId && !sp.has('worderContactID')) {
     sp.set('worderContactID', attribution.contactId);
   }
@@ -231,13 +249,24 @@ function stampDestination(
   if (attribution.campaignId && !sp.has('worderCampaignID')) {
     sp.set('worderCampaignID', attribution.campaignId);
   }
+  if (attribution.automationId && !sp.has('worderAutomationID')) {
+    sp.set('worderAutomationID', attribution.automationId);
+  }
+  const messageId = attribution.messageId || attribution.campaignId;
+  if (messageId && !sp.has('worderMessageID')) {
+    sp.set('worderMessageID', messageId);
+  }
 
-  // UTM params — respect anything the merchant hand-placed on their
-  // links (e.g. ?utm_source=instagram on a co-promo). Only fill blanks.
+  // UTM mínimas de fallback (legado sem carimbo no render).
   if (!sp.has('utm_source')) sp.set('utm_source', 'worder');
   if (!sp.has('utm_medium')) sp.set('utm_medium', 'email');
-  if (attribution.campaignId && !sp.has('utm_campaign')) {
-    sp.set('utm_campaign', attribution.campaignId);
+  if (!sp.has('utm_campaign')) {
+    if (attribution.campaignId) sp.set('utm_campaign', `campaign: (${attribution.campaignId})`);
+    else if (attribution.automationId) sp.set('utm_campaign', `automation: (${attribution.automationId})`);
+  }
+  if (!sp.has('utm_id')) {
+    const id = attribution.campaignId || attribution.automationId;
+    if (id) sp.set('utm_id', id);
   }
 
   target.search = sp.toString();

@@ -9,6 +9,8 @@
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getEmailProviderForOrg } from '@/lib/email/providers';
 import { prepareEmailHtml, resolveProductBlocks, resolveCartBlocks } from '@/lib/email/render';
+import { getUtmSettings } from '@/lib/tracking/utm-settings';
+import { makeLinkParamsResolver, type LinkContext, type UtmTemplates } from '@/lib/tracking/link-params';
 
 export interface SendCampaignEmailParams {
   campaignId: string;
@@ -47,6 +49,17 @@ export interface SendCampaignEmailParams {
    * execuções concorrentes tentando ao mesmo tempo.
    */
   dedupeKey?: string | null;
+  /**
+   * Contexto para as UTMs + identificação de TODO link do e-mail
+   * (nome/id da campanha ou automação, nome/id da mensagem…). Sem ele,
+   * o envio é tratado como campanha quando há campaignId e como
+   * automação caso contrário. sendId/contactId/loja são preenchidos aqui.
+   */
+  linkContext?: Partial<LinkContext> | null;
+  /** Sobrescritas de UTM desta mensagem (nó do fluxo). */
+  utmOverrides?: Partial<UtmTemplates> | null;
+  /** Desliga só as UTMs desta mensagem — a identificação continua. */
+  utmDisabled?: boolean;
 }
 
 export async function sendCampaignEmail({
@@ -66,6 +79,9 @@ export async function sendCampaignEmail({
   eventData,
   triggerType,
   dedupeKey,
+  linkContext,
+  utmOverrides,
+  utmDisabled,
 }: SendCampaignEmailParams): Promise<{ success: boolean; emailSendId?: string; error?: string; skipped?: boolean; reason?: string }> {
   let emailSendId = '' as string;
   // Hoisted so the catch block can flip email_consent on the contact
@@ -270,6 +286,50 @@ export async function sendCampaignEmail({
       trackingBaseUrl = await getTrackingBaseUrl(organizationId, sendStoreId || null);
     } catch { /* mantém o baseUrl do caller */ }
 
+    // 3a. Render subject merge tags — the subject must go through the SAME
+    // trigger resolvers as the body, otherwise {{ CheckoutURL }} /
+    // {{ trigger.* }} / {{ event.* }} tags in the subject line reach the
+    // inbox unresolved. Plain-text context: NO html-escaping here.
+    // Renderizado ANTES do HTML porque o assunto também alimenta as UTMs
+    // ({{email_subject}} / {{message_name}} de campanha).
+    let subjectSrc = subject;
+    if (eventData) {
+      const { resolveTriggerSmartTags } = await import('@/lib/email/merge-tags');
+      subjectSrc = resolveTriggerSmartTags(subjectSrc, eventData, mergeData.store_url, { mapping: tagMapping });
+    }
+    const { renderMergeTags } = await import('@/lib/email/render');
+    // escape:false — the subject is text/plain: escaping would ship a
+    // literal `&amp;` to the inbox ("Zé & Cia" → "Zé &amp; Cia").
+    const finalSubject = renderMergeTags(subjectSrc, mergeData, { escape: false });
+
+    // 3b. UTM + identificação em todo link. A configuração é a da LOJA do
+    // envio (padrão da organização só quando a loja não configurou nada).
+    // Falha aqui nunca derruba o envio: o pior caso é o link sair só com
+    // o que o rastreador de clique carimba no redirect.
+    let linkParams: ReturnType<typeof makeLinkParamsResolver> | null = null;
+    try {
+      const { settings: utmSettings } = await getUtmSettings(organizationId, sendStoreId);
+      const messageType = linkContext?.messageType || (isUuid(campaignId) ? 'campaign' : 'automation');
+      const ctx: LinkContext = {
+        channel: 'email',
+        messageType,
+        // Numa automação o campaignId é só o id do fluxo como substituto
+        // (email_sends.campaign_id) — não é campanha.
+        campaignId: messageType === 'campaign' && isUuid(campaignId) ? campaignId : null,
+        ...(linkContext || {}),
+        sendId: emailSendId,
+        contactId: resolvedContactId || null,
+        emailSubject: linkContext?.emailSubject || finalSubject,
+        storeName: linkContext?.storeName || mergeData.store_name || null,
+        storeDomain: linkContext?.storeDomain || mergeData.store_url || null,
+        sentAt: new Date(),
+        extra: { ...mergeData, ...(linkContext?.extra || {}) },
+      };
+      linkParams = makeLinkParamsResolver(utmSettings, ctx, { utmOverrides, utmDisabled });
+    } catch (e) {
+      console.warn('[SendCampaignEmail] link params indisponíveis, seguindo sem UTM no href:', (e as Error)?.message);
+    }
+
     const finalHtml = prepareEmailHtml({
       html: htmlWithProducts,
       mergeData,
@@ -280,21 +340,8 @@ export async function sendCampaignEmail({
       campaignId: campaignId || undefined,
       // A página de preferências mostra a marca DESTA loja.
       storeId: sendStoreId || undefined,
+      linkParams,
     });
-
-    // 4. Render subject merge tags — the subject must go through the SAME
-    // trigger resolvers as the body, otherwise {{ CheckoutURL }} /
-    // {{ trigger.* }} / {{ event.* }} tags in the subject line reach the
-    // inbox unresolved. Plain-text context: NO html-escaping here.
-    let subjectSrc = subject;
-    if (eventData) {
-      const { resolveTriggerSmartTags } = await import('@/lib/email/merge-tags');
-      subjectSrc = resolveTriggerSmartTags(subjectSrc, eventData, mergeData.store_url, { mapping: tagMapping });
-    }
-    const { renderMergeTags } = await import('@/lib/email/render');
-    // escape:false — the subject is text/plain: escaping would ship a
-    // literal `&amp;` to the inbox ("Zé & Cia" → "Zé &amp; Cia").
-    const finalSubject = renderMergeTags(subjectSrc, mergeData, { escape: false });
 
     // 5. Send via the org's configured provider (defaults to Resend).
     // Identidade da LOJA do envio: a do fluxo/campanha ou, num fluxo da

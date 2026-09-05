@@ -63,11 +63,31 @@ export async function POST(request: NextRequest) {
       console.warn('[TestCampaign] dynamic block resolve failed:', e?.message);
     }
 
+    // UTM + identificação como no envio real (configuração da loja da campanha).
+    let linkParams: any = null;
+    try {
+      const { getUtmSettings } = await import('@/lib/tracking/utm-settings');
+      const { makeLinkParamsResolver } = await import('@/lib/tracking/link-params');
+      const { settings } = await getUtmSettings(user.organization_id, campaign.store_id || null);
+      linkParams = makeLinkParamsResolver(settings, {
+        channel: 'email',
+        messageType: 'campaign',
+        campaignName: campaign.name || '',
+        campaignId: campaign.id,
+        emailSubject: renderMergeTags(campaign.subject || '', sampleData, { escape: false }),
+        sendId: testSendId,
+        storeName: sampleData.store_name,
+        storeDomain: sampleData.store_url,
+        extra: sampleData,
+      });
+    } catch { /* teste segue sem UTM no href */ }
+
     const finalHtml = prepareEmailHtml({
       html: htmlSource,
       mergeData: sampleData,
       emailSendId: testSendId,
       baseUrl,
+      linkParams,
     });
 
     // escape:false — subject is text/plain (no &amp; in the inbox).

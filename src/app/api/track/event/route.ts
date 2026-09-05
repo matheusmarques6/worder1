@@ -557,7 +557,8 @@ export async function POST(request: NextRequest) {
     // — the worderContactID alone (which the click redirect stamps)
     // means this visit came from a Worder email and should anchor
     // last-touch attribution to that send/campaign.
-    const hasEmailAttribution = attribution && (attribution.sendId || attribution.campaignId);
+    const hasEmailAttribution =
+      attribution && (attribution.sendId || attribution.campaignId || attribution.automationId);
     if (hasUtm || hasClickIds || hasEmailAttribution) {
       const touchpointBase = {
         organization_id: organizationId,
@@ -566,9 +567,10 @@ export async function POST(request: NextRequest) {
         session_id: sessionId || null,
         utm_source: utmParams?.utm_source || (hasEmailAttribution ? 'worder' : null),
         utm_medium: utmParams?.utm_medium || (hasEmailAttribution ? 'email' : null),
-        utm_campaign: utmParams?.utm_campaign || attribution?.campaignId || null,
+        utm_campaign:
+          utmParams?.utm_campaign || attribution?.campaignId || attribution?.automationId || null,
         utm_term: utmParams?.utm_term || null,
-        utm_content: utmParams?.utm_content || attribution?.sendId || null,
+        utm_content: utmParams?.utm_content || attribution?.messageId || attribution?.sendId || null,
         gclid: clickIds?.gclid || null,
         fbclid: clickIds?.fbclid || null,
         ttclid: clickIds?.ttclid || null,

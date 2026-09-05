@@ -320,6 +320,36 @@ const actionExecutors: Record<string, NodeExecutor> = {
         }
       }
 
+      // UTM + identificação em todo link do texto (configuração da loja do
+      // envio; utm_medium=whatsapp). Só no modo texto — no modo template a
+      // URL mora no template aprovado pela Meta.
+      let textBody: string = config.message || config.bodyText || '';
+      if (!isTemplateMode && textBody) {
+        try {
+          const { stampMessageLinks } = await import('@/lib/tracking/outbound-text');
+          textBody = await stampMessageLinks({
+            text: textBody,
+            organizationId,
+            storeId: (context as any).storeId || null,
+            channel: 'whatsapp',
+            context: {
+              messageType: 'automation',
+              automationName: workflow.name || (context as any).automation_name || '',
+              automationId,
+              messageName: (node as any)?.data?.label || config.label || 'WhatsApp',
+              messageId: node?.id || null,
+              sendId: whatsappSendId,
+              contactId: (context.contact as any)?.id || null,
+              storeName: (context as any)?.store?.name || null,
+              storeDomain: (context as any)?.store?.domain || null,
+            },
+          });
+          if (supabase && whatsappSendId && textBody !== (config.message || config.bodyText)) {
+            await supabase.from('whatsapp_sends').update({ message_body: textBody }).eq('id', whatsappSendId);
+          }
+        } catch { /* texto original segue */ }
+      }
+
       try {
         let result: any;
         let externalMessageId: string | null = null;
@@ -348,8 +378,8 @@ const actionExecutors: Record<string, NodeExecutor> = {
                     }
                   : {
                       // O editor grava o texto em bodyText; message é o
-                      // legado — aceitar os dois.
-                      text: { body: config.message || config.bodyText },
+                      // legado — aceitar os dois (já com os links carimbados).
+                      text: { body: textBody },
                     }),
               }),
             }
@@ -800,39 +830,38 @@ const actionExecutors: Record<string, NodeExecutor> = {
           }
         }
 
-        // 2c. UTM Tracking — append UTM params to every outbound link.
-        //
-        // Always on: the merchant gets attribution out of the box so
-        // automation emails show up under "email" in their analytics
-        // tool without any extra config. The "Ativar Rastreamento UTM"
-        // toggle in the editor just unlocks per-node CUSTOM utm_source /
-        // utm_medium / utm_campaign values; when it's off (or absent
-        // on legacy nodes) we fall through to the worder/email defaults.
-        // Set utmTracking=false explicitly on a node to opt out entirely.
-        const utmEnabled = config.utmTracking !== false; // default true
-        if (utmEnabled) {
-          const utmSource = (config.utmTracking && config.utmSource) || 'worder';
-          const utmMedium = (config.utmTracking && config.utmMedium) || 'email';
-          const utmCampaign = (config.utmTracking && config.utmCampaign) || '';
-          const utmParams = `utm_source=${encodeURIComponent(utmSource)}&utm_medium=${encodeURIComponent(utmMedium)}${utmCampaign ? `&utm_campaign=${encodeURIComponent(utmCampaign)}` : ''}`;
-
-          html = html.replace(
-            /(<a\s[^>]*href=["'])([^"'#][^"']*)(["'][^>]*>)/gi,
-            (match: string, before: string, url: string, after: string) => {
-              if (url.includes('utm_source') || url.includes('unsubscribe') || url.includes('mailto:')) return match;
-              // Skip unresolved merge tags and URLs that don't look like
-              // navigable destinations. Appending UTM to a leftover
-              // `{{ trigger.X }}` or to a stray `&discount=...` (which
-              // happens when an earlier merge tag rendered to '') would
-              // produce a URL the click-tracker then encodes verbatim,
-              // and the redirect handler bounces to the store home.
-              if (url.includes('{{')) return match;
-              if (!/^(https?:\/\/|\/)/i.test(url)) return match;
-              const separator = url.includes('?') ? '&' : '?';
-              return `${before}${url}${separator}${utmParams}${after}`;
-            }
-          );
-        }
+        // 2c. UTM + identificação em todo link — feito em sendCampaignEmail
+        // (prepareEmailHtml) com a configuração da LOJA e as variáveis do
+        // envio: `automation: <nome> (<id>)`, nome/id deste nó, etc.
+        // Aqui só se decide o que este nó SOBRESCREVE:
+        //   • "Personalizar UTMs" (utmTracking=true) → os campos do nó
+        //     valem no lugar do padrão da loja, campo a campo;
+        //   • utmDisabled=true → este e-mail sai sem UTM (a identificação
+        //     do contato/envio continua, ela nunca é removida).
+        // Nós antigos com utmTracking=false (checkbox desmarcado) caem no
+        // padrão da loja — antes isso desligava TODAS as UTMs sem querer.
+        const utmOverrides =
+          config.utmTracking === true
+            ? {
+                utm_source: config.utmSource || '',
+                utm_medium: config.utmMedium || '',
+                utm_campaign: config.utmCampaign || '',
+                utm_content: config.utmContent || '',
+                utm_term: config.utmTerm || '',
+                utm_id: config.utmId || '',
+              }
+            : null;
+        const utmDisabled = config.utmDisabled === true;
+        const linkWorkflow = (context as any).workflow || {};
+        const linkContext = {
+          messageType: 'automation' as const,
+          automationName:
+            linkWorkflow.name || (context as any).automation_name || (context as any).automationName || '',
+          automationId:
+            (context as any).automation_id || linkWorkflow.automationId || linkWorkflow.id || null,
+          messageName: (node as any)?.data?.label || config.label || config.name || 'Email',
+          messageId: node?.id || null,
+        };
 
         // 3. Build sender info
         // When the node has no explicit sender AND the flow belongs to a
@@ -1047,6 +1076,10 @@ const actionExecutors: Record<string, NodeExecutor> = {
           // Trigger type so the "Produtos do Gatilho" block builds the
           // correct CTA link (checkout recovery / cart permalink / product).
           triggerType: (context as any).trigger?.type || null,
+          // UTM + identificação de todo link (ver 2c acima).
+          linkContext,
+          utmOverrides,
+          utmDisabled,
           // Trava de duplicidade: um índice único no banco garante que
           // este passo, deste fluxo, para este contato, saia UMA vez por
           // dia. É o que faltava — a idempotência existente age na
@@ -1282,6 +1315,34 @@ const actionExecutors: Record<string, NodeExecutor> = {
 
       const provider = credentials?.provider || credentials?.type || null;
 
+      // UTM + identificação em todo link do SMS (configuração da loja do
+      // envio; utm_medium=sms). Depois da linha criada, para o link levar
+      // o worderSendID deste envio.
+      let smsBodyToSend = smsBody;
+      try {
+        const { stampMessageLinks } = await import('@/lib/tracking/outbound-text');
+        smsBodyToSend = await stampMessageLinks({
+          text: smsBody,
+          organizationId,
+          storeId: (context as any).storeId || null,
+          channel: 'sms',
+          context: {
+            messageType: 'automation',
+            automationName: workflow.name || (context as any).automation_name || '',
+            automationId,
+            messageName: (node as any)?.data?.label || config.label || 'SMS',
+            messageId: node?.id || null,
+            sendId: smsSendId,
+            contactId: (context.contact as any)?.id || null,
+            storeName: (context as any)?.store?.name || null,
+            storeDomain: (context as any)?.store?.domain || null,
+          },
+        });
+        if (smsBodyToSend !== smsBody && supabase && smsSendId) {
+          await supabase.from('sms_sends').update({ message_body: smsBodyToSend }).eq('id', smsSendId);
+        }
+      } catch { /* texto original segue */ }
+
       // Twilio integration path. Other providers (Zenvia, Vonage)
       // can plug in the same way — they all expose a single POST
       // endpoint that takes (to, from, body) and returns a message id.
@@ -1292,7 +1353,7 @@ const actionExecutors: Record<string, NodeExecutor> = {
           const body = new URLSearchParams({
             To: phone.startsWith('+') ? phone : `+${phone.replace(/\D/g, '')}`,
             From: from,
-            Body: smsBody,
+            Body: smsBodyToSend,
           });
           const response = await fetch(
             `https://api.twilio.com/2010-04-01/Accounts/${credentials.accountSid}/Messages.json`,

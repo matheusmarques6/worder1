@@ -160,6 +160,29 @@ export async function POST(req: NextRequest) {
     // 404 (and so List-Unsubscribe header has a real URL).
     const testSendId = `test-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
     const { prepareEmailHtml, buildUnsubscribeUrl, buildListUnsubscribeHeaders } = await import('@/lib/email/render')
+
+    // UTM + identificação como no envio real (configuração da loja do
+    // teste), para o lojista ver no inbox exatamente o link que sai.
+    let linkParams: any = null
+    try {
+      const { getUtmSettings } = await import('@/lib/tracking/utm-settings')
+      const { makeLinkParamsResolver } = await import('@/lib/tracking/link-params')
+      const { settings } = await getUtmSettings(organizationId, storeId)
+      const fc = body.flowContext || {}
+      linkParams = makeLinkParamsResolver(settings, fc.automationId || fc.automationName
+        ? {
+            channel: 'email', messageType: 'automation',
+            automationName: fc.automationName || 'Automação (teste)', automationId: fc.automationId || null,
+            messageName: fc.nodeLabel || 'Email (teste)', messageId: fc.nodeId || null,
+            emailSubject: finalSubject, sendId: testSendId, storeName: mergeData.store_name, storeDomain: storeUrl, extra: mergeData,
+          }
+        : {
+            channel: 'email', messageType: 'campaign',
+            campaignName: body.campaignName || 'Campanha (teste)', campaignId: body.campaignId || 'teste',
+            emailSubject: finalSubject, sendId: testSendId, storeName: mergeData.store_name, storeDomain: storeUrl, extra: mergeData,
+          })
+    } catch { /* teste segue sem UTM no href */ }
+
     finalHtml = prepareEmailHtml({
       html: finalHtml,
       mergeData,
@@ -169,6 +192,7 @@ export async function POST(req: NextRequest) {
       orgId: organizationId || undefined,
       campaignId: undefined,
       storeId: storeId || undefined,
+      linkParams,
     })
 
     const unsubUrl = buildUnsubscribeUrl(testSendId, appUrl, undefined, organizationId || undefined, undefined, storeId || undefined)

@@ -254,11 +254,17 @@
     var contactId = getUrlParam('worderContactID');
     var sendId = getUrlParam('worderSendID');
     var campaignId = getUrlParam('worderCampaignID');
-    if (!contactId && !sendId && !campaignId) return null;
+    // Links de automação (e-mail, SMS, WhatsApp) trazem o fluxo e o nó
+    // que enviou, em vez de uma campanha.
+    var automationId = getUrlParam('worderAutomationID');
+    var messageId = getUrlParam('worderMessageID');
+    if (!contactId && !sendId && !campaignId && !automationId) return null;
     var attrib = {
       contactId: contactId,
       sendId: sendId,
       campaignId: campaignId,
+      automationId: automationId,
+      messageId: messageId,
       capturedAt: Date.now(),
       source: 'email_link',
     };
@@ -457,6 +463,8 @@
       properties: {
         worderSendID: cachedAttribution.sendId,
         worderCampaignID: cachedAttribution.campaignId,
+        worderAutomationID: cachedAttribution.automationId,
+        worderMessageID: cachedAttribution.messageId,
       },
     });
   }

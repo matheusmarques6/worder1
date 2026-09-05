@@ -171,6 +171,12 @@ export async function POST(req: NextRequest) {
     const { getTrackingBaseUrl } = await import('@/lib/email/tracking-url');
     const baseUrl = await getTrackingBaseUrl(organizationId, campaign.store_id || null);
 
+    // UTM + identificação de todo link: configuração da LOJA da campanha,
+    // carregada uma vez por lote e resolvida por destinatário abaixo.
+    const { getUtmSettings } = await import('@/lib/tracking/utm-settings');
+    const { makeLinkParamsResolver } = await import('@/lib/tracking/link-params');
+    const { settings: utmSettings } = await getUtmSettings(organizationId, campaign.store_id || null);
+
     // ──────────────────────────────────────────
     // Suppression list
     // ──────────────────────────────────────────
@@ -492,6 +498,26 @@ export async function POST(req: NextRequest) {
         let htmlResolved = await resolveProductBlocks(htmlSource, organizationId, contact.id, undefined, campaign.store_id || null);
         htmlResolved = await resolveCartBlocks(htmlResolved, organizationId, contact.id, undefined, null, storeUrl, campaign.store_id || null);
 
+        // escape:false — subject is text/plain (no &amp; in the inbox).
+        // Antes do HTML: o assunto também alimenta as UTMs ({{email_subject}}).
+        let finalSubject = renderMergeTags(subjectSource, mergeData, { escape: false });
+
+        // UTM + identificação em TODO link deste destinatário.
+        const linkParams = makeLinkParamsResolver(utmSettings, {
+          channel: 'email',
+          messageType: 'campaign',
+          campaignName: campaign.name || '',
+          campaignId: campaign_id,
+          emailSubject: finalSubject,
+          abVariant: campaign.ab_test_enabled ? variant : '',
+          sendId: emailSend.id,
+          contactId: contact.id,
+          storeName,
+          storeDomain: storeUrl,
+          sentAt: new Date(),
+          extra: mergeData,
+        });
+
         // Prep final HTML (merge tags + tracking pixel + click tracking + unsubscribe)
         let finalHtml = prepareEmailHtml({
           html: htmlResolved,
@@ -502,9 +528,8 @@ export async function POST(req: NextRequest) {
           orgId: organizationId,
           campaignId: campaign_id,
           storeId: campaign.store_id || undefined,
+          linkParams,
         });
-        // escape:false — subject is text/plain (no &amp; in the inbox).
-        let finalSubject = renderMergeTags(subjectSource, mergeData, { escape: false });
 
         // Strip any unresolved merge tags so customers never see raw
         // {{template_syntax}} in their inbox. Log a warning so the

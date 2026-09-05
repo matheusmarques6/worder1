@@ -8,6 +8,8 @@
 
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { rewriteImagesForEmail } from './image-rewrite'
+import { getAppBaseUrl } from '@/lib/app-url'
+import { stampHtmlLinks, type LinkParamsResolver } from '@/lib/tracking/link-params'
 
 /**
  * Resolve saved/universal blocks in an EmailDocument.
@@ -1190,6 +1192,7 @@ export function prepareEmailHtml({
   orgId,
   campaignId,
   storeId,
+  linkParams,
 }: {
   html: string;
   mergeData: Record<string, string>;
@@ -1200,6 +1203,14 @@ export function prepareEmailHtml({
   campaignId?: string;
   /** Loja do envio — vai no token de descadastro/preferências. */
   storeId?: string;
+  /**
+   * Parâmetros de rastreamento (UTM + identificação) para TODO link do
+   * e-mail — ver src/lib/tracking/link-params.ts. Recebe o link (url,
+   * texto, posição) e devolve os parâmetros; é aplicado ao destino antes
+   * de o link ser embrulhado no rastreador de clique, então o cliente
+   * chega na loja com tudo mesmo que o redirect falhe.
+   */
+  linkParams?: LinkParamsResolver | null;
 }): string {
   let result = html;
 
@@ -1248,6 +1259,16 @@ export function prepareEmailHtml({
 
   // 2. Add unsubscribe link with HMAC token (before tracking rewrites)
   result = addUnsubscribeLink(result, emailSendId, baseUrl, contactId, orgId, campaignId, storeId);
+
+  // 2b. UTM + identificação em todo link de destino (links do próprio
+  // app/tracking ficam de fora). Antes do rastreador de clique, para
+  // que o destino embrulhado já carregue os parâmetros.
+  if (linkParams) {
+    const skipHosts: string[] = [];
+    try { skipHosts.push(new URL(baseUrl).host); } catch { /* baseUrl inválido já foi logado acima */ }
+    try { skipHosts.push(new URL(getAppBaseUrl()).host); } catch { /* sem app url */ }
+    result = stampHtmlLinks(result, linkParams, { skipHosts });
+  }
 
   // 3. Rewrite URLs for click tracking
   result = rewriteUrlsForTracking(result, emailSendId, baseUrl);
