@@ -4245,6 +4245,14 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   contexto alheio; na âncora `b87992f1` eles já eram `:2680` e `:4638`. **Declarada, não
   consertada** — a série não a criou. *(Varredura feita: nenhuma outra citação do checklist a si
   mesmo aponta para baixo do item 61.)*
+  **Reancorada no fecho da fila (item 63, âncora `ef5c5f1b`):** a reescrita do item 63 acrescentou
+  **+87 linhas** (mais as 8 desta própria nota) e deslocou tudo abaixo dele, então o `:4638` acima
+  deixou de valer também nesta âncora. **Medidos agora, já com as duas somas**, os dois sítios são
+  **`:2687`** (acima do item 63, não se moveu) e **`:5238`** — que é o `:4638` de `b87992f1` depois
+  de todo o crescimento do arquivo desde então.
+  A citação do próprio item 87 (`:2650`/`:4328`) continua **declarada e não consertada**, pela mesma
+  régua. *(Varredura refeita nesta âncora: `:4638` era a única citação do checklist a si mesmo
+  apontando para baixo do item 63.)*
 
   **Registro datado — declarar, não reescrever (régua do item 52).** Estas citações a arquivos que
   este item apagou **não** foram tocadas, porque são registro de quando foram escritas:
@@ -4488,27 +4496,80 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   CI lê um `.example`**.
 
 - [ ] **63. Lacunas de teste** `[relatado]`
-  Sem cobertura: `toucher._node_delta` com `success_criteria`/`enabled_tools`/`forbidden` (onde mora um
-  bug de tipo latente — `toucher.py:92` passa tupla onde `mission_resolver.py:63` declara `str | None`);
+  **Reescrito no fecho da fila da auditoria (âncora `ef5c5f1b`), lacuna por lacuna, por leitura do
+  teste que fecharia cada uma.** Metade da lista de abertura já estava fechada e ninguém tinha
+  registrado — um item cuja metade já está feita faz o próximo leitor refazer trabalho pronto. O que
+  fechou vai riscado com quem fechou; o que sobra fica com **rubrica e dono**. **O item continua
+  `[ ]` de propósito** — ver o fecho, no fim.
+  **Lista de abertura, estado MEDIDO:**
+  ~~`toucher._node_delta` com `success_criteria`/`enabled_tools`/`forbidden`~~ — fechada **aqui**:
+  `runtime/tests/unit/test_node_delta.py`, 4 casos, `-m unit`. O caso de maior consequência é
+  `enabled_tools`: ausente tem de ser `None`, não `()`, porque `mission_resolver.py:110` distingue
+  "o nó não falou" de "o nó zerou" — `()` apagaria `create_coupon` num toque de recuperação.
   ~~paridade preview↔turno~~ (fechada pelo item 45: `test_agent_block_has_one_producer.py` afirma o
   produtor único do bloco AGENTE e o mapeamento das colunas, e
   `test_listener_connects_in_one_guarded_place.py` afirma que a leitura do preview mora dentro da
-  transação escopada — as duas em `-m unit`, sem Postgres); contagem de duplicação do transcript;
-  ciclo de vida dos clientes httpx; teto de chamadas por turno; 429/5xx/timeout dos provedores;
-  `server._read_request` malformado.
-  **Acrescentado pelo item 52 (revisão da execução, `2ee8c2f2`):** `agent_llm_from_org_keys` tem
-  **zero ocorrências em `runtime/tests/`** — nenhum tier chega nele, nem com Postgres. O bloco
-  inteiro é inalcançável por teste, e não é só a fiação da posse do item 52: ficam sem cobertura
-  também a cascata D4 em contexto real e a **emissão do alerta `no_org_llm_key`**, que aparece em
-  teste apenas dentro de uma docstring. É o vão mais fundo desta lista, porque não se fecha com
-  banco — precisa de um teste que exercite a função.
-  **Acrescentado pelo item 53 (revisão da execução, `89eca846`):** a fiação de
-  `never_say_ai` — do literal do loader (`agent.py:199`; era `:169`, **reancorado pelo item 56 em
-  `ea5cbb35`**, que deslocou o arquivo +33 linhas) até `JudgeContext` — **não tem trava
-  executável em tier nenhum**, e isso foi **provado por mutação**, não suposto: pinar `false` no
-  loader deixa a suíte idêntica, e inverter os dois call sites (`not settings.never_say_ai`) também.
-  O valor pode ser lido errado, invertido ou ignorado sem nada ficar vermelho. Mesma família do vão
-  de `agent_llm_from_org_keys` acima: o caminho existe, a suíte não passa por ele.
+  transação escopada — as duas em `-m unit`, sem Postgres);
+  ~~ciclo de vida dos clientes httpx~~ — fechada pelo item 40:
+  `runtime/tests/unit/test_agent_llm_closes_after_the_turn.py`, **237 linhas, 9 casos**
+  comportamentais (`:77 :90 :104 :130 :171 :187 :209 :219 :229`), `-m unit`.
+  ~~teto de chamadas por turno~~ — fechada por `runtime/tests/unit/test_llm_metering.py:176-226`
+  (`TestTheTurnBudget`, **3 casos**), mais a fitness do mesmo fecho
+  `TestEveryMeteredCallSiteIsBudgeted::test_no_metered_call_site_forgets_the_turn_budget` (`:237`),
+  que prende que **nenhum sítio metrado esquece o teto**.
+  ~~429/5xx dos provedores~~ — fechada por `runtime/tests/unit/test_llm_port.py:143-163`, a
+  parametrização inteira de 429/500/503/400/401 contra `classify` e o caso que a consome.
+  ~~timeout dos provedores~~ — **a trava entrou aqui** (`test_llm_port.py::TestErrors::`
+  `test_a_transport_error_is_transient`, 4 casos), e ela mediu que **isto nunca foi lacuna de teste:
+  é defeito de produto.** `classify(httpx.ConnectError | ConnectTimeout | ReadTimeout | PoolTimeout)`
+  devolve `Failure.UNKNOWN` nos quatro, medido sem rede. Por quê: `queueing/failures.py:30` casa os
+  **builtins** `TimeoutError`/`ConnectionError`, e as exceções do httpx descem de
+  `httpx.TransportError`, de nenhum dos dois; `failures.py:33` procura o texto `"timeout"` e o httpx
+  escreve **`"timed out"`**; e `agent_core/openrouter.py` não tem `except httpx.*` (só `:109-112`,
+  para `status_code >= 400`), então a exceção chega **crua** ao `classify`. Não é catástrofe —
+  `failures.py:18-21` diz que `UNKNOWN` repete como transitório e o limite de tentativas continua
+  valendo, nenhuma mensagem se perde. **Mas** o mesmo comentário diz que `UNKNOWN` existe separado
+  *"para permitir alertar quando a tabela abaixo envelhecer"*, e `Failure.UNKNOWN` tem **zero
+  leitores fora de `failures.py`**: ninguém é avisado. **O defeito foi para o item 95**, com o
+  critério de aceite já escrito (os quatro casos são `xfail(strict=True)`).
+  **Segue aberta:** contagem de duplicação do transcript; `server._read_request` malformado.
+  **O bug de tipo que morava na primeira lacuna NÃO foi consertado aqui, e o critério é a data.**
+  `toucher.py:114` (era citado como `:92` — **citação podre**: `:92` hoje é `mission_version_id`,
+  campo de outro dataclass) faz `tuple(...)` sobre o `str | None` que `mission_resolver.py:63`
+  declara, e `"pessoa volta ao checkout"` vira tupla de 24 caracteres que vence a da missão em
+  `mission_resolver.py:118` e chega interpolada ao prompt em `prompt_compiler.py:219-220`.
+  **Critério escrito, porque ele separa contra a conveniência:** *data de nascimento do defeito ×
+  data de abertura desta auditoria (28/08/2026)*. Os **dois** lados do descasamento nasceram em
+  **11/08/2026** (`44d7f927` a linha do `toucher`, `f01a7511` a declaração do resolver) — dezessete
+  dias antes da fila → **defeito de produto pré-existente: registra e devolve** (item 95), mesmo
+  custando **uma linha** consertar. O gêmeo dele, a colisão de nome em `resolved`, nasceu em
+  `8501637a` (**04/09/2026**, commit do item 52, dentro da fila) → **regressão da auditoria:
+  conserta-se**, e foi consertada em `ef5c5f1b` com fitness própria.
+  **Convenção nova, declarada de propósito para não ser apagada por estranheza:** os dois contratos
+  devolvidos ao item 95 estão escritos como **`@pytest.mark.xfail(strict=True)`** — primeiro `xfail`
+  desta casa. O caso afirma o comportamento **desejado**, não o atual: assim a suíte fica **verde**
+  hoje (o `xfail` não entra em `passed`) e **vermelha por XPASS** no instante em que alguém
+  consertar, obrigando a remover o marcador. O teste vira o critério de aceite e não tem como ser
+  esquecido. Gravar o comportamento atual seria o anti-padrão do item 40 com o sinal trocado. A
+  linha de resumo do gate muda de **forma** (`N passed, M xfailed`) e **nada a lê**:
+  `.github/workflows/runtime.yml` roda `pytest -m unit` e usa só o código de saída.
+  **Acrescentado pelo item 52 (revisão da execução, `2ee8c2f2`) — SEGUE ABERTO:**
+  `agent_llm_from_org_keys` tem **zero ocorrências em `runtime/tests/`** — nenhum tier chega nele,
+  nem com Postgres. O bloco inteiro é inalcançável por teste, e não é só a fiação da posse do item
+  52: ficam sem cobertura também a cascata D4 em contexto real e a **emissão do alerta
+  `no_org_llm_key`**, que aparece em teste apenas dentro de uma docstring. É o vão mais fundo desta
+  lista, porque não se fecha com banco — precisa de um teste que exercite a função. **Foi ele que
+  deixou passar a regressão que `ef5c5f1b` consertou**, e `test_resolved_names_do_not_collide.py`
+  fecha só a beirada (o nome ligado ao retorno), não o ramo.
+  **Acrescentado pelo item 53 (revisão da execução, `89eca846`) — um dos três degraus fechou aqui:**
+  a fiação de `never_say_ai` — do literal do loader (`agent.py:199`; era `:169`, **reancorado pelo
+  item 56 em `ea5cbb35`**, que deslocou o arquivo +33 linhas) até `JudgeContext` — não tinha trava
+  executável em tier nenhum, e isso foi **provado por mutação**. ~~O terceiro degrau
+  (`judges/pre_send.py:295`, o `if` que põe a "Regra fixa da plataforma" no prompt do juiz)~~ fechou
+  aqui, pelos **dois lados**, em `test_pre_send_judge.py` — só o par prova: com um lado só, apagar o
+  `if` e deixar a linha incondicional passaria igual. **Seguem sem trava** o literal do loader
+  (`agent.py:199`, SQL) e os dois call sites (`responder.py:640`, `toucher.py:423`), que vivem
+  dentro de `respond`/`touch`.
   **Acrescentado pelo item 59 (`5f5dba63`) — quatro vãos que a deleção ABRIU, declarados na saída em
   vez de descobertos depois.** Os três primeiros existiam só em `tools/registry.py` +
   `tests/unit/test_tool_registry.py`; nenhum é regressão de comportamento (a produção já era assim),
@@ -4523,6 +4584,8 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
      só **derivado**: `hub-runtime-parity.test.ts:34-38` o extrai varrendo `name = "…"` nos
      `tools/*.py`. A trava de paridade continua verde, mas compara contra uma lista que ninguém
      escreveu — acrescentar uma tool sem tabela deixa de ter teste que pergunte "cadê as tabelas?".
+     **Este vão NÃO volta:** fechá-lo é reescrever a lista que o item 59 **decidiu apagar**. Fica
+     registrado como **decisão tomada**, não como pendência.
   3. **"`tool_calls.tool_name` vem da tool, não da chave por onde ela foi buscada"**
      (`test_tool_registry.py:45-54`). Cobertura **parcial** sobrevive em
      `tests/db/test_tools.py::TestTheTrail`, que confere que **existe** linha na trilha, e
@@ -4553,7 +4616,9 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   fecha este vão**, e é importante que fique escrito por quê: ele é `TestArbitration` e exercita
   `arbitrate()`, cujo corpo inteiro (`mission_resolver.py:133-150`) é `if owner … / if discovery … /
   raise` — **não olha `event_type`**. Foi por acreditar nele que a contagem de órfãs do item 56 errou
-  pela terceira vez (5 → 2 → 0 → 1): *"parecida" não é sucessor*.
+  pela terceira vez (5 → 2 → 0 → 1): *"parecida" não é sucessor*. Uma trava de **texto** sobre o SQL
+  seria trava de **forma** — anti-padrão já reprovado nesta casa
+  (`test_agent_llm_closes_after_the_turn.py:4-16`); o que fecha é `-m db`.
   **Acrescentado pelo item 60 (`0cead265`):** `tests/db/test_purchase_history.py` não tem mais
   nenhuma asserção que prenda `last_order_at` ao `max(coalesce(...))`. A poda de `first_order_at`
   levou junto `assert history.first_order_at < history.last_order_at`, que era **a única** a
@@ -4564,20 +4629,50 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   duas datas distintas (`:80-90`), então fechar o vão é **uma linha**:
   `assert history.last_order_at.date() == history.recent[0].placed_at.date()` — `recent` vem
   ordenado do mais novo para o mais velho (`:100`), e `OrderSummary.placed_at` existe
-  (`repository/orders.py:29`). Não escrito aqui porque `-m db` não roda sem Postgres.
-  **Acrescentado pelo item 60 (`b8e979d6`) — e é a primeira entrada de TS desta lista:**
-  `src/lib/ai/embeddings.ts` **não tem arquivo de teste nenhum**. Não existe `embeddings.test.ts`
-  em `src/lib/ai/__tests__/` (conferido por `ls`), e a única trava que toca o arquivo é **textual**:
-  `hub-runtime-parity.test.ts:107-108` casa duas regex (`OPENAI_EMBEDDING_MODEL` e
-  `OPENAI_EMBEDDING_DIMENSIONS`) e `:152-153` uma linha literal de `EMBEDDING_SPACE`; o
-  `it.each(PROTECTED_MODULES)` de `deletion-set.test.ts:358` só exige que o **arquivo** continue
-  alcançável. Fica sem afirmador tudo o que `generateEmbeddingsBatch` (`:142-247`) faz de
-  não-trivial: reordenar o retorno por `a.index - b.index` (`:217`), o batching de 100 (`:192`) e o
-  rate-limit entre lotes (`:241`). É o **único** caminho de ingestão de embeddings do hub — um erro
-  de ordenação aqui grava vetor no chunk errado **sem erro nenhum**, a mesma classe de falha
+  (`repository/orders.py:30` — **citação corrigida**, era `:29`, que é a docstring de `label`). Não
+  escrito aqui porque `-m db` não roda sem Postgres.
+  ~~**Acrescentado pelo item 60 (`b8e979d6`) — e é a primeira entrada de TS desta lista:**
+  `src/lib/ai/embeddings.ts` **não tem arquivo de teste nenhum**~~ — **fechada aqui**:
+  `src/lib/ai/__tests__/embeddings.test.ts`, 3 casos, `npx vitest run`. Antes dela, as únicas travas
+  que tocavam o arquivo eram **textuais** — `hub-runtime-parity.test.ts:107-108` casa duas regex
+  (`OPENAI_EMBEDDING_MODEL` e `OPENAI_EMBEDDING_DIMENSIONS`) e `:152-153` uma linha literal de
+  `EMBEDDING_SPACE` — e o `it.each(PROTECTED_MODULES)` de `deletion-set.test.ts:378` (**citação
+  corrigida**, era `:358`, que é o fim de outro `it`), que só exige que o **arquivo** continue
+  alcançável. O que ficava sem afirmador era tudo o que `generateEmbeddingsBatch` (`:142-247`) faz
+  de não-trivial: reordenar o retorno por `a.index - b.index` (`:217`), o batching de 100 (`:192`) e
+  o rate-limit entre lotes (`:241`). É o **único** caminho de ingestão de embeddings do hub — um
+  erro de ordenação aqui grava vetor no chunk errado **sem erro nenhum**, a mesma classe de falha
   silenciosa que o comentário `:6-14` do próprio arquivo descreve para o modelo trocado. Sintoma
   correlato do mesmo vão: `resetCacheStats` documentava-se *"(para testes)"* e nenhum teste a
   usava — foi por isso que o item 60 a apagou.
+  **Acrescentado e FECHADO aqui, por leitura, não por mérito:** a trava *código × exemplo* que o
+  item 62 atribuiu por escrito a este item (`task-62-exec-review.md:369`) entrou como
+  `src/lib/ai/__tests__/env-example-parity.test.ts`, 2 casos. Medição: **16** envs lidas em
+  `src/lib/ai` + `src/app/api/ai` com `__tests__`, **14** sem, **1** ausente do `.env.example` —
+  `NODE_ENV`, isenta por ser de plataforma (Next e Node a definem sozinhos, não é segredo, e
+  declará-la convidaria o lojista a sobrescrevê-la). O segundo caso é a **guarda anti-vacuidade**,
+  no molde de `test_the_guard_has_someone_to_guard`
+  (`runtime/tests/unit/test_resolved_names_do_not_collide.py:99-101`). **Não reabre** a política do
+  `.env.example` da raiz (43 envs), que o item 62 devolveu ao dono do produto (`:4449-4455`).
+  **O que sobra, com rubrica — nove lacunas vivas, contadas depois da medição acima:**
+  **(i) "só fecha com Postgres local"** — bloqueio de **ambiente**, não de prioridade (a memória do
+  projeto registra que o CI nunca viu as migrations): a fiação de `agent_llm_from_org_keys` e o
+  alerta `no_org_llm_key`; a seleção da missão pelo `event_type`; `last_order_at` × `max(...)`; a
+  contagem de duplicação do transcript (virou SQL, `exclude_inbound_after_seq`); os vãos **(3)** e
+  **(4)** do item 59; e o loader de `never_say_ai` (`agent.py:199`) com os dois call sites. **Sete.**
+  **(ii) "barato, backlog — a fila da auditoria termina aqui, então isto só sai se alguém abrir
+  trabalho novo"**: `server._read_request` malformado (executável e barato, mas não é caminho do
+  cliente, do dinheiro nem cross-tenant) e o vão **(1)** do item 59 (nome desconhecido em
+  `enabled_tools`, com cobertura parcial em `test_mission_resolver.py:93-99` e o silêncio descrito
+  em `FORK.md:274-275`). **Duas.** *(A rubrica diz "backlog" e não "fila de fundo" de propósito:
+  este é o último item da fila, e prometer que "a próxima sessão pega" seria promessa falsa.)*
+  **Por que o item NÃO fecha `[x]`, e isto é o resultado certo.** Ele fecha a **metade executável** —
+  riscada acima, com o teste que fecha cada uma — e continua `[ ]` como **dono nomeado** das nove
+  que sobram. Sendo o último item da fila, um `[x]` aqui seria a diferença entre "pendência
+  conhecida com nome" e "pendência esquecida", e a revisão do item 60 chamou sobra sem dono de
+  **pior que item errado**. Abrir um item 96 só para hospedar o resto foi rejeitado: renomearia o 63
+  e custaria renumeração de referências cruzadas por nada — o nome deste item **é** "Lacunas de
+  teste".
 
 - [ ] **64. Migrar cupom da Shopify de REST para GraphQL** `[proposto]` · *(descoberto no item 35)*
   `connectors/shopify.py` cria e busca cupom por três chamadas REST: `POST /price_rules.json`
@@ -6039,6 +6134,67 @@ você decidir se entram na fila.
   funcional não paga nem o DDL; e **(ii)** o item 49 registrou que **nenhuma migration `20260902*`
   nem `20260903*` jamais foi aplicada por CI algum**. Mexer em duas funções de compliance nesse
   estado é a troca que os itens 47 e 48 recusaram.
+
+- [ ] **95. Contratos de tipo que ninguém verifica num runtime sem type checker — um já mordeu produção** `[confirmado]` · *(descoberto no item 63)*
+  **Procurado dono pelo DEFEITO, não pelo caminho do arquivo:** `grep` no checklist inteiro por
+  `mypy`, `pyright`, `ty`, `type checker`, `erro de tipo`, `defeito de tipo`, `checagem de tipo`,
+  `anotação de tipo`, `tipagem`, `str | None`, `tupla de caracteres`, `fatia a string` — **quatro
+  hits, nenhum dono**: `:1567` (*"funciona por tipagem"*, item 44), `:2354` (*"não há tipagem
+  gerada"* sobre `supabaseAdmin`, TypeScript), o próprio item **63** (que é "lacunas de teste":
+  registrou os defeitos, nunca se declarou dono do conserto) e um *"erro de tipo"* num predicado SQL,
+  assunto alheio. `runtime/pyproject.toml` não tem `mypy`, `pyright` nem `ty` — só `ruff` e
+  `importlinter`.
+  **(a) EVIDÊNCIA, não trabalho — já consertado.** A colisão de nome em `resolved`
+  (`ResolvedAgentLlm` ligado ao nome que já era a `ResolvedMission`) era `AttributeError` em todo
+  turno que chegasse à cascata D4 com `agent_llm_from_org_keys=True` — que é exatamente o que a
+  fábrica de produção passa. Nasceu em `8501637a`, commit do item 52, **dentro** desta auditoria →
+  regressão, consertada em `ef5c5f1b` com a fitness `test_resolved_names_do_not_collide.py`, que
+  afirma a **propriedade** por AST e não a grafia. Fica aqui porque é a prova de que a família custa
+  produção, não porque haja o que fazer.
+  **(b) ABERTO — `toucher.py:114` × `mission_resolver.py:63`.**
+  `success_criteria=tuple(raw.get("success_criteria") or ())` faz `tuple(...)` sobre o `str | None`
+  que a declaração do outro lado promete. `"pessoa volta ao checkout"` vira tupla de 24 caracteres;
+  ela é *truthy*, então `mission_resolver.py:118` (`delta.success_criteria or
+  mission.success_criteria`) a deixa **vencer** a da missão, e `prompt_compiler.py:219-220` a
+  interpola — o bloco MISSÃO do toque proativo passa a dizer `Sucesso observável: ('p', 'e', 's',
+  …)`. **Provado por execução**, sem banco e sem rede.
+  **Conserto: uma linha** — `success_criteria=raw.get("success_criteria")`.
+  **Critério de aceite JÁ ESCRITO no repositório:**
+  `runtime/tests/unit/test_node_delta.py::test_success_criteria_stays_the_string_the_node_wrote`,
+  hoje `@pytest.mark.xfail(strict=True)`. Ao consertar, ele vira **XPASS**, a suíte fica **vermelha**
+  e obriga a remover o marcador — o teste não tem como ser esquecido.
+  **Por que não foi consertado no item 63, sendo uma linha:** os **dois** lados nasceram em
+  **11/08/2026** (`44d7f927` e `f01a7511`), dezessete dias **antes** de esta auditoria abrir
+  (28/08/2026). O critério é data de nascimento × data de abertura, e ele separa contra a
+  conveniência: defeito de produto pré-existente se registra e se devolve.
+  **(c) ABERTO — `classify` não reconhece os erros de transporte do httpx.** Mesma família: um
+  contrato de tipo que ninguém verifica. `queueing/failures.py:30` casa os **builtins**
+  `TimeoutError`/`ConnectionError`; as exceções do httpx descem de `httpx.TransportError`, de nenhum
+  dos dois. `failures.py:33` procura o texto `"timeout"` e o httpx escreve **`"timed out"`**. E
+  `agent_core/openrouter.py` não tem `except httpx.*` (só `:109-112`, para `status_code >= 400`),
+  então a exceção chega **crua**. Medido, sem rede: `ConnectError`, `ConnectTimeout`, `ReadTimeout` e
+  `PoolTimeout` caem os quatro em `Failure.UNKNOWN`.
+  **Consequência, medida e não inflada:** `failures.py:18-21` diz que `UNKNOWN` repete como
+  transitório e o limite de tentativas continua valendo — **nenhuma mensagem se perde**. O que se
+  perde é o aviso: o mesmo comentário diz que `UNKNOWN` existe separado *"para permitir alertar
+  quando a tabela abaixo envelhecer"*, e `grep -rn "Failure.UNKNOWN" runtime/src/` **não devolve nada
+  fora de `failures.py`**. Timeout de provedor — a falha transitória de manual — cai calado no balde
+  do não-mapeado, que é a definição de tabela envelhecida. **O aviso que existe para detectar
+  envelhecimento é o que o envelhecimento desliga.**
+  **Critério de aceite JÁ ESCRITO:** `runtime/tests/unit/test_llm_port.py::TestErrors::`
+  `test_a_transport_error_is_transient`, 4 casos `xfail(strict=True)`. A mensagem das exceções vai
+  **vazia** de propósito: o que tem de decidir é o **tipo** — hoje o único acerto possível é acidente
+  de texto (`httpx.PoolTimeout("pool timeout")` sai `TRANSIENT` porque a palavra caiu na string).
+  Conserto provável: pôr `httpx.TransportError` em `_TRANSIENT_TYPES`, ou embrulhar em
+  `openrouter.py`. **Decisão do dono, não ordem** — pôr `httpx` dentro de `queueing/` acopla a
+  camada de fila a um cliente HTTP.
+  **(d) A RECOMENDAÇÃO QUE FECHA OS TRÊS: adotar um type checker em `runtime/`.** Os três defeitos
+  são exatamente o que `mypy`/`pyright` pega de graça, e nenhum deles foi pego por teste — (a) só
+  apareceu porque a auditoria leu o diff, e (b) e (c) só apareceram porque alguém executou a função
+  à mão. O comentário que o item 52 deixou em `responder.py` (*"sem type checker no repositório…"*)
+  advertia contra o modo de falha **errado** enquanto introduzia o certo. **É recomendação, não
+  ordem:** adotar um checker num pacote sem anotações completas tem custo próprio, e o preço de
+  entrada (ignores, `Any` em massa, ruído no CI) é decisão de quem mantém o runtime.
 
 ---
 
