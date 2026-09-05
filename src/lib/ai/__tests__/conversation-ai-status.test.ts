@@ -34,8 +34,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 interface DbState {
   activeAgentRows: Array<{ agent_id: string }> | null;
   agent: { id: string; name: string; settings: any } | null;
+  agentError: { message: string } | null;
   botMessages: number;
+  botMessagesError: { message: string } | null;
   hasHumanReply: boolean;
+  humanReplyError: { message: string } | null;
   /** 'legacy' | 'runtime' | null — null simula erro de leitura (fail-closed). */
   runtimeMode: 'legacy' | 'runtime' | null;
 }
@@ -43,8 +46,11 @@ interface DbState {
 const db: DbState = {
   activeAgentRows: null,
   agent: null,
+  agentError: null,
   botMessages: 0,
+  botMessagesError: null,
   hasHumanReply: false,
+  humanReplyError: null,
   runtimeMode: 'legacy',
 };
 
@@ -54,11 +60,11 @@ const rpc = vi.fn(async (name: string, _args?: any): Promise<{ data: any; error:
 });
 
 function resultFor(table: string, calls: Array<{ m: string; a: any[] }>) {
-  if (table === 'ai_agents') return { data: db.agent, error: null };
+  if (table === 'ai_agents') return { data: db.agent, error: db.agentError };
   if (table === 'whatsapp_cloud_messages') {
     const isCount = calls.some((c) => c.m === 'select' && c.a[1]?.head === true);
-    if (isCount) return { count: db.botMessages, error: null };
-    return { data: db.hasHumanReply ? { id: 'msg-humana' } : null, error: null };
+    if (isCount) return { count: db.botMessages, error: db.botMessagesError };
+    return { data: db.hasHumanReply ? { id: 'msg-humana' } : null, error: db.humanReplyError };
   }
   if (table === 'ai_runtime_rollout') {
     if (db.runtimeMode === null) return { data: null, error: { message: 'leitura falhou' } };
@@ -99,6 +105,27 @@ import { clearRuntimeModeCache } from '../runtime-rollout';
 const ORG = '11111111-1111-1111-1111-111111111111';
 const AGENT = '22222222-2222-2222-2222-222222222222';
 
+describe('errors from guard reads do not become factual status (Task 37)', () => {
+  it('throws when ai_agents lookup fails instead of returning agent_not_found', async () => {
+    db.agentError = { message: 'ai_agents unavailable' };
+
+    await expect(ask()).rejects.toThrow(/ai_agents lookup failed/);
+  });
+
+  it('throws when bot message count fails instead of returning active', async () => {
+    db.agent!.settings.behavior = { max_messages_per_conversation: 1 };
+    db.botMessagesError = { message: 'count unavailable' };
+
+    await expect(ask()).rejects.toThrow(/bot message count failed/);
+  });
+
+  it('throws when human reply lookup fails instead of returning active', async () => {
+    db.humanReplyError = { message: 'lookup unavailable' };
+
+    await expect(ask()).rejects.toThrow(/human reply lookup failed/);
+  });
+});
+
 function conversation(over: Record<string, unknown> = {}) {
   return {
     id: '33333333-3333-3333-3333-333333333333',
@@ -119,8 +146,11 @@ beforeEach(() => {
   clearRuntimeModeCache();
   db.activeAgentRows = [{ agent_id: AGENT }];
   db.agent = { id: AGENT, name: 'Matheus', settings: { behavior: {} } };
+  db.agentError = null;
   db.botMessages = 0;
+  db.botMessagesError = null;
   db.hasHumanReply = false;
+  db.humanReplyError = null;
   db.runtimeMode = 'legacy';
 });
 

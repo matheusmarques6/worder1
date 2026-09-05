@@ -98,7 +98,7 @@ export async function hasHumanReply(
   organizationId: string,
   conversationId: string,
 ): Promise<boolean> {
-  const { data } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from('whatsapp_cloud_messages')
     .select('id')
     .eq('organization_id', organizationId)
@@ -106,6 +106,7 @@ export async function hasHumanReply(
     .eq('sender', 'human')
     .limit(1)
     .maybeSingle();
+  if (error) throw new Error('human reply lookup failed');
   return !!data;
 }
 
@@ -117,12 +118,13 @@ export async function countBotMessages(
   organizationId: string,
   conversationId: string,
 ): Promise<number> {
-  const { count } = await supabaseAdmin
+  const { count, error } = await supabaseAdmin
     .from('whatsapp_cloud_messages')
     .select('id', { count: 'exact', head: true })
     .eq('organization_id', organizationId)
     .eq('conversation_id', conversationId)
     .eq('sent_by_bot', true);
+  if (error) throw new Error('bot message count failed');
   return count || 0;
 }
 
@@ -185,12 +187,13 @@ export async function resolveConversationAiStatus(params: {
 
   const agentId: string = agentRows[0].agent_id;
 
-  const { data: agent } = await supabaseAdmin
+  const { data: agent, error: agentError } = await supabaseAdmin
     .from('ai_agents')
     .select('id, name, settings')
     .eq('id', agentId)
     .eq('organization_id', organizationId)
     .maybeSingle();
+  if (agentError) throw new Error('ai_agents lookup failed');
   if (!agent) return blocked('agent_not_found', { agentId });
 
   const agentMeta = { agentId, agentName: agent.name as string | undefined };

@@ -89,13 +89,13 @@ export default function AiUsagePage() {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Uso de IA</h1>
-            <p className="text-sm text-gray-500 mt-0.5">Nenhum dado disponível ainda.</p>
+            <p className="text-sm text-gray-500 mt-0.5">Não foi possível carregar os dados de uso.</p>
           </div>
         </div>
         <div className="bg-white border border-gray-200 rounded-xl p-12 text-center">
           <Sparkles className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-          <p className="text-sm text-gray-500">Os dados de uso aparecerão aqui quando features de IA forem utilizadas.</p>
-          <p className="text-xs text-gray-400 mt-2">Verifique se a migration do <code className="font-mono">ai_usage_logs</code> foi executada no Supabase.</p>
+          <p className="text-sm text-gray-500">Tente novamente em alguns instantes.</p>
+          <p className="text-xs text-gray-400 mt-2">Se o problema persistir, verifique a configuração do serviço de IA.</p>
         </div>
       </div>
     )
