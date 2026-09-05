@@ -341,4 +341,24 @@ describe('cloud-runner — bloqueio do send guard e terminal (sem retry)', () =>
     expect(r.replied).toBe(true)
     expect(r.failure).toBeUndefined()
   })
+
+  it('falha de token pre-envio vira transient e preserva o erro do sender', async () => {
+    mockSendHumanizedReply.mockResolvedValue({
+      sent: false,
+      error: 'No access token for account waba-1',
+    })
+
+    const result = await maybeRunAgentForCloudConversation({
+      account,
+      conversation: conv(),
+      text: 'oi',
+    })
+
+    expect(result).toMatchObject({
+      replied: false,
+      transferred: false,
+      failure: 'transient',
+      error: 'No access token for account waba-1',
+    })
+  })
 })

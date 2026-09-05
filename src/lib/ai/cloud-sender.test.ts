@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const mockRequireOptIn = vi.fn()
 const mockSendText = vi.fn()
 const mockSendTyping = vi.fn()
+const mockGetAccessToken = vi.fn(() => 'tok')
 const mockCreateClient = vi.fn(() => ({
   sendText: mockSendText,
   sendTyping: mockSendTyping,
@@ -21,7 +22,7 @@ vi.mock('@/lib/whatsapp/cloud-api', () => ({
 }))
 
 vi.mock('@/lib/whatsapp/account-loader', () => ({
-  getAccessToken: () => 'tok',
+  getAccessToken: () => mockGetAccessToken(),
 }))
 
 // `rpc` faltava neste dublê e quatro testes de "envia normalmente" passavam
@@ -136,6 +137,28 @@ describe('sendHumanizedReply — opt-out guard (Onda 13 / B2)', () => {
 
     expect(r.sent).toBe(true)
     expect(r.messageId).toBe('wamid.123')
+    expect(mockSendText).toHaveBeenCalledTimes(1)
+  })
+
+  it('falha de token pre-envio resolve sem enviar e permite envio apos reparo', async () => {
+    mockRequireOptIn.mockResolvedValue({ allowed: true })
+    mockGetAccessToken.mockImplementationOnce(() => {
+      throw new Error('No access token for account waba-1')
+    })
+    const params = { account, conversation, text: 'oi', agent, skipDelays: true }
+
+    await expect(sendHumanizedReply(params)).resolves.toEqual({
+      sent: false,
+      error: 'No access token for account waba-1',
+    })
+    expect(mockCreateClient).not.toHaveBeenCalled()
+    expect(mockSendText).not.toHaveBeenCalled()
+
+    mockSendText.mockResolvedValue({ messages: [{ id: 'wamid.repaired' }] })
+    expect(await sendHumanizedReply(params)).toMatchObject({
+      sent: true,
+      messageId: 'wamid.repaired',
+    })
     expect(mockSendText).toHaveBeenCalledTimes(1)
   })
 
