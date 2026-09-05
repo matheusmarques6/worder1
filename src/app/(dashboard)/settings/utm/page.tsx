@@ -98,8 +98,9 @@ export default function UtmSettingsPage() {
   const restore = () => setS({ ...DEFAULT_UTM_SETTINGS, custom: [] })
 
   const preview = useMemo(() => {
-    try { return previewLinkUrl(s, sampleLinkContext('campaign', 'email'), 'https://drgroot.com.br/produto') } catch { return '' }
-  }, [s])
+    const host = String(currentStore?.primary_domain || currentStore?.domain || 'sualoja.com.br').replace(/^https?:\/\//, '')
+    try { return previewLinkUrl(s, sampleLinkContext('campaign', 'email'), `https://${host}/produto`) } catch { return '' }
+  }, [s, currentStore])
   const scopeLabel = data?.source === 'store' ? 'Configuração desta loja' : data?.source === 'org' ? (storeId ? 'Herdando o padrão da organização' : 'Padrão da organização') : data?.source === 'legacy' ? 'Padrão antigo da organização' : 'Padrão Worder'
 
   if (!_hasHydrated || (loading && !data)) return <><Title h="Parâmetros UTM" p="Adicionados a todos os links para que Google Analytics e Shopify reconheçam o tráfego do Worder." /><LoadingCard rows={1} /><LoadingCard rows={6} /></>

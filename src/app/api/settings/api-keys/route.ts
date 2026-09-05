@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
   const orgId = auth.user.organization_id
   try {
     const { data } = await supabaseAdmin.from('api_keys')
-      .select('id, name, key_prefix, key_hash, key, permissions, created_at, last_used_at, expires_at, is_active, created_by, user_id, creator:user_id(full_name, first_name, email)')
+      .select('id, name, key_prefix, key_hash, key, permissions, created_at, last_used_at, expires_at, is_active, created_by, user_id, creator:created_by(full_name, first_name, email)')
       .eq('organization_id', orgId).neq('is_active', false).order('created_at', { ascending: false })
     const base = (process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin).replace(/\/$/, '')
     return NextResponse.json({

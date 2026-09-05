@@ -58,9 +58,9 @@ export function AddDomainModal({ onClose, onNext, busy, error }: { onClose: () =
     <Modal title="Adicionar domínio de envio" desc={<>Use o domínio da sua loja para enviar como <b>contato@suamarca.com.br</b>. Você vai precisar de acesso ao DNS.</>} onClose={onClose}
       footer={<><button type="button" className="btn" onClick={onClose}>Cancelar</button><button type="button" className="btn btn-primary" disabled={!ok || busy} onClick={() => onNext(clean)}>{busy ? <I n="refresh" s={14} className="spin" /> : null}Continuar<I n="arrowR" s={15} /></button></>}>
       <span className="inl">Domínio</span>
-      <div className="dom-in"><span>@</span><input autoFocus placeholder="drgroot.com.br" value={v} onChange={(e) => setV(e.target.value.toLowerCase())} onKeyDown={(e) => { if (e.key === 'Enter' && ok && !busy) onNext(clean) }} aria-label="Domínio" /></div>
+      <div className="dom-in"><span>@</span><input autoFocus placeholder="sualoja.com.br" value={v} onChange={(e) => setV(e.target.value.toLowerCase())} onKeyDown={(e) => { if (e.key === 'Enter' && ok && !busy) onNext(clean) }} aria-label="Domínio" /></div>
       {error && <div className="field-err" style={{ marginTop: 8 }}>{error}</div>}
-      <div className="tip"><I n="faqHelp" s={16} /><div>Recomendamos um <b>subdomínio</b> (ex.: <code>mail.drgroot.com.br</code>) para isolar a reputação do seu site. Os e-mails ainda mostram só o domínio principal para o cliente.</div></div>
+      <div className="tip"><I n="faqHelp" s={16} /><div>Recomendamos um <b>subdomínio</b> (ex.: <code>mail.sualoja.com.br</code>) para isolar a reputação do seu site. Os e-mails ainda mostram só o domínio principal para o cliente.</div></div>
     </Modal>
   )
 }

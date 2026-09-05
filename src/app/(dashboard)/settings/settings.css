@@ -446,3 +446,21 @@
 .wset .sk.w60 { width: 60%; } .wset .sk.w40 { width: 40%; } .wset .sk.w80 { width: 80%; } .wset .sk.h38 { height: 38px; border-radius: 8px; }
 .wset .loading-card { padding: 24px; display: flex; flex-direction: column; gap: 14px; }
 @media (prefers-reduced-motion: reduce) { .wset *, .wset *::before, .wset *::after { animation: none !important; transition: none !important; } }
+
+/* Diálogo de confirmação e toasts (componentes globais em Tailwind) no tema escuro,
+   só enquanto as Configurações estão na tela. */
+:root[data-theme="dark"] body:has(.wset) .z-\[10001\] .bg-white,
+:root[data-theme="dark"] body:has(.wset) .z-\[100\] > div { background: #1B1E23 !important; color: #E6E8EC; border-color: #2C3038 !important; }
+:root[data-theme="dark"] body:has(.wset) .z-\[10001\] .text-gray-900,
+:root[data-theme="dark"] body:has(.wset) .z-\[100\] .text-gray-900 { color: #E6E8EC !important; }
+:root[data-theme="dark"] body:has(.wset) .z-\[10001\] .text-gray-500 { color: #9AA0A8 !important; }
+:root[data-theme="dark"] body:has(.wset) .z-\[10001\] .text-gray-700 { color: #E6E8EC !important; }
+:root[data-theme="dark"] body:has(.wset) .z-\[10001\] .border-gray-200 { border-color: #2C3038 !important; }
+:root[data-theme="dark"] body:has(.wset) .z-\[10001\] .hover\:bg-gray-50:hover { background: #23262C !important; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) body:has(.wset.system) .z-\[10001\] .bg-white,
+  :root:not([data-theme="light"]) body:has(.wset.system) .z-\[100\] > div { background: #1B1E23 !important; color: #E6E8EC; border-color: #2C3038 !important; }
+  :root:not([data-theme="light"]) body:has(.wset.system) .z-\[10001\] .text-gray-900,
+  :root:not([data-theme="light"]) body:has(.wset.system) .z-\[10001\] .text-gray-700 { color: #E6E8EC !important; }
+  :root:not([data-theme="light"]) body:has(.wset.system) .z-\[10001\] .text-gray-500 { color: #9AA0A8 !important; }
+}

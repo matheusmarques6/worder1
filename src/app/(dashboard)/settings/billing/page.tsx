@@ -106,7 +106,7 @@ export default function BillingSettingsPage() {
             )
           })}
         </div>
-        <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--text-3)' }}>Precisa de mais? <a href="mailto:vendas@worder.com.br?subject=Plano%20Enterprise" style={{ color: 'var(--acc-ink)', fontWeight: 500 }}>Fale com vendas</a> para um plano Enterprise.</p>
+        <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--text-3)' }}>Precisa de mais? <Link href="/help" style={{ color: 'var(--acc-ink)', fontWeight: 500 }}>Fale com vendas</Link> para um plano Enterprise.</p>
         {!data.stripeConfigured && <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--warn-fg)' }}>Pagamentos ainda não estão habilitados neste ambiente. <Link href="/settings/billing/invoices" style={{ fontWeight: 500 }}>Faturas e pagamento</Link>.</p>}
       </Card>
 

@@ -23,11 +23,11 @@ type Slot = 'logo' | 'logo_light' | 'icon'
 const FONTS: Array<[string, string]> = [['Geist', 'Moderna e neutra'], ['Georgia', 'Editorial, com serifa'], ['Arial', 'Clássica e segura']]
 const ALL_FONTS = ['Geist', 'Inter', 'Arial', 'Helvetica', 'Georgia', 'Times New Roman', 'Verdana', 'Trebuchet MS', 'Roboto', 'Open Sans', 'Montserrat', 'Poppins', 'DM Sans', 'Lato']
 const RADII: Array<[number, string]> = [[0, 'Reto'], [6, 'Suave'], [12, 'Arredondado'], [999, 'Pill']]
-const TPL: Record<string, { h: string; p: string; c: string }> = {
-  promo: { h: 'Seu couro cabeludo pede um novo ritual', p: 'Olá Marina, o Sérum Noturno chegou. Fórmula com biotina e cafeína para fortalecer os fios enquanto você dorme.', c: 'Conhecer o Sérum' },
-  cart: { h: 'Você deixou algo no carrinho', p: 'Seu Shampoo Fortalecedor ainda está reservado. Finalize agora e ganhe frete grátis.', c: 'Finalizar compra' },
-  order: { h: 'Pedido #1284 confirmado', p: 'Obrigado, Marina! Estamos preparando seu pedido. Você recebe o rastreio assim que ele sair.', c: 'Acompanhar pedido' },
-}
+const TPL = (name: string): Record<string, { h: string; p: string; c: string }> => ({
+  promo: { h: `Novidades da ${name || 'sua marca'} chegaram`, p: 'Olá! Separamos uma seleção especial para você. Aproveite enquanto durar o estoque.', c: 'Ver novidades' },
+  cart: { h: 'Você deixou algo no carrinho', p: 'Seus itens ainda estão reservados. Finalize agora e ganhe frete grátis.', c: 'Finalizar compra' },
+  order: { h: 'Pedido confirmado', p: 'Obrigado pela compra! Estamos preparando seu pedido. Você recebe o rastreio assim que ele sair.', c: 'Acompanhar pedido' },
+})
 const HEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i
 const ini = (n: string) => n.split(' ').filter(Boolean).map((x) => x[0]).join('').slice(0, 2).toUpperCase() || 'W'
 
@@ -82,7 +82,7 @@ export default function BrandSettingsPage() {
     } catch (e: any) { toast.error('Não foi possível remover', e.message) }
   }
 
-  const T = TPL[tpl]
+  const T = TPL(b?.name || '')[tpl]
   const right = edit
     ? <><button type="button" className="btn" onClick={cancel} disabled={saving}>Cancelar</button><button type="button" className="btn btn-primary" onClick={save} disabled={saving}>{saving && <I n="refresh" s={14} className="spin" />}Salvar alterações</button></>
     : <><button type="button" className="btn" onClick={() => setImportOpen(true)}><I n="ia" s={15} />Importar do site</button><button type="button" className="btn btn-primary" onClick={() => setEdit(true)}>Editar marca</button></>

@@ -265,7 +265,7 @@ function LinkDomainCard({ storeId, data, onSaved, register }: { storeId: string;
   return (
     <Card title="Domínio dos links" desc={`Cliques, aberturas e descadastro passam pelo seu domínio em vez de ${data.shared_domain}.`} foot={<SaveBar dirty={f.dirty} saving={saving} error={error} onSave={onSave} onCancel={f.cancel} />}>
       <Row label="Subdomínio" help={<>Crie um <b>CNAME</b> de {t || 'links.sualoja.com.br'} apontando para <b>{host}</b>.</>} htmlFor="ld-in">
-        <input id="ld-in" className="in mono" placeholder="links.drgroot.com.br" value={f.val!.tracking} onChange={(e) => f.set('tracking', e.target.value)} />
+        <input id="ld-in" className="in mono" placeholder="links.sualoja.com.br" value={f.val!.tracking} onChange={(e) => f.set('tracking', e.target.value)} />
       </Row>
     </Card>
   )

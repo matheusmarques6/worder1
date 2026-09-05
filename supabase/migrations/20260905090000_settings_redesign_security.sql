@@ -19,7 +19,7 @@ create table if not exists public.user_sessions (
   revoked_at timestamptz
 );
 create index if not exists user_sessions_user_idx on public.user_sessions(user_id, revoked_at);
-create unique index if not exists user_sessions_auth_session_idx on public.user_sessions(auth_session_id) where auth_session_id is not null;
+create unique index if not exists user_sessions_auth_session_idx on public.user_sessions(auth_session_id);
 alter table public.user_sessions enable row level security;
 drop policy if exists "user_sessions_own" on public.user_sessions;
 create policy "user_sessions_own" on public.user_sessions for select using (auth.uid() = user_id);
