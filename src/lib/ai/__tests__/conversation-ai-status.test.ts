@@ -276,6 +276,19 @@ describe('item 37 — o badge para de mentir em runtime', () => {
     expect(await ask()).toMatchObject({ willRespond: true, reason: null });
   });
 
+  it('org em runtime: schedule vazio permite resposta mesmo no sábado', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(new Date('2026-09-05T15:00:00Z'));
+      db.runtimeMode = 'runtime';
+      db.agent!.settings = { behavior: {}, schedule: {} };
+
+      expect(await ask()).toMatchObject({ willRespond: true, reason: null });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('org em runtime: nada bloqueando (sem settings.schedule) → Bot ativo', async () => {
     db.runtimeMode = 'runtime';
     db.agent!.settings.behavior = {};

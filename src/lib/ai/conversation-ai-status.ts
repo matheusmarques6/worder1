@@ -237,7 +237,9 @@ export async function resolveConversationAiStatus(params: {
   // de processMessage), mas essa checagem nunca fez parte deste badge —
   // adicioná-la para legacy aqui seria mudar comportamento fora do escopo
   // do item 37 (achado à parte, reportado e não corrigido nesta entrega).
-  if (runtimeMode && !isWithinSchedule((agent.settings as any)?.schedule)) {
+  const schedule = (agent.settings as any)?.schedule;
+  // O runtime Python trata o objeto vazio como ausência de restrição.
+  if (runtimeMode && Object.keys(schedule ?? {}).length > 0 && !isWithinSchedule(schedule)) {
     return blocked('outside_schedule', agentMeta);
   }
 
