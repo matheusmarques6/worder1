@@ -759,6 +759,50 @@ create table if not exists public.agent_traces (
 );
 
 -- ----------------------------------------------------------------------------
+-- ai_usage_logs (cost-panel data and the internal.llm_calls mirror target)
+-- ----------------------------------------------------------------------------
+-- This legacy table was created outside the versioned stream. The clean
+-- baseline owns that prerequisite: an existing production table stays intact,
+-- while a clean replay gets the bridge's complete contract.
+do $$
+begin
+  if to_regclass('public.ai_usage_logs') is not null then
+    return;
+  end if;
+
+  create table public.ai_usage_logs (
+    id uuid primary key default gen_random_uuid(),
+    organization_id uuid not null,
+    provider text not null,
+    model text not null,
+    feature text not null,
+    agent_id uuid,
+    conversation_id uuid,
+    prompt_tokens integer default 0,
+    completion_tokens integer default 0,
+    total_tokens integer generated always as
+      (coalesce(prompt_tokens, 0) + coalesce(completion_tokens, 0)) stored,
+    cost_usd numeric(10, 6) default 0,
+    duration_ms integer,
+    success boolean default true,
+    error text,
+    metadata jsonb default '{}'::jsonb,
+    created_at timestamptz default now()
+  );
+
+  create index ai_usage_logs_org_created_idx
+    on public.ai_usage_logs (organization_id, created_at desc);
+  create index ai_usage_logs_org_feature_idx
+    on public.ai_usage_logs (organization_id, feature, created_at desc);
+  create index ai_usage_logs_org_model_idx
+    on public.ai_usage_logs (organization_id, provider, model);
+
+  grant insert on public.ai_usage_logs to worker_role;
+  grant select, insert on public.ai_usage_logs to service_role;
+end
+$$;
+
+-- ----------------------------------------------------------------------------
 -- organization_api_keys (BYO de LLM; DDL estava fora de banda — agora canônica)
 -- ----------------------------------------------------------------------------
 create table if not exists public.organization_api_keys (
