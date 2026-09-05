@@ -21,7 +21,7 @@
 // callsite, dá pra entender o que está sendo pedido.
 // =============================================
 
-export type Role = 'owner' | 'admin' | 'member' | 'agent'
+export type Role = 'owner' | 'admin' | 'member' | 'analyst' | 'agent'
 
 export type Capability =
   // org-level
@@ -114,6 +114,11 @@ const CAPABILITIES: Record<Exclude<Role, 'owner'>, Set<Capability>> = {
     'reports:view', 'reports:export',
     'inbox:reply', 'inbox:assign',
     'integrations:view',
+  ]),
+  // analyst: só leitura — relatórios, receita e o que foi enviado.
+  analyst: new Set<Capability>([
+    'campaigns:view', 'automations:view', 'segments:view', 'forms:view', 'templates:view',
+    'contacts:view', 'analytics:view', 'crm:view', 'reports:view', 'reports:export',
   ]),
   agent: new Set<Capability>([
     'campaigns:view',

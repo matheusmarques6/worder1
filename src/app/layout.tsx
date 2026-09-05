@@ -37,6 +37,8 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&family=Montserrat:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700;800&family=Roboto:wght@400;500;700&family=Open+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
         {/* Plus Jakarta Sans + Geist Mono — scoped to the Agentes de IA redesign (.agents-theme) */}
         <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+        {/* Geist — design system das Configurações (.wset) */}
+        <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet" />
       </head>
       <body className="font-sans bg-white text-gray-900 antialiased">
         {children}

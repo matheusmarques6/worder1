@@ -2,7 +2,42 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
 import { getAuthClient } from '@/lib/api-utils';
+import { requestMeta, jwtSessionId } from '@/lib/settings/request-meta';
+import { gotrue } from '@/lib/settings/gotrue';
 export const dynamic = 'force-dynamic';
+
+// Cookie temporário entre a senha e o código do 2FA (10 min).
+const MFA_PENDING_COOKIE = 'sb-mfa-pending';
+// Sinaliza ao middleware que a organização exige 2FA e o usuário ainda não configurou.
+const MFA_SETUP_COOKIE = 'wd-2fa-required';
+
+function cookieOpts(maxAge: number) {
+  return { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax' as const, maxAge, path: '/' };
+}
+
+/** Registra tentativa de login (Configurações → Segurança → Histórico). */
+async function logLogin(supabase: SupabaseClient, request: NextRequest, email: string, userId: string | null, success: boolean, reason?: string) {
+  try {
+    const m = requestMeta(request);
+    await supabase.from('auth_login_events').insert({ user_id: userId, email, ip: m.ip, user_agent: m.userAgent, city: m.city, country: m.country, success, reason: reason || null });
+  } catch { /* nunca bloqueia o login */ }
+}
+
+/** Guarda a sessão (navegador/IP) para a lista "Sessões ativas". */
+async function trackSession(supabase: SupabaseClient, request: NextRequest, userId: string, orgId: string | null, accessToken: string) {
+  try {
+    const m = requestMeta(request);
+    const sid = jwtSessionId(accessToken);
+    if (!sid) return;
+    await supabase.from('user_sessions').upsert({ user_id: userId, organization_id: orgId, auth_session_id: sid, user_agent: m.userAgent, ip: m.ip, city: m.city, country: m.country, last_seen_at: new Date().toISOString() }, { onConflict: 'auth_session_id' });
+  } catch { /* best-effort */ }
+}
+
+function setSessionCookies(response: NextResponse, session: { access_token: string; refresh_token: string }) {
+  response.cookies.set('sb-access-token', session.access_token, cookieOpts(60 * 60 * 24 * 7));
+  response.cookies.set('sb-refresh-token', session.refresh_token, cookieOpts(60 * 60 * 24 * 30));
+  response.cookies.delete(MFA_PENDING_COOKIE);
+}
 
 // Lazy initialize Supabase client
 let supabase: SupabaseClient | null = null;
@@ -83,11 +118,13 @@ export async function POST(request: NextRequest) {
 
     switch (action) {
       case 'login':
-        return await handleLogin(client, data);
+        return await handleLogin(client, data, request);
+      case 'mfa-verify':
+        return await handleMfaVerify(client, data, request);
       case 'signup':
         return await handleSignup(client, data);
       case 'logout':
-        return await handleLogout(client, data);
+        return await handleLogout(client, data, request);
       case 'reset-password':
         return await handleResetPassword(client, data);
       case 'update-password':
@@ -150,7 +187,7 @@ function handleDevLogin({ email, password }: { email: string; password: string }
   return response;
 }
 
-async function handleLogin(supabase: SupabaseClient, { email, password }: { email: string; password: string }) {
+async function handleLogin(supabase: SupabaseClient, { email, password }: { email: string; password: string }, request: NextRequest) {
   const { data, error } = await supabase.auth.signInWithPassword({
     email,
     password,
@@ -162,6 +199,9 @@ async function handleLogin(supabase: SupabaseClient, { email, password }: { emai
       console.log('[DEV MODE] Auth failed, using bypass:', error.message);
       return handleDevLogin({ email, password });
     }
+    // Quem é o dono do e-mail (para o histórico dele mostrar a tentativa bloqueada).
+    const { data: prof } = await supabase.from('profiles').select('id').ilike('email', email).maybeSingle();
+    await logLogin(supabase, request, email, prof?.id || null, false, error.message);
     return NextResponse.json({ error: error.message }, { status: 401 });
   }
 
@@ -175,29 +215,65 @@ async function handleLogin(supabase: SupabaseClient, { email, password }: { emai
     .eq('id', data.user.id)
     .single();
 
+  // ---- Verificação em duas etapas ----
+  const { data: factors } = await supabase.rpc('list_mfa_factors', { p_user_id: data.user.id });
+  const hasMfa = ((factors as any[]) || []).some((f) => f.status === 'verified');
+  if (hasMfa) {
+    // Senha certa, falta o código: guardamos a sessão aal1 num cookie curto.
+    const response = NextResponse.json({ mfaRequired: true });
+    response.cookies.set(MFA_PENDING_COOKIE, JSON.stringify({ a: data.session.access_token, r: data.session.refresh_token }), cookieOpts(60 * 10));
+    return response;
+  }
+
+  const requires2fa = !!profile?.organization?.settings?.require_2fa && profile?.role !== 'owner';
   const response = NextResponse.json({
     user: data.user,
     profile,
     session: data.session,
+    mfaSetupRequired: requires2fa,
   });
+  setSessionCookies(response, data.session);
+  if (requires2fa) response.cookies.set(MFA_SETUP_COOKIE, '1', cookieOpts(60 * 60 * 24 * 7));
+  else response.cookies.delete(MFA_SETUP_COOKIE);
+  await logLogin(supabase, request, email, data.user.id, true);
+  await trackSession(supabase, request, data.user.id, profile?.organization_id || null, data.session.access_token);
+  return response;
+}
 
-  // Set auth cookie
-  response.cookies.set('sb-access-token', data.session.access_token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: 60 * 60 * 24 * 7, // 1 week
-    path: '/',
-  });
+// Segunda etapa do login: código do app autenticador.
+async function handleMfaVerify(supabase: SupabaseClient, { code }: { code: string }, request: NextRequest) {
+  const raw = request.cookies.get(MFA_PENDING_COOKIE)?.value;
+  if (!raw) return NextResponse.json({ error: 'Sessão expirada. Entre novamente com e-mail e senha.' }, { status: 401 });
+  let pending: { a: string; r: string };
+  try { pending = JSON.parse(raw); } catch { return NextResponse.json({ error: 'Sessão inválida.' }, { status: 401 }); }
+  const clean = String(code || '').replace(/\s+/g, '');
+  if (!/^\d{6}$/.test(clean)) return NextResponse.json({ error: 'Digite o código de 6 dígitos.' }, { status: 400 });
 
-  response.cookies.set('sb-refresh-token', data.session.refresh_token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: 60 * 60 * 24 * 30, // 30 days
-    path: '/',
-  });
+  const { data: { user }, error: uErr } = await supabase.auth.getUser(pending.a);
+  if (uErr || !user) return NextResponse.json({ error: 'Sessão expirada. Entre novamente.' }, { status: 401 });
+  const { data: factors } = await supabase.rpc('list_mfa_factors', { p_user_id: user.id });
+  const totp = ((factors as any[]) || []).filter((f) => f.status === 'verified' && f.factor_type === 'totp');
+  if (!totp.length) return NextResponse.json({ error: 'Nenhum app autenticador configurado.' }, { status: 400 });
 
+  let verified: any = null;
+  for (const f of totp) {
+    try {
+      const ch = await gotrue.challenge(pending.a, f.id);
+      verified = await gotrue.verify(pending.a, f.id, ch.id, clean);
+      break;
+    } catch { /* tenta o próximo fator */ }
+  }
+  if (!verified?.access_token) {
+    await logLogin(supabase, request, user.email || '', user.id, false, 'Código 2FA inválido');
+    return NextResponse.json({ error: 'Código inválido ou expirado. Tente o próximo código do app.' }, { status: 401 });
+  }
+
+  const { data: profile } = await supabase.from('profiles').select('*, organization:organizations(*)').eq('id', user.id).single();
+  const response = NextResponse.json({ user, profile, session: { access_token: verified.access_token, refresh_token: verified.refresh_token } });
+  setSessionCookies(response, { access_token: verified.access_token, refresh_token: verified.refresh_token });
+  response.cookies.delete(MFA_SETUP_COOKIE);
+  await logLogin(supabase, request, user.email || '', user.id, true, '2FA');
+  await trackSession(supabase, request, user.id, profile?.organization_id || null, verified.access_token);
   return response;
 }
 
@@ -269,10 +345,13 @@ async function handleSignup(
   return response;
 }
 
-async function handleLogout(supabase: SupabaseClient, { accessToken }: { accessToken?: string }) {
-  if (accessToken && accessToken !== 'dev-access-token') {
+async function handleLogout(supabase: SupabaseClient, { accessToken }: { accessToken?: string }, request?: NextRequest) {
+  const token = accessToken || request?.cookies.get('sb-access-token')?.value;
+  if (token && token !== 'dev-access-token') {
     try {
-      await supabase.auth.admin.signOut(accessToken);
+      const sid = jwtSessionId(token);
+      if (sid) await supabase.from('user_sessions').update({ revoked_at: new Date().toISOString() }).eq('auth_session_id', sid);
+      await supabase.auth.admin.signOut(token);
     } catch (e) {
       // Ignore errors during logout
     }
@@ -283,6 +362,8 @@ async function handleLogout(supabase: SupabaseClient, { accessToken }: { accessT
   // Clear cookies
   response.cookies.delete('sb-access-token');
   response.cookies.delete('sb-refresh-token');
+  response.cookies.delete(MFA_PENDING_COOKIE);
+  response.cookies.delete(MFA_SETUP_COOKIE);
 
   return response;
 }

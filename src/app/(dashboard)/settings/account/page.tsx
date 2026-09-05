@@ -1,301 +1,204 @@
-'use client';
+'use client'
 
-import { useState, useEffect } from 'react';
-import { Loader2, Save, User, Building2, CheckCircle, AlertCircle } from 'lucide-react';
-import { useAuthStore } from '@/stores';
-import { cn } from '@/lib/utils';
+// Configurações → Perfil (desenho PPerfil): informações pessoais e preferências.
 
-interface ProfileData {
-  name: string;
-  email: string;
-  phone: string;
+import { useCallback, useEffect, useState } from 'react'
+import { useAuthStore } from '@/stores'
+import { useToast } from '@/components/ui/Toast'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
+import { Card, Row, SaveBar, Title, LoadingCard, Modal, Avatar, useForm, Field } from '@/components/settings/ui'
+import { I } from '@/components/settings/icons'
+import { api, initials } from '@/components/settings/format'
+import { useApi, useSave, useFilePicker, useAction } from '@/components/settings/hooks'
+import { useSettingsTheme, type Theme } from '@/components/settings/theme'
+
+interface Profile {
+  id: string; email: string; full_name: string; phone: string; avatar_url: string | null; role: string
+  preferences: { locale: string; timezone: string; date_format: string; time_format: string; theme: Theme }
 }
 
-interface OrgData {
-  company_name: string;
-  cnpj: string;
-  address: string;
-  city: string;
-  state: string;
-}
+const TIMEZONES: Array<[string, string]> = [
+  ['America/Sao_Paulo', '(GMT-03:00) São Paulo'],
+  ['America/Fortaleza', '(GMT-03:00) Fortaleza'],
+  ['America/Manaus', '(GMT-04:00) Manaus'],
+  ['America/Cuiaba', '(GMT-04:00) Cuiabá'],
+  ['America/Rio_Branco', '(GMT-05:00) Rio Branco'],
+  ['America/Noronha', '(GMT-02:00) Fernando de Noronha'],
+  ['America/Buenos_Aires', '(GMT-03:00) Buenos Aires'],
+  ['America/Santiago', '(GMT-04:00) Santiago'],
+  ['America/Bogota', '(GMT-05:00) Bogotá'],
+  ['America/Mexico_City', '(GMT-06:00) Cidade do México'],
+  ['America/New_York', '(GMT-05:00) Nova York'],
+  ['America/Los_Angeles', '(GMT-08:00) Los Angeles'],
+  ['Europe/Lisbon', '(GMT+00:00) Lisboa'],
+  ['Europe/London', '(GMT+00:00) Londres'],
+  ['Europe/Madrid', '(GMT+01:00) Madri'],
+  ['Europe/Berlin', '(GMT+01:00) Berlim'],
+  ['Asia/Tokyo', '(GMT+09:00) Tóquio'],
+  ['Australia/Sydney', '(GMT+10:00) Sydney'],
+]
 
-function getInitials(name: string): string {
-  return name
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map(n => n[0].toUpperCase())
-    .join('');
-}
-
-export default function AccountSettingsPage() {
-  const { user } = useAuthStore();
-
-  const [profile, setProfile] = useState<ProfileData>({
-    name: user?.name || '',
-    email: user?.email || '',
-    phone: '',
-  });
-  const [org, setOrg] = useState<OrgData>({
-    company_name: '',
-    cnpj: '',
-    address: '',
-    city: '',
-    state: '',
-  });
-
-  const [loadingProfile, setLoadingProfile] = useState(false);
-  const [loadingOrg, setLoadingOrg] = useState(false);
-  const [profileStatus, setProfileStatus] = useState<'idle' | 'success' | 'error'>('idle');
-  const [orgStatus, setOrgStatus] = useState<'idle' | 'success' | 'error'>('idle');
-  const [initialLoad, setInitialLoad] = useState(true);
-
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        const res = await fetch('/api/settings/account');
-        if (res.ok) {
-          const data = await res.json();
-          if (data.profile) {
-            setProfile({
-              name: data.profile.name || user?.name || '',
-              email: data.profile.email || user?.email || '',
-              phone: data.profile.phone || '',
-            });
-          }
-          if (data.organization) {
-            setOrg({
-              company_name: data.organization.company_name || '',
-              cnpj: data.organization.cnpj || '',
-              address: data.organization.address || '',
-              city: data.organization.city || '',
-              state: data.organization.state || '',
-            });
-          }
-        }
-      } catch {
-        // ignore; use defaults
-      } finally {
-        setInitialLoad(false);
-      }
-    }
-    fetchData();
-  }, [user]);
-
-  async function saveProfile() {
-    setLoadingProfile(true);
-    setProfileStatus('idle');
-    try {
-      const res = await fetch('/api/settings/account', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'profile', ...profile }),
-      });
-      setProfileStatus(res.ok ? 'success' : 'error');
-    } catch {
-      setProfileStatus('error');
-    } finally {
-      setLoadingProfile(false);
-      setTimeout(() => setProfileStatus('idle'), 3000);
-    }
-  }
-
-  async function saveOrg() {
-    setLoadingOrg(true);
-    setOrgStatus('idle');
-    try {
-      const res = await fetch('/api/settings/account', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'organization', ...org }),
-      });
-      setOrgStatus(res.ok ? 'success' : 'error');
-    } catch {
-      setOrgStatus('error');
-    } finally {
-      setLoadingOrg(false);
-      setTimeout(() => setOrgStatus('idle'), 3000);
-    }
-  }
-
-  if (initialLoad) {
-    return (
-      <div className="p-8 flex items-center justify-center">
-        <Loader2 className="w-6 h-6 animate-spin text-orange-500" />
-      </div>
-    );
-  }
+export default function ProfileSettingsPage() {
+  const { data, loading, error, reload } = useApi<{ profile: Profile | null }>('/api/settings/account')
+  const profile = data?.profile || null
 
   return (
-    <div className="p-8 max-w-5xl">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Conta</h1>
-        <p className="text-gray-500 mt-1">Gerencie seu perfil e as informações da sua organização.</p>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Card Perfil Pessoal */}
-        <div className="bg-white border border-gray-200 rounded-xl p-6">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-orange-50 rounded-lg">
-              <User className="w-5 h-5 text-orange-500" />
-            </div>
-            <h2 className="text-lg font-semibold text-gray-900">Perfil Pessoal</h2>
-          </div>
-
-          {/* Avatar */}
-          <div className="flex items-center gap-4 mb-6">
-            <div className="w-16 h-16 rounded-full bg-orange-100 flex items-center justify-center text-orange-600 font-bold text-xl flex-shrink-0">
-              {getInitials(profile.name) || '?'}
-            </div>
-            <div>
-              <p className="text-sm font-medium text-gray-700">{profile.name || 'Sem nome'}</p>
-              <p className="text-xs text-gray-400">{profile.email}</p>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Nome completo</label>
-              <input
-                type="text"
-                value={profile.name}
-                onChange={e => setProfile(p => ({ ...p, name: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                placeholder="Seu nome"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-              <input
-                type="email"
-                value={profile.email}
-                disabled
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 text-gray-400 cursor-not-allowed"
-              />
-              <p className="text-xs text-gray-400 mt-1">O email não pode ser alterado.</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Telefone</label>
-              <input
-                type="tel"
-                value={profile.phone}
-                onChange={e => setProfile(p => ({ ...p, phone: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                placeholder="+55 (11) 99999-9999"
-              />
-            </div>
-          </div>
-
-          <div className="mt-6 flex items-center gap-3">
-            <button
-              onClick={saveProfile}
-              disabled={loadingProfile}
-              className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
-            >
-              {loadingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              Salvar Perfil
-            </button>
-            {profileStatus === 'success' && (
-              <span className="flex items-center gap-1 text-sm text-green-600">
-                <CheckCircle className="w-4 h-4" /> Salvo!
-              </span>
-            )}
-            {profileStatus === 'error' && (
-              <span className="flex items-center gap-1 text-sm text-red-500">
-                <AlertCircle className="w-4 h-4" /> Erro ao salvar
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Card Organização */}
-        <div className="bg-white border border-gray-200 rounded-xl p-6">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-blue-50 rounded-lg">
-              <Building2 className="w-5 h-5 text-blue-500" />
-            </div>
-            <h2 className="text-lg font-semibold text-gray-900">Organização</h2>
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Nome da empresa</label>
-              <input
-                type="text"
-                value={org.company_name}
-                onChange={e => setOrg(o => ({ ...o, company_name: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                placeholder="Minha Empresa Ltda"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">CNPJ</label>
-              <input
-                type="text"
-                value={org.cnpj}
-                onChange={e => setOrg(o => ({ ...o, cnpj: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                placeholder="00.000.000/0001-00"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Endereço</label>
-              <input
-                type="text"
-                value={org.address}
-                onChange={e => setOrg(o => ({ ...o, address: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                placeholder="Rua Exemplo, 123"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Cidade</label>
-                <input
-                  type="text"
-                  value={org.city}
-                  onChange={e => setOrg(o => ({ ...o, city: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                  placeholder="São Paulo"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Estado</label>
-                <input
-                  type="text"
-                  value={org.state}
-                  onChange={e => setOrg(o => ({ ...o, state: e.target.value }))}
-                  maxLength={2}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                  placeholder="SP"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-6 flex items-center gap-3">
-            <button
-              onClick={saveOrg}
-              disabled={loadingOrg}
-              className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
-            >
-              {loadingOrg ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              Salvar Organização
-            </button>
-            {orgStatus === 'success' && (
-              <span className="flex items-center gap-1 text-sm text-green-600">
-                <CheckCircle className="w-4 h-4" /> Salvo!
-              </span>
-            )}
-            {orgStatus === 'error' && (
-              <span className="flex items-center gap-1 text-sm text-red-500">
-                <AlertCircle className="w-4 h-4" /> Erro ao salvar
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+    <>
+      <Title h="Perfil" p="Seus dados de acesso. Alterações aqui valem para todas as lojas que você administra." />
+      {loading && !data ? <><LoadingCard rows={4} /><LoadingCard rows={3} /></> : error ? (
+        <Card><div className="empty2"><b>Não foi possível carregar seu perfil</b>{error}<div><button className="btn" onClick={() => reload()}>Tentar de novo</button></div></div></Card>
+      ) : profile ? (
+        <>
+          <PersonalCard profile={profile} onChanged={() => reload(true)} />
+          <PreferencesCard profile={profile} onChanged={() => reload(true)} />
+        </>
+      ) : null}
+    </>
+  )
 }
+
+function PersonalCard({ profile, onChanged }: { profile: Profile; onChanged: () => void }) {
+  const toast = useToast()
+  const confirm = useConfirm()
+  const { user, setUser } = useAuthStore()
+  const f = useForm({ full_name: profile.full_name, phone: profile.phone })
+  useEffect(() => { f.reset({ full_name: profile.full_name, phone: profile.phone }) }, [profile.full_name, profile.phone]) // eslint-disable-line react-hooks/exhaustive-deps
+  const { saving, error, save } = useSave()
+  const { busy, run } = useAction()
+  const [emailModal, setEmailModal] = useState(false)
+
+  const upload = useCallback(async (file: File) => {
+    await run('avatar', async () => {
+      const fd = new FormData()
+      fd.append('file', file)
+      const r = await api<{ avatar_url: string }>('/api/profile/avatar', { method: 'POST', body: fd })
+      if (user) setUser({ ...user, avatar_url: r.avatar_url })
+      onChanged()
+    }, { success: 'Foto atualizada', error: 'Não foi possível enviar a foto' })
+  }, [run, user, setUser, onChanged])
+  const pick = useFilePicker('image/png,image/jpeg,image/webp,image/gif', upload)
+
+  const removeAvatar = async () => {
+    if (!(await confirm.confirm({ title: 'Remover foto?', description: 'Suas iniciais passam a aparecer no lugar.', confirmLabel: 'Remover', destructive: true }))) return
+    await run('avatar-rm', async () => {
+      await api('/api/profile/avatar', { method: 'DELETE' })
+      if (user) setUser({ ...user, avatar_url: undefined })
+      onChanged()
+    }, { success: 'Foto removida' })
+  }
+
+  const onSave = () => save(async () => {
+    await api('/api/settings/account', { method: 'PATCH', json: { type: 'profile', ...f.val } })
+    if (user) setUser({ ...user, name: f.val!.full_name })
+    onChanged()
+  })
+
+  return (
+    <>
+      <Card title="Informações pessoais" foot={<SaveBar dirty={f.dirty} saving={saving} error={error} onSave={onSave} onCancel={f.cancel} />}>
+        <Row label="Foto">
+          <div className="person">
+            <Avatar name={f.val?.full_name || profile.email} src={profile.avatar_url} />
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button type="button" className="btn btn-sm" onClick={pick} disabled={busy === 'avatar'}>{busy === 'avatar' ? <I n="refresh" s={14} className="spin" /> : null}Enviar foto</button>
+              <button type="button" className="btn btn-sm btn-danger" onClick={removeAvatar} disabled={!profile.avatar_url || busy === 'avatar-rm'}>Remover</button>
+            </div>
+          </div>
+        </Row>
+        <Row label="Nome completo" htmlFor="pf-name">
+          <input id="pf-name" className="in" value={f.val?.full_name || ''} onChange={(e) => f.set('full_name', e.target.value)} autoComplete="name" />
+        </Row>
+        <Row label="E-mail" help="Usado para login e notificações.">
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input className="in" readOnly value={profile.email} />
+            <button type="button" className="btn" onClick={() => setEmailModal(true)}>Alterar</button>
+          </div>
+        </Row>
+        <Row label="Telefone" help="Para alertas críticos por WhatsApp e recuperação de conta." htmlFor="pf-phone">
+          <input id="pf-phone" className="in" placeholder="+55 (11) 99999-9999" value={f.val?.phone || ''} onChange={(e) => f.set('phone', e.target.value)} autoComplete="tel" inputMode="tel" />
+        </Row>
+      </Card>
+      {emailModal && <ChangeEmailModal current={profile.email} onClose={() => setEmailModal(false)} onDone={(email) => { setEmailModal(false); toast.success('E-mail alterado', `Agora você entra com ${email}.`); if (user) setUser({ ...user, email }); onChanged() }} />}
+    </>
+  )
+}
+
+function ChangeEmailModal({ current, onClose, onDone }: { current: string; onClose: () => void; onDone: (email: string) => void }) {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [err, setErr] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const ok = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.toLowerCase() !== current.toLowerCase() && password.length > 0
+  const submit = async () => {
+    setBusy(true); setErr(null)
+    try {
+      await api('/api/settings/account', { method: 'PATCH', json: { type: 'email', email, password } })
+      onDone(email.trim().toLowerCase())
+    } catch (e: any) { setErr(e.message) } finally { setBusy(false) }
+  }
+  return (
+    <Modal title="Alterar e-mail de acesso" desc={<>Você passa a entrar com o novo endereço. Notificações também vão para ele. E-mail atual: <b>{current}</b>.</>} onClose={onClose}
+      footer={<><button type="button" className="btn" onClick={onClose}>Cancelar</button><button type="button" className="btn btn-primary" disabled={!ok || busy} onClick={submit}>{busy && <I n="refresh" s={14} className="spin" />}Salvar novo e-mail</button></>}>
+      <form onSubmit={(e) => { e.preventDefault(); if (ok && !busy) submit() }} style={{ display: 'grid', gap: 14 }}>
+        <Field label="Novo e-mail"><input className="in" type="email" autoFocus value={email} onChange={(e) => setEmail(e.target.value)} placeholder="voce@empresa.com.br" autoComplete="email" /></Field>
+        <Field label="Confirme sua senha atual" error={err}><input className={'in' + (err ? ' err' : '')} type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" /></Field>
+      </form>
+    </Modal>
+  )
+}
+
+function PreferencesCard({ profile, onChanged }: { profile: Profile; onChanged: () => void }) {
+  const { theme, setTheme } = useSettingsTheme()
+  const init = { ...profile.preferences }
+  const f = useForm(init)
+  useEffect(() => { f.reset({ ...profile.preferences }) }, [JSON.stringify(profile.preferences)]) // eslint-disable-line react-hooks/exhaustive-deps
+  const { saving, error, save } = useSave()
+  const onSave = () => save(async () => {
+    await api('/api/settings/account', { method: 'PATCH', json: { type: 'preferences', preferences: f.val } })
+    onChanged()
+  }, 'Preferências salvas')
+  const themeNow = f.val?.theme || theme
+  const pickTheme = (t: Theme) => { f.set('theme', t); setTheme(t, false) }
+  const tzKnown = TIMEZONES.some(([v]) => v === f.val?.timezone)
+
+  return (
+    <Card title="Preferências" foot={<SaveBar dirty={f.dirty} saving={saving} error={error} onSave={onSave} onCancel={() => { f.cancel(); setTheme(f.orig?.theme || 'light', false) }} />}>
+      <Row label="Idioma" htmlFor="pf-locale">
+        <select id="pf-locale" className="in" value={f.val?.locale || 'pt-BR'} onChange={(e) => f.set('locale', e.target.value)}>
+          <option value="pt-BR">Português (Brasil)</option>
+          <option value="en-US">English</option>
+          <option value="es">Español</option>
+        </select>
+      </Row>
+      <Row label="Fuso horário" help="Define horários de agendamento e relatórios." htmlFor="pf-tz">
+        <select id="pf-tz" className="in" value={f.val?.timezone || 'America/Sao_Paulo'} onChange={(e) => f.set('timezone', e.target.value)}>
+          {!tzKnown && f.val?.timezone && <option value={f.val.timezone}>{f.val.timezone}</option>}
+          {TIMEZONES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
+      </Row>
+      <Row label="Formato de data">
+        <div className="in2">
+          <select className="in" aria-label="Formato de data" value={f.val?.date_format || 'DD/MM/YYYY'} onChange={(e) => f.set('date_format', e.target.value)}>
+            <option value="DD/MM/YYYY">DD/MM/AAAA</option>
+            <option value="MM/DD/YYYY">MM/DD/AAAA</option>
+            <option value="YYYY-MM-DD">AAAA-MM-DD</option>
+          </select>
+          <select className="in" aria-label="Formato de hora" value={f.val?.time_format || '24h'} onChange={(e) => f.set('time_format', e.target.value)}>
+            <option value="24h">24 horas</option>
+            <option value="12h">12 horas</option>
+          </select>
+        </div>
+      </Row>
+      <Row label="Tema" help="Aparência das Configurações. “Sistema” segue o seu aparelho.">
+        <div className="seg" role="radiogroup" aria-label="Tema">
+          {([['light', 'Claro', 'sun'], ['dark', 'Escuro', 'moon'], ['system', 'Sistema', 'monitor']] as Array<[Theme, string, string]>).map(([k, l, ic]) => (
+            <button key={k} type="button" role="radio" aria-checked={themeNow === k} className={themeNow === k ? 'on' : ''} onClick={() => pickTheme(k)}><I n={ic} s={14} style={{ marginRight: 6 }} />{l}</button>
+          ))}
+        </div>
+      </Row>
+    </Card>
+  )
+}
+
+// mantém o helper importado em uso em componentes que só precisam das iniciais
+void initials

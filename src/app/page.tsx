@@ -17,6 +17,8 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
+  const [mfaStep, setMfaStep] = useState(false)
+  const [mfaCode, setMfaCode] = useState('')
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -31,10 +33,39 @@ export default function LoginPage() {
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || 'Erro ao fazer login')
-      router.push('/dashboard')
+      if (data.mfaRequired) {
+        // Senha certa; falta o código do app autenticador.
+        setMfaStep(true)
+        setIsLoading(false)
+        return
+      }
+      router.push(data.mfaSetupRequired ? '/settings/security?require2fa=1' : '/dashboard')
       router.refresh()
     } catch (err: any) {
       setError(err.message || 'Erro ao fazer login. Verifique suas credenciais.')
+      setIsLoading(false)
+    }
+  }
+
+  const handleMfa = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsLoading(true)
+    setError('')
+    try {
+      const response = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'mfa-verify', code: mfaCode }),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        if (response.status === 401 && /expirad|inválida\./i.test(data.error || '')) { setMfaStep(false); setMfaCode('') }
+        throw new Error(data.error || 'Código inválido')
+      }
+      router.push('/dashboard')
+      router.refresh()
+    } catch (err: any) {
+      setError(err.message || 'Código inválido')
       setIsLoading(false)
     }
   }
@@ -63,6 +94,55 @@ export default function LoginPage() {
             <span className="text-xl font-bold text-gray-900">Worder</span>
           </div>
 
+          {mfaStep ? (
+            <>
+              <h1 className="text-2xl font-bold text-gray-900 mb-1">Verificação em duas etapas</h1>
+              <p className="text-sm text-gray-500 mb-8">
+                Abra o app autenticador e digite o código de 6 dígitos de <b className="text-gray-700">{email}</b>.
+              </p>
+              <form onSubmit={handleMfa} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Código</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    autoFocus
+                    value={mfaCode}
+                    onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="000000"
+                    required
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-lg tracking-[0.4em] text-center text-gray-900 placeholder:text-gray-300 bg-white focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none transition-all"
+                  />
+                </div>
+                {error && (
+                  <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                    <span>{error}</span>
+                  </div>
+                )}
+                <button
+                  type="submit"
+                  disabled={isLoading || mfaCode.length !== 6}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-brand-500 hover:bg-brand-600 rounded-lg text-white font-semibold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isLoading ? (
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <>Confirmar<ArrowRight className="w-4 h-4" /></>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setMfaStep(false); setMfaCode(''); setError('') }}
+                  className="w-full text-sm text-gray-500 hover:text-gray-700 py-1"
+                >
+                  Voltar e entrar com outra conta
+                </button>
+              </form>
+            </>
+          ) : (
+          <>
           <h1 className="text-2xl font-bold text-gray-900 mb-1">Bem-vindo de volta</h1>
           <p className="text-sm text-gray-500 mb-8">
             Acesse sua conta para gerenciar sua operação.
@@ -151,6 +231,8 @@ export default function LoginPage() {
               Criar conta grátis
             </Link>
           </p>
+          </>
+          )}
         </motion.div>
       </div>
 

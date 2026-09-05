@@ -217,6 +217,20 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // A organização exige verificação em duas etapas e este usuário ainda não
+  // configurou: só a tela de Segurança (e as APIs necessárias) ficam liberadas.
+  if (accessToken && request.cookies.get('wd-2fa-required')?.value === '1' && !isPublicRoute(pathname)) {
+    const allowed = pathname.startsWith('/settings/security') || pathname.startsWith('/api/settings/security')
+      || pathname.startsWith('/api/settings/account') || pathname.startsWith('/api/auth') || pathname.startsWith('/api/stores')
+      || pathname.startsWith('/api/profile') || pathname.startsWith('/api/notifications') || pathname.startsWith('/api/shopify/stores');
+    if (!allowed) {
+      if (pathname.startsWith('/api/')) {
+        return NextResponse.json({ error: 'Configure a verificação em duas etapas para continuar.', code: 'mfa_setup_required' }, { status: 403 });
+      }
+      return NextResponse.redirect(new URL('/settings/security?require2fa=1', request.url));
+    }
+  }
+
   // Verify token and check user role
   if (accessToken && !isPublicRoute(pathname)) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
