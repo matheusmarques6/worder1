@@ -255,13 +255,50 @@ const CATALOG_COLS = 'shopify_product_id, title, handle, price, compare_at_price
 //   hidden_from_feeds — o lojista escondeu o produto na tela de Produtos.
 //   available         — a Shopify diz que não dá para comprar (esgotado
 //                       sem venda permitida). NULL é "não sei" e passa.
-function catalogQuery(orgId: string, storeId: string) {
-  return supabaseAdmin.from('shopify_products')
+function catalogQuery(orgId: string, storeId: string, excluded?: Set<string>) {
+  let q = supabaseAdmin.from('shopify_products')
     .select(CATALOG_COLS)
     .eq('organization_id', orgId)
     .eq('store_id', storeId)
     .eq('hidden_from_feeds', false)
     .or('available.is.null,available.eq.true')
+  // Exclusão POR FEED: feita no banco, não depois — assim o `limit` continua
+  // devolvendo a quantidade pedida em vez de um feed com buracos.
+  const ids = safeIdList(excluded)
+  if (ids) q = q.not('shopify_product_id', 'in', ids)
+  return q
+}
+
+/**
+ * Lista de ids para o filtro `in` do PostgREST — só dígitos e traços passam,
+ * então nada do que vem do banco vira sintaxe de filtro.
+ */
+export function safeIdList(excluded?: Set<string> | null): string | null {
+  if (!excluded || excluded.size === 0) return null
+  const ids = Array.from(excluded)
+    .map((v) => String(v).trim())
+    .filter((v) => /^[A-Za-z0-9_-]+$/.test(v))
+  if (!ids.length) return null
+  return `(${ids.map((v) => `"${v}"`).join(',')})`
+}
+
+/**
+ * O produto está na lista de excluídos do feed?
+ *
+ * Aceita os vários nomes de id porque nem todo ramo passa pelos mappers:
+ * `cart_items` devolve os itens do carrinho salvo como estão, e ali o id
+ * pode vir do pixel (`ProductID`), do webhook (`product_id`) ou do canônico.
+ */
+export function isExcluded(p: any, excluded: Set<string>): boolean {
+  if (excluded.size === 0 || !p) return false
+  const id =
+    p.product_id ??
+    p.shopify_product_id ??
+    p.ProductID ??
+    p.productId ??
+    p.product?.id ??
+    p.id
+  return id != null && excluded.has(String(id))
 }
 
 // Fetch newest active catalog products for a store, tolerant of how the
@@ -270,8 +307,8 @@ function catalogQuery(orgId: string, storeId: string) {
 // returned nothing. We try the case-insensitive/null-tolerant filter first,
 // and if that still yields zero we fall back to ANY product of the store so
 // a recommendation block never renders empty when the catalog IS synced.
-async function fetchNewestCatalog(orgId: string, storeId: string, limit: number): Promise<any[]> {
-  const base = () => catalogQuery(orgId, storeId)
+async function fetchNewestCatalog(orgId: string, storeId: string, limit: number, excluded?: Set<string>): Promise<any[]> {
+  const base = () => catalogQuery(orgId, storeId, excluded)
     .order('created_at', { ascending: false })
     .limit(limit)
   let { data } = await base().or('status.ilike.active,status.is.null')
@@ -295,6 +332,32 @@ export async function resolveProductFeed(opts: ResolveFeedOptions): Promise<any[
   const store = await resolveFeedStore(orgId, opts.storeId, contact_id, event_data)
   const shopDomain = store.host
 
+  // Configuração do feed lida ANTES da busca: as exclusões entram na
+  // consulta ao catálogo (o limite continua valendo) e os filtros dizem
+  // quanto buscar a mais para não sobrar menos produto que o pedido.
+  // A organização é a cerca: feed de outra org não configura nada aqui.
+  let feedFilters: any[] = []
+  const excluded = new Set<string>()
+  if (feed_id) {
+    try {
+      const { data: feed } = await supabaseAdmin.from('product_feeds')
+        .select('filters, excluded_product_ids').eq('id', feed_id).eq('organization_id', orgId).maybeSingle()
+      if (feed) {
+        if (Array.isArray(feed.filters)) feedFilters = feed.filters as any[]
+        for (const id of (feed.excluded_product_ids as any[]) || []) {
+          if (id != null && String(id).trim()) excluded.add(String(id).trim())
+        }
+      }
+    } catch { /* coluna nova pode não existir num banco antigo */ }
+  }
+  // Filtros são aplicados em memória depois da busca; sem folga, um feed de
+  // 4 produtos com filtro de categoria voltaria com 1.
+  const fetchLimit = feedFilters.length > 0 ? Math.min(limit * 5, 100) : limit
+  // Os feeds de evento (carrinho, pedido) cortam a lista antes de a exclusão
+  // rodar. A mesma folga, aqui pela quantidade de excluídos: um carrinho de
+  // 3 itens com 1 excluído continua mostrando os 2 que o cliente pode ver.
+  const eventLimit = excluded.size > 0 ? Math.min(limit + excluded.size, 100) : limit
+
   let products: any[] = []
 
   switch (type) {
@@ -302,16 +365,16 @@ export async function resolveProductFeed(opts: ResolveFeedOptions): Promise<any[
     case 'most_viewed':
     case 'newest': {
       if (!store.id) break
-      const data = await fetchNewestCatalog(orgId, store.id, limit)
+      const data = await fetchNewestCatalog(orgId, store.id, fetchLimit, excluded)
       products = data.map((p: any) => mapCatalogProduct(p, shopDomain))
       break
     }
 
     case 'random': {
       if (!store.id) break
-      const { data } = await catalogQuery(orgId, store.id)
+      const { data } = await catalogQuery(orgId, store.id, excluded)
         .or('status.ilike.active,status.is.null')
-        .limit(limit * 3)
+        .limit(fetchLimit * 3)
       const shuffled = (data || []).map((p: any) => mapCatalogProduct(p, shopDomain)).sort(() => Math.random() - 0.5)
       products = shuffled.slice(0, limit)
       break
@@ -334,14 +397,14 @@ export async function resolveProductFeed(opts: ResolveFeedOptions): Promise<any[
           if (productIds.length > 0) {
             // Só o que existe no catálogo DESTA loja: um produto visto na
             // loja irmã não entra no e-mail desta.
-            const { data } = await catalogQuery(orgId, store.id)
+            const { data } = await catalogQuery(orgId, store.id, excluded)
               .in('shopify_product_id', productIds)
             products = (data || []).map((p: any) => mapCatalogProduct(p, shopDomain))
           }
         } catch {}
       }
       if (products.length === 0) {
-        const data = await fetchNewestCatalog(orgId, store.id, limit)
+        const data = await fetchNewestCatalog(orgId, store.id, fetchLimit, excluded)
         products = data.map((p: any) => mapCatalogProduct(p, shopDomain))
       }
       break
@@ -357,7 +420,7 @@ export async function resolveProductFeed(opts: ResolveFeedOptions): Promise<any[
             .limit(1)
             .single()
           if (recovery?.items && Array.isArray(recovery.items)) {
-            products = recovery.items.slice(0, limit)
+            products = recovery.items.slice(0, eventLimit)
           }
         } catch {}
       }
@@ -366,7 +429,7 @@ export async function resolveProductFeed(opts: ResolveFeedOptions): Promise<any[
 
     case 'trigger_cart': {
       const items = event_data?.Items || event_data?.line_items || event_data?.extra?.line_items || []
-      products = items.slice(0, limit).map((it: any) => mapTriggerItem(it))
+      products = items.slice(0, eventLimit).map((it: any) => mapTriggerItem(it))
       break
     }
 
@@ -389,7 +452,7 @@ export async function resolveProductFeed(opts: ResolveFeedOptions): Promise<any[
         []
 
       if (Array.isArray(itemsList) && itemsList.length > 0) {
-        products = itemsList.slice(0, limit).map((it: any, idx: number) => ({
+        products = itemsList.slice(0, eventLimit).map((it: any, idx: number) => ({
           ...mapTriggerItem(it),
           _variant_id: String(it.VariantID || it.variant_id || it.variantId || it.id || '') || null,
           _idx: idx,
@@ -506,7 +569,7 @@ export async function resolveProductFeed(opts: ResolveFeedOptions): Promise<any[
             .limit(1)
             .single()
           if (recovery?.items && Array.isArray(recovery.items)) {
-            products = recovery.items.slice(0, limit).map((it: any) => mapTriggerItem(it))
+            products = recovery.items.slice(0, eventLimit).map((it: any) => mapTriggerItem(it))
           }
         } catch {}
       }
@@ -532,34 +595,29 @@ export async function resolveProductFeed(opts: ResolveFeedOptions): Promise<any[
 
     case 'trigger_order': {
       const items = event_data?.Items || event_data?.line_items || []
-      products = items.slice(0, limit).map((it: any) => mapTriggerItem(it))
+      products = items.slice(0, eventLimit).map((it: any) => mapTriggerItem(it))
       break
     }
 
     case 'recommendations':
     default: {
       if (!store.id) break
-      const data = await fetchNewestCatalog(orgId, store.id, limit)
+      const data = await fetchNewestCatalog(orgId, store.id, fetchLimit, excluded)
       products = data.map((p: any) => mapCatalogProduct(p, shopDomain))
     }
   }
 
-  // If feed_id provided, load feed config for filters. A organização é
-  // a cerca: um feed de outra org não filtra nada aqui.
-  if (feed_id) {
-    try {
-      const { data: feed } = await supabaseAdmin.from('product_feeds')
-        .select('filters').eq('id', feed_id).eq('organization_id', orgId).maybeSingle()
-      if (feed && feed.filters && Array.isArray(feed.filters) && feed.filters.length > 0) {
-        for (const filter of feed.filters as any[]) {
-          if (filter.field === 'category' && filter.value !== 'all') {
-            products = products.filter((p: any) =>
-              p.product_type === filter.value || p.category === filter.value
-            )
-          }
-        }
-      }
-    } catch {}
+  // Exclusão por feed, agora sobre TUDO — inclusive os feeds de evento
+  // (carrinho abandonado, pedido, produto visto), que não passam pelo
+  // catálogo. Um produto excluído não aparece nem se veio do evento.
+  if (excluded.size > 0) products = products.filter((p: any) => !isExcluded(p, excluded))
+
+  for (const filter of feedFilters) {
+    if (filter?.field === 'category' && filter.value !== 'all') {
+      products = products.filter((p: any) =>
+        p.product_type === filter.value || p.category === filter.value
+      )
+    }
   }
 
   return products.slice(0, limit)

@@ -1530,6 +1530,8 @@ function ProductBlockProperties({ p, onChange, commonTail, selectedSubElement, o
   const [showViewFeeds, setShowViewFeeds] = useState(false)
   const [showCreateFeed, setShowCreateFeed] = useState(false)
   const [showBrowseProducts, setShowBrowseProducts] = useState(false)
+  // Feed aberto para edição (ex.: mexer nos produtos excluídos). null = criar novo.
+  const [editingFeed, setEditingFeed] = useState<any>(null)
 
   const subElementLabels: Record<string, string> = {
     title: 'Titulo',
@@ -1951,10 +1953,12 @@ function ProductBlockProperties({ p, onChange, commonTail, selectedSubElement, o
         onClose={() => setShowViewFeeds(false)}
         currentFeedId={p.feedId}
         onSelect={(feed) => { onChange('feedId', feed.id); onChange('feedName', feed.name); onChange('feedType', feed.feed_type) }}
+        onEdit={(feed) => { setEditingFeed(feed); setShowCreateFeed(true) }}
       />
       <CreateFeedModal
         isOpen={showCreateFeed}
-        onClose={() => setShowCreateFeed(false)}
+        onClose={() => { setShowCreateFeed(false); setEditingFeed(null) }}
+        editFeed={editingFeed}
         onCreate={(feed) => { onChange('feedId', feed.id); onChange('feedName', feed.name); onChange('feedType', feed.feed_type) }}
       />
       <BrowseProductsModal

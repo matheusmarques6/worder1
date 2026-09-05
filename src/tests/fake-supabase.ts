@@ -73,6 +73,21 @@ export function createFakeSupabase(): FakeSupabase {
     chain('lte', (col: string, val: any) => filters.push((r) => r[col] != null && r[col] <= val))
     chain('ilike', (col: string, val: string) => filters.push((r) => String(r[col] ?? '').toLowerCase() === String(val).replace(/%/g, '').toLowerCase()))
     chain('or', (expr: string) => filters.push(orClause(expr)))
+    // .not(col, op, valor) — o `in` recebe a lista já no formato PostgREST,
+    // ("a","b"), que é como o código monta a exclusão de produtos do feed.
+    chain('not', (col: string, op: string, val: any) => filters.push((r) => {
+      const v = r[col]
+      switch (op) {
+        case 'in': {
+          const list = String(val).replace(/^\(|\)$/g, '').split(',')
+            .map((s) => s.trim().replace(/^"|"$/g, ''))
+          return !list.includes(String(v))
+        }
+        case 'is': return String(val) === 'null' ? v != null : String(v) !== String(val)
+        case 'eq': return String(v) !== String(val)
+        default: return true
+      }
+    }))
     chain('order', (col: string, opts?: { ascending?: boolean }) => { orderCol = col; orderAsc = opts?.ascending !== false })
     chain('limit', (n: number) => { limitN = n })
     chain('range', () => {})

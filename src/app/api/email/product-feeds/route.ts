@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthClient, authError, validateStoreAccess } from '@/lib/api-utils'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { normalizeExcluded } from '@/lib/email/product-feed-config'
 
 // =============================================================
 // Feeds de produto — configuração (nome, tipo, filtros) que o editor
@@ -92,6 +93,9 @@ export async function POST(request: NextRequest) {
     if (body.filters && Array.isArray(body.filters)) insertData.filters = body.filters
     if (body.max_products) insertData.max_products = body.max_products
     if (body.columns) insertData.columns = body.columns
+    // Produtos que este feed nunca mostra.
+    const excluded = normalizeExcluded(body.excluded_product_ids)
+    if (excluded.length) insertData.excluded_product_ids = excluded
 
     console.log('[ProductFeeds] Creating:', insertData)
 
@@ -106,6 +110,7 @@ export async function POST(request: NextRequest) {
 
       // If column error, retry with minimal fields
       if (error.message?.includes('column') || error.code === '42703') {
+        console.warn('[ProductFeeds] Coluna ausente, salvando o essencial:', error.message)
         const minimalData = {
           organization_id: auth.user.organization_id,
           name: body.name,
