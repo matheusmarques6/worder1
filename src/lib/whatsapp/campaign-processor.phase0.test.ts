@@ -102,6 +102,8 @@ vi.mock('@/lib/whatsapp/queue', () => ({
 }))
 
 import CampaignProcessor from '@/lib/whatsapp/campaign-processor'
+import { supabaseAdmin } from '@/lib/supabase-admin'
+import { campaignQueue } from '@/lib/whatsapp/queue'
 
 function batchData(recipients: any[]) {
   return {
@@ -109,7 +111,7 @@ function batchData(recipients: any[]) {
     organizationId: 'org-1',
     recipients,
     instance: { id: 'inst-1', tier: 1, phoneNumberId: 'pnid', accessToken: 'tok' },
-    template: { name: 'promo', language: 'pt_BR', category: 'MARKETING' },
+    template: { name: 'promo', language: 'pt_BR', category: 'MARKETING', shape: { body_text: 'Hello!' } },
     mediaUrl: undefined,
     mediaType: undefined,
     batchIndex: 0,
@@ -123,6 +125,87 @@ beforeEach(() => {
   recipientTable.clear()
   mockCanSend.mockResolvedValue({ allowed: true })
   sendTemplateMessage.mockReset()
+  vi.mocked(supabaseAdmin.from).mockImplementation((() => recipientBuilder()) as any)
+  vi.mocked(campaignQueue.addBatch).mockClear()
+})
+
+describe('campaign template shape survives the serialized batch', () => {
+  it.each([
+    { label: 'JSONB dynamic URL fails before Meta', components: [{ type: 'BUTTONS', buttons: [{ type: 'URL', url: 'https://shop.example/{{1}}' }] }], buttons: null, fails: true, expected: [] },
+    { label: 'flat dynamic URL fails before Meta', components: null, buttons: [{ type: 'URL', url: 'https://shop.example/{{1}}' }], fails: true, expected: [] },
+    { label: 'static template sends unchanged', components: null, buttons: [{ type: 'URL', url: 'https://shop.example/' }], fails: false, expected: [] },
+    { label: 'media header precedes numerically ordered body vars', components: [{ type: 'HEADER', format: 'IMAGE' }, { type: 'BODY', text: 'Hello {{1}}, order {{2}}' }], buttons: null, fails: false, expected: [
+      { type: 'header', parameters: [{ type: 'image', image: { link: 'https://shop.example/header.jpg' } }] },
+      { type: 'body', parameters: [{ type: 'text', text: 'Ana' }, { type: 'text', text: '123' }] },
+    ] },
+  ])('$label', async ({ components, buttons, fails, expected }) => {
+    const template = {
+      name: 'approved_promo', status: 'APPROVED', language: 'en_US', category: 'MARKETING',
+      components, buttons, header_type: null, body_text: 'Hello!',
+    }
+    const templateFilters: Array<[string, unknown]> = []
+    recipientTable.set('r1', {
+      id: 'r1', campaign_id: 'c1', phone_number: '5511999990001',
+      contact_name: null, status: 'pending', resolved_variables: expected.length ? { '2': '123', '1': 'Ana' } : {}, retry_count: 0,
+    })
+    vi.mocked(supabaseAdmin.from).mockImplementation(((table: string) => {
+      if (table === 'whatsapp_campaign_recipients') return recipientBuilder()
+      if (table === 'whatsapp_campaign_logs') return { insert: vi.fn().mockResolvedValue({ error: null }) }
+      let columns = ''
+      const query: any = {
+        select: (value: string) => { columns = value; return query },
+        eq: (key: string, value: unknown) => {
+          if (table === 'whatsapp_templates') templateFilters.push([key, value])
+          return query
+        },
+        update: () => query,
+        single: async () => ({ data: table === 'whatsapp_campaigns'
+          ? { id: 'c1', organization_id: 'org-1', status: 'draft', template_id: 'tpl-1', template_name: 'stale_name', media_url: 'https://shop.example/header.jpg', media_type: 'image' }
+          : { id: 'inst-1', phone_number_id: 'pnid', access_token: 'tok', messaging_limit_tier: 'TIER_250' }, error: null }),
+        // Mirror PostgREST projection: returning unselected shape would hide a broken query.
+        maybeSingle: async () => ({ data: Object.fromEntries(columns.split(',').map(key => {
+          const field = key.trim() as keyof typeof template
+          return [field, template[field]]
+        })), error: null }),
+      }
+      return query
+    }) as any)
+    sendTemplateMessage.mockResolvedValue({ messages: [{ id: 'wamid.invalid' }] })
+
+    const processor: any = new CampaignProcessor()
+    expect((await processor.startCampaign('c1')).success).toBe(true)
+    const batches = vi.mocked(campaignQueue.addBatch).mock.calls[0][1]
+    const batch = JSON.parse(JSON.stringify(batches[0]))
+    const result = await processor.processBatch(batch)
+
+    if (fails) {
+      expect(sendTemplateMessage).not.toHaveBeenCalled()
+      expect(result).toMatchObject({ sent: 0, failed: 1 })
+      expect(recipientTable.get('r1')).toMatchObject({ status: 'failed', error_code: 'button_vars_mismatch' })
+    } else {
+      expect(result).toMatchObject({ sent: 1, failed: 0 })
+      expect(sendTemplateMessage).toHaveBeenCalledTimes(1)
+      expect(sendTemplateMessage).toHaveBeenCalledWith({
+        phoneNumberId: 'pnid', accessToken: 'tok', to: '5511999990001',
+        templateName: 'approved_promo', languageCode: 'en_US', components: expected,
+      })
+    }
+    expect(batch.template).toMatchObject({ name: 'approved_promo', language: 'en_US' })
+    expect(templateFilters).toEqual([['id', 'tpl-1'], ['organization_id', 'org-1']])
+  })
+
+  it('old serialized batch without shape fails before Meta with an actionable error', async () => {
+    const recipient = { id: 'old', phone_number: '1', resolved_variables: {}, retry_count: 0 }
+    recipientTable.set('old', { ...recipient, campaign_id: 'c1', status: 'pending' })
+    sendTemplateMessage.mockResolvedValue({ messages: [{ id: 'wamid.old' }] })
+    const processor: any = new CampaignProcessor()
+    const oldBatch: any = batchData([recipient])
+    delete oldBatch.template.shape
+    const result = await processor.processBatch(oldBatch)
+    expect(sendTemplateMessage).not.toHaveBeenCalled()
+    expect(result).toMatchObject({ sent: 0, failed: 1 })
+    expect(result.errors[0].error).toMatch(/template.*shape.*unsent recipients/i)
+  })
 })
 
 // ---------------------------------------------------------------------------

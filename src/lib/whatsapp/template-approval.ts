@@ -9,6 +9,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { wlog } from '@/lib/observability/whatsapp-logger'
+import type { TemplateShape } from './template-components'
 
 export function isTemplateApproved(status: string | null | undefined): boolean {
   return (status || '').toUpperCase() === 'APPROVED'
@@ -17,7 +18,7 @@ export function isTemplateApproved(status: string | null | undefined): boolean {
 export interface TemplateApprovalCheck {
   ok: boolean
   reason?: string
-  template?: { name: string; status: string }
+  template?: TemplateShape & { name: string; status: string; language: string; category: string | null }
 }
 
 /**
@@ -29,12 +30,12 @@ export async function ensureCampaignTemplateApproved(campaign: {
   template_name?: string | null
   organization_id: string
 }): Promise<TemplateApprovalCheck> {
-  let row: { status: string; name: string } | null = null
+  let row: TemplateApprovalCheck['template'] | null = null
 
   if (campaign.template_id) {
     const { data } = await supabaseAdmin
       .from('whatsapp_templates')
-      .select('status, name')
+      .select('status, name, language, category, components, header_type, body_text, buttons')
       .eq('id', campaign.template_id)
       .eq('organization_id', campaign.organization_id)
       .maybeSingle()
@@ -47,7 +48,7 @@ export async function ensureCampaignTemplateApproved(campaign: {
     // silently dropping data. Fetch all rows and prefer the first APPROVED one.
     const { data: rows } = await supabaseAdmin
       .from('whatsapp_templates')
-      .select('status, name')
+      .select('status, name, language, category, components, header_type, body_text, buttons')
       .eq('organization_id', campaign.organization_id)
       .eq('name', campaign.template_name)
     if (rows && rows.length > 0) {
