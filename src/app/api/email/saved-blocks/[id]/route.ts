@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthClient, authError } from '@/lib/api-utils'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { inlineIntoTemplates, loadUsage, savedKind, stripLinks } from '@/lib/email/universal-blocks'
+import {
+  inlineIntoTemplates, loadUsage, savedKind, stripLinks,
+  propagateToTemplates, snapshotVersion,
+} from '@/lib/email/universal-blocks'
+
+export const dynamic = 'force-dynamic'
+// Salvar um universal reescreve o design e o html de cada e-mail que o
+// usa — vinte e três, no caso do rodapé maior desta base. É trabalho
+// demais para o teto padrão de dez segundos.
+export const maxDuration = 60
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -33,6 +42,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
   try {
     const auth = await getAuthClient()
     if (!auth) return authError()
+    const orgId = auth.user.organization_id
     const body = await request.json()
 
     const updateData: Record<string, any> = {}
@@ -49,21 +59,45 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ error: 'Nada para atualizar' }, { status: 400 })
     }
 
+    const contentChanged = body.block_json !== undefined
+
+    // Guarda o conteúdo anterior antes de sobrescrever: um universal em
+    // vinte e três e-mails não tem desfazer natural.
+    if (contentChanged) {
+      const { data: before } = await supabaseAdmin
+        .from('saved_blocks')
+        .select('block_json')
+        .eq('id', params.id)
+        .eq('organization_id', orgId)
+        .maybeSingle()
+      if (before?.block_json) await snapshotVersion(orgId, params.id, before.block_json, auth.user.id)
+    }
+
     const { data, error } = await supabaseAdmin
       .from('saved_blocks')
       .update(updateData)
       .eq('id', params.id)
-      .eq('organization_id', auth.user.organization_id)
+      .eq('organization_id', orgId)
       .select()
       .single()
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    // Quem salvou quer saber onde a alteração chegou.
-    const usage = body.block_json !== undefined
-      ? await loadUsage(auth.user.organization_id, params.id)
-      : null
-    return NextResponse.json({ block: data, ...(usage ? { usage } : {}) })
+    // Aqui a promessa se cumpre: o conteúdo novo é escrito em cada
+    // e-mail que usa este universal, design e html. Sem este passo,
+    // "editar em todos" valia só dentro do editor — o envio lê o html
+    // já renderizado do template, e as automações nem olham o design.
+    let propagated = 0
+    let usage = null
+    if (contentChanged) {
+      try {
+        propagated = await propagateToTemplates(orgId, params.id, data as any, updateData.name)
+      } catch (err) {
+        console.error('[universal] falha ao propagar para os e-mails', err)
+      }
+      usage = await loadUsage(orgId, params.id)
+    }
+    return NextResponse.json({ block: data, ...(usage ? { usage, propagated } : {}) })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 })
   }

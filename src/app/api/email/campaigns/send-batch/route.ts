@@ -17,6 +17,7 @@ import {
   resolveProductBlocks,
   resolveCartBlocks,
   resolveSavedBlocks,
+  hasUniversalContent,
   renderMergeTags,
 } from '@/lib/email/render';
 import { renderDocumentToHtml } from '@/lib/email/render-html';
@@ -103,8 +104,9 @@ export async function POST(req: NextRequest) {
     // Resolve universal/saved blocks — re-render HTML if design_json has linked blocks
     if (template.design_json) {
       try {
-        const hasLinkedBlocks = JSON.stringify(template.design_json).includes('_savedBlockId')
-        if (hasLinkedBlocks) {
+        // Seção conta tanto quanto bloco: na prática todo universal em
+        // uso é uma seção, e a checagem antiga só via `_savedBlockId`.
+        if (hasUniversalContent(template.design_json)) {
           const resolvedDoc = await resolveSavedBlocks(template.design_json, organizationId)
           template.html = renderDocumentToHtml(resolvedDoc)
         }

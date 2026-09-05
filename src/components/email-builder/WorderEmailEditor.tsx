@@ -946,7 +946,6 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
             })),
           }
         }
-        if (info.kind === 'section' && sec._savedSectionId) return sec
         return sec
       }),
     }))
@@ -2248,7 +2247,7 @@ function SavedBlockVersionsModal({ savedBlockId, onClose, onRestored }: {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/40 z-[140] flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-2xl w-[520px] max-h-[70vh] flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
           <div>

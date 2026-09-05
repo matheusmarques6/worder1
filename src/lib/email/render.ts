@@ -12,14 +12,21 @@ import { getAppBaseUrl } from '@/lib/app-url'
 import { stampHtmlLinks, type LinkParamsResolver } from '@/lib/tracking/link-params'
 
 /**
- * Resolve saved/universal blocks in an EmailDocument.
- * For each block with _savedBlockId, fetches the latest version from saved_blocks
- * and merges its props (keeping the local block's id and _savedBlockId).
+ * Põe o conteúdo universal em dia dentro de um documento de e-mail.
+ *
+ * O e-mail guarda uma cópia do universal; salvar o universal reescreve
+ * essa cópia em cada e-mail que o usa. Isto aqui é a rede de proteção
+ * para quando aquela escrita não chegou — uma falha no meio do caminho,
+ * um template restaurado de uma versão antiga. Custa uma consulta por
+ * envio de campanha e evita mandar o rodapé errado.
+ *
+ * Trata seção E bloco. Antes só olhava `_savedBlockId`, e como todo
+ * universal em uso é uma seção, na prática não resolvia nada.
  */
 export async function resolveSavedBlocks(doc: any, orgId: string): Promise<any> {
-  // Collect all unique savedBlockIds
   const ids = new Set<string>()
   for (const section of doc.sections || []) {
+    if (section._savedSectionId) ids.add(section._savedSectionId)
     for (const col of section.columns || []) {
       for (const block of col.blocks || []) {
         if (block._savedBlockId) ids.add(block._savedBlockId)
@@ -28,7 +35,6 @@ export async function resolveSavedBlocks(doc: any, orgId: string): Promise<any> 
   }
   if (ids.size === 0) return doc
 
-  // Fetch all saved blocks in one query
   const { data: savedBlocks } = await supabaseAdmin
     .from('saved_blocks')
     .select('id, block_json')
@@ -39,29 +45,56 @@ export async function resolveSavedBlocks(doc: any, orgId: string): Promise<any> 
 
   const savedMap = new Map(savedBlocks.map(sb => [sb.id, sb.block_json]))
 
-  // Replace block props with latest saved version
   const resolved = JSON.parse(JSON.stringify(doc))
-  for (const section of resolved.sections || []) {
-    for (const col of section.columns || []) {
-      for (let i = 0; i < (col.blocks || []).length; i++) {
-        const block = col.blocks[i]
-        if (block._savedBlockId && savedMap.has(block._savedBlockId)) {
-          const savedJson = savedMap.get(block._savedBlockId)
-          if (savedJson && savedJson.props) {
-            // Merge: saved props override, keep local id + meta
-            col.blocks[i] = {
-              ...block,
-              type: savedJson.type || block.type,
-              props: { ...savedJson.props },
-              _savedBlockId: block._savedBlockId,
-              _savedBlockName: block._savedBlockName,
-            }
-          }
+  resolved.sections = (resolved.sections || []).map((section: any) => {
+    // Seção universal: o conteúdo inteiro vem da biblioteca — colunas,
+    // blocos, cor, espaçamento. Só o id da seção neste e-mail fica.
+    if (section._savedSectionId && savedMap.has(section._savedSectionId)) {
+      const saved: any = savedMap.get(section._savedSectionId)
+      if (saved?._kind === 'section' && saved.section) {
+        return {
+          ...JSON.parse(JSON.stringify(saved.section)),
+          id: section.id,
+          _savedSectionId: section._savedSectionId,
+          _savedSectionName: section._savedSectionName,
         }
       }
     }
-  }
+    // Bloco universal solto dentro de uma seção comum.
+    return {
+      ...section,
+      columns: (section.columns || []).map((col: any) => ({
+        ...col,
+        blocks: (col.blocks || []).map((block: any) => {
+          if (!block._savedBlockId || !savedMap.has(block._savedBlockId)) return block
+          const savedJson: any = savedMap.get(block._savedBlockId)
+          if (!savedJson?.props) return block
+          return {
+            ...block,
+            type: savedJson.type || block.type,
+            props: { ...savedJson.props },
+            _savedBlockId: block._savedBlockId,
+            _savedBlockName: block._savedBlockName,
+          }
+        }),
+      })),
+    }
+  })
   return resolved
+}
+
+/** O documento tem algum conteúdo vindo da biblioteca? */
+export function hasUniversalContent(design: any): boolean {
+  if (!design) return false
+  for (const section of design.sections || []) {
+    if (section?._savedSectionId) return true
+    for (const col of section?.columns || []) {
+      for (const block of col?.blocks || []) {
+        if (block?._savedBlockId) return true
+      }
+    }
+  }
+  return false
 }
 
 /**

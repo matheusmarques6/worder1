@@ -3,6 +3,12 @@ import { getAuthClient, authError } from '@/lib/api-utils'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { usageCounts, savedKind, stripLinks } from '@/lib/email/universal-blocks'
 
+export const dynamic = 'force-dynamic'
+// Salvar um universal reescreve o design e o html de cada e-mail que o
+// usa — vinte e três, no caso do rodapé maior desta base. É trabalho
+// demais para o teto padrão de dez segundos.
+export const maxDuration = 60
+
 export async function GET(request: NextRequest) {
   try {
     const auth = await getAuthClient()

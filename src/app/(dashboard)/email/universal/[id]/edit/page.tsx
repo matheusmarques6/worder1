@@ -27,5 +27,13 @@ export default function EditUniversalPage() {
   const router = useRouter()
   const id = params.id as string
 
-  return <UniversalEditorModal savedId={id} onClose={() => router.back()} />
+  // Aberto direto (link salvo, aba nova) não tem histórico para voltar:
+  // fechar levaria a lugar nenhum. Nesse caso vai para os e-mails.
+  const close = () => {
+    const cameFromHere = typeof window !== 'undefined' && window.history.length > 1
+    if (cameFromHere) router.back()
+    else router.push('/email/templates')
+  }
+
+  return <UniversalEditorModal savedId={id} onClose={close} />
 }

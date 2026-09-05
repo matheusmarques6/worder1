@@ -34,3 +34,13 @@ where ids.saved_id ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{
 
 comment on view public.email_universal_usage is
   'Um par (universal, e-mail) por vínculo. Alimenta a contagem "usado em N e-mails" e a lista de onde a alteração vai chegar.';
+
+-- A visão nasce com SELECT para anon e authenticated, como toda tabela
+-- nova do schema public. Quem a lê é só o servidor, com a chave de
+-- serviço e filtrando por organização — o acesso direto do navegador
+-- não tem uso e só amplia a superfície.
+revoke all on public.email_universal_usage from anon, authenticated;
+
+-- security_invoker: se um dia alguém conceder acesso de novo, a visão
+-- passa a valer as regras de quem consulta, e não as do dono.
+alter view public.email_universal_usage set (security_invoker = on);

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { ShoppingBag, Tag, ShoppingCart, Type, ImageIcon, MousePointerClick, Minus, MoveVertical, Share2, Code, Play, PanelTop, PanelBottom, Columns, Package, User, Store, Package2, Link, LucideIcon, Menu, Layers, Table, Quote, Clock, Trash2, Search, Receipt, Pencil, Copy, Loader2, AlertTriangle } from 'lucide-react'
+import { ShoppingBag, Tag, ShoppingCart, Type, ImageIcon, MousePointerClick, Minus, MoveVertical, Share2, Code, Play, PanelTop, PanelBottom, Columns, Package, User, Store, Package2, Link, LucideIcon, Menu, Layers, Table, Quote, Clock, Trash2, Search, Receipt, Pencil, Copy, Loader2, AlertTriangle, Check, X } from 'lucide-react'
 import { BLOCK_DEFS, type BlockDef, type EmailBlock, type EmailSection } from '../config/types'
 import { UniversalThumb, UsageBadge, UniversalIcon, usageText } from '../universal/UniversalBits'
 
@@ -140,6 +140,7 @@ export function BlockPalette({ onAddBlock, onAddSavedBlock, onAddSavedSection, o
   const [renameValue, setRenameValue] = useState('')
   const [busyId, setBusyId] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<SavedItem | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
 
   const loadLibrary = useCallback(async (): Promise<void> => {
     setSavedLoading(true)
@@ -217,8 +218,18 @@ export function BlockPalette({ onAddBlock, onAddSavedBlock, onAddSavedSection, o
   const deleteItem = useCallback(async (item: SavedItem) => {
     setBusyId(item.id)
     try {
-      await fetch(`/api/email/saved-blocks/${item.id}`, { method: 'DELETE' })
-      setSavedItems(prev => prev.filter(i => i.id !== item.id))
+      const res = await fetch(`/api/email/saved-blocks/${item.id}`, { method: 'DELETE' })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok) {
+        setSavedItems(prev => prev.filter(i => i.id !== item.id))
+        // O servidor diz em quantos e-mails o conteúdo ficou gravado.
+        // Sem esse número, "excluído" parece que os e-mails perderam o
+        // rodapé — e é justamente o contrário.
+        setNotice(data.inlined > 0
+          ? `“${item.name}” saiu da biblioteca. O conteúdo ficou gravado nos ${data.inlined} e-mails que o usavam.`
+          : `“${item.name}” foi excluído.`)
+        setTimeout(() => setNotice(null), 6000)
+      }
     } catch { /* nada muda */ }
     setBusyId(null)
     setConfirmDelete(null)
@@ -332,6 +343,16 @@ export function BlockPalette({ onAddBlock, onAddSavedBlock, onAddSavedSection, o
                 muda todos os e-mails que o contêm — o selo diz quantos são.
               </p>
             </div>
+
+            {notice && (
+              <div className="flex items-start gap-2 p-2.5 rounded-lg bg-emerald-50 border border-emerald-200">
+                <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                <p className="text-[10px] text-emerald-900 leading-snug flex-1">{notice}</p>
+                <button onClick={() => setNotice(null)} className="text-emerald-600 hover:text-emerald-800 shrink-0">
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            )}
 
             {/* Filter pills: all / blocks / sections */}
             <div className="flex bg-zinc-100 rounded-md p-0.5">

@@ -13,13 +13,10 @@
 // mora no modal, carregado sob demanda.
 // ═══════════════════════════════════════════════════════════════════
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Layers, Package, Loader2, Mail, Workflow, Send, FileText, Globe, Unlink } from 'lucide-react'
 import { BlockPreview } from '../blocks/BlockPreview'
 import type { EmailBlock, EmailSection } from '../config/types'
-
-/** Violeta é a cor do universal em toda a tela — canvas, painel, biblioteca. */
-export const UNIVERSAL_ACCENT = 'violet'
 
 export type UniversalKind = 'section' | 'block'
 
@@ -338,7 +335,13 @@ export function UniversalThumb({ content, kind, height = 64, width = 600 }: {
   // de parecer com o e-mail. A escala sai da largura disponível, medida
   // — cravar um número deixaria sobra ou corte quando o painel mudar.
   const [scale, setScale] = useState(0.55)
+  const observer = useRef<ResizeObserver | null>(null)
   const boxRef = useCallback((node: HTMLDivElement | null) => {
+    // Ref callback também roda com null ao desmontar: é onde o
+    // observador para, senão cada miniatura que sai da lista deixa um
+    // observador vivo — e a biblioteca remonta a cada busca digitada.
+    observer.current?.disconnect()
+    observer.current = null
     if (!node) return
     const apply = () => {
       const w = node.clientWidth
@@ -346,8 +349,8 @@ export function UniversalThumb({ content, kind, height = 64, width = 600 }: {
     }
     apply()
     if (typeof ResizeObserver === 'undefined') return
-    const ro = new ResizeObserver(apply)
-    ro.observe(node)
+    observer.current = new ResizeObserver(apply)
+    observer.current.observe(node)
   }, [width])
 
   return (

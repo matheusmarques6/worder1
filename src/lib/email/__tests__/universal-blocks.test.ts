@@ -17,7 +17,7 @@ vi.mock('@/lib/supabase-admin', () => ({ supabaseAdmin: { from: (t: string) => f
 
 import {
   savedKind, savedContent, wrapContent, stripLinks,
-  loadUsage, usageCounts, inlineIntoTemplates,
+  loadUsage, usageCounts, inlineIntoTemplates, propagateToTemplates, snapshotVersion,
 } from '../universal-blocks'
 
 const ORG = '425db1ba-99c0-4dbb-9434-27fe9cc03ec6'
@@ -32,7 +32,7 @@ const T_SOLTO = 'a0000000-0000-4000-8000-000000000003'
 const T_ALHEIO = 'a0000000-0000-4000-8000-000000000004'
 
 const rodapeContent = {
-  id: 's_lib', columns: [{ id: 'c1', width: 100, blocks: [{ id: 'b1', type: 'text', props: { text: 'Rodapé novo' } }] }],
+  id: 's_lib', columns: [{ id: 'c1', width: 100, blocks: [{ id: 'b1', type: 'text', props: { contentHtml: '<p>Rodapé novo</p>' } }] }],
   styles: { backgroundColor: '#000', padding: { top: 0, right: 0, bottom: 0, left: 0 }, stackOnMobile: true },
 }
 
@@ -44,12 +44,12 @@ function emailComRodape(templateId: string) {
       version: 2,
       settings: {},
       sections: [
-        { id: 's_topo', columns: [{ id: 'c0', width: 100, blocks: [{ id: 'b0', type: 'text', props: { text: 'Oi' } }] }], styles: {} },
+        { id: 's_topo', columns: [{ id: 'c0', width: 100, blocks: [{ id: 'b0', type: 'text', props: { contentHtml: '<p>Oi</p>' } }] }], styles: {} },
         {
           id: 's_rodape',
           _savedSectionId: RODAPE,
           _savedSectionName: 'Rod 2',
-          columns: [{ id: 'c9', width: 100, blocks: [{ id: 'b9', type: 'text', props: { text: 'Rodapé velho' } }] }],
+          columns: [{ id: 'c9', width: 100, blocks: [{ id: 'b9', type: 'text', props: { contentHtml: '<p>Rodapé velho</p>' } }] }],
           styles: { backgroundColor: '#fff' },
         },
       ],
@@ -109,6 +109,23 @@ describe('forma do que está guardado', () => {
     expect(wrapContent('block', { type: 'text' })).toEqual({ type: 'text' })
   })
 
+  it('o vínculo some também de dentro do envelope da seção', () => {
+    // O corpo de uma seção chega embrulhado; sem descer no envelope a
+    // limpeza do servidor era só aparente.
+    const dirty = {
+      _kind: 'section',
+      section: {
+        id: 's1', _savedSectionId: 'x', _savedSectionName: 'y',
+        columns: [{ id: 'c', blocks: [{ id: 'b', _savedBlockId: 'z', props: {} }] }],
+      },
+    }
+    const clean: any = stripLinks(dirty)
+    expect(clean.section._savedSectionId).toBeUndefined()
+    expect(clean.section._savedSectionName).toBeUndefined()
+    expect(clean.section.columns[0].blocks[0]._savedBlockId).toBeUndefined()
+    expect(clean._kind).toBe('section')
+  })
+
   it('o vínculo nunca entra no corpo guardado, nem nos blocos de dentro', () => {
     const dirty = {
       id: 's1', _savedSectionId: 'x', _savedSectionName: 'y',
@@ -163,10 +180,12 @@ describe('onde é usado', () => {
     expect((await loadUsage('', RODAPE)).count).toBe(0)
   })
 
-  it('a contagem da biblioteca inteira sai numa consulta', async () => {
+  it('a contagem da biblioteca conta e-mail, não vínculo', async () => {
     const counts = await usageCounts(ORG)
-    // Aqui os vínculos contam, não os e-mails: é o selo da lista.
-    expect(counts[RODAPE]).toBe(4)
+    // O rodapé tem 4 vínculos em 3 e-mails (um e-mail o usa duas vezes).
+    // O selo diz "N e-mails" e tem de bater com o painel e a confirmação.
+    expect(counts[RODAPE]).toBe(3)
+    expect(counts[RODAPE]).toBe((await loadUsage(ORG, RODAPE)).count)
     expect(counts[BOTAO]).toBe(1)
     expect(counts[SEM_USO]).toBeUndefined()
   })
@@ -184,7 +203,7 @@ describe('apagar embute o conteúdo em vez de deixar buraco', () => {
       expect(sec._savedSectionId).toBeUndefined()
       expect(sec._savedSectionName).toBeUndefined()
       // O conteúdo é o da biblioteca, não o snapshot velho do e-mail.
-      expect(sec.columns[0].blocks[0].props.text).toBe('Rodapé novo')
+      expect(sec.columns[0].blocks[0].props.contentHtml).toContain('Rodapé novo')
       // E o id da seção neste e-mail é preservado.
       expect(sec.id).toBe('s_rodape')
     }
@@ -201,7 +220,7 @@ describe('apagar embute o conteúdo em vez de deixar buraco', () => {
     const row = fake.tables['saved_blocks'].find(r => r.id === RODAPE)!
     await inlineIntoTemplates(ORG, RODAPE, row as any)
     const t = fake.tables['email_templates'].find(r => r.id === T_CAMPANHA)!
-    expect(t.design_json.sections[0].columns[0].blocks[0].props.text).toBe('Oi')
+    expect(t.design_json.sections[0].columns[0].blocks[0].props.contentHtml).toContain('Oi')
   })
 
   it('universal sem uso não escreve em ninguém', async () => {
@@ -228,6 +247,72 @@ describe('apagar embute o conteúdo em vez de deixar buraco', () => {
     expect(botao.props.text).toBe('Comprar')
     expect(botao._savedBlockId).toBeUndefined()
     // A seção segue sendo seção, e o texto vizinho não mudou.
-    expect(blocos[0].props.text).toBe('Oi')
+    expect(blocos[0].props.contentHtml).toContain('Oi')
+  })
+})
+
+describe('salvar leva o conteúdo para os e-mails', () => {
+  // Sem isto, "editar em todos" valia só na tela: o envio lê o html já
+  // renderizado do template, e a automação nem olha o design.
+  it('reescreve design e html de cada e-mail, mantendo o vínculo', async () => {
+    const row = fake.tables['saved_blocks'].find(r => r.id === RODAPE)!
+    const escritos = await propagateToTemplates(ORG, RODAPE, row as any)
+    expect(escritos).toBe(3)
+
+    for (const id of [T_CAMPANHA, T_FLUXO, T_SOLTO]) {
+      const t = fake.tables['email_templates'].find(r => r.id === id)!
+      const sec = t.design_json.sections[1]
+      expect(sec.columns[0].blocks[0].props.contentHtml).toContain('Rodapé novo')
+      // O vínculo FICA: o e-mail continua acompanhando a biblioteca.
+      expect(sec._savedSectionId).toBe(RODAPE)
+      expect(sec.id).toBe('s_rodape')
+      // E o html tem de acompanhar — é dele que a automação envia.
+      expect(t.html).toContain('Rodapé novo')
+      expect(t.html).not.toContain('Rodapé velho')
+    }
+  })
+
+  it('o nome novo viaja junto com o conteúdo', async () => {
+    const row = fake.tables['saved_blocks'].find(r => r.id === RODAPE)!
+    await propagateToTemplates(ORG, RODAPE, row as any, 'Rodapé 2026')
+    const t = fake.tables['email_templates'].find(r => r.id === T_CAMPANHA)!
+    expect(t.design_json.sections[1]._savedSectionName).toBe('Rodapé 2026')
+  })
+
+  it('não atravessa organizações', async () => {
+    const row = fake.tables['saved_blocks'].find(r => r.id === RODAPE)!
+    await propagateToTemplates(ORG, RODAPE, row as any)
+    const alheio = fake.tables['email_templates'].find(r => r.id === T_ALHEIO)!
+    expect(alheio.design_json.sections[1].columns[0].blocks[0].props.contentHtml).toContain('Rodapé velho')
+  })
+
+  it('universal sem uso não escreve em ninguém', async () => {
+    const row = fake.tables['saved_blocks'].find(r => r.id === SEM_USO)!
+    expect(await propagateToTemplates(ORG, SEM_USO, row as any)).toBe(0)
+  })
+})
+
+describe('histórico', () => {
+  beforeEach(() => { fake.seed('saved_block_versions', []) })
+
+  it('a primeira versão é a 1 e as seguintes contam a partir dela', async () => {
+    await snapshotVersion(ORG, RODAPE, { v: 'a' })
+    await snapshotVersion(ORG, RODAPE, { v: 'b' })
+    const rows = fake.tables['saved_block_versions'].filter(r => r.block_id === RODAPE)
+    expect(rows.map(r => r.version)).toEqual([1, 2])
+    expect(rows[1].block_json).toEqual({ v: 'b' })
+  })
+
+  it('cada universal tem a sua própria contagem', async () => {
+    await snapshotVersion(ORG, RODAPE, { v: 'a' })
+    await snapshotVersion(ORG, BOTAO, { v: 'x' })
+    const doBotao = fake.tables['saved_block_versions'].filter(r => r.block_id === BOTAO)
+    expect(doBotao).toHaveLength(1)
+    expect(doBotao[0].version).toBe(1)
+  })
+
+  it('conteúdo vazio não vira versão', async () => {
+    await snapshotVersion(ORG, RODAPE, null)
+    expect(fake.tables['saved_block_versions']).toHaveLength(0)
   })
 })

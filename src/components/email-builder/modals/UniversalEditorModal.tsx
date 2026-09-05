@@ -140,9 +140,10 @@ export default function UniversalEditorModal({ savedId, onClose, onSaved, onOpen
       }
       const data = await res.json()
       const freshUsage: Usage = data.usage || usage
+      const written: number = typeof data.propagated === 'number' ? data.propagated : freshUsage.count
       broadcastUniversalSaved(savedId)
       setSaved((prev) => (prev ? { ...prev, block_json: body, name: data.block?.name || prev.name } : prev))
-      setJustSaved(freshUsage.count)
+      setJustSaved(written)
       baseline.current = JSON.stringify(docOut?.sections ?? [])
       setDirty(false)
       setTimeout(() => setJustSaved(0), 4000)
@@ -281,7 +282,7 @@ export default function UniversalEditorModal({ savedId, onClose, onSaved, onOpen
         {/* Salvar é um ato, não um temporizador: enquanto este botão não
             for clicado, nenhum e-mail muda. */}
         <button
-          onClick={() => liveDoc && handleSave(liveDoc)}
+          onClick={() => { if (liveDoc) void handleSave(liveDoc) }}
           disabled={saving || !dirty || !liveDoc}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-semibold bg-white text-violet-700 hover:bg-violet-50 disabled:opacity-50 disabled:hover:bg-white transition-colors"
         >

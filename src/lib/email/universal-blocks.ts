@@ -50,16 +50,24 @@ export function wrapContent(kind: UniversalKind, content: any): any {
  */
 export function stripLinks<T>(value: T): T {
   const copy = JSON.parse(JSON.stringify(value))
-  delete copy._savedSectionId
-  delete copy._savedSectionName
-  delete copy._savedBlockId
-  delete copy._savedBlockName
-  for (const col of copy.columns || []) {
-    for (const b of col.blocks || []) {
-      delete b._savedBlockId
-      delete b._savedBlockName
+  // O envelope da seção também passa por aqui: sem descer nele, o
+  // vínculo ficava intacto lá dentro e a limpeza do servidor era só
+  // aparente — funcionava porque a tela já limpava antes de enviar.
+  const clean = (node: any) => {
+    if (!node || typeof node !== 'object') return
+    delete node._savedSectionId
+    delete node._savedSectionName
+    delete node._savedBlockId
+    delete node._savedBlockName
+    for (const col of node.columns || []) {
+      for (const b of col.blocks || []) {
+        delete b._savedBlockId
+        delete b._savedBlockName
+      }
     }
   }
+  clean(copy)
+  if (copy?._kind === 'section') clean(copy.section)
   return copy
 }
 
@@ -94,12 +102,20 @@ export async function usageCounts(orgId: string): Promise<Record<string, number>
   try {
     const { data } = await supabaseAdmin
       .from('email_universal_usage')
-      .select('saved_block_id')
+      .select('saved_block_id, template_id')
       .eq('organization_id', orgId)
+    // Conta E-MAIL, não vínculo: um e-mail com o mesmo rodapé no topo e
+    // no rodapé é um e-mail. O selo diz "N e-mails" e tem de bater com
+    // o número que o painel e a confirmação mostram.
+    const seen = new Map<string, Set<string>>()
     for (const row of data || []) {
       const id = (row as any).saved_block_id
-      if (id) out[id] = (out[id] || 0) + 1
+      const tpl = (row as any).template_id
+      if (!id || !tpl) continue
+      if (!seen.has(id)) seen.set(id, new Set())
+      seen.get(id)!.add(tpl)
     }
+    for (const [id, templates] of seen) out[id] = templates.size
   } catch {
     // Visão nova pode não existir num banco antigo: a tela some com o
     // selo de uso em vez de quebrar.
@@ -185,28 +201,45 @@ export async function loadUsage(orgId: string, savedId: string): Promise<Usage> 
   }
 }
 
-// ── Apagar sem quebrar e-mail ───────────────────────────────────────
+// ── Escrever nos e-mails que usam ───────────────────────────────────
 
 /**
- * Antes de apagar um universal, o conteúdo dele é escrito por extenso
- * em cada e-mail que o usava, e o vínculo cai. É o que a Omnisend faz:
- * os e-mails continuam iguais ao que a pessoa via, só param de receber
- * as próximas alterações. A alternativa — apagar e deixar o vínculo
- * pendurado — troca o rodapé de vinte e-mails por um buraco.
+ * O e-mail guarda uma CÓPIA do universal, não uma referência: o envio
+ * lê `email_templates.html`, já renderizado. Isso é o que torna o envio
+ * barato — e é também onde a promessa "editar muda todos" se cumpre ou
+ * se perde. Se o universal muda e a cópia não, o rodapé velho continua
+ * saindo: as automações nem olham o design_json, vão direto no html.
  *
- * Devolve quantos e-mails foram reescritos.
+ * Então toda alteração num universal é escrita aqui, e-mail por e-mail,
+ * design e html. É o preço de um envio que não precisa consultar a
+ * biblioteca a cada destinatário.
+ *
+ * `keepLink` distingue os dois usos:
+ *   true  — salvar: o e-mail recebe o conteúdo novo e continua ligado.
+ *   false — apagar: recebe o conteúdo atual e o vínculo cai, para o
+ *           e-mail seguir funcionando sozinho.
  */
-export async function inlineIntoTemplates(orgId: string, savedId: string, row: SavedBlockRow): Promise<number> {
+async function rewriteTemplates(
+  orgId: string,
+  savedId: string,
+  row: SavedBlockRow,
+  opts: { keepLink: boolean; name?: string }
+): Promise<number> {
   const kind = savedKind(row)
   const content = stripLinks(savedContent(row))
   if (!content) return 0
 
-  const { data: usage } = await supabaseAdmin
-    .from('email_universal_usage')
-    .select('template_id')
-    .eq('organization_id', orgId)
-    .eq('saved_block_id', savedId)
-  const ids = Array.from(new Set((usage || []).map((r: any) => r.template_id).filter(Boolean)))
+  let ids: string[] = []
+  try {
+    const { data: usage } = await supabaseAdmin
+      .from('email_universal_usage')
+      .select('template_id')
+      .eq('organization_id', orgId)
+      .eq('saved_block_id', savedId)
+    ids = Array.from(new Set((usage || []).map((r: any) => r.template_id).filter(Boolean)))
+  } catch {
+    return 0
+  }
   if (ids.length === 0) return 0
 
   const { data: templates } = await supabaseAdmin
@@ -214,6 +247,17 @@ export async function inlineIntoTemplates(orgId: string, savedId: string, row: S
     .select('id, design_json')
     .eq('organization_id', orgId)
     .in('id', ids)
+
+  // O renderizador é uma função pura sobre o documento; importado aqui
+  // para o módulo continuar utilizável de contextos que só querem ler.
+  const { renderDocumentToHtml } = await import('@/lib/email/render-html')
+
+  const link = (target: any) => {
+    if (!opts.keepLink) return {}
+    return kind === 'section'
+      ? { _savedSectionId: savedId, _savedSectionName: opts.name ?? target._savedSectionName ?? row.name }
+      : { _savedBlockId: savedId, _savedBlockName: opts.name ?? target._savedBlockName ?? row.name }
+  }
 
   let written = 0
   for (const t of templates || []) {
@@ -224,9 +268,9 @@ export async function inlineIntoTemplates(orgId: string, savedId: string, row: S
     design.sections = design.sections.map((sec: any) => {
       if (kind === 'section' && sec?._savedSectionId === savedId) {
         touched = true
-        // Mantém o id da seção neste e-mail: o resto do documento (e o
-        // que o usuário tem selecionado) referencia esse id.
-        return { ...JSON.parse(JSON.stringify(content)), id: sec.id }
+        // O id da seção neste e-mail é preservado: o resto do documento
+        // (e a seleção aberta no editor) referencia esse id.
+        return { ...JSON.parse(JSON.stringify(content)), id: sec.id, ...link(sec) }
       }
       if (kind === 'block') {
         const columns = (sec.columns || []).map((col: any) => ({
@@ -234,7 +278,7 @@ export async function inlineIntoTemplates(orgId: string, savedId: string, row: S
           blocks: (col.blocks || []).map((b: any) => {
             if (b?._savedBlockId !== savedId) return b
             touched = true
-            return { ...JSON.parse(JSON.stringify(content)), id: b.id }
+            return { ...JSON.parse(JSON.stringify(content)), id: b.id, ...link(b) }
           }),
         }))
         return { ...sec, columns }
@@ -243,12 +287,89 @@ export async function inlineIntoTemplates(orgId: string, savedId: string, row: S
     })
 
     if (!touched) continue
+
+    // O html renderizado tem de acompanhar: é dele que a automação
+    // envia. Se o render falhar, o design ainda é salvo — melhor um
+    // html velho do que perder a alteração inteira.
+    const patch: Record<string, any> = { design_json: design }
+    try {
+      patch.html = renderDocumentToHtml(design)
+    } catch (err) {
+      console.warn(`[universal] render falhou para o template ${t.id}`, err)
+    }
+
     const { error } = await supabaseAdmin
       .from('email_templates')
-      .update({ design_json: design })
+      .update(patch)
       .eq('id', t.id)
       .eq('organization_id', orgId)
     if (!error) written++
   }
   return written
+}
+
+/**
+ * Salvou o universal: leva o conteúdo novo para cada e-mail que o usa,
+ * mantendo o vínculo. É isto que faz "editar em todos os e-mails" ser
+ * verdade no que sai para o cliente, e não só na tela do editor.
+ */
+export function propagateToTemplates(orgId: string, savedId: string, row: SavedBlockRow, name?: string): Promise<number> {
+  return rewriteTemplates(orgId, savedId, row, { keepLink: true, name })
+}
+
+/**
+ * Antes de apagar um universal, o conteúdo dele é escrito por extenso
+ * em cada e-mail que o usava, e o vínculo cai. É o que a Omnisend faz:
+ * os e-mails continuam iguais ao que a pessoa via, só param de receber
+ * as próximas alterações. A alternativa — apagar e deixar o vínculo
+ * pendurado — troca o rodapé de vinte e-mails por um buraco.
+ */
+export function inlineIntoTemplates(orgId: string, savedId: string, row: SavedBlockRow): Promise<number> {
+  return rewriteTemplates(orgId, savedId, row, { keepLink: false })
+}
+
+// ── Histórico ───────────────────────────────────────────────────────
+
+/**
+ * Guarda o conteúdo ANTERIOR antes de sobrescrever. Um universal em
+ * vinte e três e-mails não tem desfazer natural: quando a alteração
+ * está errada, ela já saiu em todos. O histórico é o caminho de volta.
+ *
+ * Nunca impede o salvamento: se a versão não puder ser gravada, a
+ * alteração segue e só se perde o desfazer.
+ */
+export async function snapshotVersion(orgId: string, savedId: string, previous: any, userId?: string | null): Promise<void> {
+  if (!previous) return
+  try {
+    const { data: last } = await supabaseAdmin
+      .from('saved_block_versions')
+      .select('version')
+      .eq('block_id', savedId)
+      .eq('organization_id', orgId)
+      .order('version', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    const nextVersion = ((last?.version as number) || 0) + 1
+    await supabaseAdmin.from('saved_block_versions').insert({
+      block_id: savedId,
+      organization_id: orgId,
+      version: nextVersion,
+      block_json: previous,
+      created_by: userId || null,
+    })
+
+    // Vinte versões bastam para voltar atrás; o resto é peso morto num
+    // conteúdo que se edita com frequência.
+    if (nextVersion > 20) {
+      await supabaseAdmin
+        .from('saved_block_versions')
+        .delete()
+        .eq('block_id', savedId)
+        .eq('organization_id', orgId)
+        .lte('version', nextVersion - 20)
+    }
+  } catch (err) {
+    console.warn('[universal] não foi possível guardar a versão anterior', err)
+  }
 }

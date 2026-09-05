@@ -690,6 +690,28 @@ const actionExecutors: Record<string, NodeExecutor> = {
 
           // Use pre-rendered HTML from template
           html = template.html || '';
+
+          // Conteúdo universal em dia. O html gravado é uma cópia do
+          // momento em que o e-mail foi salvo; salvar o universal
+          // reescreve essa cópia, mas se aquela escrita não chegou (uma
+          // falha no meio, um template restaurado de versão antiga), a
+          // automação mandaria o rodapé velho — e é aqui que ele para.
+          // Sem a organização não dá para consultar a biblioteca sem
+          // atravessar inquilinos — melhor o html gravado.
+          if (template.design_json && organizationId) {
+            try {
+              const { hasUniversalContent, resolveSavedBlocks } = await import('@/lib/email/render');
+              if (hasUniversalContent(template.design_json)) {
+                const { renderDocumentToHtml } = await import('@/lib/email/render-html');
+                const resolved = await resolveSavedBlocks(template.design_json, organizationId);
+                const fresh = renderDocumentToHtml(resolved);
+                if (fresh) html = fresh;
+              }
+            } catch (err) {
+              console.warn('[action_email] falha ao atualizar o conteúdo universal:', err);
+            }
+          }
+
           if (!html) {
             html = '<p>Template sem conteúdo HTML renderizado</p>';
           }

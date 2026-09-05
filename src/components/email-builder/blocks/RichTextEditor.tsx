@@ -23,6 +23,13 @@ export function RichTextEditor({ content, onChange, onInsertMergeTag, placeholde
   const tagButtonRef = useRef<HTMLButtonElement>(null)
   const toolbarRef = useRef<HTMLDivElement>(null)
 
+  // O editor é criado uma vez e guarda o onChange daquele momento. Como
+  // o pai passa uma função nova a cada render, sem esta ref o editor
+  // continuaria escrevendo no bloco que estava selecionado quando foi
+  // montado. Pela ref, escreve sempre no atual.
+  const onChangeRef = useRef(onChange)
+  useEffect(() => { onChangeRef.current = onChange }, [onChange])
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -35,8 +42,13 @@ export function RichTextEditor({ content, onChange, onInsertMergeTag, placeholde
     ],
     content: content || '<p></p>',
     autofocus: 'end',
+    // Sem isto o Tiptap 3 monta o editor DURANTE o render e reclama de
+    // SSR — um erro no console a cada bloco de texto aberto. E era o que
+    // fazia o onUpdate disparar dentro do próprio render, gerando o
+    // "Cannot update a component while rendering a different component".
+    immediatelyRender: false,
     onUpdate: ({ editor: e }) => {
-      onChange(e.getHTML())
+      onChangeRef.current(e.getHTML())
     },
     editorProps: {
       attributes: {
