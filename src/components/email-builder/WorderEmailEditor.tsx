@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useCallback, useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
-import { ArrowLeft, Save, Send, Loader2, CheckCircle, Undo2, Redo2, Monitor, Smartphone, Plus, Eye, Tag, Copy, Trash2, GripVertical, X, Columns, Square, PanelLeft, PanelRight, LayoutGrid, Star, RotateCcw, ChevronDown, AlertCircle } from 'lucide-react'
+import { useState, useCallback, useEffect, useMemo, useRef, forwardRef, useImperativeHandle } from 'react'
+import dynamic from 'next/dynamic'
+import { ArrowLeft, Save, Send, Loader2, CheckCircle, Undo2, Redo2, Monitor, Smartphone, Plus, Eye, Tag, Copy, Trash2, GripVertical, X, Columns, Square, PanelLeft, PanelRight, LayoutGrid, Star, RotateCcw, ChevronDown, AlertCircle, Package, Layers, Unlink } from 'lucide-react'
 import { DndContext, pointerWithin, PointerSensor, useSensor, useSensors, useDroppable, type DragEndEvent, type DragStartEvent } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -22,6 +23,11 @@ import { cn } from '@/lib/utils'
 import { EmailSwitcher, type EmailSiblingItem } from './modals/EmailSwitcher'
 import { useEmailAutosave, type SaveStatus } from './hooks/useEmailAutosave'
 import { useStoreStore } from '@/stores'
+import { UniversalScopePanel, useUniversalUsage, UniversalIcon } from './universal/UniversalBits'
+
+// Import dinâmico nos dois sentidos: o modal renderiza este mesmo editor
+// para abrir o universal sozinho, e o ciclo estático quebraria o build.
+const UniversalEditorModal = dynamic(() => import('./modals/UniversalEditorModal'), { ssr: false })
 
 interface WorderEmailEditorProps {
   templateName: string
@@ -40,12 +46,21 @@ interface WorderEmailEditorProps {
   emailSiblings?: EmailSiblingItem[]
   currentTemplateId?: string
   onNavigateEmail?: (templateId: string) => void
+  /**
+   * Salvar sozinho enquanto se digita. Ligado para um e-mail — é dele
+   * mesmo o rascunho. Desligado para um conteúdo universal: ali cada
+   * salvamento reescreve dezenas de e-mails, e isso não é coisa que
+   * aconteça por conta própria a cada tecla.
+   */
+  autosave?: boolean
+  /** Documento a cada alteração, para quem precisa salvar por fora. */
+  onDocChange?: (doc: EmailDocument) => void
 }
 
 // ── Sortable Block Wrapper (drag from anywhere on the block) ──
 function SortableBlock({
   blockId, children, isSelected, onSelect, onClone, onDelete,
-  isUniversal, savedBlockName, onSaveAsUniversal, onUnlink,
+  isUniversal, savedBlockName, onSaveAsUniversal, onUnlink, onEditUniversal,
   hiddenOnDevice, dragDisabled,
 }: {
   blockId: string;
@@ -58,6 +73,8 @@ function SortableBlock({
   savedBlockName?: string;
   onSaveAsUniversal: () => void;
   onUnlink: () => void;
+  /** Abre o bloco universal sozinho, para editar em todos os e-mails. */
+  onEditUniversal?: () => void;
   /** 'desktop' | 'mobile' | 'all' when the block is hidden */
   hiddenOnDevice?: 'desktop' | 'mobile' | 'all' | null;
   dragDisabled?: boolean;
@@ -76,14 +93,15 @@ function SortableBlock({
       onClick={e => { e.stopPropagation(); onSelect() }}
       className={`relative group cursor-grab active:cursor-grabbing ${isSelected ? 'ring-2 ring-zinc-900 ring-offset-1' : isUniversal ? 'hover:ring-1 hover:ring-violet-300' : 'hover:ring-1 hover:ring-zinc-400'}`}
     >
-      {/* Universal badge — always visible when linked to saved block */}
+      {/* Marca do universal: o nome fica na tela, não só num tooltip —
+          é o nome que diz se este é o rodapé preto ou o branco. */}
       {isUniversal && (
         <div
-          className="absolute left-1 top-1 z-20 flex items-center gap-1 px-1.5 py-0.5 bg-violet-500 text-white text-[10px] font-semibold rounded shadow-sm"
-          title={savedBlockName ? `Bloco universal: ${savedBlockName}` : 'Bloco universal'}
+          className="absolute left-1 top-1 z-20 flex items-center gap-1 pl-1 pr-1.5 py-0.5 bg-violet-600 text-white text-[10px] font-semibold rounded shadow-sm max-w-[60%]"
+          title={savedBlockName ? `Bloco universal: ${savedBlockName} — editar muda em todos os e-mails` : 'Bloco universal'}
         >
-          <Star className="w-2.5 h-2.5 fill-white" />
-          <span className="uppercase tracking-wide">Universal</span>
+          <Package className="w-2.5 h-2.5" />
+          <span className="truncate">{savedBlockName || 'Bloco universal'}</span>
         </div>
       )}
 
@@ -115,13 +133,22 @@ function SortableBlock({
           <Copy className="w-3.5 h-3.5" />
         </button>
         {isUniversal ? (
-          <button
-            onClick={e => { e.stopPropagation(); onUnlink() }}
-            className="p-1.5 text-violet-500 hover:text-amber-600 hover:bg-amber-50 rounded"
-            title="Desvincular do bloco universal (editar só aqui)"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
+          <>
+            <button
+              onClick={e => { e.stopPropagation(); onEditUniversal?.() }}
+              className="p-1.5 text-violet-600 hover:bg-violet-50 rounded"
+              title="Editar em todos os e-mails que usam este bloco"
+            >
+              <Package className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={e => { e.stopPropagation(); onUnlink() }}
+              className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded"
+              title="Soltar do universal — editar só neste e-mail"
+            >
+              <Unlink className="w-3.5 h-3.5" />
+            </button>
+          </>
         ) : (
           <button
             onClick={e => { e.stopPropagation(); onSaveAsUniversal() }}
@@ -192,18 +219,23 @@ function SortableSection({ sectionId, children, isSelected, hiddenOnDevice, isUn
           </div>
         </>
       )}
-      {/* Universal section badge — mirrors the block-level badge so users can
-          see at a glance which sections are linked to the library. */}
-      {isUniversal && !isSelected && (
+      {/* Seção universal: contorno violeta contínuo e o nome no canto.
+          A seção inteira é uma peça só — o contorno mostra até onde ela
+          vai, e o nome diz qual das seções salvas é esta. */}
+      {isUniversal && (
         <>
-          <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-violet-300/60 z-[5]" />
-          <div
-            className="absolute left-1 top-1 z-20 flex items-center gap-1 px-1.5 py-0.5 bg-violet-500 text-white text-[10px] font-semibold rounded shadow-sm"
-            title={savedSectionName ? `Seção universal: ${savedSectionName}` : 'Seção universal'}
-          >
-            <Star className="w-2.5 h-2.5 fill-white" />
-            <span className="uppercase tracking-wide">Universal</span>
-          </div>
+          <div className={`pointer-events-none absolute inset-0 z-[5] ring-inset ${isSelected ? 'ring-2 ring-violet-500' : 'ring-1 ring-violet-300/70'}`} />
+          {/* Selecionada, quem mostra o nome é a barra de ferramentas — que
+              cai exatamente aqui. Sem isso os dois se sobrepõem. */}
+          {!isSelected && (
+            <div
+              className="absolute left-1 top-1 z-20 flex items-center gap-1 pl-1 pr-1.5 py-0.5 bg-violet-600 text-white text-[10px] font-semibold rounded shadow-sm max-w-[60%]"
+              title={savedSectionName ? `Seção universal: ${savedSectionName} — editar muda em todos os e-mails` : 'Seção universal'}
+            >
+              <Layers className="w-2.5 h-2.5" />
+              <span className="truncate">{savedSectionName || 'Seção universal'}</span>
+            </div>
+          )}
         </>
       )}
       {children}
@@ -446,7 +478,7 @@ export interface WorderEmailEditorHandle {
   save: () => Promise<void>;
 }
 
-const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorProps>(function WorderEmailEditor({ templateName, design, onSave, onBack, onRename, flowContext, flowName, emailSiblings, currentTemplateId, onNavigateEmail }, ref) {
+const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorProps>(function WorderEmailEditor({ templateName, design, onSave, onBack, onRename, flowContext, flowName, emailSiblings, currentTemplateId, onNavigateEmail, autosave = true, onDocChange }, ref) {
   // Loja cujo catálogo alimenta o preview de blocos dinâmicos: a do
   // fluxo quando estamos dentro de um, senão a selecionada no switcher.
   // Num ref para o handler de preview ler sempre o valor atual sem
@@ -461,30 +493,28 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
     if (design) return migrateV1toV2(design)
     return JSON.parse(JSON.stringify(DEFAULT_DOCUMENT))
   })
+  // O documento visto de dentro de closures estáveis (seleção, atalhos)
+  // sem refazê-las a cada alteração.
+  const docRef = useRef(doc)
+  useEffect(() => { docRef.current = doc }, [doc])
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null)
   const [inlineEditingBlockId, setInlineEditingBlockId] = useState<string | null>(null)
   const [selectedSubElement, setSelectedSubElement] = useState<string | null>(null)
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null)
 
-  // Universal block edit confirmation: tracks which saved blocks the user
-  // already chose how to handle in this session (key = saved_block id,
-  // value = 'all' to propagate or 'detached' to unlink). When edit hits
-  // a block/section linked to a saved entry not yet decided, we show the
-  // confirmation modal and queue the pending edit.
-  const [universalDecisions, setUniversalDecisions] = useState<Record<string, 'all' | 'detached'>>({})
-  // Mirror of universalDecisions kept in a ref so closures created BEFORE a
-  // decision is made (the queued edit) read the up-to-date value synchronously.
-  // Without this, the very first edit after choosing "Editar em todos" would
-  // read a stale empty map and silently skip propagation to the library.
-  const universalDecisionsRef = useRef<Record<string, 'all' | 'detached'>>({})
-  const [pendingUniversalEdit, setPendingUniversalEdit] = useState<{
-    kind: 'block' | 'section'
-    savedId: string
-    savedName?: string
-    blockId?: string
-    sectionId?: string
-    apply: () => void
-  } | null>(null)
+  // ── Conteúdo universal ──
+  // O que está vinculado à biblioteca não se edita dentro do e-mail: o
+  // painel direito mostra a escolha (mudar em todos / soltar este
+  // e-mail) e "mudar em todos" abre o universal sozinho, num modal por
+  // cima. Antes, o editor deixava digitar e perguntava depois — quando
+  // a pergunta chegava a alteração já existia, e um rodapé podia ser
+  // reescrito em vinte e três e-mails sem ninguém decidir isso.
+  const [universalModal, setUniversalModal] = useState<string | null>(null)
+  // Espelho em ref: a re-hidratação roda dentro de closures criadas antes
+  // de o modal abrir e precisa ver o estado atual, não o de quando ela
+  // foi montada.
+  const universalModalRef = useRef<string | null>(null)
+  useEffect(() => { universalModalRef.current = universalModal }, [universalModal])
   const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop')
   const [isDirty, setIsDirty] = useState(false)
   const [switcherOpen, setSwitcherOpen] = useState(false)
@@ -510,12 +540,15 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
   const [columnModalLayout, setColumnModalLayout] = useState<number[]>([50, 50])
   const [saveBlockName, setSaveBlockName] = useState('')
   const [saveSectionName, setSaveSectionName] = useState('')
+  // Um clique, um universal. Sem isto, o duplo clique no botão gerou
+  // cinco linhas "Etapas de envio" em quinze segundos — e cada e-mail
+  // acabou preso a uma cópia diferente da mesma seção.
+  const [savingUniversal, setSavingUniversal] = useState(false)
   // Bumped every time a save-as-universal (block or section) succeeds so the
   // palette re-fetches the library without switching tabs manually.
   const [savedLibraryVersion, setSavedLibraryVersion] = useState(0)
   // Sync status for visible feedback in the universal banner so the user
   // can SEE that edits are landing in the library (Klaviyo shows the same).
-  const [universalSyncStatus, setUniversalSyncStatus] = useState<'idle' | 'syncing' | 'saved' | 'error'>('idle')
 
   // ── Drop indicator for HTML5 palette drag ──
   const [dropIndicator, setDropIndicator] = useState<{
@@ -597,6 +630,19 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
 
   // ── Selection helpers ──
   const selectBlock = useCallback((blockId: string) => {
+    // Dentro de uma seção universal, o bloco não é uma peça à parte: a
+    // seção inteira é a unidade guardada. Clicar num texto do rodapé
+    // seleciona o rodapé, não o texto — senão a barra do bloco oferece
+    // duplicar e excluir num conteúdo que este e-mail não manda.
+    const owner = docRef.current.sections.find(s =>
+      s._savedSectionId && s.columns.some(c => c.blocks.some(b => b.id === blockId))
+    )
+    if (owner) {
+      setSelectedSectionId(owner.id)
+      setSelectedBlockId(null)
+      setSelectedSubElement(null)
+      return
+    }
     setSelectedBlockId(blockId)
     setSelectedSectionId(null)
     setSelectedSubElement(null)
@@ -715,14 +761,14 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
 
   const updateSectionStyles = useCallback((sectionId: string, patch: Partial<EmailSection['styles']>) => {
     setDoc(prev => {
-      const next = {
+      // Seção vinculada não muda por aqui — cor e espaçamento fazem
+      // parte do universal e se editam no universal.
+      const target = prev.sections.find(s => s.id === sectionId)
+      if (target?._savedSectionId) return prev
+      return {
         ...prev,
         sections: prev.sections.map(s => s.id === sectionId ? { ...s, styles: { ...s.styles, ...patch } } : s),
       }
-      // If this section is linked to a saved_section, propagate the change.
-      const edited = next.sections.find(s => s.id === sectionId)
-      if (edited?._savedSectionId) scheduleUniversalSectionSync(edited._savedSectionId, edited)
-      return next
     })
   }, [])
 
@@ -820,7 +866,7 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
     selectBlock(clone.id)
   }, [doc, updateDoc, selectBlock])
 
-  // ── Universal Blocks (Klaviyo-style) ──
+  // ── Conteúdo universal ──
   // Open the "Save as Universal" modal pre-filled with the selected block
   const saveBlockAsUniversal = useCallback((id: string) => {
     setSelectedBlockId(id)
@@ -828,68 +874,24 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
     setShowSaveBlockModal(true)
   }, [])
 
-  // Confirm: user chose to edit ALL emails (propagate via library)
-  const confirmEditAllUniversal = useCallback(() => {
-    if (!pendingUniversalEdit) return
-    // Write to the ref FIRST (synchronous) so the queued performUpdate closure
-    // reads 'all' and propagates. Then mirror into state for any UI reads.
-    universalDecisionsRef.current = { ...universalDecisionsRef.current, [pendingUniversalEdit.savedId]: 'all' }
-    setUniversalDecisions({ ...universalDecisionsRef.current })
-    const apply = pendingUniversalEdit.apply
-    setPendingUniversalEdit(null)
-    apply()
-  }, [pendingUniversalEdit])
+  /**
+   * A que universal este bloco pertence — o dele, ou o da seção que o
+   * contém. O vínculo do bloco é mais específico e ganha; um bloco
+   * dentro de uma seção universal pertence à seção, e é ela que se
+   * edita.
+   */
+  const universalOwnerOfBlock = useCallback((blockId: string): { savedId: string; kind: 'block' | 'section' } | null => {
+    const loc = findBlockLocation(doc, blockId)
+    if (!loc) return null
+    const block = doc.sections[loc.sectionIdx].columns[loc.columnIdx].blocks[loc.blockIdx]
+    if (block?._savedBlockId) return { savedId: block._savedBlockId, kind: 'block' }
+    const section = doc.sections[loc.sectionIdx]
+    if (section?._savedSectionId) return { savedId: section._savedSectionId, kind: 'section' }
+    return null
+  }, [doc])
 
-  // Confirm: user chose to detach (unlink) — edits stay local to this email
-  const confirmDetachUniversal = useCallback(() => {
-    if (!pendingUniversalEdit) return
-    const { kind, savedId, blockId, sectionId, apply } = pendingUniversalEdit
-
-    if (kind === 'block' && blockId) {
-      setDoc(prev => ({
-        ...prev,
-        sections: prev.sections.map(s => ({
-          ...s,
-          columns: s.columns.map(c => ({
-            ...c,
-            blocks: c.blocks.map(b => {
-              if (b.id !== blockId) return b
-              const stripped = { ...b }
-              delete (stripped as any)._savedBlockId
-              delete (stripped as any)._savedBlockName
-              return stripped
-            }),
-          })),
-        })),
-      }))
-    } else if (kind === 'section' && sectionId) {
-      setDoc(prev => ({
-        ...prev,
-        sections: prev.sections.map(s => {
-          if (s.id !== sectionId) return s
-          const stripped = { ...s }
-          delete (stripped as any)._savedSectionId
-          delete (stripped as any)._savedSectionName
-          return stripped
-        }),
-      }))
-    }
-
-    universalDecisionsRef.current = { ...universalDecisionsRef.current, [savedId]: 'detached' }
-    setUniversalDecisions({ ...universalDecisionsRef.current })
-    setPendingUniversalEdit(null)
-    showToast(kind === 'section' ? 'Seção desvinculada — alterações ficam só neste email' : 'Bloco desvinculado — alterações ficam só neste email')
-    // Defer so the _savedBlockId strip (setDoc above) lands before the edit
-    // re-runs against the now-detached block.
-    setTimeout(() => apply(), 0)
-  }, [pendingUniversalEdit, showToast])
-
-  const cancelUniversalEdit = useCallback(() => {
-    setPendingUniversalEdit(null)
-  }, [])
-
-  // Unlink: keep the current block instance but drop its _savedBlockId so
-  // further edits only affect THIS email (not the saved library entry).
+  // Soltar do universal: o conteúdo fica como está, mas para de
+  // acompanhar a biblioteca. É a saída para "quero mudar só aqui".
   const unlinkUniversalBlock = useCallback((id: string) => {
     const loc = findBlockLocation(doc, id)
     if (!loc) return
@@ -898,10 +900,9 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
     delete b._savedBlockId
     delete b._savedBlockName
     updateDoc({ ...doc, sections })
-    showToast('Bloco desvinculado — edições agora ficam só neste email')
+    showToast('Bloco solto do universal — o que você mudar fica só neste e-mail')
   }, [doc, updateDoc, showToast])
 
-  // ── Universal Sections (Klaviyo/Omnisend parity) ──
   const saveSectionAsUniversal = useCallback((sectionId: string) => {
     setSectionToSaveId(sectionId)
     setSaveSectionName('')
@@ -919,83 +920,37 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
         return copy
       }),
     }))
-    showToast('Seção desvinculada — edições agora ficam só neste email')
+    showToast('Seção solta do universal — o que você mudar fica só neste e-mail')
   }, [showToast])
 
-  // Debounced propagation queue for universal blocks AND sections — when the
-  // user edits a linked block/section, we PATCH the saved_blocks entry so
-  // every email using it picks up the change. We debounce so rapid keystrokes
-  // make one request.
-  const universalSyncTimersRef = useRef<Map<string, any>>(new Map())
-  const scheduleUniversalSync = useCallback((savedBlockId: string, block: EmailBlock) => {
-    const timers = universalSyncTimersRef.current
-    if (timers.has(savedBlockId)) clearTimeout(timers.get(savedBlockId))
-    setUniversalSyncStatus('syncing')
-    const t = setTimeout(async () => {
-      timers.delete(savedBlockId)
-      try {
-        // Never persist the link fields back into the saved_block body
-        const clean: EmailBlock = { ...block } as EmailBlock
-        delete (clean as any)._savedBlockId
-        delete (clean as any)._savedBlockName
-        const res = await fetch(`/api/email/saved-blocks/${savedBlockId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ block_json: clean }),
-        })
-        if (!res.ok) throw new Error('patch failed')
-        setUniversalSyncStatus('saved')
-        // Broadcast to any other open tab so its email editor re-hydrates.
-        try { localStorage.setItem('worder:universal-saved', JSON.stringify({ id: savedBlockId, at: Date.now() })) } catch {}
-        // Let the "Saved" chip linger briefly, then settle to idle.
-        setTimeout(() => setUniversalSyncStatus(s => s === 'saved' ? 'idle' : s), 1500)
-      } catch (err) {
-        console.warn('[UniversalBlock] sync failed', err)
-        setUniversalSyncStatus('error')
-      }
-    }, 600)
-    timers.set(savedBlockId, t)
-  }, [])
-
-  // Same debounce, but for SECTIONS. We wrap the section in a
-  // `{ _kind: 'section', section: {...} }` envelope so the saved_blocks table
-  // can store both kinds without a schema change.
-  const scheduleUniversalSectionSync = useCallback((savedSectionId: string, section: EmailSection) => {
-    const timers = universalSyncTimersRef.current
-    const key = 'section:' + savedSectionId
-    if (timers.has(key)) clearTimeout(timers.get(key))
-    setUniversalSyncStatus('syncing')
-    const t = setTimeout(async () => {
-      timers.delete(key)
-      try {
-        const clean: EmailSection = JSON.parse(JSON.stringify(section))
-        delete (clean as any)._savedSectionId
-        delete (clean as any)._savedSectionName
-        // Strip per-block save links on nested blocks — the section body
-        // should be self-contained when stored in the library.
-        for (const col of clean.columns || []) {
-          for (const b of col.blocks || []) {
-            delete (b as any)._savedBlockId
-            delete (b as any)._savedBlockName
+  /**
+   * Salvou no modal: o e-mail de trás troca o conteúdo na hora, sem
+   * esperar recarregar. Todas as cópias do mesmo universal neste
+   * documento mudam juntas — é comum um rodapé aparecer duas vezes.
+   */
+  const applyUniversalUpdate = useCallback((info: { id: string; name: string; kind: 'block' | 'section'; content: any }) => {
+    setDoc(prev => ({
+      ...prev,
+      sections: prev.sections.map(sec => {
+        if (info.kind === 'section' && sec._savedSectionId === info.id) {
+          return { ...JSON.parse(JSON.stringify(info.content)), id: sec.id, _savedSectionId: info.id, _savedSectionName: info.name }
+        }
+        if (info.kind === 'block') {
+          return {
+            ...sec,
+            columns: sec.columns.map(col => ({
+              ...col,
+              blocks: col.blocks.map(b => b._savedBlockId === info.id
+                ? { ...JSON.parse(JSON.stringify(info.content)), id: b.id, _savedBlockId: info.id, _savedBlockName: info.name }
+                : b),
+            })),
           }
         }
-        const res = await fetch(`/api/email/saved-blocks/${savedSectionId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            block_json: { _kind: 'section', section: clean },
-          }),
-        })
-        if (!res.ok) throw new Error('patch failed')
-        setUniversalSyncStatus('saved')
-        try { localStorage.setItem('worder:universal-saved', JSON.stringify({ id: savedSectionId, at: Date.now() })) } catch {}
-        setTimeout(() => setUniversalSyncStatus(s => s === 'saved' ? 'idle' : s), 1500)
-      } catch (err) {
-        console.warn('[UniversalSection] sync failed', err)
-        setUniversalSyncStatus('error')
-      }
-    }, 600)
-    timers.set(key, t)
+        if (info.kind === 'section' && sec._savedSectionId) return sec
+        return sec
+      }),
+    }))
+    setSavedLibraryVersion(v => v + 1)
   }, [])
 
   // ── Hydrate linked blocks/sections from the library ──
@@ -1006,9 +961,10 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
   // same way — the library is the source of truth, each email's stored copy
   // is just a cache.
   const hydrateFromLibrary = useCallback(async () => {
-    // Never clobber local state while the user has in-flight edits — their
-    // debounced PATCH hasn't landed yet and re-fetching would roll them back.
-    if (universalSyncTimersRef.current.size > 0) return
+    // Com o universal aberto no modal, a biblioteca está mudando debaixo
+    // deste documento: quem aplica o resultado é o próprio modal, ao
+    // salvar. Re-hidratar no meio disso mostraria a versão antiga.
+    if (universalModalRef.current) return
     try {
       const res = await fetch('/api/email/saved-blocks')
       if (!res.ok) return
@@ -1102,114 +1058,57 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
     }
   }, [hydrateFromLibrary])
 
-  // Check if a block (or its parent section) is universal-linked and the user
-  // hasn't yet decided how to handle edits this session. If so, queue the
-  // edit and open the confirmation modal. Returns true if gated, false if
-  // the edit can proceed immediately.
-  const gateUniversalEdit = useCallback((blockId: string, apply: () => void): boolean => {
-    const block = allBlocks(doc).find(b => b.id === blockId)
-    if (!block) return false
-    const loc = findBlockLocation(doc, blockId)
-    const section = loc ? doc.sections[loc.sectionIdx] : null
-
-    // Block-level link takes priority over section-level (more specific scope)
-    const savedBlockId = (block as any)._savedBlockId
-    const savedSectionId = section ? (section as any)._savedSectionId : null
-
-    if (savedBlockId && !universalDecisionsRef.current[savedBlockId]) {
-      setPendingUniversalEdit({
-        kind: 'block',
-        savedId: savedBlockId,
-        savedName: (block as any)._savedBlockName || 'Bloco universal',
-        blockId,
-        apply,
-      })
-      return true
-    }
-    if (savedSectionId && !universalDecisionsRef.current[savedSectionId]) {
-      setPendingUniversalEdit({
-        kind: 'section',
-        savedId: savedSectionId,
-        savedName: (section as any)._savedSectionName || 'Seção universal',
-        sectionId: section?.id,
-        apply,
-      })
-      return true
-    }
-    return false
-  }, [doc])
+  /**
+   * Um bloco vinculado não muda por aqui.
+   *
+   * As propriedades dele nem aparecem no painel — no lugar delas está a
+   * escolha entre mudar em todos os e-mails ou soltar este. Mas ainda
+   * existem caminhos que chegam num bloco sem passar pelo painel (o
+   * texto editado direto na tela, por exemplo). Todos param aqui e
+   * mandam a pessoa para a mesma escolha, em vez de gravar uma alteração
+   * que a próxima re-hidratação apagaria em silêncio.
+   */
+  const blockIsLocked = useCallback((blockId: string): boolean => {
+    const owner = universalOwnerOfBlock(blockId)
+    if (!owner) return false
+    setInlineEditingBlockId(null)
+    selectBlock(blockId)
+    return true
+  }, [universalOwnerOfBlock, selectBlock])
 
   const updateProp = useCallback((id: string, key: string, value: any) => {
-    const performUpdate = () => {
-      setDoc(prev => {
-        let parentSection: EmailSection | null = null
-        const next = {
-          ...prev,
-          sections: prev.sections.map(s => {
-            if (!s.columns.some(c => c.blocks.some(b => b.id === id))) return s
-            const updated: EmailSection = {
-              ...s,
-              columns: s.columns.map(c => ({
-                ...c,
-                blocks: c.blocks.map(b => b.id === id ? { ...b, props: { ...b.props, [key]: value } } : b),
-              })),
-            }
-            parentSection = updated
-            return updated
-          }),
+    if (blockIsLocked(id)) return
+    setDoc(prev => ({
+      ...prev,
+      sections: prev.sections.map(s => {
+        if (!s.columns.some(c => c.blocks.some(b => b.id === id))) return s
+        return {
+          ...s,
+          columns: s.columns.map(c => ({
+            ...c,
+            blocks: c.blocks.map(b => b.id === id ? { ...b, props: { ...b.props, [key]: value } } : b),
+          })),
         }
-        // Only propagate to library if the user chose 'all'. Read from the
-        // ref (not state) so this closure always sees the latest decision,
-        // even on the first edit that triggered the modal. 'detached' is
-        // handled by removing _savedBlockId before this runs.
-        const edited = allBlocks(next).find(b => b.id === id)
-        if (edited?._savedBlockId && universalDecisionsRef.current[edited._savedBlockId] === 'all') {
-          scheduleUniversalSync(edited._savedBlockId, edited)
-        }
-        if (parentSection && (parentSection as EmailSection)._savedSectionId
-            && universalDecisionsRef.current[(parentSection as EmailSection)._savedSectionId!] === 'all') {
-          scheduleUniversalSectionSync((parentSection as EmailSection)._savedSectionId!, parentSection)
-        }
-        return next
-      })
-    }
-    if (gateUniversalEdit(id, performUpdate)) return
-    performUpdate()
-  }, [scheduleUniversalSync, scheduleUniversalSectionSync, gateUniversalEdit])
+      }),
+    }))
+  }, [blockIsLocked])
 
   const updateBlockMultiProps = useCallback((id: string, patch: Record<string, any>) => {
-    const performUpdate = () => {
-      setDoc(prev => {
-        let parentSection: EmailSection | null = null
-        const next = {
-          ...prev,
-          sections: prev.sections.map(s => {
-            if (!s.columns.some(c => c.blocks.some(b => b.id === id))) return s
-            const updated: EmailSection = {
-              ...s,
-              columns: s.columns.map(c => ({
-                ...c,
-                blocks: c.blocks.map(b => b.id === id ? { ...b, props: { ...b.props, ...patch } } : b),
-              })),
-            }
-            parentSection = updated
-            return updated
-          }),
+    if (blockIsLocked(id)) return
+    setDoc(prev => ({
+      ...prev,
+      sections: prev.sections.map(s => {
+        if (!s.columns.some(c => c.blocks.some(b => b.id === id))) return s
+        return {
+          ...s,
+          columns: s.columns.map(c => ({
+            ...c,
+            blocks: c.blocks.map(b => b.id === id ? { ...b, props: { ...b.props, ...patch } } : b),
+          })),
         }
-        const edited = allBlocks(next).find(b => b.id === id)
-        if (edited?._savedBlockId && universalDecisionsRef.current[edited._savedBlockId] === 'all') {
-          scheduleUniversalSync(edited._savedBlockId, edited)
-        }
-        if (parentSection && (parentSection as EmailSection)._savedSectionId
-            && universalDecisionsRef.current[(parentSection as EmailSection)._savedSectionId!] === 'all') {
-          scheduleUniversalSectionSync((parentSection as EmailSection)._savedSectionId!, parentSection)
-        }
-        return next
-      })
-    }
-    if (gateUniversalEdit(id, performUpdate)) return
-    performUpdate()
-  }, [scheduleUniversalSync, scheduleUniversalSectionSync, gateUniversalEdit])
+      }),
+    }))
+  }, [blockIsLocked])
 
   const [activeDragId, setActiveDragId] = useState<string | null>(null)
 
@@ -1323,58 +1222,9 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
   }, [addBlock, addSavedBlock, doc, updateDoc, selectSection])
 
   // ── Save ──
-  // Force-flush every pending universal sync PATCH before we leave the
-  // editor (save / unmount). Without this, rapid Edit → Save closes would
-  // drop the last in-flight debounce and the library row would never learn
-  // about the final change — which is exactly what "editei e nao propagou"
-  // looks like to the user.
-  const flushUniversalSync = useCallback(async () => {
-    const timers = universalSyncTimersRef.current
-    if (timers.size === 0) return
-    const pending: Array<{ id: string; kind: 'block' | 'section'; payload: any }> = []
-    // Walk the current doc to produce fresh payloads for every scheduled id.
-    for (const key of timers.keys()) {
-      clearTimeout(timers.get(key))
-      if (key.startsWith('section:')) {
-        const savedSectionId = key.slice('section:'.length)
-        const sec = doc.sections.find(s => s._savedSectionId === savedSectionId)
-        if (!sec) continue
-        const clean: EmailSection = JSON.parse(JSON.stringify(sec))
-        delete (clean as any)._savedSectionId
-        delete (clean as any)._savedSectionName
-        for (const col of clean.columns || []) {
-          for (const b of col.blocks || []) {
-            delete (b as any)._savedBlockId
-            delete (b as any)._savedBlockName
-          }
-        }
-        pending.push({ id: savedSectionId, kind: 'section', payload: { _kind: 'section', section: clean } })
-      } else {
-        const savedBlockId = key
-        const block = allBlocks(doc).find(b => b._savedBlockId === savedBlockId)
-        if (!block) continue
-        const clean: EmailBlock = { ...block } as EmailBlock
-        delete (clean as any)._savedBlockId
-        delete (clean as any)._savedBlockName
-        pending.push({ id: savedBlockId, kind: 'block', payload: clean })
-      }
-    }
-    timers.clear()
-    // Fire all PATCHes in parallel and wait — the user is saving so it's OK
-    // to make them wait the round-trip.
-    await Promise.all(pending.map(p =>
-      fetch(`/api/email/saved-blocks/${p.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ block_json: p.payload }),
-      }).catch(() => { /* non-blocking */ })
-    ))
-  }, [doc])
-
   const { saveStatus, lastSavedAt: autosaveLastSaved, saveError, flush: flushAutosave } = useEmailAutosave({
     onSave: async () => {
       try {
-        await flushUniversalSync()
         const html = renderDocumentToHtml(doc)
         const success = await onSave(doc as any, html)
         if (success) setSavedLibraryVersion(v => v + 1)
@@ -1384,7 +1234,14 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
     isDirty,
     onSaved: () => setIsDirty(false),
     debounceMs: 1500,
+    disabled: !autosave,
   })
+
+  // Avisa quem hospeda o editor a cada alteração. Por ref para a
+  // identidade do callback não re-disparar o efeito a cada render.
+  const onDocChangeRef = useRef(onDocChange)
+  useEffect(() => { onDocChangeRef.current = onDocChange }, [onDocChange])
+  useEffect(() => { onDocChangeRef.current?.(doc) }, [doc])
 
   useImperativeHandle(ref, () => ({ save: async () => { await flushAutosave() } }), [flushAutosave])
 
@@ -1475,72 +1332,38 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
     return () => document.removeEventListener('mousedown', handler)
   }, [inlineEditingBlockId])
 
-  // ── Universal-sync safeguards ──
-  // If the user closes the tab or SPA-unmounts the editor mid-debounce, we
-  // must still push pending saved_blocks PATCHes; otherwise their last edits
-  // never land in the library and the next email shows stale content.
-  //
-  // NOTE: we deliberately split this into TWO effects. The naïve approach
-  // (single effect with [doc, flushUniversalSync] deps) re-runs the cleanup
-  // on every edit — which would force-flush on every keystroke and defeat
-  // the 600ms debounce in scheduleUniversalSync/scheduleUniversalSectionSync.
-  // We use a ref to keep a handle to the latest flush fn so the unmount
-  // cleanup can call it without the effect itself depending on it.
-  const flushRef = useRef<() => Promise<void>>()
-  useEffect(() => { flushRef.current = flushUniversalSync }, [flushUniversalSync])
-
-  // beforeunload — needs latest doc, so it re-binds when doc changes. Cheap.
-  useEffect(() => {
-    const onBeforeUnload = () => {
-      const timers = universalSyncTimersRef.current
-      if (timers.size === 0) return
-      // beforeunload can't await — use sendBeacon so the PATCH actually
-      // leaves before the tab dies. For each pending timer, fire now.
-      for (const key of timers.keys()) {
-        clearTimeout(timers.get(key))
-        try {
-          if (key.startsWith('section:')) {
-            const id = key.slice('section:'.length)
-            const sec = doc.sections.find(s => s._savedSectionId === id)
-            if (!sec) continue
-            const clean: any = JSON.parse(JSON.stringify(sec))
-            delete clean._savedSectionId
-            delete clean._savedSectionName
-            for (const col of clean.columns || []) {
-              for (const b of col.blocks || []) { delete b._savedBlockId; delete b._savedBlockName }
-            }
-            navigator.sendBeacon(
-              `/api/email/saved-blocks/${id}`,
-              new Blob([JSON.stringify({ block_json: { _kind: 'section', section: clean } })], { type: 'application/json' })
-            )
-          } else {
-            const block = allBlocks(doc).find(b => b._savedBlockId === key)
-            if (!block) continue
-            const clean: any = { ...block }
-            delete clean._savedBlockId
-            delete clean._savedBlockName
-            navigator.sendBeacon(
-              `/api/email/saved-blocks/${key}`,
-              new Blob([JSON.stringify({ block_json: clean })], { type: 'application/json' })
-            )
-          }
-        } catch { /* best-effort */ }
+  /**
+   * O universal a que o item selecionado pertence, se pertencer a algum.
+   * Um bloco dentro de uma seção universal responde pela seção: é ela a
+   * unidade guardada, e é ela que a pessoa reconhece como "o rodapé".
+   */
+  const selectedUniversal = useMemo(() => {
+    if (selectedBlock?._savedBlockId) {
+      const id = selectedBlock.id
+      return {
+        savedId: selectedBlock._savedBlockId,
+        kind: 'block' as const,
+        name: selectedBlock._savedBlockName || 'Bloco universal',
+        detach: () => unlinkUniversalBlock(id),
       }
-      timers.clear()
     }
-    window.addEventListener('beforeunload', onBeforeUnload)
-    return () => window.removeEventListener('beforeunload', onBeforeUnload)
-  }, [doc])
+    const parent = selectedBlock
+      ? doc.sections.find(s => s.columns.some(c => c.blocks.some(b => b.id === selectedBlock.id)))
+      : selectedSection
+    if (parent?._savedSectionId) {
+      const sid = parent.id
+      return {
+        savedId: parent._savedSectionId,
+        kind: 'section' as const,
+        name: parent._savedSectionName || 'Seção universal',
+        detach: () => unlinkUniversalSection(sid),
+      }
+    }
+    return null
+  }, [selectedBlock, selectedSection, doc.sections, unlinkUniversalBlock, unlinkUniversalSection])
 
-  // Unmount-only flush (SPA navigation). Empty deps → cleanup runs ONCE
-  // on real unmount, not on every doc change.
-  useEffect(() => {
-    return () => {
-      // Both the call and the .catch are optional-chained so this stays a
-      // no-op if the ref never got populated (shouldn't happen in practice).
-      flushRef.current?.()?.catch(() => {})
-    }
-  }, [])
+  const { usage: selectedUsage, loading: selectedUsageLoading } =
+    useUniversalUsage(selectedUniversal?.savedId, !!selectedUniversal)
 
   const canvasWidth = device === 'mobile' ? 375 : doc.settings.contentWidth
 
@@ -1605,7 +1428,9 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
           <span className="text-[9px] px-1.5 py-0.5 bg-white/10 text-white rounded font-bold tracking-wider hidden sm:inline">WORDER</span>
 
           {/* Save status indicator */}
-          <SaveStatusIndicator status={saveStatus} lastSavedAt={autosaveLastSaved} error={saveError} />
+          {/* Sem salvamento automático quem manda no estado é quem
+              hospeda o editor — é lá que fica o botão de salvar. */}
+          {autosave && <SaveStatusIndicator status={saveStatus} lastSavedAt={autosaveLastSaved} error={saveError} />}
 
           {emailSiblings && currentTemplateId && onNavigateEmail && flowName && (
             <EmailSwitcher
@@ -1644,8 +1469,7 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
             <Send size={14} /> Teste
           </button>
           <button onClick={async () => {
-            await flushAutosave()
-            await flushUniversalSync()
+            if (autosave) await flushAutosave()
             onBack()
           }}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-zinc-700 text-xs font-medium text-zinc-400 rounded-lg hover:bg-zinc-800 hover:text-white transition-colors" title="Sair">
@@ -1658,7 +1482,31 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
       <div className="flex flex-1 overflow-hidden">
         {/* ── Left Sidebar (contextual: palette OR block/section properties) ── */}
         <div className="w-[360px] bg-white border-r border-gray-200 flex flex-col flex-shrink-0">
-          {selectedBlock ? (
+          {/* Universal selecionado: a escolha toma o lugar das propriedades.
+              O conteúdo não é deste e-mail, então não se ajusta daqui —
+              ou se abre o universal, ou se solta este e-mail dele. */}
+          {selectedUniversal ? (
+            <>
+              <div className="flex items-center gap-2 py-2.5 px-3 border-b border-gray-200 flex-shrink-0">
+                <button onClick={clearSelection} className="p-1 text-gray-400 hover:text-gray-700 rounded hover:bg-gray-100 transition-colors" title="Voltar">
+                  <ArrowLeft size={14} />
+                </button>
+                <p className="text-[11px] font-bold text-violet-700 uppercase tracking-wider flex-1">
+                  Conteúdo universal
+                </p>
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                <UniversalScopePanel
+                  kind={selectedUniversal.kind}
+                  name={selectedUniversal.name}
+                  usage={selectedUsage}
+                  usageLoading={selectedUsageLoading}
+                  onEditAll={() => setUniversalModal(selectedUniversal.savedId)}
+                  onEditHere={() => { selectedUniversal.detach(); }}
+                />
+              </div>
+            </>
+          ) : selectedBlock ? (
             <>
               {/* Header with back button when editing a block */}
               <div className="flex items-center gap-2 py-2.5 px-3 border-b border-gray-200 flex-shrink-0">
@@ -1668,63 +1516,7 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
                 <p className="text-[11px] font-bold text-gray-700 uppercase tracking-wider flex-1">
                   {BLOCK_DEFS.find(d => d.type === selectedBlock.type)?.label || selectedBlock.type}
                 </p>
-                {selectedBlock._savedBlockId && (
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-violet-100 text-violet-700">
-                    <Star className="w-2.5 h-2.5 fill-violet-600" />
-                    UNIVERSAL
-                  </span>
-                )}
               </div>
-
-              {/* Universal block banner — appears only when the selected block
-                  is linked to a saved_block. Explains propagation + unlink action. */}
-              {selectedBlock._savedBlockId && (
-                <div className="mx-3 mt-3 p-3 rounded-lg bg-violet-50 border border-violet-200">
-                  <div className="flex items-start gap-2">
-                    <Star className="w-4 h-4 text-violet-600 fill-violet-600 shrink-0 mt-0.5" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-[12px] font-semibold text-violet-900 leading-tight flex-1 truncate">
-                          {selectedBlock._savedBlockName || 'Bloco Universal'}
-                        </p>
-                        {/* Live sync status chip (Klaviyo-style) */}
-                        {universalSyncStatus === 'syncing' && (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-medium text-violet-600">
-                            <Loader2 className="w-3 h-3 animate-spin" /> Sincronizando…
-                          </span>
-                        )}
-                        {universalSyncStatus === 'saved' && (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600">
-                            <CheckCircle className="w-3 h-3" /> Salvo na biblioteca
-                          </span>
-                        )}
-                        {universalSyncStatus === 'error' && (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-medium text-red-600">Erro ao sincronizar</span>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-violet-700/80 leading-snug mt-0.5">
-                        Edições se aplicam a todos os emails que usam este bloco.
-                      </p>
-                      <div className="mt-2 flex items-center gap-3 flex-wrap">
-                        <a
-                          href={`/email/universal/${selectedBlock._savedBlockId}/edit`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-white bg-violet-600 rounded-md hover:bg-violet-700"
-                        >
-                          Abrir editor dedicado
-                        </a>
-                        <button
-                          onClick={() => unlinkUniversalBlock(selectedBlock.id)}
-                          className="inline-flex items-center gap-1 text-[11px] font-medium text-violet-700 hover:text-violet-900 underline underline-offset-2"
-                        >
-                          Desvincular — editar só neste email
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
 
               <div className="flex-1 overflow-y-auto p-3">
                 <BlockProperties
@@ -1748,63 +1540,7 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
                   <ArrowLeft size={14} />
                 </button>
                 <p className="text-[11px] font-bold text-gray-700 uppercase tracking-wider flex-1">Seção</p>
-                {selectedSection._savedSectionId && (
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-violet-100 text-violet-700">
-                    <Star className="w-2.5 h-2.5 fill-violet-600" />
-                    UNIVERSAL
-                  </span>
-                )}
               </div>
-              {/* Universal section banner — appears only when the selected
-                  section is linked to a saved_section. Explains propagation
-                  + offers unlink action. Mirrors the block banner above. */}
-              {selectedSection._savedSectionId && (
-                <div className="mx-3 mt-3 p-3 rounded-lg bg-violet-50 border border-violet-200">
-                  <div className="flex items-start gap-2">
-                    <Star className="w-4 h-4 text-violet-600 fill-violet-600 shrink-0 mt-0.5" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-[12px] font-semibold text-violet-900 leading-tight flex-1 truncate">
-                          {selectedSection._savedSectionName || 'Seção Universal'}
-                        </p>
-                        {universalSyncStatus === 'syncing' && (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-medium text-violet-600">
-                            <Loader2 className="w-3 h-3 animate-spin" /> Sincronizando…
-                          </span>
-                        )}
-                        {universalSyncStatus === 'saved' && (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600">
-                            <CheckCircle className="w-3 h-3" /> Salvo na biblioteca
-                          </span>
-                        )}
-                        {universalSyncStatus === 'error' && (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-medium text-red-600">Erro ao sincronizar</span>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-violet-700/80 leading-snug mt-0.5">
-                        Edições (blocos, cores, visibilidade, padding…) se aplicam
-                        a todos os emails que usam essa seção.
-                      </p>
-                      <div className="mt-2 flex items-center gap-3 flex-wrap">
-                        <a
-                          href={`/email/universal/${selectedSection._savedSectionId}/edit`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-white bg-violet-600 rounded-md hover:bg-violet-700"
-                        >
-                          Abrir editor dedicado
-                        </a>
-                        <button
-                          onClick={() => unlinkUniversalSection(selectedSection.id)}
-                          className="inline-flex items-center gap-1 text-[11px] font-medium text-violet-700 hover:text-violet-900 underline underline-offset-2"
-                        >
-                          Desvincular — editar só neste email
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
               <div className="flex-1 overflow-y-auto p-3">
                 <SectionProperties
                   section={selectedSection}
@@ -1827,10 +1563,6 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
                           return { ...s, columns: newCols }
                         })
                       }
-                      // Column layout is part of the section — propagate to
-                      // the library if the section is linked.
-                      const edited = next.sections.find(s => s.id === selectedSection.id)
-                      if (edited?._savedSectionId) scheduleUniversalSectionSync(edited._savedSectionId, edited)
                       return next
                     })
                   }}
@@ -1870,6 +1602,7 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
                       onAddSavedSection={addSavedSection}
                       onAddPrebuiltSection={addPrebuiltSection}
                       savedLibraryVersion={savedLibraryVersion}
+                      onEditUniversal={(savedId) => setUniversalModal(savedId)}
                     />
                   </div>
                 ) : (
@@ -1930,8 +1663,11 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
                       {/* Section toolbar INSIDE the section - always visible */}
                       {selectedSectionId === section.id && (
                         <div className="absolute left-1 top-1 z-20 flex items-center gap-1">
-                          <span className={`px-2 py-0.5 text-white text-[10px] font-semibold rounded ${section._savedSectionId ? 'bg-violet-500' : 'bg-zinc-700'}`}>
-                            {section._savedSectionId ? 'Seção Universal' : 'Seção'}
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-white text-[10px] font-semibold rounded max-w-[16rem] ${section._savedSectionId ? 'bg-violet-600' : 'bg-zinc-700'}`}>
+                            {section._savedSectionId && <Layers className="w-2.5 h-2.5 flex-shrink-0" />}
+                            <span className="truncate">
+                              {section._savedSectionId ? (section._savedSectionName || 'Seção universal') : 'Seção'}
+                            </span>
                           </span>
                           <div className="flex gap-0.5 bg-white/90 backdrop-blur-sm border border-gray-200 rounded-md shadow-sm px-0.5 py-0.5">
                             <button onClick={e => { e.stopPropagation(); cloneSection(section.id) }}
@@ -1939,10 +1675,16 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
                               <Copy className="w-3 h-3" />
                             </button>
                             {section._savedSectionId ? (
-                              <button onClick={e => { e.stopPropagation(); unlinkUniversalSection(section.id) }}
-                                className="p-1 text-violet-500 hover:text-amber-600 hover:bg-amber-50 rounded" title="Desvincular da seção universal">
-                                <X className="w-3 h-3" />
-                              </button>
+                              <>
+                                <button onClick={e => { e.stopPropagation(); setUniversalModal(section._savedSectionId!) }}
+                                  className="p-1 text-violet-600 hover:bg-violet-50 rounded" title="Editar em todos os e-mails que usam esta seção">
+                                  <Layers className="w-3 h-3" />
+                                </button>
+                                <button onClick={e => { e.stopPropagation(); unlinkUniversalSection(section.id) }}
+                                  className="p-1 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded" title="Soltar do universal — editar só neste e-mail">
+                                  <Unlink className="w-3 h-3" />
+                                </button>
+                              </>
                             ) : (
                               <button onClick={e => { e.stopPropagation(); saveSectionAsUniversal(section.id) }}
                                 className="p-1 text-gray-400 hover:text-violet-600 hover:bg-violet-50 rounded" title="Salvar como seção universal">
@@ -2112,6 +1854,7 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
                                         savedBlockName={block._savedBlockName}
                                         onSaveAsUniversal={() => saveBlockAsUniversal(block.id)}
                                         onUnlink={() => unlinkUniversalBlock(block.id)}
+                                        onEditUniversal={() => block._savedBlockId && setUniversalModal(block._savedBlockId)}
                                         hiddenOnDevice={blockHiddenOnDevice}
                                         dragDisabled={inlineEditingBlockId === block.id}
                                       >
@@ -2237,9 +1980,11 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
                 Cancelar
               </button>
               <button
-                disabled={!saveBlockName.trim()}
+                disabled={!saveBlockName.trim() || savingUniversal}
                 onClick={async () => {
                   const name = saveBlockName.trim()
+                  if (savingUniversal) return
+                  setSavingUniversal(true)
                   try {
                     // Strip any existing link fields before saving to library
                     const cleanBlock: EmailBlock = { ...selectedBlock } as EmailBlock
@@ -2266,15 +2011,17 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
                       }
                     }
                     setSavedLibraryVersion(v => v + 1)
-                    showToast('Bloco universal criado!')
+                    showToast(json?.deduped ? 'Bloco universal já existia — reaproveitado' : 'Bloco universal criado')
                     setShowSaveBlockModal(false)
                   } catch {
                     showToast('Erro ao salvar', 'error')
+                  } finally {
+                    setSavingUniversal(false)
                   }
                 }}
                 className="px-4 py-2 bg-violet-600 text-white text-sm font-semibold rounded-lg hover:bg-violet-700 disabled:opacity-50"
               >
-                Salvar como Universal
+                {savingUniversal ? 'Salvando…' : 'Salvar como Universal'}
               </button>
             </div>
           </div>
@@ -2312,11 +2059,12 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
                 Cancelar
               </button>
               <button
-                disabled={!saveSectionName.trim()}
+                disabled={!saveSectionName.trim() || savingUniversal}
                 onClick={async () => {
                   const name = saveSectionName.trim()
                   const section = doc.sections.find(s => s.id === sectionToSaveId)
-                  if (!section) return
+                  if (!section || savingUniversal) return
+                  setSavingUniversal(true)
                   try {
                     const cleanSection: EmailSection = JSON.parse(JSON.stringify(section))
                     delete (cleanSection as any)._savedSectionId
@@ -2349,15 +2097,17 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
                       }))
                     }
                     setSavedLibraryVersion(v => v + 1)
-                    showToast('Seção universal criada!')
+                    showToast(json?.deduped ? 'Seção universal já existia — reaproveitada' : 'Seção universal criada')
                     setShowSaveSectionModal(false)
                   } catch {
                     showToast('Erro ao salvar', 'error')
+                  } finally {
+                    setSavingUniversal(false)
                   }
                 }}
                 className="px-4 py-2 bg-violet-600 text-white text-sm font-semibold rounded-lg hover:bg-violet-700 disabled:opacity-50"
               >
-                Salvar como Universal
+                {savingUniversal ? 'Salvando…' : 'Salvar como Universal'}
               </button>
             </div>
           </div>
@@ -2448,75 +2198,23 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
         />
       )}
 
-      {/* ── Universal Edit Confirmation Modal ── */}
-      {pendingUniversalEdit && (
-        <div
-          className="fixed inset-0 bg-black/40 z-[100] flex items-center justify-center p-4"
-          onClick={cancelUniversalEdit}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6"
-          >
-            <div className="flex items-start gap-3 mb-4">
-              <div className="w-10 h-10 rounded-lg bg-violet-100 flex items-center justify-center flex-shrink-0">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2">
-                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                </svg>
-              </div>
-              <div className="flex-1">
-                <h3 className="text-base font-semibold text-gray-900">
-                  Editar {pendingUniversalEdit.kind === 'section' ? 'seção universal' : 'bloco universal'}
-                </h3>
-                <p className="text-xs text-gray-500 mt-1 leading-relaxed">
-                  <strong>{pendingUniversalEdit.savedName}</strong> é {pendingUniversalEdit.kind === 'section' ? 'uma seção universal' : 'um bloco universal'} usado em vários emails.
-                  Como você quer aplicar essa alteração?
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-2 mb-4">
-              <button
-                onClick={confirmEditAllUniversal}
-                className="w-full text-left p-3 border-2 border-violet-200 hover:border-violet-400 bg-violet-50/50 hover:bg-violet-50 rounded-lg transition-colors group"
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2">
-                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                  </svg>
-                  <span className="text-sm font-semibold text-violet-900">Editar em todos os emails</span>
-                </div>
-                <p className="text-[11px] text-violet-700 leading-snug pl-6">
-                  A alteração será propagada para todas as campanhas e automações que usam este {pendingUniversalEdit.kind === 'section' ? 'rodapé / seção' : 'bloco'}.
-                </p>
-              </button>
-
-              <button
-                onClick={confirmDetachUniversal}
-                className="w-full text-left p-3 border-2 border-gray-200 hover:border-gray-400 hover:bg-gray-50 rounded-lg transition-colors group"
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2">
-                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-                  </svg>
-                  <span className="text-sm font-semibold text-gray-900">Desvincular e editar só aqui</span>
-                </div>
-                <p className="text-[11px] text-gray-500 leading-snug pl-6">
-                  O {pendingUniversalEdit.kind === 'section' ? 'rodapé / seção' : 'bloco'} ficará independente neste email. Outros emails continuam com a versão universal.
-                </p>
-              </button>
-            </div>
-
-            <button
-              onClick={cancelUniversalEdit}
-              className="w-full text-center text-xs text-gray-500 hover:text-gray-700 py-1.5 transition-colors"
-            >
-              Cancelar
-            </button>
-          </div>
-        </div>
+      {/* ── Editar o universal: abre por cima do e-mail ── */}
+      {universalModal && (
+        <UniversalEditorModal
+          savedId={universalModal}
+          onClose={() => setUniversalModal(null)}
+          onSaved={(info) => {
+            applyUniversalUpdate(info)
+            showToast(
+              info.usage.count > 1
+                ? `Salvo — ${info.usage.count} e-mails atualizados`
+                : 'Conteúdo universal salvo'
+            )
+          }}
+          onOpenVersions={(savedId) => setVersionsModal({ blockId: savedId, savedBlockId: savedId })}
+        />
       )}
+
     </div>
   )
 })

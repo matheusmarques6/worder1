@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
-import { ShoppingBag, Tag, ShoppingCart, Type, ImageIcon, MousePointerClick, Minus, MoveVertical, Share2, Code, Play, PanelTop, PanelBottom, Columns, Package, User, Store, Package2, Link, LucideIcon, Menu, Layers, Table, Quote, Clock, GripVertical, Star, Trash2, Search, ExternalLink, Receipt } from 'lucide-react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
+import { ShoppingBag, Tag, ShoppingCart, Type, ImageIcon, MousePointerClick, Minus, MoveVertical, Share2, Code, Play, PanelTop, PanelBottom, Columns, Package, User, Store, Package2, Link, LucideIcon, Menu, Layers, Table, Quote, Clock, Trash2, Search, Receipt, Pencil, Copy, Loader2, AlertTriangle } from 'lucide-react'
 import { BLOCK_DEFS, type BlockDef, type EmailBlock, type EmailSection } from '../config/types'
+import { UniversalThumb, UsageBadge, UniversalIcon, usageText } from '../universal/UniversalBits'
 
 const ICON_MAP: Record<string, LucideIcon> = {
   ShoppingBag, Tag, ShoppingCart, Type, Image: ImageIcon, MousePointerClick, Minus, MoveVertical, Share2, Code, Play, PanelTop, PanelBottom, Columns, Menu, Layers, Table, Quote, Clock, Receipt,
@@ -114,6 +115,8 @@ interface BlockPaletteProps {
   /** Incremented by the editor whenever a new saved block/section is created
    *  so the palette re-fetches the library without requiring a tab switch. */
   savedLibraryVersion?: number
+  /** Abre o universal sozinho, para editar em todos os e-mails. */
+  onEditUniversal?: (savedId: string) => void
 }
 
 type SavedItem = {
@@ -123,38 +126,103 @@ type SavedItem = {
   block_json: any
   // Computed fields:
   kind: 'block' | 'section'
+  /** Em quantos e-mails este universal está. */
+  usageCount: number
 }
 
-export function BlockPalette({ onAddBlock, onAddSavedBlock, onAddSavedSection, onAddPrebuiltSection, savedLibraryVersion = 0 }: BlockPaletteProps) {
+export function BlockPalette({ onAddBlock, onAddSavedBlock, onAddSavedSection, onAddPrebuiltSection, savedLibraryVersion = 0, onEditUniversal }: BlockPaletteProps) {
   const [tab, setTab] = useState<'blocks' | 'prebuilt' | 'saved'>('blocks')
   const [savedItems, setSavedItems] = useState<SavedItem[]>([])
   const [savedLoading, setSavedLoading] = useState(false)
   const [savedFilter, setSavedFilter] = useState<'all' | 'blocks' | 'sections'>('all')
   const [search, setSearch] = useState('')
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<SavedItem | null>(null)
 
-  // Load library on mount, when the Salvos tab is opened, AND every time
-  // the editor bumps savedLibraryVersion (after creating a universal).
-  useEffect(() => {
-    let cancelled = false
+  const loadLibrary = useCallback(async (): Promise<void> => {
     setSavedLoading(true)
-    fetch('/api/email/saved-blocks')
-      .then(r => r.json())
-      .then(d => {
-        if (cancelled) return
-        const rows: any[] = d.blocks || []
-        const items: SavedItem[] = rows.map(r => ({
-          id: r.id,
-          name: r.name,
-          category: r.category,
-          block_json: r.block_json,
-          kind: (r.block_json && r.block_json._kind === 'section') || r.category === 'section' ? 'section' : 'block',
-        }))
-        setSavedItems(items)
+    try {
+      // withUsage: a contagem vem junto, numa consulta só. Sem ela a
+      // lista é um punhado de nomes parecidos e nada diz qual está no ar.
+      const res = await fetch('/api/email/saved-blocks?withUsage=1')
+      const d = await res.json()
+      const rows: any[] = d.blocks || []
+      setSavedItems(rows.map(r => ({
+        id: r.id,
+        name: r.name,
+        category: r.category,
+        block_json: r.block_json,
+        kind: (r.block_json && r.block_json._kind === 'section') || r.category === 'section' ? 'section' : 'block',
+        usageCount: r.usage_count || 0,
+      })))
+    } catch {
+      setSavedItems([])
+    } finally {
+      setSavedLoading(false)
+    }
+  }, [])
+
+  // Recarrega ao montar e sempre que o editor cria um universal novo.
+  useEffect(() => { loadLibrary() }, [loadLibrary, savedLibraryVersion])
+
+  // Outra aba salvou um universal: a lista aqui já está velha.
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'worder:universal-saved') loadLibrary()
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [loadLibrary])
+
+  const commitRename = useCallback(async (item: SavedItem) => {
+    const next = renameValue.trim()
+    setRenamingId(null)
+    if (!next || next === item.name) return
+    setBusyId(item.id)
+    try {
+      const res = await fetch(`/api/email/saved-blocks/${item.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: next }),
       })
-      .catch(() => { if (!cancelled) setSavedItems([]) })
-      .finally(() => { if (!cancelled) setSavedLoading(false) })
-    return () => { cancelled = true }
-  }, [savedLibraryVersion])
+      if (res.ok) setSavedItems(prev => prev.map(i => (i.id === item.id ? { ...i, name: next } : i)))
+    } catch { /* a lista continua com o nome antigo */ }
+    setBusyId(null)
+  }, [renameValue])
+
+  /**
+   * Duplicar existe por causa do caso real: querer mudar um rodapé só
+   * para uma campanha. Sem uma cópia nomeada, a saída era editar o
+   * universal e desfazer depois — nos vinte e três e-mails.
+   */
+  const duplicateItem = useCallback(async (item: SavedItem) => {
+    setBusyId(item.id)
+    try {
+      const res = await fetch('/api/email/saved-blocks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: `${item.name} (cópia)`,
+          category: item.category,
+          block_json: item.block_json,
+        }),
+      })
+      if (res.ok) await loadLibrary()
+    } catch { /* nada muda */ }
+    setBusyId(null)
+  }, [loadLibrary])
+
+  const deleteItem = useCallback(async (item: SavedItem) => {
+    setBusyId(item.id)
+    try {
+      await fetch(`/api/email/saved-blocks/${item.id}`, { method: 'DELETE' })
+      setSavedItems(prev => prev.filter(i => i.id !== item.id))
+    } catch { /* nada muda */ }
+    setBusyId(null)
+    setConfirmDelete(null)
+  }, [])
 
   const categories = ['Conteúdo', 'E-commerce', 'Estrutura']
 
@@ -258,10 +326,10 @@ export function BlockPalette({ onAddBlock, onAddSavedBlock, onAddSavedSection, o
         {tab === 'saved' && (
           <div className="space-y-3">
             <div className="flex items-start gap-2 p-2.5 rounded-lg bg-violet-50 border border-violet-100">
-              <Star className="w-3.5 h-3.5 text-violet-600 fill-violet-600 shrink-0 mt-0.5" />
+              <Layers className="w-3.5 h-3.5 text-violet-600 shrink-0 mt-0.5" />
               <p className="text-[10px] text-violet-900/80 leading-snug">
-                Conteúdo universal fica disponível em todos os emails. Edições
-                se propagam automaticamente — igual Klaviyo e Omnisend.
+                Guardado uma vez, usado em vários e-mails. Editar um destes
+                muda todos os e-mails que o contêm — o selo diz quantos são.
               </p>
             </div>
 
@@ -299,18 +367,19 @@ export function BlockPalette({ onAddBlock, onAddSavedBlock, onAddSavedSection, o
                 </p>
                 <p className="text-[10px] text-zinc-400 mt-1 leading-relaxed">
                   {savedCount === 0
-                    ? 'Selecione um bloco ou seção e clique no ícone ⭐ da toolbar para salvar como universal.'
+                    ? 'Selecione uma seção ou um bloco no e-mail e clique na estrela da barra de ferramentas para guardar aqui.'
                     : 'Ajuste o filtro ou a busca.'}
                 </p>
               </div>
             ) : (
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 {filteredSaved.map((item) => {
                   const isSection = item.kind === 'section'
                   const payloadJson = isSection ? (item.block_json?.section || item.block_json) : item.block_json
+                  const renaming = renamingId === item.id
                   return (
                     <div key={item.id}
-                      draggable
+                      draggable={!renaming}
                       onDragStart={(e) => {
                         if (isSection) {
                           e.dataTransfer.setData('savedSectionJson', JSON.stringify(payloadJson))
@@ -324,47 +393,83 @@ export function BlockPalette({ onAddBlock, onAddSavedBlock, onAddSavedSection, o
                         e.dataTransfer.effectAllowed = 'copy'
                       }}
                       onClick={() => {
+                        if (renaming) return
                         if (isSection) onAddSavedSection?.(payloadJson, item.id, item.name)
                         else onAddSavedBlock?.(payloadJson, item.id, item.name)
                       }}
-                      className="flex items-center gap-2.5 p-2.5 bg-white border border-zinc-200 rounded-lg hover:border-violet-400 hover:shadow-sm transition-all cursor-grab active:cursor-grabbing group"
+                      title={`Inserir neste e-mail — ${usageText(item.usageCount)}`}
+                      className="bg-white border border-zinc-200 rounded-lg overflow-hidden hover:border-violet-400 hover:shadow-sm transition-all cursor-grab active:cursor-grabbing group"
                     >
-                      <div className={`w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0 ${isSection ? 'bg-violet-100' : 'bg-zinc-100'}`}>
-                        {isSection ? <Layers className="w-4 h-4 text-violet-600" /> : <Package className="w-4 h-4 text-zinc-500" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <p className="text-[12px] font-medium text-zinc-900 truncate">{item.name}</p>
-                          <span className={`text-[8px] px-1 py-px rounded font-semibold uppercase tracking-wide ${isSection ? 'bg-violet-100 text-violet-700' : 'bg-zinc-100 text-zinc-600'}`}>
-                            {isSection ? 'Seção' : 'Bloco'}
-                          </span>
+                      {/* A miniatura é o que identifica: "Rodapé preto" e
+                          "rodape preto" só se distinguem olhando. */}
+                      <UniversalThumb content={payloadJson} kind={item.kind} height={78} />
+
+                      <div className="flex items-center gap-2 px-2 py-1.5">
+                        <div className={`w-6 h-6 rounded flex items-center justify-center flex-shrink-0 ${isSection ? 'bg-violet-100 text-violet-600' : 'bg-zinc-100 text-zinc-500'}`}>
+                          <UniversalIcon kind={item.kind} className="w-3.5 h-3.5" />
                         </div>
-                        <p className="text-[10px] text-zinc-400">Arraste ou clique para inserir</p>
+
+                        <div className="flex-1 min-w-0">
+                          {renaming ? (
+                            <input
+                              autoFocus
+                              value={renameValue}
+                              onClick={e => e.stopPropagation()}
+                              onChange={e => setRenameValue(e.target.value)}
+                              onBlur={() => commitRename(item)}
+                              onKeyDown={e => {
+                                e.stopPropagation()
+                                if (e.key === 'Enter') commitRename(item)
+                                if (e.key === 'Escape') setRenamingId(null)
+                              }}
+                              className="w-full px-1.5 py-0.5 border border-violet-300 rounded text-[12px] text-zinc-900 outline-none focus:border-violet-500"
+                            />
+                          ) : (
+                            <p className="text-[12px] font-medium text-zinc-900 truncate leading-tight">{item.name}</p>
+                          )}
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <UsageBadge count={item.usageCount} />
+                            <span className="text-[9px] text-zinc-400">{isSection ? 'Seção' : 'Bloco'}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                          {busyId === item.id ? (
+                            <Loader2 className="w-3.5 h-3.5 text-violet-500 animate-spin mx-1" />
+                          ) : (
+                            <>
+                              <button
+                                onClick={e => { e.stopPropagation(); onEditUniversal?.(item.id) }}
+                                className="p-1 text-zinc-400 hover:text-violet-600 hover:bg-violet-50 rounded"
+                                title={`Editar — muda em ${item.usageCount === 1 ? '1 e-mail' : `${item.usageCount} e-mails`}`}
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={e => { e.stopPropagation(); setRenamingId(item.id); setRenameValue(item.name) }}
+                                className="p-1 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded"
+                                title="Renomear"
+                              >
+                                <Type className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={e => { e.stopPropagation(); duplicateItem(item) }}
+                                className="p-1 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded"
+                                title="Duplicar — para variar sem mexer no original"
+                              >
+                                <Copy className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={e => { e.stopPropagation(); setConfirmDelete(item) }}
+                                className="p-1 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded"
+                                title="Excluir da biblioteca"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </div>
-                      <a
-                        href={`/email/universal/${item.id}/edit`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={e => e.stopPropagation()}
-                        className="p-1 text-zinc-300 hover:text-violet-600 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
-                        title="Abrir editor dedicado (edita em todos os emails)"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </a>
-                      <button
-                        onClick={async (e) => {
-                          e.stopPropagation()
-                          if (!confirm(`Excluir "${item.name}" da biblioteca? Os emails que já usam esse ${isSection ? 'seção' : 'bloco'} universal vão perder o vínculo.`)) return
-                          try {
-                            await fetch(`/api/email/saved-blocks/${item.id}`, { method: 'DELETE' })
-                            setSavedItems(prev => prev.filter(b => b.id !== item.id))
-                          } catch {}
-                        }}
-                        className="p-1 text-zinc-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
-                        title="Excluir"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
                     </div>
                   )
                 })}
@@ -373,6 +478,43 @@ export function BlockPalette({ onAddBlock, onAddSavedBlock, onAddSavedSection, o
           </div>
         )}
       </div>
+
+      {/* ── Excluir da biblioteca ──
+          O conteúdo não some dos e-mails: ele é escrito por extenso em
+          cada um antes de a linha ser apagada. O que se perde é o
+          vínculo — daqui em diante cada e-mail segue por conta. */}
+      {confirmDelete && (
+        <div className="fixed inset-0 z-[110] bg-black/40 flex items-center justify-center p-4" onClick={() => setConfirmDelete(null)}>
+          <div onClick={e => e.stopPropagation()} className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-5">
+            <div className="flex items-start gap-3 mb-3">
+              <div className="w-9 h-9 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="w-4.5 h-4.5 text-amber-600" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-[14px] font-semibold text-gray-900">Excluir “{confirmDelete.name}”?</h3>
+                <p className="text-[12px] text-gray-500 leading-relaxed mt-1">
+                  {confirmDelete.usageCount === 0
+                    ? 'Não está em nenhum e-mail — some sem deixar rastro.'
+                    : `Os ${confirmDelete.usageCount} e-mails que usam continuam exatamente como estão: o conteúdo fica gravado neles. O que acaba é o vínculo — a partir daqui, mudar um não muda os outros.`}
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setConfirmDelete(null)} className="px-3 py-1.5 text-[12px] font-medium text-gray-600 hover:bg-gray-100 rounded-lg">
+                Cancelar
+              </button>
+              <button
+                onClick={() => deleteItem(confirmDelete)}
+                disabled={busyId === confirmDelete.id}
+                className="px-3.5 py-1.5 bg-red-600 text-white text-[12px] font-semibold rounded-lg hover:bg-red-700 disabled:opacity-50 inline-flex items-center gap-1.5"
+              >
+                {busyId === confirmDelete.id && <Loader2 className="w-3 h-3 animate-spin" />}
+                Excluir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
