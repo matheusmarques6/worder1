@@ -34,7 +34,9 @@ const chain: any = new Proxy(
   {},
   {
     get(_t, prop: string) {
-      if (prop === 'then') return (resolve: any) => resolve(chainResult)
+      if (prop === 'then') return (resolve: any) => resolve(
+        typeof chainResult === 'function' ? chainResult() : chainResult,
+      )
       return (...args: any[]) => {
         track(prop, args)
         return chain
@@ -95,5 +97,50 @@ describe('/api/queue/agents — o roster é o da sessão', () => {
     await GET(req('?status=all'))
 
     expect(calls['eq']).not.toContainEqual(['status', 'all'])
+  })
+
+  it('oculta o profile de outra org sem remover o agente nem alterar as métricas', async () => {
+    const localProfile = { id: 'user-a', full_name: 'Agente A', email: 'a@example.test', avatar_url: 'avatar-a' }
+    const foreignProfile = { id: 'user-b', full_name: 'Segredo B', email: 'b@example.test', avatar_url: 'avatar-b' }
+    const profileOrgs: Record<string, string> = { 'user-a': SESSION.orgId, 'user-b': ALHEIA }
+    const defaults = { organization_id: SESSION.orgId, status: 'online', current_conversations: 0, max_conversations: 5, on_break: false }
+    const rows = [
+      { ...defaults, user_id: 'user-a', current_conversations: 2, profile: localProfile },
+      { ...defaults, user_id: 'user-b', current_conversations: 3, on_break: true, profile: foreignProfile },
+      { ...defaults, user_id: 'missing', profile: null },
+      { ...defaults, user_id: 'offline', status: 'offline', profile: null },
+      { ...defaults, user_id: 'foreign-row', organization_id: ALHEIA, profile: foreignProfile },
+    ]
+
+    // PostgREST: filtros do alias afetam só o embed; !inner também remove a linha raiz.
+    chainResult = () => {
+      const filters = calls['eq'] || []
+      const profileOrg = filters.find(([column]) => column === 'profile.organization_id')?.[1]
+      let data = rows
+        .filter(row => filters.every(([column, value]) => column.includes('.') || row[column as keyof typeof row] === value))
+        .map(row => ({
+          ...row,
+          profile: profileOrg === undefined || profileOrgs[row.user_id] === profileOrg ? row.profile : null,
+        }))
+      if (calls['select']?.[0][0].includes('!inner')) data = data.filter(row => row.profile !== null)
+      return { data, error: null }
+    }
+
+    const res = await GET(req(`?organization_id=${ALHEIA}&status=online`))
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(body.agents.map((agent: any) => ({ user_id: agent.user_id, profile: agent.profile }))).toEqual([
+      { user_id: 'user-a', profile: { id: 'user-a', full_name: 'Agente A', email: 'a@example.test', avatar_url: 'avatar-a' } },
+      { user_id: 'user-b', profile: null },
+      { user_id: 'missing', profile: null },
+    ])
+    for (const secret of ['Segredo B', 'b@example.test', 'avatar-b']) {
+      expect(JSON.stringify(body)).not.toContain(secret)
+    }
+    expect(body.metrics).toEqual({
+      total: 3, online: 3, busy: 0, away: 0, offline: 0, on_break: 1,
+      total_conversations: 5, available_capacity: 8,
+    })
   })
 })
