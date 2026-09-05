@@ -4284,14 +4284,52 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   ~~`DEBUG_ENDPOINT_SECRET`~~ saiu desta lista: o fix round 1 do item 43 acrescentou a env ao
   `.env.example:47-54`, com a nota de que ela passou a ser exigida em qualquer ambiente. As demais
   continuam ausentes.
-  Ausentes dos `runtime/.env.*.example`: `AGENTS_LOGFIRE_TOKEN`, `AGENTS_PLATFORM_LLM_ENABLED`,
-  `AGENTS_HUMANIZE_DELAYS`, `AGENTS_RUBRICS_DIR` e os knobs de fila.
+  **Correção 1 — estas cinco são AMOSTRA, não conta.** Medido na âncora `50576bc8`, antes dos
+  commits deste item: o lado TS lê **68** envs em `src/ scripts/ worker/`, o `.env.example` declara
+  **20**, logo **48** são lidas e ausentes. As outras 43 são de Stripe/Shopify/TikTok/Google/
+  Resend/Instagram/OAuth, `NEXT_PUBLIC_*`, `NODE_ENV`/`VERCEL_*` e chaves de suíte — fora do
+  recorte deste item, com destinatário escrito no corpo abaixo. Escrever o número importa: sem ele
+  o próximo leitor acha que o drift tem cinco nomes.
+  **Correção 2 — não há drift ao contrário em arquivo de configuração nenhum.** Medido, e é a
+  metade boa da medição que ninguém tinha feito: **0 órfãos** (chave declarada e nunca lida) em
+  `.env.example` (20 chaves), `runtime/.env.bancada.example` (12), `runtime/.env.piloto.example`
+  (14) e `render.yaml:26-61` (15).
+  **Correção 3 — `AGENTS_PREVIEW_TOKEN` NÃO está "ausente dos exemplos".** Ela está em
+  `runtime/.env.bancada.example` (citado **sem número de linha de propósito**: este item edita o
+  arquivo), `runtime/.env.piloto.example:18`, `render.yaml:58` e `runtime/DEPLOY.md:21`. Ausente
+  **só do `.env.example` da raiz**, que é o lado Vercel do par — e `runtime/DEPLOY.md:22-24` já diz
+  isso por escrito.
+  **Correção 4 — `AGENTS_HUMANIZE_DELAYS` estava listada DUAS vezes**, separada e dentro de "os
+  knobs de fila". Ela mora no mesmo `config_from_env`
+  (`runtime/src/agents_runtime/config.py:117-120`): são **13** knobs, não 12 + 1. A linha certa é:
+  ausentes dos `runtime/.env.*.example` estão `AGENTS_LOGFIRE_TOKEN`,
+  `AGENTS_PLATFORM_LLM_ENABLED`, `AGENTS_RUBRICS_DIR` e os **13** knobs de `config_from_env` (12
+  `*_MS` + `AGENTS_HUMANIZE_DELAYS`).
+  **Correção 5 — a ausência de `AGENTS_CHANNEL` no `runtime/.env.bancada.example` não é drift: é o
+  contrato.** Acrescentá-la transforma o modo mudo, que roda sobre dados reais de clientes, em modo
+  que envia WhatsApp de verdade. A ausência é a configuração correta **para o envio**; o custo dela
+  está no item *"Todo o housekeeping do banco vive dentro da task do canal — sem `AGENTS_CHANNEL`,
+  os três passos morrem juntos"* (pelo título), que continua **aberto** e mede a outra metade do
+  mesmo mecanismo. Mecanismo completo no corpo abaixo.
+  **Correção 6 — `WHATSAPP_AI_DEBOUNCE_SECONDS` só pode ser documentada com o qualificador de
+  inércia**: org migrada ao runtime lê a janela **por organização** e ignora a env. Sem o
+  qualificador, a linha vende um knob global que metade do produto ignora — pior que a ausência.
+  **Correção 7 — `providers.py:97` está podre; a leitura é `providers.py:100`.**
   **Dependência do item 52 (fechado, commits `9e184ab3` `9e51923f`):** `AGENTS_PLATFORM_LLM_ENABLED`
   continua nesta lista — o item 52 não removeu nem ligou o degrau —, **mas não é drift do mesmo tipo
-  que as outras**. Ela é lida (`providers.py:97`) e inerte por desenho: o degrau (3) exige também um
-  argumento `platform` que nenhum call site de produção passa, então copiá-la para um
+  que as outras**. Ela é lida em `platform_enabled` (`providers.py:100`; a constante do nome está em
+  `:38`; `:97` é linha em branco) e inerte por desenho: o degrau (3) exige **duas** condições —
+  `if platform is not None and platform_enabled():` (`providers.py:140`) — e o parâmetro `platform`
+  (`providers.py:121`) não é passado por nenhum call site de produção. Copiá-la para um
   `.env.*.example` prometeria um efeito que ela não tem. Trate-a aqui como "documentar a inércia ou
   não documentar", não como "acrescentar a env e pronto".
+  **O critério de recorte, três condições cumulativas.** (1) O nome está no recorte que o item
+  nomeia — não se acrescenta nome de fora sem **declarar a exceção**. (2) O arquivo é o lugar
+  certo: o `.env.example` da raiz é **toda env do app Next.js que o operador precisa conhecer,
+  inclusive a opcional cuja ausência degrada em silêncio**; `runtime/.env.*.example` é **o mínimo
+  para ESTE modo subir**; `runtime/DEPLOY.md` é "tudo que se pode configurar". (3) Escrever a linha
+  não vende um efeito que a env não tem. Quem não passa nas três recebe decisão escrita de NÃO
+  documentar, com o motivo medido — nenhuma fica pendente, e é por isso que o item fecha.
 
 - [ ] **63. Lacunas de teste** `[relatado]`
   Sem cobertura: `toucher._node_delta` com `success_criteria`/`enabled_tools`/`forbidden` (onde mora um
