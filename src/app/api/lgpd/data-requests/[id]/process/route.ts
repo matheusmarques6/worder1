@@ -89,7 +89,7 @@ export async function POST(
     // Notifica o requisitante via email
     try {
       const { sendEmail } = await import('@/lib/email/resend')
-      const from = process.env.LGPD_FROM_EMAIL || 'privacy@worder.app'
+      const from = process.env.LGPD_FROM_EMAIL || process.env.RESEND_FROM_EMAIL || 'noreply@worder.email'
       await sendEmail({
         to: request.requester_email,
         from,
