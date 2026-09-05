@@ -1,221 +1,116 @@
 'use client'
 
-// =============================================
-// WORDER: Deliverability dashboard
-// /settings/deliverability/page.tsx
-//
-// SPF / DKIM / DMARC / MX checker + inbox preview launcher.
-// Klaviyo/Omnisend-style "why am I going to spam?" page.
-// =============================================
+// Configurações → Entregabilidade (desenho PEntreg): saúde 30 dias, checklist
+// de autenticação e higiene da lista. Mantém a ferramenta de verificar um
+// domínio qualquer (DNS ao vivo) do fluxo anterior.
 
-import { useState, useEffect, useCallback } from 'react'
-import {
-  Shield,
-  CheckCircle2,
-  AlertTriangle,
-  XCircle,
-  Loader2,
-  RefreshCw,
-  Globe,
-} from 'lucide-react'
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import { useStoreStore } from '@/stores'
+import { Card, Row, SaveBar, Title, LoadingCard, Meter, Chk, Tog, useForm, Badge } from '@/components/settings/ui'
+import { I } from '@/components/settings/icons'
+import { api, nf } from '@/components/settings/format'
+import { useApi, useSave } from '@/components/settings/hooks'
 
-interface CheckResult {
-  ok: boolean
-  state: 'pass' | 'warn' | 'fail' | 'missing'
-  value?: string
-  message: string
-  recommendation?: string
+interface Resp {
+  metrics: { sent: number; delivered: number; opened: number; clicked: number; bounced: number; complained: number; unsubscribed: number; bounce_rate: number; complaint_rate: number; unsubscribe_rate: number; open_rate: number; click_rate: number }
+  sender: { email: string | null; domain: string; is_shared: boolean; verified: boolean; spf: boolean; dkim: boolean }
+  tracking_domain: string | null
+  hygiene: { suppress_inactive_days: number | null; validate_on_entry: boolean }
 }
+interface DomainCheck { domain: string; score: number; band: string; checks: Record<'spf' | 'dkim' | 'dmarc' | 'mx', { ok: boolean; state: string; value?: string; message: string; recommendation?: string }> }
 
-interface CheckResponse {
-  domain: string
-  checkedAt: string
-  score: number
-  band: 'excellent' | 'good' | 'fair' | 'poor'
-  checks: {
-    spf: CheckResult
-    dkim: CheckResult
-    dmarc: CheckResult
-    mx: CheckResult
-  }
-}
+const pctBR = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: v < 1 ? 2 : 1, maximumFractionDigits: 2 }) + '%'
 
-export default function DeliverabilityPage() {
-  const [domain, setDomain] = useState('')
-  const [result, setResult] = useState<CheckResponse | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+export default function DeliverabilitySettingsPage() {
+  const { currentStore, _hasHydrated } = useStoreStore() as any
+  const storeId: string | null = currentStore?.id || null
+  const { data, loading, error, reload } = useApi<Resp>(_hasHydrated ? `/api/settings/deliverability${storeId ? `?storeId=${encodeURIComponent(storeId)}` : ''}` : null, [storeId])
+  const dc = useApi<DomainCheck>(data?.sender?.domain ? `/api/deliverability/domain-check?domain=${encodeURIComponent(data.sender.domain)}` : null, [data?.sender?.domain])
 
-  // Persist the last-checked domain so a refresh doesn't lose context.
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem('wd:deliverability:domain')
-      if (saved) setDomain(saved)
-    } catch {}
-  }, [])
+  if (!_hasHydrated || (loading && !data)) return <><Title h="Entregabilidade" p="Saúde do envio nos últimos 30 dias e o que fazer para melhorar." /><LoadingCard rows={2} /><LoadingCard rows={4} /></>
+  if (error || !data) return <><Title h="Entregabilidade" /><Card><div className="empty2"><b>Não foi possível carregar</b>{error}<div><button className="btn" onClick={() => reload()}>Tentar de novo</button></div></div></Card></>
 
-  const runCheck = useCallback(async (d: string) => {
-    if (!d) return
-    setLoading(true)
-    setError(null)
-    try {
-      const res = await fetch(`/api/deliverability/domain-check?domain=${encodeURIComponent(d)}`)
-      const json = await res.json()
-      if (!res.ok) {
-        setError(json.error || 'Falha ao verificar domínio')
-        return
-      }
-      setResult(json)
-      try {
-        localStorage.setItem('wd:deliverability:domain', d)
-      } catch {}
-    } catch (e: any) {
-      setError(e?.message || 'Erro de rede')
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    const cleaned = domain.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '')
-    setDomain(cleaned)
-    runCheck(cleaned)
-  }
-
-  return (
-    <div className="max-w-5xl mx-auto px-6 py-10">
-      <header className="mb-8">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="w-10 h-10 rounded-lg bg-orange-50 flex items-center justify-center">
-            <Shield className="w-5 h-5 text-orange-600" />
-          </div>
-          <h1 className="text-[24px] font-bold text-gray-900">Deliverability</h1>
-        </div>
-        <p className="text-[14px] text-gray-500 leading-relaxed max-w-2xl">
-          Verifique se o seu domínio está configurado corretamente pra que seus emails caiam na
-          caixa de entrada, não no spam. SPF, DKIM e DMARC são lidos diretamente do DNS público.
-        </p>
-      </header>
-
-      <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
-        <label className="block text-[12px] font-semibold text-gray-700 mb-2 uppercase tracking-wider">
-          Domínio do remetente
-        </label>
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              value={domain}
-              onChange={(e) => setDomain(e.target.value)}
-              placeholder="ex: sualoja.com"
-              className="w-full bg-white border border-gray-200 rounded-lg pl-10 pr-3 py-2.5 text-[14px] focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={loading || !domain}
-            className="inline-flex items-center gap-1.5 px-5 py-2.5 text-[13px] font-semibold text-white bg-orange-500 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
-          >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-            Verificar
-          </button>
-        </div>
-        {error && (
-          <p className="mt-3 text-[12px] text-red-600 flex items-center gap-1.5">
-            <XCircle className="w-3.5 h-3.5" />
-            {error}
-          </p>
-        )}
-      </form>
-
-      {result && <ResultPanel result={result} onRefresh={() => runCheck(result.domain)} />}
-    </div>
-  )
-}
-
-function ResultPanel({ result, onRefresh }: { result: CheckResponse; onRefresh: () => void }) {
-  const bandColor =
-    result.band === 'excellent'
-      ? 'text-emerald-600 bg-emerald-50 border-emerald-200'
-      : result.band === 'good'
-      ? 'text-blue-600 bg-blue-50 border-blue-200'
-      : result.band === 'fair'
-      ? 'text-amber-600 bg-amber-50 border-amber-200'
-      : 'text-red-600 bg-red-50 border-red-200'
-
-  const bandLabel = {
-    excellent: 'Excelente',
-    good: 'Bom',
-    fair: 'Médio',
-    poor: 'Crítico',
-  }[result.band]
+  const m = data.metrics
+  const bar = (v: number, goal: number) => ({ pct: Math.min(100, Math.round((v / (goal * 2.5)) * 100)), tone: v <= goal ? 'good' as const : 'over' as const })
+  const b1 = bar(m.bounce_rate, 2), b2 = bar(m.complaint_rate, 0.1), b3 = bar(m.unsubscribe_rate, 0.5)
+  const dmarcOk = !!dc.data?.checks?.dmarc?.ok
+  const dmarcState = dc.data?.checks?.dmarc?.state
+  const items: Array<{ t: string; h: string; ok: boolean; warn?: boolean; action?: React.ReactNode }> = [
+    { t: 'SPF configurado', h: data.sender.spf ? data.sender.domain : `${data.sender.domain} — registro não verificado`, ok: data.sender.spf, action: !data.sender.spf ? <Link href="/settings/email" className="btn btn-sm">Resolver</Link> : undefined },
+    { t: 'DKIM assinando', h: data.sender.dkim ? data.sender.domain : `${data.sender.domain} — registro não verificado`, ok: data.sender.dkim, action: !data.sender.dkim ? <Link href="/settings/email" className="btn btn-sm">Resolver</Link> : undefined },
+    { t: 'DMARC publicado', h: dc.loading ? `${data.sender.domain} — consultando DNS…` : dmarcOk ? `${data.sender.domain} — ${dc.data?.checks.dmarc.value || 'p=none'}` : `${data.sender.domain} — sem registro _dmarc`, ok: dmarcOk, warn: dmarcState === 'warn', action: !dmarcOk && !dc.loading ? <Link href="/settings/email" className="btn btn-sm">Resolver</Link> : undefined },
+    { t: 'Link de descadastro em um clique', h: 'List-Unsubscribe ativo em todos os envios', ok: true },
+    { t: 'Domínio dos links personalizado', h: data.tracking_domain ? `Usando ${data.tracking_domain}` : `Usando ${data.sender.is_shared ? data.sender.domain : 'o domínio do Worder'}; recomendamos o seu`, ok: !!data.tracking_domain, action: !data.tracking_domain ? <Link href="/settings/email" className="btn btn-sm">Resolver</Link> : undefined },
+  ]
 
   return (
     <>
-      <div className={`rounded-xl border p-5 mb-5 ${bandColor}`}>
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <p className="text-[12px] font-semibold uppercase tracking-wider opacity-80">Score de Deliverability</p>
-            <p className="text-[42px] font-bold leading-none mt-1">{result.score}<span className="text-[20px] opacity-60">/100</span></p>
-            <p className="text-[14px] font-medium mt-1">{bandLabel} · {result.domain}</p>
-          </div>
-          <button
-            onClick={onRefresh}
-            className="p-2 rounded-lg bg-white/50 hover:bg-white transition-colors"
-            title="Reverificar"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </button>
+      <Title h="Entregabilidade" p="Saúde do envio nos últimos 30 dias e o que fazer para melhorar." right={<Link href="/email-marketing/analytics" className="lnk">Relatório completo<I n="chevR" s={15} /></Link>} />
+      <Card flush>
+        <div className="use">
+          <Meter label="Taxa de rejeição" right="meta < 2%" value={pctBR(m.bounce_rate)} pct={b1.pct} tone={b1.tone} />
+          <Meter label="Marcações de spam" right="meta < 0,1%" value={pctBR(m.complaint_rate)} pct={b2.pct} tone={b2.tone} />
+          <Meter label="Descadastros" right="meta < 0,5%" value={pctBR(m.unsubscribe_rate)} pct={b3.pct} tone={b3.tone} />
         </div>
-        <div className="w-full h-2 rounded-full bg-white/40 overflow-hidden">
-          <div
-            className="h-full rounded-full bg-current opacity-90 transition-all"
-            style={{ width: `${result.score}%` }}
-          />
-        </div>
-      </div>
+        <div className="sc-f"><span className="hint">{m.sent ? `${nf(m.sent)} e-mails enviados · ${nf(m.opened)} abertos · ${nf(m.clicked)} clicados nos últimos 30 dias.` : 'Nenhum e-mail enviado nos últimos 30 dias — as taxas aparecem depois do primeiro envio.'}</span></div>
+      </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <CheckCard name="SPF" desc="Servidores autorizados a enviar como você" result={result.checks.spf} />
-        <CheckCard name="DKIM" desc="Assinatura criptográfica das mensagens" result={result.checks.dkim} />
-        <CheckCard name="DMARC" desc="Política contra spoof do seu domínio" result={result.checks.dmarc} />
-        <CheckCard name="MX" desc="Recebimento de replies / bounces" result={result.checks.mx} />
-      </div>
+      <Card title="Checklist de autenticação" desc="Itens que provedores como Gmail e Yahoo exigem desde 2024.">
+        {items.map((it) => <Chk key={it.t} ok={it.ok} warn={it.warn} title={it.t} help={it.h} action={it.action} />)}
+      </Card>
 
-      <p className="text-[11px] text-gray-400 mt-5">
-        Última verificação: {new Date(result.checkedAt).toLocaleString('pt-BR')}
-      </p>
+      <HygieneCard hygiene={data.hygiene} onSaved={() => reload(true)} />
+
+      <DomainCheckCard initial={data.sender.domain} />
     </>
   )
 }
 
-function CheckCard({ name, desc, result }: { name: string; desc: string; result: CheckResult }) {
-  const Icon = result.state === 'pass' ? CheckCircle2 : result.state === 'warn' ? AlertTriangle : XCircle
-  const iconColor =
-    result.state === 'pass' ? 'text-emerald-500' : result.state === 'warn' ? 'text-amber-500' : 'text-red-500'
-
+function HygieneCard({ hygiene, onSaved }: { hygiene: Resp['hygiene']; onSaved: () => void }) {
+  const f = useForm({ suppress: !!hygiene.suppress_inactive_days, days: hygiene.suppress_inactive_days || 180, validate: hygiene.validate_on_entry })
+  useEffect(() => { f.reset({ suppress: !!hygiene.suppress_inactive_days, days: hygiene.suppress_inactive_days || 180, validate: hygiene.validate_on_entry }) }, [JSON.stringify(hygiene)]) // eslint-disable-line react-hooks/exhaustive-deps
+  const { saving, error, save } = useSave()
+  const v = f.val!
+  const onSave = () => save(async () => { await api('/api/settings/deliverability', { method: 'PATCH', json: { hygiene: { suppress_inactive_days: v.suppress ? v.days : null, validate_on_entry: v.validate } } }); onSaved() }, 'Higiene da lista salva')
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4">
-      <div className="flex items-start gap-3">
-        <Icon className={`w-5 h-5 mt-0.5 ${iconColor} shrink-0`} />
-        <div className="flex-1 min-w-0">
-          <p className="text-[14px] font-bold text-gray-900">{name}</p>
-          <p className="text-[11px] text-gray-500 mb-2">{desc}</p>
-          <p className="text-[13px] text-gray-800">{result.message}</p>
-          {result.value && (
-            <code className="block mt-2 text-[11px] font-mono text-gray-600 bg-gray-50 rounded px-2 py-1 break-all">
-              {result.value}
-            </code>
-          )}
-          {result.recommendation && (
-            <div className="mt-2 text-[12px] text-gray-600 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
-              <span className="font-semibold text-amber-700">Recomendação:</span> {result.recommendation}
-            </div>
-          )}
+    <Card title="Higiene da lista" foot={<SaveBar dirty={f.dirty} saving={saving} error={error} onSave={onSave} onCancel={f.cancel} />}>
+      <Row tg label="Suprimir inativos automaticamente" help={`Contatos sem abertura ou clique há ${v.days} dias saem dos envios de campanha (continuam em automações transacionais).`}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          {v.suppress && <select className="in" style={{ width: 130, height: 34 }} value={v.days} onChange={(e) => f.set('days', Number(e.target.value))} aria-label="Dias sem interação">{[90, 120, 180, 270, 365].map((d) => <option key={d} value={d}>{d} dias</option>)}</select>}
+          <Tog on={v.suppress} set={(x) => f.set('suppress', x)} label="Suprimir inativos automaticamente" />
         </div>
-      </div>
-    </div>
+      </Row>
+      <Row tg label="Validar e-mails na entrada" help="Rejeita endereços inválidos ou descartáveis em formulários e importações."><Tog on={v.validate} set={(x) => f.set('validate', x)} label="Validar e-mails na entrada" /></Row>
+    </Card>
+  )
+}
+
+function DomainCheckCard({ initial }: { initial: string }) {
+  const [domain, setDomain] = useState(() => { try { return localStorage.getItem('wd:deliverability:domain') || initial } catch { return initial } })
+  const [q, setQ] = useState<string | null>(null)
+  const { data, loading, error } = useApi<DomainCheck>(q ? `/api/deliverability/domain-check?domain=${encodeURIComponent(q)}` : null, [q])
+  const clean = domain.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '')
+  const run = () => { if (!clean) return; try { localStorage.setItem('wd:deliverability:domain', clean) } catch { /* ignore */ } setQ(clean) }
+  const band = data ? (data.band === 'excellent' ? 'ok' : data.band === 'good' ? 'ok' : data.band === 'fair' ? 'warn' : 'err') : 'off'
+  return (
+    <Card title="Verificar um domínio" desc="Consulta SPF, DKIM, DMARC e MX ao vivo em qualquer domínio — útil antes de adicionar ou para conferir o site principal.">
+      <Row label="Domínio">
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input className="in mono" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="sualoja.com.br" onKeyDown={(e) => { if (e.key === 'Enter') run() }} aria-label="Domínio para verificar" />
+          <button type="button" className="btn" onClick={run} disabled={!clean || loading}>{loading ? <I n="refresh" s={14} className="spin" /> : <I n="search" s={14} />}Verificar</button>
+        </div>
+        {error && <div className="field-err">{error}</div>}
+      </Row>
+      {data && (
+        <Row label="Resultado" help={<>Pontuação <b>{data.score}</b>/100 — {data.band === 'excellent' ? 'excelente' : data.band === 'good' ? 'boa' : data.band === 'fair' ? 'razoável' : 'fraca'}.</>}>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}><Badge k={band as any}>{data.domain}</Badge></div>
+          {(['spf', 'dkim', 'dmarc', 'mx'] as const).map((k) => {
+            const c = data.checks[k]
+            return <Chk key={k} ok={c.ok} warn={c.state === 'warn'} title={<>{k.toUpperCase()} — {c.message}</>} help={c.recommendation || c.value} />
+          })}
+        </Row>
+      )}
+    </Card>
   )
 }

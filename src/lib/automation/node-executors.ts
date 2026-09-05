@@ -205,6 +205,30 @@ const actionExecutors: Record<string, NodeExecutor> = {
     async execute({ node, config, context, credentials, isTest, supabase, organizationId }) {
       const phone = context.contact?.phone;
 
+      // Regras de envio (Configurações → Regras de envio): horário de
+      // silêncio e limite por contato no canal whatsapp.
+      if (!isTest && organizationId) {
+        try {
+          const { getOrgSendingRules, nextAllowedSendTime, isFrequencyCapped, quietHoursApplyTo } =
+            await import('@/lib/email/sending-rules');
+          const rules = await getOrgSendingRules(organizationId);
+          const resumeAt = quietHoursApplyTo(rules, 'whatsapp') ? nextAllowedSendTime(rules, new Date(), (context.contact as any)?.timezone || null) : null;
+          if (resumeAt) {
+            return { status: 'waiting', output: { postponedFor: 'quiet_hours', resumeAt: resumeAt.toISOString() }, waitUntil: resumeAt };
+          }
+          const cid = (context.contact as any)?.id;
+          if (await isFrequencyCapped(organizationId, cid, rules, 'whatsapp')) {
+            if (rules.campaignPriority) {
+              const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+              return { status: 'waiting', output: { postponedFor: 'frequency_cap', resumeAt: tomorrow.toISOString() }, waitUntil: tomorrow };
+            }
+            return { status: 'success', output: { sent: false, skipped: true, reason: 'Limite de frequência atingido' } };
+          }
+        } catch (e) {
+          console.warn('[action_whatsapp] sending rules check failed (proceeding):', e);
+        }
+      }
+
       if (isTest) {
         return {
           status: 'success',
@@ -477,10 +501,12 @@ const actionExecutors: Record<string, NodeExecutor> = {
       // send (let the flow continue without spamming).
       if (!isTest && organizationId) {
         try {
-          const { getOrgSendingRules, nextAllowedSendTime, isFrequencyCapped } =
+          const { getOrgSendingRules, nextAllowedSendTime, isFrequencyCapped, quietHoursApplyTo } =
             await import('@/lib/email/sending-rules');
           const rules = await getOrgSendingRules(organizationId);
-          const resumeAt = nextAllowedSendTime(rules);
+          // Horário de silêncio só nos canais escolhidos em Regras de envio
+          // (padrão: WhatsApp e SMS; e-mail entra quando "Todos").
+          const resumeAt = quietHoursApplyTo(rules, 'email') ? nextAllowedSendTime(rules) : null;
           if (resumeAt) {
             return {
               status: 'waiting',
@@ -490,6 +516,11 @@ const actionExecutors: Record<string, NodeExecutor> = {
           }
           const contactIdForCap = (context.contact as any)?.id;
           if (await isFrequencyCapped(organizationId, contactIdForCap, rules)) {
+            if (rules.campaignPriority) {
+              // "Campanhas têm prioridade": a automação espera o próximo dia.
+              const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+              return { status: 'waiting', output: { postponedFor: 'frequency_cap', resumeAt: tomorrow.toISOString() }, waitUntil: tomorrow };
+            }
             return {
               status: 'success',
               output: {
@@ -1197,6 +1228,30 @@ const actionExecutors: Record<string, NodeExecutor> = {
   action_sms: {
     async execute({ node, config, context, credentials, isTest, supabase, organizationId }) {
       const phone = context.contact?.phone;
+
+      // Regras de envio (Configurações → Regras de envio): horário de
+      // silêncio e limite por contato no canal sms.
+      if (!isTest && organizationId) {
+        try {
+          const { getOrgSendingRules, nextAllowedSendTime, isFrequencyCapped, quietHoursApplyTo } =
+            await import('@/lib/email/sending-rules');
+          const rules = await getOrgSendingRules(organizationId);
+          const resumeAt = quietHoursApplyTo(rules, 'sms') ? nextAllowedSendTime(rules, new Date(), (context.contact as any)?.timezone || null) : null;
+          if (resumeAt) {
+            return { status: 'waiting', output: { postponedFor: 'quiet_hours', resumeAt: resumeAt.toISOString() }, waitUntil: resumeAt };
+          }
+          const cid = (context.contact as any)?.id;
+          if (await isFrequencyCapped(organizationId, cid, rules, 'sms')) {
+            if (rules.campaignPriority) {
+              const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+              return { status: 'waiting', output: { postponedFor: 'frequency_cap', resumeAt: tomorrow.toISOString() }, waitUntil: tomorrow };
+            }
+            return { status: 'success', output: { sent: false, skipped: true, reason: 'Limite de frequência atingido' } };
+          }
+        } catch (e) {
+          console.warn('[action_sms] sending rules check failed (proceeding):', e);
+        }
+      }
 
       if (isTest) {
         return {

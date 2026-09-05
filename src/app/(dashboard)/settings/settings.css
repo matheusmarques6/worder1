@@ -83,7 +83,7 @@
 .wset .btn-link { border: none; background: none; color: var(--acc-ink); font-weight: 500; padding: 0; height: auto; }
 .wset .btn-link:hover { color: var(--acc-d); background: none; }
 .wset .seg { display: inline-flex; border: 1px solid var(--line-2); border-radius: 8px; background: var(--surface); padding: 2px; gap: 2px; height: 36px; }
-.wset .seg button { height: 30px; padding: 0 12px; border-radius: 6px; font-size: 13.5px; font-weight: 500; color: var(--text-2); transition: .13s; }
+.wset .seg button { height: 30px; padding: 0 12px; border-radius: 6px; font-size: 13.5px; font-weight: 500; color: var(--text-2); transition: .13s; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .wset .seg button:hover { color: var(--text); }
 .wset .seg button.on { background: var(--inv-bg); color: var(--inv-fg); }
 .wset .lnk { font-size: 13.5px; font-weight: 500; color: var(--text-2); display: inline-flex; align-items: center; gap: 4px; }
@@ -248,7 +248,8 @@
   .wset .mobnav::-webkit-scrollbar { display: none; }
   .wset .mobnav a, .wset .mobnav button { height: 34px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line-2); background: var(--surface); font-size: 13.5px; color: var(--text-2); white-space: nowrap; display: inline-flex; align-items: center; flex: 0 0 auto; font-weight: 400; }
   .wset .mobnav a.on, .wset .mobnav button.on { background: var(--inv-bg); color: var(--inv-fg); border-color: var(--inv-bg); }
-  .wset .row { grid-template-columns: 1fr; gap: 10px; } .wset .row .lb { padding-top: 0; }
+  .wset .row, .wset .brand .row { grid-template-columns: 1fr; gap: 10px; } .wset .row .lb { padding-top: 0; }
+  .wset .stbl td.fx { max-width: none; min-width: 220px; }
   .wset .row.tg { grid-template-columns: 1fr auto; }
   .wset .use { grid-template-columns: 1fr; } .wset .use > div { border-left: none; border-top: 1px solid var(--line); } .wset .use > div:first-child { border-top: none; }
   .wset .notif { grid-template-columns: 1fr 60px 60px; }
@@ -421,7 +422,9 @@
 .wset .prev-f { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); flex-wrap: wrap; }
 .wset .prev-f button { height: 30px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--line-2); font-size: 12.5px; color: var(--text-2); }
 .wset .prev-f button.on { background: var(--inv-bg); color: var(--inv-fg); border-color: var(--inv-bg); }
-@media (max-width: 1200px) { .wset .brand { grid-template-columns: 1fr; } .wset .brand-side { position: static; } }
+/* Dentro da coluna da Marca o rótulo é mais estreito para sobrar espaço aos campos. */
+.wset .brand .row { grid-template-columns: minmax(0,150px) minmax(0,1fr); }
+@media (max-width: 1200px) { .wset .brand { grid-template-columns: 1fr; } .wset .brand-side { position: static; } .wset .brand .row { grid-template-columns: minmax(0,260px) minmax(0,1fr); } }
 @media (max-width: 700px) { .wset .lgrid, .wset .fontp { grid-template-columns: 1fr; } .wset .pal { grid-template-columns: 1fr 1fr; } .wset .bhero { flex-wrap: wrap; } .wset .bhero .r { margin-left: 0; } }
 @media (max-width: 980px) {
   .wset .wiz-body { grid-template-columns: 1fr; }

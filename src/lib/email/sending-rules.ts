@@ -17,6 +17,16 @@ export interface OrgSendingRules {
   maxEmailPerContactPerDay: number | null;
   maxSmsPerContactPerDay: number | null;
   maxWhatsappPerContactPerDay: number | null;
+  // Configurações → Regras de envio (organizations.settings.sending)
+  /** Em quais canais o horário de silêncio vale. */
+  quietHoursChannels: 'all' | 'sms_whatsapp';
+  /** Campanhas têm prioridade: ao atingir o limite, a automação espera o dia seguinte. */
+  campaignPriority: boolean;
+  // Configurações → Entregabilidade → Higiene da lista (organizations.settings.hygiene)
+  /** Suprimir de campanhas contatos sem abertura/clique há N dias (null = desligado). */
+  suppressInactiveDays: number | null;
+  /** Rejeitar e-mails inválidos/descartáveis em formulários e importações. */
+  validateOnEntry: boolean;
 }
 
 const DEFAULTS: OrgSendingRules = {
@@ -29,10 +39,70 @@ const DEFAULTS: OrgSendingRules = {
   // Omnisend default for SMS: 3/day per recipient.
   maxSmsPerContactPerDay: 3,
   maxWhatsappPerContactPerDay: null,
+  quietHoursChannels: 'sms_whatsapp',
+  campaignPriority: true,
+  suppressInactiveDays: null,
+  validateOnEntry: true,
 };
+
+export type SendChannel = 'email' | 'sms' | 'whatsapp';
+
+/** O horário de silêncio vale para este canal? */
+export function quietHoursApplyTo(rules: OrgSendingRules, channel: SendChannel): boolean {
+  if (!rules.quietHoursEnabled) return false;
+  if (rules.quietHoursChannels === 'all') return true;
+  return channel !== 'email';
+}
 
 const cache = new Map<string, { rules: OrgSendingRules; ts: number }>();
 const CACHE_TTL_MS = 60_000;
+
+function normalizeDays(v: unknown): number | null {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.min(3650, Math.round(n));
+}
+
+/** Para quem acabou de salvar as regras e quer ver o efeito já. */
+export function __resetSendingRulesCache() { cache.clear(); }
+
+/**
+ * Data-limite da higiene da lista: contatos sem engajamento (abertura,
+ * clique, compra ou visita) desde esta data saem das CAMPANHAS.
+ * Automações transacionais não passam por aqui.
+ */
+export function inactiveCutoff(rules: OrgSendingRules, now: Date = new Date()): string | null {
+  if (!rules.suppressInactiveDays) return null;
+  return new Date(now.getTime() - rules.suppressInactiveDays * 86400_000).toISOString();
+}
+
+/**
+ * Aplica a higiene da lista a uma lista de contatos de campanha.
+ * Um contato é "inativo" quando TODAS as datas de engajamento que temos
+ * (last_active_at, last_email_at, last_order_at, last_seen_at) são
+ * anteriores ao corte — contatos recém-criados (sem histórico ainda)
+ * ficam na lista até completar o período.
+ */
+export function filterInactiveContacts<T extends { created_at?: string | null; last_active_at?: string | null; last_email_at?: string | null; last_order_at?: string | null; last_seen_at?: string | null }>(
+  contacts: T[],
+  rules: OrgSendingRules,
+  now: Date = new Date()
+): { kept: T[]; suppressed: number } {
+  const cutoff = inactiveCutoff(rules, now);
+  if (!cutoff) return { kept: contacts, suppressed: 0 };
+  const c = new Date(cutoff).getTime();
+  const kept: T[] = [];
+  let suppressed = 0;
+  for (const ct of contacts) {
+    const dates = [ct.last_active_at, ct.last_email_at, ct.last_order_at, ct.last_seen_at, ct.created_at]
+      .map((d) => (d ? new Date(d).getTime() : NaN))
+      .filter((n) => Number.isFinite(n));
+    const latest = dates.length ? Math.max(...dates) : Number.POSITIVE_INFINITY;
+    if (latest < c) suppressed++;
+    else kept.push(ct);
+  }
+  return { kept, suppressed };
+}
 
 export async function getOrgSendingRules(organizationId: string): Promise<OrgSendingRules> {
   const cached = cache.get(organizationId);
@@ -40,7 +110,7 @@ export async function getOrgSendingRules(organizationId: string): Promise<OrgSen
 
   const { data } = await supabaseAdmin
     .from('organizations')
-    .select('quiet_hours_enabled, quiet_hours_start, quiet_hours_end, quiet_hours_timezone, max_sends_per_contact_per_day, max_email_per_contact_per_day, max_sms_per_contact_per_day, max_whatsapp_per_contact_per_day')
+    .select('quiet_hours_enabled, quiet_hours_start, quiet_hours_end, quiet_hours_timezone, max_sends_per_contact_per_day, max_email_per_contact_per_day, max_sms_per_contact_per_day, max_whatsapp_per_contact_per_day, settings')
     .eq('id', organizationId)
     .maybeSingle();
 
@@ -53,6 +123,10 @@ export async function getOrgSendingRules(organizationId: string): Promise<OrgSen
     maxEmailPerContactPerDay: data?.max_email_per_contact_per_day ?? DEFAULTS.maxEmailPerContactPerDay,
     maxSmsPerContactPerDay: data?.max_sms_per_contact_per_day ?? DEFAULTS.maxSmsPerContactPerDay,
     maxWhatsappPerContactPerDay: data?.max_whatsapp_per_contact_per_day ?? DEFAULTS.maxWhatsappPerContactPerDay,
+    quietHoursChannels: (data as any)?.settings?.sending?.quiet_hours_channels === 'all' ? 'all' : DEFAULTS.quietHoursChannels,
+    campaignPriority: (data as any)?.settings?.sending?.campaign_priority ?? DEFAULTS.campaignPriority,
+    suppressInactiveDays: normalizeDays((data as any)?.settings?.hygiene?.suppress_inactive_days),
+    validateOnEntry: (data as any)?.settings?.hygiene?.validate_on_entry ?? DEFAULTS.validateOnEntry,
   };
 
   cache.set(organizationId, { rules, ts: Date.now() });

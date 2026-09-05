@@ -66,18 +66,34 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
-    // If updating email_settings, merge with existing
-    if (update.email_settings) {
+    // If updating email_settings / settings, merge with existing so one
+    // screen never wipes the keys another screen saved.
+    if (update.email_settings || update.settings) {
       const { data: existing } = await supabase
         .from('organizations')
-        .select('email_settings')
+        .select('email_settings, settings')
         .eq('id', orgId)
         .single();
 
-      update.email_settings = {
-        ...(existing?.email_settings || {}),
-        ...update.email_settings,
-      };
+      if (update.email_settings) {
+        update.email_settings = {
+          ...(existing?.email_settings || {}),
+          ...update.email_settings,
+        };
+      }
+      if (update.settings && typeof update.settings === 'object') {
+        const cur = (existing?.settings || {}) as Record<string, any>;
+        const next: Record<string, any> = { ...cur };
+        for (const [k, v] of Object.entries(update.settings as Record<string, any>)) {
+          next[k] = v && typeof v === 'object' && !Array.isArray(v) && cur[k] && typeof cur[k] === 'object' ? { ...cur[k], ...v } : v;
+        }
+        update.settings = next;
+      }
+    }
+
+    // Regras de envio mudaram → cache do motor de envio zera.
+    if (['quiet_hours_enabled', 'quiet_hours_start', 'quiet_hours_end', 'quiet_hours_timezone', 'max_sends_per_contact_per_day', 'max_email_per_contact_per_day', 'max_sms_per_contact_per_day', 'max_whatsapp_per_contact_per_day', 'settings'].some((k) => k in update)) {
+      try { const m = await import('@/lib/email/sending-rules'); m.__resetSendingRulesCache(); } catch { /* ignore */ }
     }
 
     if (Object.keys(update).length === 0) {

@@ -136,7 +136,7 @@ export async function POST(request: NextRequest) {
     // timezone/country entram para o modo "fuso do destinatário": sem
     // eles todo contato cairia no fuso da loja e o recurso viraria um
     // agendamento fixo com nome bonito.
-    const contactFields = 'id, email, first_name, last_name, phone, last_email_sent_at, engagement_score, best_send_hour, timezone, country'
+    const contactFields = 'id, email, first_name, last_name, phone, last_email_sent_at, engagement_score, best_send_hour, timezone, country, created_at, last_active_at, last_email_at, last_order_at, last_seen_at'
     let contacts: any[] = []
     let contactsError: any = null
 
@@ -170,6 +170,22 @@ export async function POST(request: NextRequest) {
       const { data, error } = await q
       contacts = data || []
       contactsError = error
+    }
+
+    // Higiene da lista (Configurações → Entregabilidade): contatos sem
+    // engajamento há N dias saem das campanhas — continuam nas automações.
+    if (!contactsError && contacts.length) {
+      try {
+        const { getOrgSendingRules, filterInactiveContacts } = await import('@/lib/email/sending-rules')
+        const rules = await getOrgSendingRules(organizationId)
+        const { kept, suppressed } = filterInactiveContacts(contacts, rules)
+        if (suppressed > 0) {
+          console.log(`[SendCampaign] Higiene da lista: ${suppressed} contato(s) inativo(s) há ${rules.suppressInactiveDays} dias fora desta campanha`)
+          contacts = kept
+        }
+      } catch (e) {
+        console.warn('[SendCampaign] Higiene da lista indisponível:', (e as any)?.message)
+      }
     }
 
     if (contactsError) {

@@ -84,8 +84,21 @@ export async function POST(request: NextRequest) {
       return mapped;
     });
     
+    // Configurações → Entregabilidade → "Validar e-mails na entrada":
+    // e-mails inválidos/descartáveis são descartados (o contato fica só
+    // com telefone, se tiver).
+    let rejectedEmails = 0;
+    try {
+      const { checkEmail, shouldValidateOnEntry } = await import('@/lib/email/email-hygiene');
+      if (await shouldValidateOnEntry(user.organization_id)) {
+        for (const c of mappedContacts) {
+          if (c.email && !checkEmail(c.email).ok) { c.email = undefined; rejectedEmails++; }
+        }
+      }
+    } catch { /* falha aberta */ }
+
     const validContacts = mappedContacts.filter(c => c.email || c.phone);
-    const invalidCount = mappedContacts.length - validContacts.length;
+    const invalidCount = mappedContacts.length - validContacts.length + rejectedEmails;
     
     if (validContacts.length === 0) {
       return NextResponse.json(

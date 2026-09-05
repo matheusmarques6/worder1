@@ -1,276 +1,114 @@
 'use client'
 
-// =============================================
-// Sending Rules — org-level Quiet Hours, Frequency Cap,
-// Skip Contacts overlap. Klaviyo + Omnisend parity.
-// =============================================
+// Configurações → Regras de envio (desenho PRegras): horário de silêncio,
+// limite de frequência e fluxos simultâneos. Salva em /api/settings/organization.
 
-import { useEffect, useState } from 'react'
-import { Loader2, Save, CheckCircle, Moon, Hash, Layers } from 'lucide-react'
+import { useEffect } from 'react'
+import { Card, Row, SaveBar, Title, LoadingCard, Tog, useForm } from '@/components/settings/ui'
+import { api } from '@/components/settings/format'
+import { useApi, useSave } from '@/components/settings/hooks'
 
-interface OrgRules {
-  quiet_hours_enabled: boolean
-  quiet_hours_start: number
-  quiet_hours_end: number
-  quiet_hours_timezone: string
-  max_sends_per_contact_per_day: number
-  max_email_per_contact_per_day: number | null
-  max_sms_per_contact_per_day: number | null
-  max_whatsapp_per_contact_per_day: number | null
-  skip_contacts_in_active_flows: boolean
+interface Org {
+  quiet_hours_enabled: boolean | null; quiet_hours_start: number | null; quiet_hours_end: number | null; quiet_hours_timezone: string | null
+  max_sends_per_contact_per_day: number | null; max_email_per_contact_per_day: number | null; max_sms_per_contact_per_day: number | null; max_whatsapp_per_contact_per_day: number | null
+  skip_contacts_in_active_flows: boolean | null
+  settings: { sending?: { quiet_hours_channels?: 'all' | 'sms_whatsapp'; campaign_priority?: boolean } } | null
 }
 
-const DEFAULTS: OrgRules = {
-  quiet_hours_enabled: false,
-  quiet_hours_start: 20,
-  quiet_hours_end: 8,
-  quiet_hours_timezone: 'America/Sao_Paulo',
-  max_sends_per_contact_per_day: 0,
-  max_email_per_contact_per_day: null,
-  max_sms_per_contact_per_day: 3,
-  max_whatsapp_per_contact_per_day: null,
-  skip_contacts_in_active_flows: false,
-}
+const HOURS = Array.from({ length: 24 }, (_, h) => h)
+const hh = (h: number) => `${String(h).padStart(2, '0')}:00`
+const TZS: Array<[string, string]> = [['America/Sao_Paulo', 'São Paulo'], ['America/Manaus', 'Manaus'], ['America/Fortaleza', 'Fortaleza'], ['America/Cuiaba', 'Cuiabá'], ['America/Rio_Branco', 'Rio Branco'], ['America/Buenos_Aires', 'Buenos Aires'], ['America/Bogota', 'Bogotá'], ['America/Mexico_City', 'Cidade do México'], ['America/New_York', 'Nova York'], ['Europe/Lisbon', 'Lisboa']]
 
-const TZ_OPTIONS = [
-  'America/Sao_Paulo',
-  'America/Recife',
-  'America/Manaus',
-  'America/New_York',
-  'America/Los_Angeles',
-  'Europe/London',
-  'Europe/Lisbon',
-  'UTC',
-]
-
-export default function SendingRulesPage() {
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [savedAt, setSavedAt] = useState<number | null>(null)
-  const [rules, setRules] = useState<OrgRules>(DEFAULTS)
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch('/api/settings/organization')
-        const j = await res.json()
-        const o = j.organization || {}
-        setRules({
-          quiet_hours_enabled: !!o.quiet_hours_enabled,
-          quiet_hours_start: o.quiet_hours_start ?? 20,
-          quiet_hours_end: o.quiet_hours_end ?? 8,
-          quiet_hours_timezone: o.quiet_hours_timezone || 'America/Sao_Paulo',
-          max_sends_per_contact_per_day: o.max_sends_per_contact_per_day ?? 0,
-          max_email_per_contact_per_day: o.max_email_per_contact_per_day ?? null,
-          max_sms_per_contact_per_day: o.max_sms_per_contact_per_day ?? 3,
-          max_whatsapp_per_contact_per_day: o.max_whatsapp_per_contact_per_day ?? null,
-          skip_contacts_in_active_flows: !!o.skip_contacts_in_active_flows,
-        })
-      } finally {
-        setLoading(false)
-      }
-    })()
-  }, [])
-
-  const save = async () => {
-    setSaving(true)
-    try {
-      const res = await fetch('/api/settings/organization', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(rules),
-      })
-      if (res.ok) setSavedAt(Date.now())
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  if (loading) {
-    return (
-      <div className="p-8 flex items-center gap-2 text-gray-500">
-        <Loader2 className="w-4 h-4 animate-spin" /> Carregando…
-      </div>
-    )
-  }
-
-  const update = <K extends keyof OrgRules>(k: K, v: OrgRules[K]) =>
-    setRules(r => ({ ...r, [k]: v }))
-
+export default function SendingRulesSettingsPage() {
+  const { data, loading, error, reload } = useApi<{ organization: Org | null }>('/api/settings/organization')
   return (
-    <div className="max-w-3xl mx-auto p-8 space-y-6">
-      <header>
-        <h1 className="text-2xl font-semibold text-gray-900">Regras de envio</h1>
-        <p className="text-sm text-gray-600 mt-1">
-          Configurações globais que protegem a entregabilidade — Horário de silêncio, Limite de
-          frequência e Pular contatos em fluxos ativos. Aplicam-se a todos os emails enviados por automações.
-        </p>
-      </header>
+    <>
+      <Title h="Regras de envio" p="Proteções globais aplicadas a todas as automações e campanhas." />
+      {loading && !data ? <><LoadingCard rows={2} /><LoadingCard rows={3} /><LoadingCard rows={1} /></> : error || !data?.organization ? (
+        <Card><div className="empty2"><b>Não foi possível carregar</b>{error}<div><button className="btn" onClick={() => reload()}>Tentar de novo</button></div></div></Card>
+      ) : (
+        <>
+          <QuietCard org={data.organization} onSaved={() => reload(true)} />
+          <FrequencyCard org={data.organization} onSaved={() => reload(true)} />
+          <FlowsCard org={data.organization} onSaved={() => reload(true)} />
+        </>
+      )}
+    </>
+  )
+}
 
-      {/* Quiet Hours */}
-      <section className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-        <div className="flex items-start gap-3">
-          <Moon className="w-5 h-5 text-indigo-500 mt-0.5" />
-          <div className="flex-1">
-            <h2 className="font-medium text-gray-900">Horário de silêncio</h2>
-            <p className="text-sm text-gray-500">
-              Não envia emails dentro da janela definida. As mensagens ficam em espera e retomam
-              automaticamente quando a janela fecha.
-            </p>
-          </div>
-          <label className="inline-flex items-center cursor-pointer">
-            <input
-              type="checkbox"
-              className="sr-only peer"
-              checked={rules.quiet_hours_enabled}
-              onChange={(e) => update('quiet_hours_enabled', e.target.checked)}
-            />
-            <div className="relative w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-indigo-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all" />
-          </label>
+function QuietCard({ org, onSaved }: { org: Org; onSaved: () => void }) {
+  const init = () => ({ on: !!org.quiet_hours_enabled, start: org.quiet_hours_start ?? 22, end: org.quiet_hours_end ?? 8, tz: org.quiet_hours_timezone || 'America/Sao_Paulo', channels: org.settings?.sending?.quiet_hours_channels === 'all' ? 'all' : 'sms_whatsapp' })
+  const f = useForm(init())
+  useEffect(() => { f.reset(init()) }, [JSON.stringify(org)]) // eslint-disable-line react-hooks/exhaustive-deps
+  const { saving, error, save } = useSave()
+  const v = f.val!
+  const onSave = () => save(async () => {
+    await api('/api/settings/organization', { method: 'PATCH', json: { quiet_hours_enabled: v.on, quiet_hours_start: v.start, quiet_hours_end: v.end, quiet_hours_timezone: v.tz, settings: { ...(org.settings || {}), sending: { ...(org.settings?.sending || {}), quiet_hours_channels: v.channels } } } })
+    onSaved()
+  }, 'Horário de silêncio salvo')
+  return (
+    <Card title="Horário de silêncio" foot={<SaveBar dirty={f.dirty} saving={saving} error={error} onSave={onSave} onCancel={f.cancel} />}>
+      <Row tg label="Não enviar em determinado horário" help="Mensagens ficam em espera e saem quando a janela abre."><Tog on={v.on} set={(x) => f.set('on', x)} label="Não enviar em determinado horário" /></Row>
+      {v.on && (
+        <>
+          <Row label="Janela" help={`No fuso horário de cada contato quando disponível; senão, ${TZS.find(([k]) => k === v.tz)?.[1] || v.tz}.`}>
+            <div className="in3">
+              <div><span className="inl">De</span><select className="in" value={v.start} onChange={(e) => f.set('start', Number(e.target.value))} aria-label="Início">{HOURS.map((h) => <option key={h} value={h}>{hh(h)}</option>)}</select></div>
+              <div><span className="inl">Até</span><select className="in" value={v.end} onChange={(e) => f.set('end', Number(e.target.value))} aria-label="Fim">{HOURS.map((h) => <option key={h} value={h}>{hh(h)}</option>)}</select></div>
+              <div><span className="inl">Canais</span><select className="in" value={v.channels} onChange={(e) => f.set('channels', e.target.value as any)} aria-label="Canais"><option value="sms_whatsapp">WhatsApp e SMS</option><option value="all">Todos</option></select></div>
+            </div>
+          </Row>
+          <Row label="Fuso padrão" help="Usado quando não sabemos o fuso do contato." htmlFor="qh-tz">
+            <select id="qh-tz" className="in" value={v.tz} onChange={(e) => f.set('tz', e.target.value)} style={{ maxWidth: 280 }}>
+              {!TZS.some(([k]) => k === v.tz) && <option value={v.tz}>{v.tz}</option>}
+              {TZS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+            </select>
+          </Row>
+        </>
+      )}
+    </Card>
+  )
+}
+
+function FrequencyCard({ org, onSaved }: { org: Org; onSaved: () => void }) {
+  const num = (n: number | null | undefined) => (n && n > 0 ? String(n) : '')
+  const init = () => ({ email: num(org.max_email_per_contact_per_day), wa: num(org.max_whatsapp_per_contact_per_day), sms: num(org.max_sms_per_contact_per_day), total: num(org.max_sends_per_contact_per_day), priority: org.settings?.sending?.campaign_priority !== false })
+  const f = useForm(init())
+  useEffect(() => { f.reset(init()) }, [JSON.stringify(org)]) // eslint-disable-line react-hooks/exhaustive-deps
+  const { saving, error, save } = useSave()
+  const v = f.val!
+  const parse = (s: string) => { const n = Number(s); return s === '' ? null : Number.isFinite(n) && n >= 0 && n <= 50 ? Math.round(n) : NaN }
+  const onSave = () => save(async () => {
+    const vals = { email: parse(v.email), wa: parse(v.wa), sms: parse(v.sms), total: parse(v.total) }
+    if (Object.values(vals).some((n) => Number.isNaN(n))) throw new Error('Use números de 0 a 50 (ou deixe vazio para sem limite).')
+    await api('/api/settings/organization', { method: 'PATCH', json: { max_email_per_contact_per_day: vals.email, max_whatsapp_per_contact_per_day: vals.wa, max_sms_per_contact_per_day: vals.sms, max_sends_per_contact_per_day: vals.total ?? 0, settings: { ...(org.settings || {}), sending: { ...(org.settings?.sending || {}), campaign_priority: v.priority } } } })
+    onSaved()
+  }, 'Limite de frequência salvo')
+  const numInput = (k: 'email' | 'wa' | 'sms' | 'total', label: string, ph = 'Sem limite') => <input className="in" inputMode="numeric" placeholder={ph} value={v[k]} onChange={(e) => f.set(k, e.target.value.replace(/\D/g, '').slice(0, 2))} aria-label={label} />
+  return (
+    <Card title="Limite de frequência" desc="Máximo de mensagens por contato em 24 h. Deixe vazio para sem limite." foot={<SaveBar dirty={f.dirty} saving={saving} error={error} onSave={onSave} onCancel={f.cancel} />}>
+      <Row label="Por canal">
+        <div className="in3">
+          <div><span className="inl">E-mail</span>{numInput('email', 'E-mail')}</div>
+          <div><span className="inl">WhatsApp</span>{numInput('wa', 'WhatsApp')}</div>
+          <div><span className="inl">SMS</span>{numInput('sms', 'SMS')}</div>
         </div>
-        {rules.quiet_hours_enabled && (
-          <div className="grid grid-cols-3 gap-3 pt-2 border-t border-gray-100">
-            <label className="space-y-1">
-              <span className="text-xs font-medium text-gray-600">Início (hora)</span>
-              <select
-                className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm"
-                value={rules.quiet_hours_start}
-                onChange={(e) => update('quiet_hours_start', parseInt(e.target.value, 10))}
-              >
-                {Array.from({ length: 24 }, (_, i) => (
-                  <option key={i} value={i}>{String(i).padStart(2, '0')}:00</option>
-                ))}
-              </select>
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs font-medium text-gray-600">Fim (hora)</span>
-              <select
-                className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm"
-                value={rules.quiet_hours_end}
-                onChange={(e) => update('quiet_hours_end', parseInt(e.target.value, 10))}
-              >
-                {Array.from({ length: 24 }, (_, i) => (
-                  <option key={i} value={i}>{String(i).padStart(2, '0')}:00</option>
-                ))}
-              </select>
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs font-medium text-gray-600">Timezone</span>
-              <select
-                className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm"
-                value={rules.quiet_hours_timezone}
-                onChange={(e) => update('quiet_hours_timezone', e.target.value)}
-              >
-                {TZ_OPTIONS.map(tz => <option key={tz} value={tz}>{tz}</option>)}
-              </select>
-            </label>
-          </div>
-        )}
-      </section>
+      </Row>
+      <Row label="Total (todos os canais)"><div style={{ maxWidth: 200 }}>{numInput('total', 'Total')}</div></Row>
+      <Row tg label="Campanhas têm prioridade sobre automações" help="Quando o limite é atingido, a automação espera o próximo dia."><Tog on={v.priority} set={(x) => f.set('priority', x)} label="Campanhas têm prioridade sobre automações" /></Row>
+    </Card>
+  )
+}
 
-      {/* Frequency Cap */}
-      <section className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-        <div className="flex items-start gap-3">
-          <Hash className="w-5 h-5 text-emerald-500 mt-0.5" />
-          <div className="flex-1">
-            <h2 className="font-medium text-gray-900">Limite de frequência</h2>
-            <p className="text-sm text-gray-500">
-              Máximo de mensagens por contato em 24h. Por canal — 0 ou vazio significa sem limite específico do canal.
-              Sugestão: 3 SMS/dia.
-            </p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-1">
-          <label className="space-y-1">
-            <span className="text-xs font-medium text-gray-600">Total (todos canais)</span>
-            <input
-              type="number"
-              min={0}
-              max={50}
-              value={rules.max_sends_per_contact_per_day}
-              onChange={(e) => update('max_sends_per_contact_per_day', parseInt(e.target.value, 10) || 0)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm"
-              placeholder="0"
-            />
-          </label>
-          <label className="space-y-1">
-            <span className="text-xs font-medium text-gray-600">Email/dia</span>
-            <input
-              type="number"
-              min={0}
-              max={50}
-              value={rules.max_email_per_contact_per_day ?? ''}
-              onChange={(e) => update('max_email_per_contact_per_day', e.target.value === '' ? null : parseInt(e.target.value, 10))}
-              className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm"
-              placeholder="—"
-            />
-          </label>
-          <label className="space-y-1">
-            <span className="text-xs font-medium text-gray-600">SMS/dia</span>
-            <input
-              type="number"
-              min={0}
-              max={50}
-              value={rules.max_sms_per_contact_per_day ?? ''}
-              onChange={(e) => update('max_sms_per_contact_per_day', e.target.value === '' ? null : parseInt(e.target.value, 10))}
-              className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm"
-              placeholder="3"
-            />
-          </label>
-          <label className="space-y-1">
-            <span className="text-xs font-medium text-gray-600">WhatsApp/dia</span>
-            <input
-              type="number"
-              min={0}
-              max={50}
-              value={rules.max_whatsapp_per_contact_per_day ?? ''}
-              onChange={(e) => update('max_whatsapp_per_contact_per_day', e.target.value === '' ? null : parseInt(e.target.value, 10))}
-              className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm"
-              placeholder="—"
-            />
-          </label>
-        </div>
-      </section>
-
-      {/* Skip Contacts */}
-      <section className="bg-white rounded-xl border border-gray-200 p-6">
-        <div className="flex items-start gap-3">
-          <Layers className="w-5 h-5 text-purple-500 mt-0.5" />
-          <div className="flex-1">
-            <h2 className="font-medium text-gray-900">Pular contatos em fluxos ativos</h2>
-            <p className="text-sm text-gray-500">
-              Quando um contato já está em espera, pendente ou em andamento em outra automação,
-              novos disparos para ele são descartados.
-            </p>
-          </div>
-          <label className="inline-flex items-center cursor-pointer">
-            <input
-              type="checkbox"
-              className="sr-only peer"
-              checked={rules.skip_contacts_in_active_flows}
-              onChange={(e) => update('skip_contacts_in_active_flows', e.target.checked)}
-            />
-            <div className="relative w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-purple-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all" />
-          </label>
-        </div>
-      </section>
-
-      <div className="flex items-center gap-3">
-        <button
-          onClick={save}
-          disabled={saving}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-gray-900 text-white text-sm font-medium hover:bg-gray-800 disabled:opacity-50"
-        >
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-          Salvar
-        </button>
-        {savedAt && Date.now() - savedAt < 4000 && (
-          <span className="inline-flex items-center gap-1 text-emerald-600 text-sm">
-            <CheckCircle className="w-4 h-4" /> Salvo
-          </span>
-        )}
-      </div>
-    </div>
+function FlowsCard({ org, onSaved }: { org: Org; onSaved: () => void }) {
+  const f = useForm({ skip: !!org.skip_contacts_in_active_flows })
+  useEffect(() => { f.reset({ skip: !!org.skip_contacts_in_active_flows }) }, [org.skip_contacts_in_active_flows]) // eslint-disable-line react-hooks/exhaustive-deps
+  const { saving, error, save } = useSave()
+  const onSave = () => save(async () => { await api('/api/settings/organization', { method: 'PATCH', json: { skip_contacts_in_active_flows: f.val!.skip } }); onSaved() }, 'Regra de fluxos salva')
+  return (
+    <Card title="Fluxos simultâneos" foot={<SaveBar dirty={f.dirty} saving={saving} error={error} onSave={onSave} onCancel={f.cancel} />}>
+      <Row tg label="Pular contatos em fluxo ativo" help="Se o contato já está em uma automação, novos gatilhos são descartados."><Tog on={f.val!.skip} set={(x) => f.set('skip', x)} label="Pular contatos em fluxo ativo" /></Row>
+    </Card>
   )
 }

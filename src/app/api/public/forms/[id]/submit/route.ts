@@ -595,6 +595,18 @@ export async function POST(
     const CONTACT_SELECT = 'id, custom_fields, utm_data, store_id'
 
     if (hasContactData) {
+      // Configurações → Entregabilidade → "Validar e-mails na entrada":
+      // endereços descartáveis/temporários não entram na lista (o lead
+      // continua salvo pelo telefone/nome, se houver).
+      if (contactData.email) {
+        try {
+          const { checkEmail, shouldValidateOnEntry } = await import('@/lib/email/email-hygiene')
+          if (await shouldValidateOnEntry(form.organization_id) && !checkEmail(contactData.email).ok) {
+            console.log('[Form Submit] E-mail rejeitado pela higiene da lista')
+            delete contactData.email
+          }
+        } catch { /* falha aberta */ }
+      }
       // Tentar encontrar contato existente por email (já normalizado
       // lowercase em extractContactData — invariante do índice único)
       if (contactData.email) {

@@ -141,6 +141,15 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { email, phone, first_name, last_name, tags, source, store_id } = body;
 
+    // Configurações → Entregabilidade → "Validar e-mails na entrada"
+    if (email) {
+      const { checkEmail, emailCheckMessage, shouldValidateOnEntry } = await import('@/lib/email/email-hygiene');
+      if (await shouldValidateOnEntry(organizationId)) {
+        const c = checkEmail(email);
+        if (!c.ok) return NextResponse.json({ error: emailCheckMessage(c), suggestion: c.suggestion }, { status: 400 });
+      }
+    }
+
     // Check for existing contact
     if (email) {
       const { data: existing } = await supabase
