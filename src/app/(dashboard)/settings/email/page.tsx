@@ -68,8 +68,7 @@ export default function DomainsSettingsPage() {
   const onWizardDone = async () => {
     const d = wiz?.d
     setWiz(null)
-    const list = await dom.reload(true)
-    void list
+    await dom.reload(true)
     if (!d || !storeId) return
     // Domínio verificado vira o remetente padrão da loja (mesmo nome antes do @).
     const cur = se.data?.email_settings || {}
