@@ -46,7 +46,7 @@ export default function DeliverabilitySettingsPage() {
 
   return (
     <>
-      <Title h="Entregabilidade" p="Saúde do envio nos últimos 30 dias e o que fazer para melhorar." right={<Link href="/email-marketing/analytics" className="lnk">Relatório completo<I n="chevR" s={15} /></Link>} />
+      <Title h="Entregabilidade" p="Saúde do envio nos últimos 30 dias e o que fazer para melhorar." right={<Link href="/analytics/deliverability" className="lnk">Relatório completo<I n="chevR" s={15} /></Link>} />
       <Card flush>
         <div className="use">
           <Meter label="Taxa de rejeição" right="meta < 2%" value={pctBR(m.bounce_rate)} pct={b1.pct} tone={b1.tone} />

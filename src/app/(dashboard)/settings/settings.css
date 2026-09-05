@@ -250,6 +250,8 @@
   .wset .mobnav a.on, .wset .mobnav button.on { background: var(--inv-bg); color: var(--inv-fg); border-color: var(--inv-bg); }
   .wset .row, .wset .brand .row { grid-template-columns: 1fr; gap: 10px; } .wset .row .lb { padding-top: 0; }
   .wset .stbl td.fx { max-width: none; min-width: 220px; }
+  .wset .stbl th, .wset .stbl td { padding-left: 12px; padding-right: 12px; }
+  .wset .sc-h { flex-wrap: wrap; }
   .wset .row.tg { grid-template-columns: 1fr auto; }
   .wset .use { grid-template-columns: 1fr; } .wset .use > div { border-left: none; border-top: 1px solid var(--line); } .wset .use > div:first-child { border-top: none; }
   .wset .notif { grid-template-columns: 1fr 60px 60px; }
