@@ -27,6 +27,7 @@ import pytest
 
 from agents_runtime.tools.custom_http import (
     GENERIC_REFUSAL_MESSAGE,
+    MAX_BODY_CHARS,
     CustomHttpTool,
     CustomToolRow,
     tool_spec_for,
@@ -68,6 +69,27 @@ def capturing(seen: dict, payload, status: int = 200):
         return httpx.Response(status, json=payload)
 
     return httpx.MockTransport(handler)
+
+
+def capturing_text(seen: dict, payload: str, status: int = 200):
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        return httpx.Response(status, text=payload)
+
+    return httpx.MockTransport(handler)
+
+
+class ExplodingAfterCap(httpx.AsyncByteStream):
+    def __init__(self) -> None:
+        self.pulled_past_cap = False
+
+    async def __aiter__(self):
+        yield b"x" * (MAX_BODY_CHARS * 4)
+        self.pulled_past_cap = True
+        raise AssertionError("a leitura passou do teto")
+
+    async def aclose(self) -> None:
+        return None
 
 
 class TestTheCall:
@@ -138,6 +160,29 @@ class TestTheCall:
         result = await tool(None, None, {"cep": "01310-100"})
         assert result.success is True
         assert len(json.dumps(result.output)) < 5_000
+
+    async def test_a_small_text_body_stays_text(self) -> None:
+        tool = CustomHttpTool(
+            ROW, transport=capturing_text({}, "resposta curta"), resolver=_resolve_public
+        )
+
+        result = await tool(None, None, {"cep": "01310-100"})
+
+        assert result.success is True
+        assert result.output == {"status": 200, "body": "resposta curta"}
+
+    async def test_a_response_at_the_byte_ceiling_does_not_pull_the_next_chunk(self) -> None:
+        stream = ExplodingAfterCap()
+        tool = CustomHttpTool(
+            ROW,
+            transport=httpx.MockTransport(lambda _request: httpx.Response(200, stream=stream)),
+            resolver=_resolve_public,
+        )
+
+        result = await tool(None, None, {"cep": "01310-100"})
+
+        assert result.success is True
+        assert stream.pulled_past_cap is False
 
 
 class TestTheSpec:
