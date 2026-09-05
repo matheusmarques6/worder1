@@ -293,13 +293,13 @@ def build_toucher(
             owns_agent_llm = False
             if agent_llm_from_org_keys:
                 try:
-                    resolved = resolve_agent_llm(
+                    agent_llm_choice = resolve_agent_llm(
                         key_rows, agent_provider=version.provider, base_secret=base_secret
                     )
                     # Por atributo, não por desempacotamento posicional — ver
                     # o gêmeo em `responder.py`.
-                    agent_llm = resolved.port
-                    owns_agent_llm = resolved.built_here
+                    agent_llm = agent_llm_choice.port
+                    owns_agent_llm = agent_llm_choice.built_here
                 except NoOrgLlmKey as reason:
                     await _alert(
                         conn, job,
