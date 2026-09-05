@@ -4125,7 +4125,9 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   que mora aí ganhou dono: item **90**.
 
   **FECHAMENTO — o que saiu, commit a commit, com as linhas medidas.** Total **3386 linhas**: 3381 de
-  **doze arquivos apagados inteiros** + 5 de sobra em **dois barris**.
+  **treze arquivos apagados inteiros** + 5 de sobra em **dois barris** — `git diff --name-status
+  b87992f1..4b56e6b8` devolve 13 entradas `D`. (A mensagem de `4b56e6b8` diz "doze"; mensagem é
+  imutável, o número certo é este.)
   1. `c082c5c3` — a correção do texto acima, **antes do código**; nada em `src/`.
   2. `0a83b756` — **133**: `src/app/api/whatsapp/conversations/[id]/ai/route.ts`.
   3. `3301eb40` — **931**: `api/ai/respond/route.ts` (409) + `route.test.ts` (192) +
@@ -4228,6 +4230,16 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
     `:364`.
   - **item 43** (`:1409`) cita `:269`. `:269` era `const body = url`, dentro de `urlMatcher`; a busca
     por URL como texto é `callersOf`, então era `:300-308`. Hoje são `:289` e `:320-328`.
+  **A varredura foi ALARGADA na revisão da execução, e a conclusão sobreviveu.** O commit `3301eb40`
+  inseriu 7 linhas em `:403` e portanto deslocou **o checklist inteiro** a partir de ~`:413` — não só
+  o que está abaixo do item 61, que era o recorte declarado. Refeita a varredura larga, o resultado é
+  que **nenhuma autocitação boa apodreceu por causa desta série**: a única correta abaixo do ponto de
+  inserção (`:340`) está **acima** dele e não se moveu, e todas as demais **já estavam podres na
+  âncora** — as nove de `PYTHONUTF8` erravam por −3, cinco das seis notas do item 54 apontavam para
+  texto alheio, e o mesmo vale para `:2461-2463`, `:3441-3444`, `:3515-3519`, `:3009-3010`,
+  `:2932-2933`, `:2942-2945` e `:2600`. **Declaradas como podres pré-existentes, não consertadas** —
+  são dívida anterior a este item, e a fila declara em vez de alargar escopo. Quem for reancorá-las
+  precisa medir contra a âncora `b87992f1`, não contra o texto de quem as citou.
   **E uma terceira, alheia a este arquivo, achada na varredura e igualmente pré-existente:** o item
   87 (`:5225`) cita `:2650` e `:4328` como os sítios de `order_status`/`transfer_to_human` em
   contexto alheio; na âncora `b87992f1` eles já eram `:2680` e `:4638`. **Declarada, não
@@ -4247,7 +4259,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   | `docs/AUDITORIA-LEGADO-WHATSAPP-IA.md:201` | 3 e 4 |
   | `docs/AUDIT_RLS_MIGRATION.md:160` | 4 |
   | `docs/AUDIT_RLS_MIGRATION.md:33` | 5 |
-  | `docs/INTEGRACAO-FRONTEND-BACKEND.md:90-92,134` | 5 |
+  | `docs/INTEGRACAO-FRONTEND-BACKEND.md:90-91` | 5 |
   | `docs/superpowers/plans/2026-06-10-p1-ai-security.md:55,66,374,377` | 5 |
 
   **Citação permanentemente podre, que não se corrige nem declarando-a datada:**
@@ -5324,7 +5336,8 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   O executor `action_whatsapp_ai` (`src/lib/automation/node-executors.ts:1857`) escreve
   `whatsapp_conversations.bot_active` (`:1868-1871`, com `supabaseAdmin`) — **tabela legada e coluna
   legada**. O toggle canônico de hoje escreve `whatsapp_cloud_conversations.ai_enabled`
-  (`src/app/api/whatsapp/inbox/conversations/[id]/bot/route.ts:105-106`).
+  (`src/app/api/whatsapp/inbox/conversations/[id]/bot/route.ts:83`, a coluna; `:105-106`, a tabela e
+  o `update`).
   **Medido:** a única função que **lê** `bot_active` num caminho de decisão é
   `handleAIResponse` (`src/lib/services/whatsapp/ai-chatbot-service.ts:283`, a leitura em `:298`), e
   ela **não tem um importador** — `grep -rn ai-chatbot-service src/` devolve só
