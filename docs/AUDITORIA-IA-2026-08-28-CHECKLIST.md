@@ -4030,7 +4030,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
 
   **2. `src/app/api/ai/respond/route.ts` (409) + `route.test.ts` (192) = 601 linhas, 4 ids.** Zero
   chamadores, inclusive nos shell scripts. O próprio teste declara a órfandade e o dono
-  (`route.test.ts:2-3`), e os itens **23** (`:408-416`) e **85** (`:5147-5149`) apontam para o 61 —
+  (`route.test.ts:2-3`), e os itens **23** (`:408-416`) e **85** apontam para o 61 —
   duas atribuições explícitas, nenhuma disputa. **Nenhuma tabela fica sem leitor.**
 
   **3. `src/app/api/ai/knowledge/route.ts` (196) + `route.test.ts` (134) = 330 linhas, 3 ids.** Zero
@@ -4241,7 +4241,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   são dívida anterior a este item, e a fila declara em vez de alargar escopo. Quem for reancorá-las
   precisa medir contra a âncora `b87992f1`, não contra o texto de quem as citou.
   **E uma terceira, alheia a este arquivo, achada na varredura e igualmente pré-existente:** o item
-  87 (`:5225`) cita `:2650` e `:4328` como os sítios de `order_status`/`transfer_to_human` em
+  87 cita `:2650` e `:4328` como os sítios de `order_status`/`transfer_to_human` em
   contexto alheio; na âncora `b87992f1` eles já eram `:2680` e `:4638`. **Declarada, não
   consertada** — a série não a criou. *(Varredura feita: nenhuma outra citação do checklist a si
   mesmo aponta para baixo do item 61.)*
@@ -4332,7 +4332,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   não vende um efeito que a env não tem. Quem não passa nas três recebe decisão escrita de NÃO
   documentar, com o motivo medido — nenhuma fica pendente, e é por isso que o item fecha.
 
-  **Entregue — cinco envs documentadas, quatro recusadas por escrito, três realocadas.**
+  **Entregue — cinco envs documentadas, quatro recusadas por escrito, cinco realocadas.**
 
   **O RULING DE SEGURANÇA, e ele vale mais que todo o resto do item: `AGENTS_CHANNEL` fica FORA do
   `runtime/.env.bancada.example`, e a ausência É a configuração correta.** Um script ingênuo de
@@ -4403,6 +4403,28 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   reordenação apodrece a segunda. A prosa que não coube no `DEPLOY.md` está neste corpo, de propósito.
   **`AGENTS_WORKERS` continua na lista:** a escolha entre ler a env em `_serve` e tirar a linha é do
   achado que a possui, não deste item.
+  **Três correções da revisão da execução, todas aplicadas no fix round.**
+  1. **A série apodreceu DUAS autocitações e o relatório dizia que nenhuma.** A varredura cobriu os
+     arquivos de fora e as autocitações acima do ponto de inserção, mas não o resto do arquivo: os
+     +172 linhas dos commits `b3e0e25f` e `a956276b` empurraram o item 85 e o item 87 para baixo, e
+     duas frases que os citavam por linha passaram a apontar para outro item. **Conserto: apagar os
+     dois números** — as duas frases já nomeiam o item pelo número, então a linha não acrescentava
+     nada e só criava dívida. É a mesma lição do ruling que proibiu citar linha de arquivo que a
+     própria série edita.
+  2. **`DEPLOY.md:126` afirmava que `AGENTS_RUBRICS_DIR` é "sem efeito em produção hoje" — falso.**
+     `default_rubrics_directory` (`responder.py`) **honra o override**, e o juiz de pré-envio lê as
+     rubricas desse diretório. Corrigido no arquivo: "raramente setada, mas tem efeito". Documentar
+     um knob como inerte quando ele funciona é o espelho do defeito que este item persegue.
+  3. **`AGENTS_LOGFIRE_TOKEN` está no recorte nomeado pelo item e não tinha decisão escrita.**
+     Decisão, agora escrita: **não entra em `.env.*.example`**, porque já está documentada em
+     `runtime/DEPLOY.md` e no `render.yaml`, e porque a ausência dela não impede modo nenhum de
+     subir — o runtime apenas não exporta traces. Sem dano prático (nada mudou), mas o `[x]` afirmava
+     cobertura do recorte inteiro e uma env do recorte estava sem veredito.
+  **Uma quarta, de contagem:** a mensagem de `a956276b` diz que inserir na Fase 3 deslocaria "as oito
+  citações de linha" de `:3283`. São **nove** (mais seis num parágrafo vizinho). A decisão de abrir o
+  item 94 no fim da fila fica **mais** forte, não menos; o número é que estava errado, num parágrafo
+  que só existe porque alguém já contou dois onde havia nove. Mensagem é imutável — o número certo
+  é este.
   **Registrado e NÃO consertado: `runtime/DEPLOY.md:135` já está podre hoje** — é a linha do
   `no_org_llm_key`, e o que o item 10 cita a partir dela, `correlate_channel_status`, mora em
   `:144-145`. Dívida anterior a este item, e citação de item fechado: quem reancorar, reancore lá.
