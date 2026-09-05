@@ -4277,7 +4277,8 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   instrumentado — é ele que desbloqueia o alvo 7) e **93** (o `curl` que afirma o que a rota nunca
   devolveu).
 
-- [ ] **62. Env drift** `[confirmado]`
+- [x] **62. Env drift** `[confirmado]` · âncora `50576bc8` · commits `b3e0e25f` (correções acima),
+  `a04c7f2a` (as quatro envs), `0833ed67` (o debounce), `4444bd9f` (`DEPLOY.md` + bancada)
   Lidas em código e ausentes do `.env.example`: `AGENTS_RUNTIME_URL` e `AGENTS_PREVIEW_TOKEN`
   (`src/app/api/ai/preview-prompt/route.ts:16-17` — sem elas o preview do hub devolve 503 e o botão
   morre), `WHATSAPP_AI_DEBOUNCE_SECONDS`, `OPENAI_API_KEY`, `SLACK_WEBHOOK_URL`.
@@ -4330,6 +4331,139 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   para ESTE modo subir**; `runtime/DEPLOY.md` é "tudo que se pode configurar". (3) Escrever a linha
   não vende um efeito que a env não tem. Quem não passa nas três recebe decisão escrita de NÃO
   documentar, com o motivo medido — nenhuma fica pendente, e é por isso que o item fecha.
+
+  **Entregue — cinco envs documentadas, quatro recusadas por escrito, três realocadas.**
+
+  **O RULING DE SEGURANÇA, e ele vale mais que todo o resto do item: `AGENTS_CHANNEL` fica FORA do
+  `runtime/.env.bancada.example`, e a ausência É a configuração correta.** Um script ingênuo de
+  "acrescente tudo que falta" põe a linha lá e transforma o modo mudo — que roda **sobre dados reais
+  de clientes** (`runtime/DEPLOY.md:57`) — em modo que envia WhatsApp de verdade. O mecanismo, em
+  três degraus: a **leitura** é `_channel_from_env` → `_factory_from_env("AGENTS_CHANNEL", dsn)`,
+  **sem `required=True`** (`runtime/src/agents_runtime/__main__.py:60-61`); a **ausência** cai no
+  `if not spec or not spec.strip():` que devolve `None` para quem não é `required`
+  (`__main__.py:46-54`); a **consequência** é que a task do sender só nasce dentro do
+  `if channel is not None:` de `app.py:230`. Sem canal não existe sender. O comentário de
+  `_factory_from_env` declara o desenho com todas as letras (`__main__.py:38`): *"An absent CHANNEL
+  means no sender task: nothing is sent, which is safe."* O contrato já estava escrito em dois
+  lugares — `runtime/.env.bancada.example:4-6` e `runtime/DEPLOY.md:59`, com a tabela de modos em
+  `:38` marcando a bancada como *"NÃO (sem canal)"*. O commit `4444bd9f` acrescenta ao
+  `bancada.example`, depois de `:6` e preservando `:4-6`, as duas linhas do **mecanismo**, que é o
+  que torna o contrato falsificável em vez de asserção.
+  **A ausência é a configuração correta PARA O ENVIO — e só para ele.** O custo dela está no item
+  *"Todo o housekeeping do banco vive dentro da task do canal — sem `AGENTS_CHANNEL`, os três passos
+  morrem juntos"* (pelo título), que continua **aberto**: a mesma ausência mata `sweep_outbox_unknown`,
+  `review_stale_unknown` e `expire_incentive_grants`. **Não feche aquele item como "funciona como
+  projetado" com base neste ruling** — são as duas metades do mesmo mecanismo, e só uma delas é
+  desejada. `AGENTS_META_API_VERSION` sai pela mesma porta, como consequência: sem canal não há API
+  da Meta a versionar, e ela já está em `runtime/.env.piloto.example:26`, onde faz sentido.
+
+  **Os 13 knobs de `config_from_env` não entram em exemplo nenhum, e agora é MEDIDO.** A docstring
+  já dizia (`runtime/src/agents_runtime/config.py:92-98`): *"This exists for exactly one consumer:
+  the pipeline suite… Production sets none of these and gets the CLAUDE.md table verbatim."* A
+  medição confirma: fora de `config.py`, os únicos sítios que setam qualquer um dos 13 são
+  `runtime/tests/support/runtime_process.py:25-34` (`TINY_INTERVALS`, com `AGENTS_HUMANIZE_DELAYS`
+  em `:33`), `runtime/tests/pipeline/test_scenarios_b.py:165-167,255-256` e
+  `runtime/tests/pipeline/test_scenarios_c.py:70-71,323-324,382,441` — **13 de 13, os três de
+  `-m pipeline`**. *(Medido por `grep`; a suíte `-m pipeline` **não** foi rodada — sem Postgres ela
+  pendura por mais de dez minutos em vez de falhar.)* `AGENTS_HUMANIZE_DELAYS` é knob de teste **e**
+  de produção (o consumo vivo é o sender, ANDado com a preferência por org) — o que a torna **igual**
+  aos outros 12, não diferente deles. Pôr qualquer um no `runtime/.env.*.example` convidaria quem
+  opera a mexer num número que a tabela canônica do `CLAUDE.md` governa: documentação enganosa. O
+  lugar deles é a seção de tuning do `runtime/DEPLOY.md`, e é para lá que foram.
+
+  **`AGENTS_PLATFORM_LLM_ENABLED`: NÃO documentar, em arquivo de exemplo nenhum.** Falha na condição
+  (3): a env **sozinha não liga degrau nenhum**, e escrever `AGENTS_PLATFORM_LLM_ENABLED=false` num
+  `.env.*.example` prometeria um interruptor que não existe. A inércia já está documentada no melhor
+  lugar possível — a docstring de `resolve_agent_llm`, `providers.py:123-131`: *"ligar só a env não
+  tem efeito nenhum"*. Documentá-la como interruptor reintroduziria exatamente a armadilha que o
+  commit `9e184ab3` desarmou, e o item 52 decidiu **manter** a capacidade estacionada
+  (`core/agentes-por-evento.md:421`, ruling D9).
+
+  **`DEBUG_ROUTE_SECRET`: não documentada de propósito, com dono.** Lida em `src/app/api/debug/route.ts:9`
+  e `src/app/api/shopify/debug/route.ts:5`. Dono: o item *"`/api/debug` — a décima terceira rota de
+  debug, com o mesmo fail-open que o item 43 fechou nas outras doze"* (pelo título), cujo conserto
+  proposto **apaga a env**. Duas razões cumulativas: documentar agora cria duas envs de debug de nome
+  quase idêntico no mesmo arquivo (`DEBUG_ENDPOINT_SECRET` já está em `.env.example:47-54`) — o
+  comentário teria de explicar qual guarda quais rotas, documentação que vira armadilha —, e ela pode
+  deixar de existir.
+
+  **`AGENTS_TURN_LLM_CALL_LIMIT` é nome de FORA do recorte, e a exceção é declarada, não escondida.**
+  A condição (1) diz "nunca acrescenta nome de fora"; este item nomeia `AGENTS_LOGFIRE_TOKEN`,
+  `AGENTS_PLATFORM_LLM_ENABLED`, `AGENTS_HUMANIZE_DELAYS`, `AGENTS_RUBRICS_DIR` e "os knobs de fila"
+  — e não este. Entra assim mesmo, em uma linha do `runtime/DEPLOY.md`, porque é knob de **custo**
+  real (default 8 em `metering.DEFAULT_TURN_LLM_CALL_LIMIT`, lido por `default_turn_llm_call_limit`)
+  e não tinha documentação em arquivo nenhum. Declarado aqui para que a régua não sirva aos dois
+  lados na próxima vez.
+
+  **A restrição de tamanho do bloco de tuning é DESENHO, não sorte — não a quebre.** O bloco
+  `runtime/DEPLOY.md:121-126` tem de continuar com **exatamente 6 linhas**, e `:123` tem de continuar
+  sendo a linha do `AGENTS_WORKERS`. Motivo: `DEPLOY.md:136-137` (a sonda externa do `/healthz`) é
+  citado por item **fechado** neste checklist, e `DEPLOY.md:123` é citado pelo achado *"`AGENTS_WORKERS`
+  é documentada e inalcançável"* (pelo título). Qualquer bloco maior desloca a primeira; qualquer
+  reordenação apodrece a segunda. A prosa que não coube no `DEPLOY.md` está neste corpo, de propósito.
+  **`AGENTS_WORKERS` continua na lista:** a escolha entre ler a env em `_serve` e tirar a linha é do
+  achado que a possui, não deste item.
+  **Registrado e NÃO consertado: `runtime/DEPLOY.md:135` já está podre hoje** — é a linha do
+  `no_org_llm_key`, e o que o item 10 cita a partir dela, `correlate_channel_status`, mora em
+  `:144-145`. Dívida anterior a este item, e citação de item fechado: quem reancorar, reancore lá.
+
+  **Os números medidos, para ninguém remedir.** Lado TS: **68** envs lidas em `src/ scripts/ worker/`,
+  **20** declaradas no `.env.example` na âncora, **48** lidas e ausentes, **0** declaradas e não
+  lidas. Lado Python: `runtime/src` lê **32** envs; `runtime/.env.piloto.example` declara **14** e
+  `runtime/.env.bancada.example` **12** — as lacunas de 18 e 20 são exatamente a aritmética do item,
+  **e não são configuração quebrada**: as 18 ausentes do piloto têm **todas** default funcionando, e
+  os dois arquivos não são "toda env que se pode setar", são "o mínimo para ESTE modo subir". Só
+  `AGENTS_RESPONDER` recusa a partida por ausência (`__main__.py:48-53`), e ele está declarado nos
+  dois; `AGENTS_CHANNEL` e `AGENTS_TOUCHER` são ausência **segura** por desenho (`__main__.py:37-44`).
+
+  **As 43 envs restantes vão para O DONO DO PRODUTO, sem item novo, e o motivo é que não são 43
+  defeitos: é UMA decisão** — *qual é a política de escopo do `.env.example` da raiz?* — e ela é de
+  produto, não de auditoria. São Stripe, Shopify, TikTok, Google, Resend, Instagram, OAuth,
+  `NEXT_PUBLIC_*`, `NODE_ENV`, `VERCEL_URL`, `VERCEL_REGION` e as chaves de suíte (`RUN_REDIS_IT`,
+  `GEN_BUBBLE_VECTORS`, `WA_RL_LUA_KILL`, `WA_RL_LUA_PCT`) — **sete integrações que a fila deste
+  dossiê nunca examinou**. Abrir um `[ ]` sem dono e com 43 sujeitos é o que o item *"Apagar sobras
+  menores"* (pelo título) já julgou pior que um item errado.
+  **Na mesma devolução ao dono do produto, DUAS linhas de `src/app/(dashboard)/integrations/meta/page.tsx`:**
+  `:245` manda *"Defina WEBHOOK_VERIFY_TOKEN no .env"* e `:301` imprime, num bloco de `.env` **para o
+  lojista copiar**, `WEBHOOK_VERIFY_TOKEN=your_global_verify_token`. O nome `WEBHOOK_VERIFY_TOKEN`
+  sozinho **não é lido em lugar nenhum** — as reais são `WHATSAPP_WEBHOOK_VERIFY_TOKEN`
+  (`.env.example:24`) e `NEXT_PUBLIC_WEBHOOK_VERIFY_TOKEN`. A segunda é pior que a primeira: instrução
+  de copiar-e-colar errada. Tela de integrações, fora do motor de IA; não vira item porque sozinha não
+  paga um número.
+
+  **Entrada para o item *"Lacunas de teste"* (pelo título): a trava código × exemplo é construível
+  hoje, na versão ESTREITA.** A versão larga ("toda env lida está no `.env.example`") depende da
+  política de produto acima e fica bloqueada. A estreita — *"toda env lida em `src/lib/ai/` e
+  `src/app/api/ai/`, fora de `__tests__/`, está no `.env.example`"* — não depende de nada: são **16**
+  envs lidas nesse recorte, **6** ausentes na âncora (`AGENTS_RUNTIME_URL`, `AGENTS_PREVIEW_TOKEN`,
+  `OPENAI_API_KEY`, `WHATSAPP_AI_DEBOUNCE_SECONDS`, `NODE_ENV`, `GEN_BUBBLE_VECTORS`) e, **depois dos
+  commits `a04c7f2a` e `0833ed67`, sobram 2**: `NODE_ENV`, que é da plataforma, e `GEN_BUBBLE_VECTORS`,
+  lida só em `src/lib/ai/__tests__/gen-bubble-vectors.test.ts:50` e portanto já excluída pelo filtro
+  `__tests__/`. **A lista de isenção tem UM nome: `NODE_ENV`.** Custa ~30 linhas e uma isenção, não
+  "seria barato". **Registrado, NÃO implementado aqui:** a trava é `+N` ids de vitest, e isso é delta
+  daquele item.
+
+  **Achados devolvidos com dono, procurados pelo DEFEITO e não pelo caminho do arquivo:**
+  `OPENAI_API_KEY` paga pela plataforma sem `trackAiUsage` → item *"Chamadas de LLM que a plataforma
+  paga e não contabiliza"* (pelo título); os 10 erros do `ruff` → item *"`ruff check .` está VERMELHO
+  na branch"* (pelo título), **não consertados aqui**; a linha `AGENTS_WORKERS` do `DEPLOY.md` → o
+  achado que a possui; `src/lib/oauth-security.ts:37` → **item 94, aberto por este item**.
+  **Correção de atribuição, e ela importa porque a recon agrupou três sítios como o mesmo defeito:**
+  `src/lib/email/unsubscribe-token.ts` e `src/lib/email/optin-token.ts` **NÃO** têm o defeito do
+  `oauth-security.ts` — os dois são **fail-closed**, com `throw` quando o segredo sai vazio
+  (`unsubscribe-token.ts:14-18`, `optin-token.ts:28-31`). Citá-los junto seria acusar dois arquivos de
+  um defeito que eles não têm. **`oauth-security.ts:37` está sozinho.**
+
+  **Não verificado:** o estado real das envs em produção (Vercel / Render) — nada foi consultado, e
+  **nenhum valor de segredo foi lido, copiado ou transcrito** em lugar nenhum deste item; o conteúdo
+  de `runtime/.env.piloto` (arquivo real, gitignored, **não aberto**); o comportamento em execução de
+  qualquer env. `-m db` e `-m pipeline` não foram rodados (proibidos, e sem Postgres penduram por mais
+  de dez minutos em vez de falhar).
+  **Delta de suíte: ZERO, medido.** `npx vitest run` **1314** (1307 passed / 4 failed pré-existentes e
+  alheias / 3 skipped), `npx tsc --noEmit` exit 0, `pytest -m unit` **1170**, `ruff check .` **10**
+  (do item do `ruff`, não consertados), `lint-imports` **3 kept** — idênticos à âncora, porque nenhum
+  dos quatro arquivos tocados é TypeScript, Python ou workflow, e **nenhum teste, script ou passo de
+  CI lê um `.example`**.
 
 - [ ] **63. Lacunas de teste** `[relatado]`
   Sem cobertura: `toucher._node_delta` com `success_criteria`/`enabled_tools`/`forbidden` (onde mora um
@@ -5449,6 +5583,33 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   executado. **Território sem dono:** o hit mais próximo é o item 43 (`:1404-1410`), que fala dos
   **mesmos dois scripts** mas de `curl` **diferentes** (`/api/ai/test` e `/api/ai/test/webhook`,
   sobre `DEBUG_ENDPOINT_SECRET`) — não é o mesmo defeito.
+
+- [ ] **94. O segredo que assina o state de OAuth tem literal de fallback no repositório** `[confirmado]` · *(descoberto no item 62)*
+  `src/lib/oauth-security.ts:37` — `const STATE_SECRET = process.env.OAUTH_STATE_SECRET ||
+  process.env.NEXTAUTH_SECRET || 'fallback-secret-change-me';`. **Sem `throw`**: quando nenhuma das
+  duas envs está setada, o valor em vigor é o literal, e ele é **público no repositório**. Esse valor
+  é a chave HMAC-SHA256 que **assina** (`:74`) e **verifica** (`:104`) o state de OAuth dos quatro
+  provedores declarados em `:26` (`'meta' | 'tiktok' | 'google' | 'shopify'`), e o cabeçalho do
+  próprio arquivo (`:1-14`) declara que o state existe para prevenir *"CSRF attacks / Account
+  takeover / Replay attacks"* — exatamente o que um segredo público não previne.
+  **Nenhuma das duas envs está no `.env.example`** (medido por diferença de conjuntos: as duas estão
+  entre as 68 lidas e nenhuma entre as declaradas) **e o CI não as injeta** —
+  `.github/workflows/app.yml:81-85` injeta 4 dummies (`NEXT_PUBLIC_SUPABASE_URL`,
+  `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `ENCRYPTION_KEY`), nenhuma delas.
+  **Não é do item 62** — aquele é sobre arquivo de exemplo, não sobre a qualidade do fallback — **e
+  não é do motor de IA**; abre-se porque é defeito de segurança **sem dono** (procurado pelo DEFEITO
+  e com variação de vocabulário: `fallback-secret`, `OAUTH_STATE_SECRET`, `NEXTAUTH_SECRET`,
+  `oauth-security`, `segredo literal`, `hardcoded secret`, `state de OAuth`, `CSRF`, `HMAC`, `replay`,
+  `takeover`, `assinatura` — zero ocorrências), e a fila já carrega achado fora do motor quando
+  ninguém o possui: o item *"O CI do runtime só existe em Ubuntu"* é de matriz de CI.
+  **`src/lib/email/unsubscribe-token.ts` e `src/lib/email/optin-token.ts` NÃO são o mesmo defeito** e
+  não entram aqui: os dois são **fail-closed**, com `throw` quando o segredo sai vazio
+  (`unsubscribe-token.ts:14-18`, `optin-token.ts:28-31`). `oauth-security.ts:37` está sozinho.
+  **NÃO CONSERTADO pelo item 62.** **Não verificado:** se produção seta `OAUTH_STATE_SECRET` ou
+  `NEXTAUTH_SECRET` — a conclusão é por leitura de código, e **nenhum valor de segredo foi lido**.
+  *(Achado lateral, registrado e sem item próprio porque sozinho não paga um número:
+  `optin-token.ts:26` aceita `SUPABASE_SERVICE_ROLE_KEY` como material de assinatura HMAC — reúso de
+  segredo de altíssimo privilégio para outra finalidade.)*
 
 ---
 
