@@ -172,3 +172,11 @@ ignore_imports = [
     "agents_runtime.channels.port -> psycopg",
     "agents_runtime.channels.cloud_api -> psycopg",
 ]
+
+[[tool.importlinter.contracts]]
+name = "the root module does not reach the database"
+type = "forbidden"
+source_modules = ["agents_runtime"]
+forbidden_modules = ["psycopg"]
+as_packages = false
+allow_indirect_imports = true
