@@ -114,12 +114,14 @@ export function estimateCostUsd(
 
 export async function trackAiUsage(input: TrackAiUsageInput): Promise<void> {
   try {
-    const promptTokens = input.promptTokens || 0
-    const completionTokens = input.completionTokens || 0
+    const promptTokens = input.promptTokens ?? 0
+    const completionTokens = input.completionTokens ?? 0
     const costUsd =
       input.costUsdOverride !== undefined
         ? input.costUsdOverride
-        : estimateCostUsd(input.provider, input.model, promptTokens, completionTokens)
+        : input.promptTokens === undefined || input.completionTokens === undefined
+          ? null
+          : estimateCostUsd(input.provider, input.model, promptTokens, completionTokens)
 
     if (costUsd === null) {
       // Ruling D: modelo fora da tabela é visível, não silencioso — mesmo

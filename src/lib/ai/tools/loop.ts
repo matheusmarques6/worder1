@@ -56,6 +56,8 @@ export interface ToolLoopResult {
   promptTokens: number
   /** Soma de completionTokens de todas as rodadas (para o AI budget/cost-tracker). */
   completionTokens: number
+  /** Soma factual, ou null se qualquer rodada não informou custo. */
+  costUsd: number | null
   stoppedBy: StoppedBy
   transferred: boolean
   rateLimited: boolean
@@ -102,6 +104,7 @@ export async function runToolLoop(params: RunToolLoopParams): Promise<ToolLoopRe
   let totalTokens = 0
   let totalPromptTokens = 0
   let totalCompletionTokens = 0
+  let totalCostUsd: number | null = 0
   let finalText = ''
   let transferred = false
 
@@ -114,6 +117,7 @@ export async function runToolLoop(params: RunToolLoopParams): Promise<ToolLoopRe
         tokens: totalTokens,
         promptTokens: totalPromptTokens,
         completionTokens: totalCompletionTokens,
+        costUsd: totalCostUsd,
         stoppedBy: 'max_tokens',
         transferred,
         rateLimited: false,
@@ -144,6 +148,7 @@ export async function runToolLoop(params: RunToolLoopParams): Promise<ToolLoopRe
         tokens: totalTokens,
         promptTokens: totalPromptTokens,
         completionTokens: totalCompletionTokens,
+        costUsd: totalCostUsd,
         stoppedBy: 'final',
         transferred,
         rateLimited: false,
@@ -153,6 +158,8 @@ export async function runToolLoop(params: RunToolLoopParams): Promise<ToolLoopRe
     totalTokens += step.usage?.totalTokens || 0
     totalPromptTokens += step.usage?.promptTokens || 0
     totalCompletionTokens += step.usage?.completionTokens || 0
+    if (step.usage?.costUsd === undefined) totalCostUsd = null
+    else if (totalCostUsd !== null) totalCostUsd += step.usage.costUsd
 
     // 429 / rate-limit: abort gracioso, sinaliza no retorno (runner loga no trace).
     if (step.rateLimited) {
@@ -162,6 +169,7 @@ export async function runToolLoop(params: RunToolLoopParams): Promise<ToolLoopRe
         tokens: totalTokens,
         promptTokens: totalPromptTokens,
         completionTokens: totalCompletionTokens,
+        costUsd: totalCostUsd,
         stoppedBy: 'rate_limited',
         transferred,
         rateLimited: true,
@@ -178,6 +186,7 @@ export async function runToolLoop(params: RunToolLoopParams): Promise<ToolLoopRe
         tokens: totalTokens,
         promptTokens: totalPromptTokens,
         completionTokens: totalCompletionTokens,
+        costUsd: totalCostUsd,
         stoppedBy: 'final',
         transferred,
         rateLimited: false,
@@ -229,6 +238,7 @@ export async function runToolLoop(params: RunToolLoopParams): Promise<ToolLoopRe
         tokens: totalTokens,
         promptTokens: totalPromptTokens,
         completionTokens: totalCompletionTokens,
+        costUsd: totalCostUsd,
         stoppedBy: 'control_stop',
         transferred,
         rateLimited: false,
@@ -248,6 +258,7 @@ export async function runToolLoop(params: RunToolLoopParams): Promise<ToolLoopRe
     tokens: totalTokens,
     promptTokens: totalPromptTokens,
     completionTokens: totalCompletionTokens,
+    costUsd: totalCostUsd,
     stoppedBy: 'max_iterations',
     transferred,
     rateLimited: false,

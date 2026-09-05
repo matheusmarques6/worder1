@@ -45,6 +45,7 @@ describe('estimateCostUsd', () => {
   it('devolve null pra qualquer provider/model fora da tabela', () => {
     expect(estimateCostUsd('groq', 'llama-3.1-8b-instant', 100, 100)).toBeNull()
   })
+
 })
 
 describe('trackAiUsage', () => {
@@ -132,5 +133,10 @@ describe('trackAiUsage', () => {
       expect.stringContaining('custo desconhecido'),
       expect.objectContaining({ provider: 'openai', model: 'gpt-4o-mini' })
     )
+  })
+
+  it('sem contagens e sem override grava custo desconhecido, nao estimativa zero', async () => {
+    await trackAiUsage({ organizationId: 'org-1', provider: 'openai', model: 'gpt-4o-mini', feature: 'eval_judge' })
+    expect(insertMock.mock.calls[0][0].cost_usd).toBeNull()
   })
 })

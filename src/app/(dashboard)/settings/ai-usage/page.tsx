@@ -8,6 +8,7 @@
 import { useEffect, useState } from 'react'
 import { Sparkles, DollarSign, Zap, Loader2, Clock, TrendingUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { costLabel } from './usage-label'
 
 interface UsageData {
   period: string
@@ -19,9 +20,11 @@ interface UsageData {
     completionTokens: number
     totalTokens: number
     costUsd: number
+    unknownCostCalls?: number
     avgDurationMs: number
   }
   grouped: Array<{ key: string; calls: number; tokens: number; costUsd: number }>
+  budget?: { hasUnknownCost?: boolean } | null
 }
 
 const PERIODS = [
@@ -67,6 +70,7 @@ export default function AiUsagePage() {
           period: d.period || period,
           totals: d.totals || { calls: 0, successful: 0, failed: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, costUsd: 0, avgDurationMs: 0 },
           grouped: Array.isArray(d.grouped) ? d.grouped : [],
+          budget: d.budget || null,
         })
       })
       .catch((e) => setError(e?.message || 'Erro ao carregar'))
@@ -144,7 +148,7 @@ export default function AiUsagePage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white border border-gray-200 rounded-xl p-4">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-gray-500">Custo total</span>
+            <span className="text-xs font-medium text-gray-500">{costLabel(data.totals, data.budget)}</span>
             <DollarSign className="w-4 h-4 text-emerald-500" />
           </div>
           <p className="text-2xl font-bold text-gray-900 tabular-nums">{fmtCost(data.totals.costUsd)}</p>
@@ -184,6 +188,10 @@ export default function AiUsagePage() {
           <p className="text-xs text-gray-400 mt-1">por chamada</p>
         </div>
       </div>
+
+      {(data.totals.unknownCostCalls || data.budget?.hasUnknownCost) && (
+        <p className="text-xs text-amber-700">Custo parcial: há chamadas sem custo conhecido neste período.</p>
+      )}
 
       {/* Grouped chart */}
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">

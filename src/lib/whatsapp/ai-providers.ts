@@ -38,6 +38,7 @@ interface AIResponse {
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
+    costUsd?: number;
   };
 }
 
@@ -86,6 +87,7 @@ export interface ProviderToolResult {
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
+    costUsd?: number;
   };
   /** sinal de rate-limit do provedor (HTTP 429) para abort gracioso no loop. */
   rateLimited?: boolean;
@@ -405,6 +407,7 @@ async function callOpenRouter(config: AIConfig, messages: AIMessage[]): Promise<
       promptTokens: data.usage?.prompt_tokens || 0,
       completionTokens: data.usage?.completion_tokens || 0,
       totalTokens: data.usage?.total_tokens || 0,
+      costUsd: typeof data.usage?.cost === 'number' ? data.usage.cost : undefined,
     },
   };
 }
@@ -614,6 +617,9 @@ async function callOpenAICompatWithTools(
       promptTokens: data.usage?.prompt_tokens || 0,
       completionTokens: data.usage?.completion_tokens || 0,
       totalTokens: data.usage?.total_tokens || 0,
+      costUsd: config.provider === 'openrouter' && typeof data.usage?.cost === 'number'
+        ? data.usage.cost
+        : undefined,
     },
   };
 }

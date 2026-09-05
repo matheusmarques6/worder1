@@ -437,6 +437,9 @@ export async function runEvaluation(
         model: judgeModel,
         feature: 'eval_judge',
         agentId: agent.id,
+        promptTokens: verdict.usage?.promptTokens,
+        completionTokens: verdict.usage?.completionTokens,
+        costUsdOverride: verdict.usage?.costUsd,
         success: true,
       })
     } catch {
