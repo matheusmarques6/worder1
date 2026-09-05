@@ -797,7 +797,6 @@ begin
   create index ai_usage_logs_org_model_idx
     on public.ai_usage_logs (organization_id, provider, model);
 
-  grant insert on public.ai_usage_logs to worker_role;
   grant select, insert on public.ai_usage_logs to service_role;
 end
 $$;
