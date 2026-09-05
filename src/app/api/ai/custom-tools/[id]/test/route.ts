@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic'
 // mas um oráculo de DNS interno se voltar pro lojista (autenticado, mas não
 // deveria conseguir mapear hostnames internos testando endpoints). Uma
 // mensagem só pro caller; a mensagem específica do guard vai pro log.
-export const GENERIC_REFUSAL_MESSAGE =
+const GENERIC_REFUSAL_MESSAGE =
   'endpoint recusado: use uma URL pública e válida'
 
 // POST — o teste OBRIGATÓRIO antes de ligar (10.7): chamada real, feita do
