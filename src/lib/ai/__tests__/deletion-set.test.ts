@@ -63,7 +63,13 @@ const DELETION_SET: string[] = [
  * Rotas de API do mesmo conjunto. Não têm importador — a prova é que nenhum
  * código vivo cita a URL.
  */
-const DELETION_SET_ROUTES: string[] = [];
+const DELETION_SET_ROUTES: string[] = [
+  // Onda 6 (item 61): `api/whatsapp/conversations/[id]/ai` passou por aqui —
+  // a lista foi preenchida com o arquivo ainda no lugar, o teste provou que
+  // nenhum código vivo cita a URL (a UI já usa `inbox/conversations/[id]/bot`),
+  // e a entrada saiu junto com o arquivo. A lista volta a ficar vazia porque é
+  // o teste de "todo caminho listado existe" que impede que ela apodreça.
+];
 
 /**
  * Segunda ordem: peças cujo ÚNICO sustentáculo é outra peça morta que só
