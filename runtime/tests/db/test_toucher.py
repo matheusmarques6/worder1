@@ -108,8 +108,10 @@ class TestTheDraft:
 
         await _toucher(dsn, llm)(_job(org, thread))
 
-        system = llm.asked[0].messages[0].content
-        assert "[Cliente enviou uma imagem]" in system
+        assert any(
+            message.role == "user" and "[Cliente enviou uma imagem]" in message.content
+            for message in llm.asked[0].messages
+        )
 
     async def test_a_family_off_the_air_alerts_and_stays_silent(
         self, dsn: str, admin: psycopg.Connection, org: uuid.UUID
