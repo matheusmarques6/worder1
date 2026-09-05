@@ -22,6 +22,8 @@
 - Não implementar automaticamente as nove pendências declaradas na task 63 nem itens 64–95; somente verificar os cinco XFAILs do item 95.
 - Não chamar APIs externas reais, não usar credenciais de produção e não acessar banco de produção.
 - Docker/Supabase local está autorizado. Confirmar a identidade do stack e portas antes de conectar.
+- Todo gate `db`/`pipeline` usa explicitamente `SUPABASE_DB_URL=postgresql://postgres:postgres@127.0.0.1:55322/postgres` no mesmo processo; o default 54322 é proibido nesta execução.
+- O stack 55322 é único: replay de migrations e testes `db`/`pipeline` são serializados. Antes deles, encerrar testes concorrentes e confirmar projeto/porta; fixtures podem truncar tabelas.
 - As cinco falhas iniciais de Vitest são baseline permitido somente até as Tasks 96–97 desta execução; qualquer falha nova bloqueia a fase.
 - `pnpm-workspace.yaml` é configuração local temporária para aprovar apenas `esbuild` e `unrs-resolver`; nunca commitar e remover na Task 98.
 - Não tocar o `.claude/` não rastreado da árvore original.
@@ -49,10 +51,13 @@ Gates direcionados usam estes comandos, reduzidos aos arquivos nomeados em cada 
 pnpm typecheck
 uv run --directory runtime ruff check .
 uv run --directory runtime lint-imports
+$env:SUPABASE_DB_URL = 'postgresql://postgres:postgres@127.0.0.1:55322/postgres'
 ```
 
 Cada task abaixo fornece o comando direcionado com o caminho literal. O gate amplo por fase repete
-os gates afetados e compara com o baseline documentado.
+os gates afetados e compara com o baseline documentado. A última linha é obrigatória na mesma sessão
+antes de qualquer pytest com marker `db`/`pipeline`; cada brief DB repete a DSN e exige confirmação
+da porta. Nunca usar o default 54322.
 
 ## Agent Launch Matrix
 
@@ -69,7 +74,9 @@ Read-only waves are `(1,2,3)`, `(4,5,6)`, `(7,8)`, then groups of at most three 
 order through 63. Task 0 runs alone because it owns stack identity/migrations. Findings return to one
 ordered queue; the controller resolves Task N completely before accepting any write for Task N+1.
 No phase advances until its differential gate and integrated review pass. Tasks 96–98 run only after
-the Task 63 review artifact is final.
+the Task 63 review artifact is final. Paralelismo cobre leitura e testes unitários sem estado; qualquer
+mutação temporária da árvore, teste DB/pipeline ou migration replay espera todos os outros workers e
+roda exclusivamente.
 
 ### Task 0: Review Phase 0 CI foundations
 
@@ -239,7 +246,9 @@ the Task 63 review artifact is final.
 ### Task 10: Review channel-status correlation
 
 **Files:**
-- Inspect: WhatsApp status webhook under `src/app/api/`
+- Inspect: `src/lib/whatsapp/webhook-processor.ts`
+- Inspect: `src/app/api/whatsapp/cloud/webhook/route.ts`
+- Inspect: `src/app/api/workers/whatsapp-webhook/route.ts`
 - Inspect: correlation migrations in `supabase/migrations/`
 - Test: `src/lib/whatsapp/__tests__/webhook-status-correlate.test.ts`
 - Test: `runtime/tests/db/test_correlate_outbox_status.py`
@@ -259,13 +268,14 @@ the Task 63 review artifact is final.
 - Inspect: `src/app/api/cron/reprocess-whatsapp-pending/route.ts`
 - Inspect: `src/lib/ai/runtime-rollout.ts`
 - Test: `src/app/api/cron/reprocess-whatsapp-pending/route.test.ts`
+- Test: `src/lib/ai/__tests__/runtime-rollout.test.ts`
 
 **Interfaces:**
 - Consumes: modo por organização para cada linha do lote.
 - Produces: runtime ignorado sem apagar `ai_pending`; legacy continua reprocessável.
 
-- [ ] Conferir `e957b389`, fase por linha e fallback de leitura.
-- [ ] Rodar `pnpm exec vitest run src/app/api/cron/reprocess-whatsapp-pending/route.test.ts`.
+- [ ] Conferir `e957b389`, fase por linha e regra: erro usa cache stale da organização; somente cache frio cai para legacy.
+- [ ] Rodar os dois Vitests nomeados; registrar a lacuna de cache `runtime` expirado + erro, que deve manter `ai_enqueued=0`.
 - [ ] Verificar contadores scanned/enqueued/failed e ausência da RPC fora do stream como fato histórico da Task 49.
 - [ ] Registrar vereditos; modo calculado por lote é Important.
 
@@ -276,13 +286,13 @@ the Task 63 review artifact is final.
 - Test: `src/lib/ai/__tests__/conversation-ai-status.test.ts`
 
 **Interfaces:**
-- Consumes: runtime mode, `ai_enabled` e `pending_response_at`.
-- Produces: badge que não aplica guards exclusivos do cloud-runner ao runtime.
+- Consumes: runtime mode, `ai_enabled`, schedule, cooldown, teto, `activate_on` e `stop_on_human_reply`.
+- Produces: status/badge com a mesma régua de guards em legacy e runtime após Tasks 30/37.
 
-- [ ] Conferir `ae34087c`, os cinco antigos `it.todo` e a divergência agente ativo/versão em produção.
+- [ ] Conferir `ae34087c` e as mudanças posteriores das Tasks 30/37 que removeram o early return do runtime.
 - [ ] Rodar `pnpm exec vitest run src/lib/ai/__tests__/conversation-ai-status.test.ts`.
-- [ ] Confirmar que legacy mantém os guards e runtime faz o early return correto.
-- [ ] Registrar a divergência de produto sem implementá-la nesta task.
+- [ ] Confirmar `activate_on`, cooldown, teto, `stop_on_human_reply` e schedule nos dois motores.
+- [ ] Classificar o contrato posterior como CURRENT, não restaurar o early return histórico.
 
 ### Task 13: Review canonical auto-disabled reasons
 
@@ -328,7 +338,7 @@ the Task 63 review artifact is final.
 
 - [ ] Conferir `6e4dbfad` e `16a5f11b` e buscar todas as cópias das frases corrigidas.
 - [ ] Rodar `pnpm exec vitest run src/lib/ai/__tests__/runtime-rollout.test.ts`.
-- [ ] Comparar cada docstring com os ramos de erro/cache, sem teste textual vazio.
+- [ ] Comparar cada docstring com os ramos de erro/cache; registrar a falta do caso cache `runtime` expirado + erro retornando `runtime`.
 - [ ] Registrar vereditos; texto histórico datado não deve ser reescrito.
 
 ### Task 16: Review real database import boundary
@@ -344,7 +354,7 @@ the Task 63 review artifact is final.
 
 - [ ] Conferir `6255fc18` e `2f55f367`, lista de módulos e exceções atuais.
 - [ ] Rodar `uv run --directory runtime lint-imports`.
-- [ ] Fazer mutação temporária num módulo coberto, provar `2 kept, 1 broken` e restaurar a árvore limpa.
+- [ ] Inspecionar as três contracts e cobertura dos módulos sem mutar a árvore compartilhada.
 - [ ] Registrar veredito separado da Task 17; uma sala não coberta é Important.
 
 ### Task 17: Review SET ROLE SQL detector
@@ -359,7 +369,7 @@ the Task 63 review artifact is final.
 
 - [ ] Conferir `b927016d`, os quatro call sites originais e a contagem atual.
 - [ ] Rodar `uv run --directory runtime pytest tests/unit/test_no_sql_outside_repository.py -m unit`.
-- [ ] Plantar `SET ROLE` temporário, provar falha e restaurar a árvore.
+- [ ] Inspecionar os casos positivos/negativos do detector sem plantar SQL na árvore compartilhada.
 - [ ] Executar gate diferencial da Fase 2 completo e lançar review integrado da fase.
 
 ### Task 18: Review crawler SSRF boundary
@@ -754,7 +764,7 @@ the Task 63 review artifact is final.
 **Interfaces:** literal pinado no loader → `JudgeContext` de responder/toucher; não é coluna nem regra do prompt.
 
 - [ ] Traçar loader → responder/toucher → judge e provar que a disclosure line do prompt não muda.
-- [ ] Rodar os testes DB/unit nomeados; adicionar prova TDD loader→flows para true/false se a auditoria confirmar a lacuna.
+- [ ] Rodar os testes DB/unit existentes e registrar a ausência da prova loader→flows como `KNOWN_GAP` da Task 63; não implementá-la neste escopo.
 - [ ] Validar true/false sem alegar coluna ou preview.
 - [ ] Executar gate diferencial da Fase 5 completo e lançar review integrado da fase.
 
