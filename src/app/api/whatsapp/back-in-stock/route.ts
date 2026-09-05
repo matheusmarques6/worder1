@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { processProductBackInStock } from '@/lib/services/whatsapp/back-in-stock-service'
 import { isInternalAuthorized } from '@/lib/internal-auth'
+import { verifyBearerToken } from '@/lib/webhook-security'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -18,6 +19,10 @@ export const maxDuration = 60
 // em src/lib/internal-auth.ts, fail-closed sem exceção de ambiente.
 
 export async function POST(request: NextRequest) {
+  if (!isInternalAuthorized(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   try {
     const body = await request.json()
 
@@ -84,10 +89,6 @@ export async function POST(request: NextRequest) {
     }
 
     // Case 2: Direct call (admin or cron) — ✅ P1 v2: requer Bearer secret
-    if (!isInternalAuthorized(request)) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
     const { organizationId, storeId, productId, variantId, productTitle, productUrl } = body
 
     if (!organizationId || !productId) {
@@ -141,7 +142,7 @@ export async function GET(request: NextRequest) {
     // fallback: accept legacy x-cron-secret header
     const cronSecret = request.headers.get('x-cron-secret')
     const expectedSecret = process.env.INTERNAL_API_SECRET || process.env.CRON_SECRET
-    if (!expectedSecret || cronSecret !== expectedSecret) {
+    if (!expectedSecret || !verifyBearerToken(cronSecret, expectedSecret)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
   }
