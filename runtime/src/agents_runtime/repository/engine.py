@@ -54,6 +54,17 @@ async def claim_conversation(
     return ClaimedConversation(last_processed_seq=row[0], version=row[1])
 
 
+async def runtime_rollout_is_enabled(
+    conn: psycopg.AsyncConnection, organization_id: UUID
+) -> bool:
+    cursor = await conn.execute(
+        "select exists (select 1 from public.ai_runtime_rollout"
+        " where organization_id = %s and mode = 'runtime')",
+        (organization_id,),
+    )
+    return bool((await cursor.fetchone())[0])
+
+
 async def release_lease(conn: psycopg.AsyncConnection, conversation_id: UUID, token: UUID) -> bool:
     cursor = await conn.execute("select internal.release_lease(%s, %s)", (conversation_id, token))
     return bool((await cursor.fetchone())[0])
@@ -95,6 +106,7 @@ async def conclude_turn(
     kind: str = "reply",
     moment_ids: tuple[UUID, ...] = (),
     otel: dict[str, Any] | None = None,
+    require_runtime: bool = False,
 ) -> TurnOutcome:
     """`content=None` means Judge 1 refused the draft: the turn concludes, the
     sequence advances and NOTHING goes out (S8, migration 20260803000003).
@@ -102,7 +114,7 @@ async def conclude_turn(
     para o preflight do sender (migrations 0007/0008). `otel` é o carrier do
     turno — a linha de outbox o carrega até o sender (9.1b, migration 0012)."""
     cursor = await conn.execute(
-        "select * from internal.conclude_turn(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+        "select * from internal.conclude_turn(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
         (
             conversation_id,
             token,
@@ -117,6 +129,7 @@ async def conclude_turn(
             kind,
             list(moment_ids),
             Jsonb(otel) if otel is not None else None,
+            require_runtime,
         ),
     )
     committed, outbound_seq, outbox_id = await cursor.fetchone()

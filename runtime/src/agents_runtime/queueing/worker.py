@@ -110,6 +110,8 @@ async def _turn(
     # FASE 1 — claim, short transaction, commit immediately.
     async with conn.transaction():
         await engine.scope_to_organization(conn, job.organization_id)
+        if not await engine.runtime_rollout_is_enabled(conn, job.organization_id):
+            return TurnResult.SUPERSEDED
         claimed = await engine.claim_conversation(
             conn, job.conversation_id, token, lease=config.conversation_lease
         )
@@ -168,6 +170,7 @@ async def _turn(
             # O carrier do TURNO (span corrente); sem tracer, o do passe do
             # coalescer segue viagem — o sender retoma o que houver.
             otel=carrier.inject() or job.otel,
+            require_runtime=True,
         )
 
     if outcome.committed:
