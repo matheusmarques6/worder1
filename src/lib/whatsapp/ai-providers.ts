@@ -35,9 +35,9 @@ export interface AIMessage {
 interface AIResponse {
   content: string;
   usage?: {
-    promptTokens: number;
-    completionTokens: number;
-    totalTokens: number;
+    promptTokens?: number;
+    completionTokens?: number;
+    totalTokens?: number;
     costUsd?: number;
   };
 }
@@ -84,9 +84,9 @@ export interface ProviderToolResult {
   /** tool calls pedidas neste passo (vazio => resposta final) */
   toolCalls: ProviderToolCall[];
   usage?: {
-    promptTokens: number;
-    completionTokens: number;
-    totalTokens: number;
+    promptTokens?: number;
+    completionTokens?: number;
+    totalTokens?: number;
     costUsd?: number;
   };
   /** sinal de rate-limit do provedor (HTTP 429) para abort gracioso no loop. */
@@ -404,9 +404,9 @@ async function callOpenRouter(config: AIConfig, messages: AIMessage[]): Promise<
   return {
     content,
     usage: {
-      promptTokens: data.usage?.prompt_tokens || 0,
-      completionTokens: data.usage?.completion_tokens || 0,
-      totalTokens: data.usage?.total_tokens || 0,
+      promptTokens: data.usage?.prompt_tokens,
+      completionTokens: data.usage?.completion_tokens,
+      totalTokens: data.usage?.total_tokens,
       costUsd: typeof data.usage?.cost === 'number' ? data.usage.cost : undefined,
     },
   };
@@ -614,9 +614,9 @@ async function callOpenAICompatWithTools(
     content: choice.content || '',
     toolCalls,
     usage: {
-      promptTokens: data.usage?.prompt_tokens || 0,
-      completionTokens: data.usage?.completion_tokens || 0,
-      totalTokens: data.usage?.total_tokens || 0,
+      promptTokens: data.usage?.prompt_tokens,
+      completionTokens: data.usage?.completion_tokens,
+      totalTokens: data.usage?.total_tokens,
       costUsd: config.provider === 'openrouter' && typeof data.usage?.cost === 'number'
         ? data.usage.cost
         : undefined,

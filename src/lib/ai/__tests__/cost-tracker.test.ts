@@ -139,4 +139,14 @@ describe('trackAiUsage', () => {
     await trackAiUsage({ organizationId: 'org-1', provider: 'openai', model: 'gpt-4o-mini', feature: 'eval_judge' })
     expect(insertMock.mock.calls[0][0].cost_usd).toBeNull()
   })
+
+  it('override ausente com contagens completas preserva a estimativa', async () => {
+    await trackAiUsage({ organizationId: 'org-1', provider: 'openai', model: 'gpt-4o-mini', feature: 'whatsapp_agent', promptTokens: 1000, completionTokens: 1000 })
+    expect(insertMock.mock.calls[0][0].cost_usd).toBe(0.00075)
+  })
+
+  it('uma contagem ausente grava custo desconhecido', async () => {
+    await trackAiUsage({ organizationId: 'org-1', provider: 'openai', model: 'gpt-4o-mini', feature: 'eval_judge', promptTokens: 1000 })
+    expect(insertMock.mock.calls[0][0].cost_usd).toBeNull()
+  })
 })

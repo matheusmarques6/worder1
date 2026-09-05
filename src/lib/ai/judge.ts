@@ -34,7 +34,7 @@ export interface JudgeVerdict {
   score: number
   /** nota textual curta do juiz */
   note: string
-  usage?: { promptTokens: number; completionTokens: number; totalTokens: number; costUsd?: number }
+  usage?: { promptTokens?: number; completionTokens?: number; totalTokens?: number; costUsd?: number }
   /** sinalizações por turno */
   flags: JudgeFlag[]
 }
@@ -166,7 +166,7 @@ export interface CaseVerdict {
   criteria: CriterionResult[]
   /** nota textual curta do juiz */
   note: string
-  usage?: { promptTokens: number; completionTokens: number; totalTokens: number; costUsd?: number }
+  usage?: { promptTokens?: number; completionTokens?: number; totalTokens?: number; costUsd?: number }
 }
 
 const JUDGE_CASE_SYSTEM_PROMPT = `Você é um avaliador rigoroso e imparcial de respostas de atendimento.

@@ -218,8 +218,8 @@ export class AIAgentEngine {
 
       await this.logUsage({
         conversationId,
-        inputTokens: llmResponse.usage?.promptTokens || 0,
-        outputTokens: llmResponse.usage?.completionTokens || 0,
+        inputTokens: llmResponse.usage?.promptTokens,
+        outputTokens: llmResponse.usage?.completionTokens,
         costUsdOverride: llmResponse.usage?.costUsd,
         responseTimeMs,
         sourcesUsed,
@@ -296,8 +296,8 @@ export class AIAgentEngine {
    */
   private async logUsage(params: {
     conversationId?: string
-    inputTokens: number
-    outputTokens: number
+    inputTokens?: number
+    outputTokens?: number
     costUsdOverride?: number | null
     responseTimeMs: number
     sourcesUsed: string[]
@@ -327,7 +327,7 @@ export class AIAgentEngine {
 
     // Atualizar estatísticas do agente (best-effort)
     if (params.success) {
-      const totalTokens = params.inputTokens + params.outputTokens
+      const totalTokens = (params.inputTokens ?? 0) + (params.outputTokens ?? 0)
       const { error: rpcError } = await this.supabase.rpc('update_agent_stats', {
         p_agent_id: this.agent.id,
         p_tokens: totalTokens,
