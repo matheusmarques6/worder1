@@ -14,16 +14,30 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const mockGetUser = vi.fn()
+const queryResults: Record<string, Array<{ data: any; error: any }>> = {}
+const queryCalls: Array<{ table: string; args: any[] }> = []
+
+function queueResult(table: string, result: { data: any; error: any }) {
+  queryResults[table] = queryResults[table] || []
+  queryResults[table].push(result)
+}
+
+function query(table: string) {
+  const chain: any = {
+    select: () => chain,
+    eq: (...args: any[]) => {
+      queryCalls.push({ table, args })
+      return chain
+    },
+    single: async () => queryResults[table]?.shift() || { data: null, error: null },
+  }
+  return chain
+}
+
 vi.mock('@supabase/auth-helpers-nextjs', () => ({
   createRouteHandlerClient: () => ({
     auth: { getUser: (...args: any[]) => mockGetUser(...args) },
-    from: () => ({
-      select: () => ({
-        eq: () => ({
-          single: async () => ({ data: null, error: null }),
-        }),
-      }),
-    }),
+    from: (table: string) => query(table),
   }),
 }))
 
@@ -38,6 +52,8 @@ function req(): any {
 describe('/api/whatsapp/agents/me — fail-closed', () => {
   beforeEach(() => {
     mockGetUser.mockReset()
+    for (const table of Object.keys(queryResults)) delete queryResults[table]
+    queryCalls.length = 0
   })
 
   it('sem sessão: 401, e o corpo não traz isAdmin: true', async () => {
@@ -61,6 +77,7 @@ describe('/api/whatsapp/agents/me — fail-closed', () => {
   })
 
   it('usuário autenticado não-agente: continua admin, acesso total', async () => {
+    queueResult('profiles', { data: { organization_id: 'org-1' }, error: null })
     mockGetUser.mockResolvedValue({
       data: { user: { id: 'u1', email: 'dona@loja.com', user_metadata: {} } },
       error: null,
@@ -76,6 +93,12 @@ describe('/api/whatsapp/agents/me — fail-closed', () => {
   })
 
   it('usuário agente: mantém as permissões dele, igual a hoje', async () => {
+    queueResult('profiles', { data: { organization_id: 'org-1' }, error: null })
+    queueResult('agents', {
+      data: { id: 'a1', name: 'Agente', email: 'agente@loja.com', role: 'agent', status: 'online', organization_id: 'org-1' },
+      error: null,
+    })
+    queueResult('agent_permissions', { data: null, error: { code: 'PGRST116' } })
     mockGetUser.mockResolvedValue({
       data: {
         user: {
@@ -95,5 +118,54 @@ describe('/api/whatsapp/agents/me — fail-closed', () => {
     expect(body.isAdmin).toBe(false)
     expect(body.permissions).not.toBe(null)
     expect(body.permissions.agentId).toBe('a1')
+    expect(queryCalls).toContainEqual({ table: 'agents', args: ['organization_id', 'org-1'] })
+  })
+
+  it('erro real de permissões é não-2xx e nunca devolve defaults permissivos', async () => {
+    queueResult('profiles', { data: { organization_id: 'org-1' }, error: null })
+    queueResult('agents', { data: { id: 'a1', organization_id: 'org-1' }, error: null })
+    queueResult('agent_permissions', { data: null, error: { code: '42501', message: 'RLS falhou' } })
+    mockGetUser.mockResolvedValue({
+      data: { user: { id: 'u2', email: 'agente@loja.com', user_metadata: { is_agent: true, agent_id: 'a1' } } },
+      error: null,
+    })
+
+    const res: any = await GET(req())
+    const body = await res.json()
+
+    expect(res.ok).toBe(false)
+    expect(body.isAdmin).not.toBe(true)
+    expect(body.permissions).toBe(null)
+  })
+
+  it('erro ao buscar agente é não-2xx e nunca devolve permissões', async () => {
+    queueResult('profiles', { data: { organization_id: 'org-1' }, error: null })
+    queueResult('agents', { data: null, error: { code: '42501', message: 'agents indisponível' } })
+    mockGetUser.mockResolvedValue({
+      data: { user: { id: 'u2', email: 'agente@loja.com', user_metadata: { is_agent: true, agent_id: 'a1' } } },
+      error: null,
+    })
+
+    const res: any = await GET(req())
+    const body = await res.json()
+
+    expect(res.ok).toBe(false)
+    expect(body.isAdmin).not.toBe(true)
+    expect(body.permissions).toBe(null)
+  })
+
+  it('usuário autenticado sem organização de perfil nunca é admin', async () => {
+    queueResult('profiles', { data: { organization_id: null }, error: null })
+    mockGetUser.mockResolvedValue({
+      data: { user: { id: 'u1', email: 'dona@loja.com', user_metadata: {} } },
+      error: null,
+    })
+
+    const res: any = await GET(req())
+    const body = await res.json()
+
+    expect(res.ok).toBe(false)
+    expect(body.isAdmin).not.toBe(true)
+    expect(body.permissions).toBe(null)
   })
 })
