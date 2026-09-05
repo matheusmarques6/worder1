@@ -120,10 +120,10 @@ qualquer org que não seja a da sessão), a mesma que o app Next.js já grava em
 
 ### Tuning (defaults sensatos; a suíte pipeline roda com eles apertados)
 
-`AGENTS_WORKERS`, `AGENTS_VT_MS`, `AGENTS_LEASE_MS`, `AGENTS_WORK_HEARTBEAT_MS`,
-`AGENTS_COALESCER_TICK_MS`, `AGENTS_SENDER_POLL_MS`, `AGENTS_SEND_LEASE_MS`,
-`AGENTS_REVIEW_MS`, `AGENTS_BACKOFF_BASE_MS`, `AGENTS_BACKOFF_CAP_MS`,
-`AGENTS_PROCESS_HEARTBEAT_MS` — ver `config.py`.
+- `AGENTS_WORKERS`, `AGENTS_VT_MS`, `AGENTS_LEASE_MS`, `AGENTS_WORK_HEARTBEAT_MS`, `AGENTS_COALESCER_TICK_MS`, `AGENTS_SENDER_POLL_MS`, `AGENTS_SEND_LEASE_MS`, `AGENTS_REVIEW_MS`, `AGENTS_BACKOFF_BASE_MS`, `AGENTS_BACKOFF_CAP_MS`, `AGENTS_PROCESS_HEARTBEAT_MS`, `AGENTS_BUSY_RETRY_MS`, `AGENTS_IDLE_PAUSE_MS` — ver `config.py`. Os 12 `*_MS` vêm de `config_from_env`, que existe para UM consumidor e diz isso na própria docstring: a suíte `-m pipeline`. Produção não seta nenhum e fica com a tabela do `CLAUDE.md` — por isso nenhum deles entra em `.env.bancada.example` / `.env.piloto.example`.
+- `AGENTS_HUMANIZE_DELAYS` — o 13º knob de `config_from_env`, booleano e não `_MS`: opt-**out** do ritmo de digitação, default LIGADO. **Só `off`, `0` e `false` desligam** — vazio, `no` ou `nao` deixam ligado, em silêncio. Consumido em produção pelo sender, ANDado com a preferência por org.
+- `AGENTS_TURN_LLM_CALL_LIMIT` — teto de chamadas de LLM por turno; default 8 em `metering.DEFAULT_TURN_LLM_CALL_LIMIT`, lido por `default_turn_llm_call_limit` (`responder.py`). Knob de **custo**, não de fila, e estava ausente daqui, do `render.yaml` e de todo `.env.*.example`.
+- `AGENTS_RUBRICS_DIR` — diretório de rubricas; ausente = as que vieram no pacote instalado (`default_rubrics_directory`, `responder.py`). Sem efeito em produção hoje.
 
 ## Checklist de subida
 
