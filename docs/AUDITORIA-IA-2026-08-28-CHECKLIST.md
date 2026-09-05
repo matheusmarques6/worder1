@@ -4026,7 +4026,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
 
   **2. `src/app/api/ai/respond/route.ts` (409) + `route.test.ts` (192) = 601 linhas, 4 ids.** Zero
   chamadores, inclusive nos shell scripts. O próprio teste declara a órfandade e o dono
-  (`route.test.ts:2-3`), e os itens **23** (`:408-416`) e **85** (`:4991-4993`) apontam para o 61 —
+  (`route.test.ts:2-3`), e os itens **23** (`:408-416`) e **85** (`:5002-5004`) apontam para o 61 —
   duas atribuições explícitas, nenhuma disputa. **Nenhuma tabela fica sem leitor.**
 
   **3. `src/app/api/ai/knowledge/route.ts` (196) + `route.test.ts` (134) = 330 linhas, 3 ids.** Zero
@@ -4311,13 +4311,24 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `internal.mirror_outbound_to_inbox` (`supabase/migrations/20260813000003_sender_preflight.sql:228-271`),
   insere em `whatsapp_cloud_messages` sem a coluna `ai_agent_id` e no `update` de
   `whatsapp_cloud_conversations` só toca `last_message_at`/`last_message_preview`/
-  `last_message_direction`/`updated_at` — nunca `ai_agent_id`. Efeito na loja: para org migrada, o
-  card do agente (`src/components/whatsapp/analytics/ai/AIAgentCard.tsx`) mostra tokens, latência
-  média e contagem de conversas/mensagens congelados no valor de antes da migração — a mesma classe
+  `last_message_direction`/`updated_at` — nunca `ai_agent_id`. Efeito na loja: para org migrada, as
+  quatro colunas ficam congeladas no valor de antes da migração — a mesma classe
   "zero permanente" do item 37, só que no dashboard de estatísticas em vez de propostas/kappa; e
   `src/lib/ai/proposals.ts` filtra por `ai_agent_id` em `whatsapp_cloud_messages` (`:132,160,166`),
   então sem o carimbo essas consultas também ficam sem linha para atribuir ao agente certo em org
   migrada.
+
+  **Corrigido pelo item 61 — a SUPERFÍCIE que este item citava não existia, e agora nem o arquivo.**
+  A frase acima dizia que o lojista via os contadores congelados **no
+  `src/components/whatsapp/analytics/ai/AIAgentCard.tsx`**. Medido pelo grafo do
+  `deletion-set.test.ts`: aquele componente era **inalcançável a partir de qualquer entrada do
+  Next** — nenhuma loja o via, e a árvore `analytics/` inteira estava no mesmo estado; a página que
+  consome analytics (`src/app/(dashboard)/whatsapp/analytics/page.tsx:336`) faz
+  `fetch('/api/whatsapp/analytics…')` e não importava nada dali. O item 61 o **apagou**. **O defeito
+  deste item continua real e inteiro** — as colunas de `ai_agents` seguem sem escritor no runtime, e
+  `proposals.ts:132,160,166` segue sem linha para atribuir —, o que mudou é que **a superfície
+  citada nunca foi a prova**. Quem for consertar precisa escolher onde o número aparece, porque hoje
+  não aparece em lugar nenhum.
 
   **Acrescentado pelo item 55 (commit `c76a29bb`) — uma instância nova da mesma classe, que este item
   não cobria.** A deleção da cadeia `actions-engine` tirou o **único escritor** de

@@ -57,6 +57,11 @@ const DELETION_SET: string[] = [
   // `api/ai/test/webhook` — o herdeiro é `cloud-runner.ts` + a rota
   // `api/ai/test/cloud-webhook`, e os `curl` dos dois scripts foram
   // repontados no mesmo commit, senão o teste de rota abaixo ficaria vermelho.
+  //
+  // Onda 6 (item 61): `components/whatsapp/analytics/ai/` inteiro — entrou como
+  // prefixo de diretório com os cinco arquivos ainda no lugar, o teste provou
+  // que nenhuma entrada do Next os alcança, e saiu junto com a linha do barril
+  // `analytics/index.ts:5`, sem a qual o `tsc --noEmit` quebraria.
 ];
 
 /**
@@ -64,9 +69,9 @@ const DELETION_SET: string[] = [
  * código vivo cita a URL.
  */
 const DELETION_SET_ROUTES: string[] = [
-  // Onda 6 (item 61): `api/whatsapp/conversations/[id]/ai`, `api/ai/respond` e
-  // `api/ai/knowledge` passaram por aqui. Cada uma entrou com o arquivo ainda
-  // no lugar — é essa rodada que prova o alcance, e ela passou —, e saiu da
+  // Onda 6 (item 61): `api/whatsapp/conversations/[id]/ai`, `api/ai/respond`,
+  // `api/ai/knowledge` e `api/ai/agents/[id]/integrations` (só a base) passaram
+  // por aqui. Cada uma entrou com o arquivo ainda no lugar — é essa rodada que prova o alcance, e ela passou —, e saiu da
   // lista junto com o arquivo. A lista volta a ficar vazia porque é o teste de
   // "todo caminho listado existe no repo" que impede que ela apodreça com nome
   // de arquivo já morto.
