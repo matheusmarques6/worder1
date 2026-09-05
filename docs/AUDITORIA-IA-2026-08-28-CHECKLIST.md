@@ -3972,10 +3972,146 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   foi para o **item 63** (lacunas de teste), que é o dono pelo defeito.
 
 - [ ] **61. Rotas órfãs** `[relatado]`
-  `whatsapp/conversations/[id]/ai` (duplicata insegura do toggle, apagar primeiro), `ai/respond`,
-  `ai/knowledge`, `ai/models` + `hooks/useAgents.ts`, `ai/agents/[id]/integrations` (base),
-  `components/whatsapp/analytics/ai/*`, forwarders `whatsapp/webhook` e `whatsapp/meta/webhook`,
-  executor `action_whatsapp_ai` (`node-executors.ts:1857`).
+  *Enunciado original: `whatsapp/conversations/[id]/ai` (duplicata insegura do toggle, apagar
+  primeiro), `ai/respond`, `ai/knowledge`, `ai/models` + `hooks/useAgents.ts`,
+  `ai/agents/[id]/integrations` (base), `components/whatsapp/analytics/ai/*`, forwarders
+  `whatsapp/webhook` e `whatsapp/meta/webhook`, executor `action_whatsapp_ai`
+  (`node-executors.ts:1857`).*
+
+  **Toda citação de linha deste item está ancorada em `b87992f1`**, medida com o arquivo aberto — a
+  lição dos itens 44 e 45: reancorar sem declarar volta a mentir no commit seguinte. O selo era
+  `[relatado]` e a medição mostrou por quê: das oito alegações **quatro estavam erradas** (alvos 1,
+  5, 6 e 7) e a do alvo 8 estava **certa na linha e sem caminho**. "Sem chamador" aqui é o que o
+  grafo do `deletion-set.test.ts` mede — mesmo `ENTRYPOINT_RE`, `resolveSpec`, `urlMatcher` com o
+  lookahead `(?![-\w/])` e `SHELL_FILES` —, não `grep` a olho.
+
+  **1. `src/app/api/whatsapp/conversations/[id]/ai/route.ts` (133 linhas, zero chamadores) — o
+  veredito "apagar primeiro" está certo; a explicação, não.** Não há chave de serviço nem
+  organização vinda do corpo: **isso é o item 86**, outro defeito. A rota usa
+  `createRouteHandlerClient` (import `:7`, instâncias `:17` e `:49`), que é **cliente de sessão**, e
+  **não tem `.eq('organization_id', …)` em nenhuma das quatro queries** (`:21`/`:23`, `:58`/`:60`,
+  `:87`/`:93`, `:109`/`:116` — todas filtram só por `id`). A canônica
+  `src/app/api/whatsapp/inbox/conversations/[id]/bot/route.ts` (160 linhas) usa `requireOrgFromAuth`
+  (`:5`, `:14`, `:60`) e filtra por org em **todas** (`:30`, `:109`).
+  **E "duplicata" engana, porque a diferença é de comportamento.** A canônica chama a RPC
+  `cancel_pending_ai_response` ao desligar (`bot/route.ts:124-127`) — o freio que cancela o turno já
+  agendado — e grava `recordAiStep(AI_RUN_STEPS.SKIPPED)` (`:132-140`), o rastro visível no chat. A
+  órfã não faz nenhum dos dois: quem a chamasse desligaria a IA **sem cancelar o turno na fila e sem
+  deixar rastro**. A interface já migrou: `src/hooks/useInboxConversations.ts:184` e
+  `src/hooks/useInboxContact.ts:326` chamam a canônica, as duas por `authedFetch`.
+  **Os dois cenários de RLS — e é por isso que este alvo não é "só limpeza".**
+  `whatsapp_cloud_conversations` é criada em
+  `supabase/migrations/20260812000001_agents_baseline_prereqs.sql:522-555` **sem** `enable row level
+  security`, e não há policy dela em `supabase/migrations/` (grep por RLS e por policy da tabela no
+  stream = **zero**). O único sítio que a liga é `supabase/migrations-archive/001_enable_rls.sql:97`,
+  com as policies de org geradas em `:308` — **fora do stream aplicado**, mesma classe dos itens 49
+  e 55. O repositório **não pode provar** se aquele archive foi aplicado em produção, e a resposta
+  muda o que a rota é: **(a) se foi**, ela é redundante e sem freio; **(b) se não foi**, ela é
+  **escrita cross-tenant autenticada** — um usuário logado da loja A desliga a IA de uma conversa da
+  loja B informando o uuid, contido só pelo 401 de sessão do `middleware.ts` (a rota não está em
+  `publicApiRoutes`). Nos dois cenários apagar é certo; no (b) é urgente. **Ninguém tire este alvo do
+  escopo achando que é higiene.**
+  **Achado de produto que NÃO vira item novo, de propósito:** o defeito **desta rota** morre com a
+  deleção, e a família já tem donos (itens 86, 80 e 71; molde de conserto no item 3, com
+  `requireOrgFromAuth`). **O que NÃO morre com a deleção** é a ausência de RLS de
+  `whatsapp_cloud_conversations` no stream versionado — essa é da classe do item 49 e continua
+  aberta depois deste item.
+
+  **2. `src/app/api/ai/respond/route.ts` (409) + `route.test.ts` (192) = 601 linhas, 4 ids.** Zero
+  chamadores, inclusive nos shell scripts. O próprio teste declara a órfandade e o dono
+  (`route.test.ts:2-3`), e os itens **23** (`:405-409`) e **85** (`:4983-4984`) apontam para o 61 —
+  duas atribuições explícitas, nenhuma disputa. **Nenhuma tabela fica sem leitor.**
+
+  **3. `src/app/api/ai/knowledge/route.ts` (196) + `route.test.ts` (134) = 330 linhas, 3 ids.** Zero
+  chamadores. **Três tabelas ficam sem leitor** — `knowledge_bases`, `knowledge_documents` e
+  `knowledge_chunks`, lidas exclusivamente por esta rota. **Nenhum `drop` é proposto e nada entra em
+  `TABLES_MARKED_FOR_DROP`**: as três não existem em `supabase/migrations/`, só em `sql/` e em
+  `supabase/migrations-archive/001_enable_rls.sql:326-328` — DDL fora do stream **pode estar aplicada
+  em produção** (régua dos itens 55 e 58). **Registrar, não liberar.**
+
+  **4. `src/app/api/ai/models/route.ts` (682) + `src/hooks/useAgents.ts` (401) — o caso de SEGUNDA
+  ORDEM, e o mais fácil de errar.** A rota tem **um** chamador, e é o hook (`useAgents.ts:288-289`);
+  o hook é alcançável **só** pelo barril `src/hooks/index.ts:34-35` — nenhum componente importa
+  `useAgents`, `useAIModels` ou `useApiKeys`, e nenhum dos seis importadores de `@/hooks` pega os
+  cinco tipos do `:35`. É **letra por letra** o precedente que o próprio teste documenta em
+  `deletion-set.test.ts:74-76` (`useAgent.ts`), então o par vai para `DELETION_SET_PENDING` +
+  `DELETION_SET_PENDING_ROUTES`, e **`hooks/index.ts:34-35` sai no MESMO commit**, senão
+  `tsc --noEmit` quebra por re-export de módulo inexistente — é o ponto cego **(b)** do cabeçalho do
+  teste (`:24-25`).
+  **Segunda ordem verificada: nada mais cai junto.** `useAgents.ts` também chama
+  `/api/whatsapp/agents` e `/api/api-keys`, e as duas têm chamadores vivos. `ai_models` fica sem
+  leitor — **mesma regra do alvo 3: registrar, não derrubar.**
+
+  **5. `src/app/api/ai/agents/[id]/integrations/route.ts` (195 linhas, zero chamadores) — e SÓ ela.**
+  O item diz "(base)", e é a base que sai. **`…/integrations/[integrationId]/sync/route.ts` (306) NÃO
+  sai**: está protegida **por nome** em `KEPT_WITHOUT_CALLER` (`deletion-set.test.ts:136-139`,
+  *"sync de produtos Shopify → ai_agent_chunks; o pacote B conta com ele"*), e o `it.each` de
+  `:368-370` afirma que o arquivo continua existindo — apagá-la seria falha vermelha e violação de
+  decisão anterior. **`…/integrations/[integrationId]/route.ts` (183) também NÃO sai**: está sem
+  chamador real — o único "caller" medido é o `console.error` de `sync/route.ts:192`, cuja string de
+  log contém a URL-pai como prefixo —, mas está **fora do recorte deste item**. Medida e com
+  destinatário no fechamento. **Estreitar uma deleção com evidência é seguro; alargar não seria**
+  (`:3544`), e alargar aqui apagaria código que o item nunca nomeou.
+  O consumidor histórico das três era `IntegrationsTab.tsx`, que **já morreu**
+  (`grep -rn IntegrationsTab src/` = zero); as rotas ficaram. Apagando só a base,
+  `ai_agent_integrations` continua lida pelas outras duas: **nenhuma tabela fica sem leitor aqui.**
+
+  **6. `src/components/whatsapp/analytics/ai/*` — 1039 linhas, e a linha do barril vai junto.**
+  `AIAgentCard.tsx` 244, `AIKPICards.tsx` 203, `AIPerformanceChart.tsx` 369,
+  `AIProviderBreakdown.tsx` 219, `index.ts` 4. **`src/components/whatsapp/analytics/index.ts:5`
+  (`export * from './ai';`) sai no MESMO commit**, senão `tsc --noEmit` quebra — o mesmo ponto cego
+  (b). Quem consome analytics de verdade hoje é
+  `src/app/(dashboard)/whatsapp/analytics/page.tsx:336`, que faz `fetch('/api/whatsapp/analytics…')`
+  e **não importa** nenhum desses componentes.
+  **Medido e deixado de fora porque o item não os nomeia:** `analytics/campaigns/*` (977),
+  `analytics/shared/*` (221) e o barril `analytics/index.ts` (8) **também são inalcançáveis** —
+  árvore inteira **2245 linhas**. Mesma disciplina do item 56, que carregou um campo morto porque o
+  brief mandava mover, não podar. Os números vão no fechamento, com dono.
+
+  **7. Forwarders `src/app/api/whatsapp/webhook/route.ts` (67) e
+  `src/app/api/whatsapp/meta/webhook/route.ts` (67) — SAEM do escopo, e a prova que vale é CÓDIGO
+  VIVO, não documento.** Os dois só encaminham verbatim para `/api/whatsapp/cloud/webhook`.
+  Os cabeçalhos vivos dizem o que eles são: `webhook/route.ts:10-12` (*"Mantido vivo só para que
+  qualquer config do Meta Business Suite que ainda aponte para esta URL continue funcionando até o
+  usuário atualizar o painel"*) e `meta/webhook/route.ts:8-11` (o mesmo, em inglês). Somado ao
+  **limite de medição**: quem configura o destino é o painel da Meta, **fora deste repositório**, e a
+  documentação de produto mandou por muito tempo cadastrar a URL legada (`docs/WHATSAPP-CRM.md:52`
+  e `:251`, `PROGRESSO.md:98`). **Um webhook sem chamador aqui pode estar vivíssimo em produção**, e
+  apagá-lo derruba recebimento de mensagem de quem não atualizou o painel.
+  `docs/superpowers/plans/whatsapp-scale/phase7-cleanup-observability.md:253` entra como
+  **corroboração e origem do portão, não como decisão vigente**: a frase é escopada *"in this PR"* e
+  o plano a que ela pertence nunca foi executado — o passo `:138`, marcado **"now"**, mandava trocar
+  os `console.warn` por `wlog.warn('whatsapp.webhook.deprecated_hit', …)` e **não landou**
+  (`webhook/route.ts:32,51` e `meta/webhook/route.ts:32,51` ainda são `console.warn`;
+  `grep deprecated_hit src/` = **zero**). Usá-la como decisão viva repetiria o erro dos briefs 52,
+  55 e 57. O que ela dá de útil é o portão: `deprecated_hit == 0`.
+  **A formulação honesta, e ela NÃO é a do item 60:** ali a pergunta *"apagar?"* tinha um **não**
+  definitivo (RNF-022). Aqui é **"não agora"** — a pergunta que decidiria está aberta porque **a
+  medição que a responderia nunca foi construída**. Isso ainda justifica sair do escopo; é outra
+  frase, e o item **92** é o dono do desbloqueio.
+  **A armadilha, para quem um dia incluir este alvo** (é a mesma do item 58): listar
+  `/api/whatsapp/webhook` em `DELETION_SET_ROUTES` obriga a tirar os `curl` de
+  `scripts/test-ai-system.sh:265` e `scripts/test-commands.sh:129` **e** a reescrever o comentário
+  `src/middleware.ts:112-113` — mantendo a regex `:114`, que é o que torna
+  `/api/whatsapp/cloud/webhook` pública e continua necessária. Sem isso a suíte vai a **5 falhas**,
+  não 4, pela resolução por `SHELL_FILES`.
+
+  **8. Executor `action_whatsapp_ai` — SAI do escopo. A linha do item estava CERTA; faltava o
+  caminho.** `node-executors.ts:1857` é literalmente `action_whatsapp_ai: {` — **citação boa**. O
+  item dá a linha **sem prefixo nenhum**, e o palpite natural (`src/lib/workflow/`) não existe:
+  acrescente **`src/lib/automation/`** (o arquivo tem 2535 linhas). A linha estava certa e o caminho
+  estava ausente — não errado.
+  **Por que não sai:** `src/lib/automation/execution-engine.ts:338-339` despacha por **string vinda
+  do JSON do fluxo salvo no banco** (`node.data.nodeType || node.type`), e `:356-363` transforma nó
+  não-trigger sem executor em **erro de execução**, parando o fluxo inteiro se
+  `workflow.settings.errorHandling === 'stop'`. **Os fluxos vivem no banco; o repositório não os
+  vê** — e é exatamente isso que os comentários D8 dizem existir
+  (`node-executors.ts:1854-1856` *"fica vivo para fluxos antigos até o pós-cutover"*;
+  `src/components/flow-builder/nodes/nodeTypes.ts:472-473` *"definição fica para fluxos antigos
+  renderizarem"*; `src/components/flow-builder/Sidebar.tsx:127-128` *"fluxos antigos seguem
+  renderizando"* — três arquivos, três frases, não a mesma). Apagar converteria "nó que funcionava"
+  em "automação quebrada", para fluxos que o repositório não consegue enumerar. O achado de produto
+  que mora aí ganhou dono: item **90**.
 
 - [ ] **62. Env drift** `[confirmado]`
   Lidas em código e ausentes do `.env.example`: `AGENTS_RUNTIME_URL` e `AGENTS_PREVIEW_TOKEN`
