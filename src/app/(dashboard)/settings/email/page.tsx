@@ -68,8 +68,25 @@ export default function DomainsSettingsPage() {
   const onWizardDone = async () => {
     const d = wiz?.d
     setWiz(null)
-    await dom.reload(true)
-    if (d) senderRef.current?.setDomain(d.domain)
+    const list = await dom.reload(true)
+    void list
+    if (!d || !storeId) return
+    // Domínio verificado vira o remetente padrão da loja (mesmo nome antes do @).
+    const cur = se.data?.email_settings || {}
+    const local = (cur.default_sender_email || '').split('@')[0] || se.data?.suggested_local_part || 'contato'
+    try {
+      const fresh = await api<{ domains: DomainRow[] }>(`/api/email/domains?storeId=${encodeURIComponent(storeId)}`)
+      const row = fresh.domains.find((x) => x.id === d.id)
+      if (row?.status === 'verified') {
+        await api('/api/settings/store-email', { method: 'PATCH', json: { storeId, email_settings: { default_sender_email: `${local}@${d.domain}` } } })
+        se.reload(true)
+        toast.success(`${d.domain} é o remetente padrão`, `Envios de ${storeName} saem de ${local}@${d.domain}.`)
+      } else {
+        senderRef.current?.setDomain(d.domain)
+      }
+    } catch (e: any) {
+      toast.warning('Domínio verificado, mas o remetente não foi trocado', e.message)
+    }
   }
   const wizardAction = async (d: DomainRow, action: 'warmup' | 'links' | 'dmarc') => {
     if (action === 'warmup') { await api('/api/email/domains/warmup', { method: 'POST', json: { domain_id: d.id, enabled: true } }); await dom.reload(true); toast.success('Warm-up ativado', 'Dia 1 de 14 · limite de 200 e-mails hoje.') }

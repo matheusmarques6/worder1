@@ -70,6 +70,10 @@
       "schedule": "0 3 * * *"
     },
     {
+      "path": "/api/cron/verify-email-domains",
+      "schedule": "*/15 * * * *"
+    },
+    {
       "path": "/api/cron/resolve-ab-winners",
       "schedule": "*/10 * * * *"
     },

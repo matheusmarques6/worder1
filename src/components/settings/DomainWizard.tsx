@@ -65,7 +65,9 @@ export function AddDomainModal({ onClose, onNext, busy, error }: { onClose: () =
   )
 }
 
-type Chk = Record<string, 'ok' | 'wait' | 'spin' | undefined>
+type RecState = 'ok' | 'found' | 'mismatch' | 'missing' | 'spin'
+type Chk = Record<string, { state: RecState; observed?: string[] } | undefined>
+interface VerifyResp { domain: DomainRow; records: Array<{ key: string; type: string; host: string; state: 'ok' | 'found' | 'missing' | 'mismatch'; dns_observed: string[] }>; dmarc: { found: boolean; value: string | null; policy: string | null }; resend_error: string | null; our_status: string }
 
 const GUIDES: Record<string, string> = {
   Cloudflare: 'DNS → Records → Add record. Deixe o proxy (nuvem laranja) desligado para os registros TXT e MX.',
@@ -99,27 +101,26 @@ export function DomainWizard({ domain, storeName, initialStep = 1, onClose, onDo
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const recs = recordsFor(d)
 
-  const verify = useCallback(async () => {
+  const verify = useCallback(async (mode: 'verify' | 'poll' = 'verify') => {
     setChecking(true)
     setVerifyErr(null)
-    setChk(Object.fromEntries(recs.map((r) => [r.id, 'spin'])) as Chk)
+    setChk((o) => Object.fromEntries(recs.map((r) => [r.id, o[r.id]?.state === 'ok' ? o[r.id] : { state: 'spin' as RecState }])) as Chk)
     try {
-      const [v, dm] = await Promise.all([
-        api<{ domain: DomainRow }>('/api/email/domains/verify', { method: 'POST', json: { domainId: d.id } }),
-        api<{ checks: { dmarc: { ok: boolean } } }>(`/api/deliverability/domain-check?domain=${encodeURIComponent(d.domain)}`).catch(() => null),
-      ])
+      const v = await api<VerifyResp>('/api/email/domains/verify', { method: 'POST', json: { domainId: d.id, mode } })
       const nd = v.domain || d
       setD(nd)
       const next: Chk = {}
       for (const r of recordsFor(nd)) {
-        if (r.id === 'dmarc') next[r.id] = dm?.checks?.dmarc?.ok ? 'ok' : 'wait'
-        else next[r.id] = r.status === 'verified' || nd.status === 'verified' ? 'ok' : 'wait'
+        if (r.id === 'dmarc') { next[r.id] = { state: v.dmarc?.found ? 'ok' : 'missing', observed: v.dmarc?.value ? [v.dmarc.value] : [] }; continue }
+        const hit = (v.records || []).find((x) => x.host.toLowerCase() === r.host.toLowerCase() && x.type.toUpperCase() === r.k.toUpperCase())
+        next[r.id] = hit ? { state: nd.status === 'verified' ? 'ok' : hit.state, observed: hit.dns_observed } : { state: nd.status === 'verified' ? 'ok' : 'missing' }
       }
       setChk(next)
+      if (v.resend_error) setVerifyErr(`DNS conferido, mas o Resend não respondeu (${v.resend_error}). Tentamos de novo em 30 s.`)
       if (nd.status === 'verified') onVerified?.(nd)
     } catch (e: any) {
       setVerifyErr(e.message || 'Não foi possível consultar o DNS agora.')
-      setChk(Object.fromEntries(recs.map((r) => [r.id, 'wait'])) as Chk)
+      setChk((o) => Object.fromEntries(recs.map((r) => [r.id, o[r.id]?.state === 'ok' ? o[r.id] : { state: 'missing' as RecState }])) as Chk)
     } finally {
       setChecking(false)
     }
@@ -128,13 +129,13 @@ export function DomainWizard({ domain, storeName, initialStep = 1, onClose, onDo
   // Passo 3: re-verifica a cada 30 s enquanto falta algo.
   useEffect(() => {
     if (step !== 3) return
-    const allOk = recs.filter((r) => r.required).every((r) => chk[r.id] === 'ok')
+    const allOk = d.status === 'verified' || recs.filter((r) => r.required).every((r) => chk[r.id]?.state === 'ok')
     if (allOk || checking) return
-    timer.current = setTimeout(() => { verify() }, 30_000)
+    timer.current = setTimeout(() => { verify('poll') }, 30_000)
     return () => { if (timer.current) clearTimeout(timer.current) }
-  }, [step, chk, checking, verify, recs])
+  }, [step, chk, checking, verify, recs, d.status])
 
-  useEffect(() => { if (initialStep === 3) verify() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (initialStep === 3) verify('verify') }, []) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', onKey)
@@ -143,7 +144,8 @@ export function DomainWizard({ domain, storeName, initialStep = 1, onClose, onDo
     return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = prev }
   }, [onClose])
 
-  const allOk = d.status === 'verified' || recs.filter((r) => r.required).every((r) => chk[r.id] === 'ok')
+  const allOk = d.status === 'verified' || recs.filter((r) => r.required).every((r) => chk[r.id]?.state === 'ok')
+  const anyFound = recs.some((r) => r.required && chk[r.id]?.state === 'found')
   const Cp = ({ id, text }: { id: string; text: string }) => (
     <button type="button" className={'cpb' + (c === id ? ' ok' : '')} onClick={() => cp(id, text)}>{c === id ? <><I n="check" s={14} />Copiado</> : <><I n="copy" s={14} />Copiar</>}</button>
   )
@@ -201,7 +203,7 @@ export function DomainWizard({ domain, storeName, initialStep = 1, onClose, onDo
                 <button type="button" className="btn" onClick={() => setStep(1)}>Voltar</button>
                 <div className="grp">
                   <button type="button" className="btn" onClick={() => cp('all', recs.map((r) => `${r.k}\t${r.host}\t${r.pri ? r.pri + '\t' : ''}${r.val}`).join('\n'))}>{c === 'all' ? 'Copiado' : 'Copiar todos'}</button>
-                  <button type="button" className="btn btn-primary" onClick={() => { setStep(3); verify() }}>Já adicionei, verificar<I n="arrowR" s={15} /></button>
+                  <button type="button" className="btn btn-primary" onClick={() => { setStep(3); verify('verify') }}>Já adicionei, verificar<I n="arrowR" s={15} /></button>
                 </div>
               </div>
             </>
@@ -212,23 +214,27 @@ export function DomainWizard({ domain, storeName, initialStep = 1, onClose, onDo
               <p>Consultamos o DNS de {d.domain} agora. Se algo ainda não propagou, deixe aberto — checamos de novo a cada 30 segundos.</p>
               <div className="vres">
                 {recs.map((r) => {
-                  const st = chk[r.id]
+                  const st = chk[r.id]?.state
+                  const obs = chk[r.id]?.observed || []
+                  const ic = st === 'ok' ? 'ok' : st === 'found' ? 'ok' : st === 'missing' || st === 'mismatch' ? 'wait' : 'spin'
+                  const label = st === 'ok' ? 'Verificado' : st === 'found' ? 'No DNS · confirmando no Resend' : st === 'mismatch' ? 'Valor diferente no DNS' : st === 'missing' ? 'Ainda não propagou' : 'Consultando…'
                   return (
                     <div key={r.id} className="vrow">
-                      <span className={'ic ' + (st === 'ok' ? 'ok' : st === 'wait' ? 'wait' : 'spin')}><I n={st === 'ok' ? 'check' : st === 'wait' ? 'clock' : 'refresh'} s={14} className={st === 'spin' || !st ? 'spin' : undefined} /></span>
-                      <div><b>{r.nm}</b><span style={{ fontFamily: 'var(--mono)' }}>{r.host}</span></div>
-                      <span className="r">{st === 'ok' ? 'Encontrado' : st === 'wait' ? 'Ainda não propagou' : 'Consultando…'}</span>
+                      <span className={'ic ' + ic}><I n={st === 'ok' ? 'check' : st === 'found' ? 'check' : st === 'missing' || st === 'mismatch' ? 'clock' : 'refresh'} s={14} className={!st || st === 'spin' ? 'spin' : undefined} /></span>
+                      <div><b>{r.nm}</b><span style={{ fontFamily: 'var(--mono)' }}>{r.host}</span>{st === 'mismatch' && obs[0] && <span style={{ fontFamily: 'var(--mono)', color: 'var(--neg)' }} title={obs.join(' | ')}>encontrado: {obs[0].slice(0, 70)}{obs[0].length > 70 ? '…' : ''}</span>}</div>
+                      <span className="r" style={st === 'found' ? { color: 'var(--pos)' } : undefined}>{label}</span>
                     </div>
                   )
                 })}
               </div>
               {verifyErr && <div className="field-err" style={{ marginTop: 12 }}>{verifyErr}</div>}
-              {!checking && chk.dmarc === 'wait' && allOk && <div className="tip"><I n="faqHelp" s={16} /><div>DMARC é opcional para começar. Você pode concluir agora e o Worder avisa quando o registro for encontrado.</div></div>}
-              {!checking && !allOk && Object.keys(chk).length > 0 && <div className="tip"><I n="clock" s={16} /><div>Registros novos podem levar de alguns minutos a 48 h para propagar. Confira se copiou <b>nome</b> e <b>valor</b> exatamente — e, no Cloudflare, se o proxy está desligado.</div></div>}
+              {!checking && allOk && chk.dmarc && chk.dmarc.state !== 'ok' && <div className="tip"><I n="faqHelp" s={16} /><div>DMARC é opcional para começar. Você pode concluir agora — o Worder continua checando e avisa por e-mail quando o registro for encontrado.</div></div>}
+              {!checking && !allOk && anyFound && <div className="tip"><I n="check" s={16} /><div>Os registros já estão no DNS público. Falta só o Resend confirmar — costuma levar poucos minutos. Pode fechar; verificamos a cada 15 min e avisamos por e-mail quando concluir.</div></div>}
+              {!checking && !allOk && !anyFound && Object.keys(chk).length > 0 && <div className="tip"><I n="clock" s={16} /><div>Registros novos podem levar de alguns minutos a 48 h para propagar. Confira se copiou <b>nome</b> e <b>valor</b> exatamente — e, no Cloudflare, se o proxy está desligado. Não precisa ficar aqui: checamos a cada 15 min e avisamos por e-mail.</div></div>}
               <div className="wiz-foot">
                 <button type="button" className="btn" onClick={() => setStep(2)}>Voltar aos registros</button>
                 <div className="grp">
-                  <button type="button" className="btn" onClick={verify} disabled={checking}><I n="refresh" s={14} className={checking ? 'spin' : undefined} />Verificar de novo</button>
+                  <button type="button" className="btn" onClick={() => verify('verify')} disabled={checking}><I n="refresh" s={14} className={checking ? 'spin' : undefined} />Verificar de novo</button>
                   <button type="button" className="btn btn-primary" disabled={!allOk} onClick={() => setStep(4)}>Concluir<I n="arrowR" s={15} /></button>
                 </div>
               </div>
@@ -236,7 +242,7 @@ export function DomainWizard({ domain, storeName, initialStep = 1, onClose, onDo
           )}
           {step === 4 && (
             <>
-              <div className="done-hero"><div className="ic"><I n="check" s={28} sw={2.4} /></div><h2>{d.domain} está verificado</h2><p style={{ margin: '8px auto 0', maxWidth: 460 }}>Você já pode usar remetentes @{d.domain}. Definimos ele como padrão da {storeName} — pode mudar em Remetente padrão.</p></div>
+              <div className="done-hero"><div className="ic"><I n="check" s={28} sw={2.4} /></div><h2>{d.domain} está verificado</h2><p style={{ margin: '8px auto 0', maxWidth: 460 }}>Você já pode usar remetentes @{d.domain}. Ao ir para Domínios, ele vira o padrão da {storeName} — pode mudar em Remetente padrão.</p></div>
               <div className="rec">
                 <div className="rec-h"><b>Próximos passos recomendados</b></div>
                 {([
