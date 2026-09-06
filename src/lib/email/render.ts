@@ -8,6 +8,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { rewriteImagesForEmail } from './image-rewrite'
+import { fitProductImage, fitProductImageStyle } from './product-image'
 import { getAppBaseUrl } from '@/lib/app-url'
 import { stampHtmlLinks, type LinkParamsResolver } from '@/lib/tracking/link-params'
 
@@ -814,6 +815,9 @@ export async function resolveCartBlocks(
     const isRight = cfg.layoutType === 'image-right'
     const font = cfg.font || 'Arial, sans-serif'
     const imgW = cfg.imageWidth || 200
+    // Sem altura configurada, a caixa é quadrada — que é o que o editor
+    // sempre desenhou.
+    const imgH = cfg.imageHeight || imgW
     const imgR = cfg.imageBorderRadius || 0
     const btnAlign = cfg.buttonAlign || 'left'
     const btnDisplay = btnAlign === 'full' ? 'display:block;width:100%;text-align:center;' : `display:inline-block;`
@@ -884,11 +888,18 @@ export async function resolveCartBlocks(
       // `object-fit: cover` so the image fills without distortion.
       // Fallback (no URL) renders a soft neutral placeholder instead of a
       // jarring gray box.
+      // A caixa da imagem. Antes só a largura era fixa e a altura ia
+      // livre: um frasco alto virava 600px de imagem ao lado de duas
+      // linhas de texto, enquanto o editor desenhava um quadrado. Agora
+      // a foto encaixa na caixa — reduzida na CDN da Shopify quando dá,
+      // e segurada pelo CSS quando não dá.
       const imgSize = isVert ? '100%' : `${imgW}px`
+      const boxW: number | '100%' = isVert ? '100%' : imgW
+      const fitted = fitProductImage(imgUrl, { width: imgW, height: imgH })
       const imgCell = cfg.showImage ? `<td width="${isVert ? '100%' : imgW}" style="vertical-align:middle;${isVert ? 'padding:0 0 12px 0;' : 'padding:0;'}">
         <a href="${prodUrl}" style="display:block;text-decoration:none;">${imgUrl
-          ? `<img src="${imgUrl}" alt="${title}" width="${isVert ? '100%' : imgW}" style="display:block;width:${imgSize};height:auto;max-width:100%;border-radius:${imgR}px;border:0;outline:none;" />`
-          : `<div style="width:${imgSize};${isVert ? 'aspect-ratio:1/1;min-height:160px;' : `height:${imgW}px;`}background:#F3F4F6;border-radius:${imgR}px;display:flex;align-items:center;justify-content:center;color:#9CA3AF;font-size:11px;">imagem</div>`
+          ? `<img src="${fitted}" alt="${title}" style="${fitProductImageStyle({ width: boxW, height: imgH })}border-radius:${imgR}px;border:0;outline:none;" />`
+          : `<div style="width:${imgSize};height:${imgH}px;background:#F3F4F6;border-radius:${imgR}px;display:flex;align-items:center;justify-content:center;color:#9CA3AF;font-size:11px;">imagem</div>`
         }</a>
       </td>` : ''
 

@@ -764,6 +764,24 @@ export function BlockProperties({ block, onChange, onSaveAsReusable, selectedSub
             <p className="text-[10px] text-zinc-400 mt-1">Empilha todos os produtos do gatilho. Use 0 para não limitar.</p>
           </div>
 
+          {/* Tamanho da imagem — a foto encaixa nesta caixa mantendo a
+              proporção. Sem isto a altura ia livre e um produto alto
+              (um frasco, um tubo) esticava a linha inteira. */}
+          {p.showImage !== false && (
+            <div>
+              <p className="text-[12px] font-medium text-zinc-700 mb-2">Imagem do produto</p>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Largura (px)">
+                  <NumberInput value={p.imageWidth || 200} onChange={v => onChange('imageWidth', v)} min={60} max={400} />
+                </Field>
+                <Field label="Altura (px)">
+                  <NumberInput value={p.imageHeight || p.imageWidth || 200} onChange={v => onChange('imageHeight', v)} min={60} max={400} />
+                </Field>
+              </div>
+              <p className="text-[11px] text-zinc-500 mt-1.5">A foto encaixa dentro da caixa sem cortar nem esticar.</p>
+            </div>
+          )}
+
           {/* Product details checkboxes */}
           <div>
             <p className="text-[12px] font-medium text-zinc-700 mb-2">Detalhes do produto</p>
