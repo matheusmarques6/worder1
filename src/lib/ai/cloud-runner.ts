@@ -436,7 +436,7 @@ export async function maybeRunAgentForCloudConversation(
 
   if (agentErr) {
     console.error('[cloud-runner] erro ao resolver agente:', agentErr.message);
-    return { replied: false, transferred: false, error: agentErr.message };
+    return { replied: false, transferred: false, error: agentErr.message, failure: 'transient' };
   }
   if (!agentRows || agentRows.length === 0) {
     await skip('Nenhum agente de IA ativo para este canal');
