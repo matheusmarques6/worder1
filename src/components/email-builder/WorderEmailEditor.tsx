@@ -24,6 +24,7 @@ import { EmailSwitcher, type EmailSiblingItem } from './modals/EmailSwitcher'
 import { useEmailAutosave, type SaveStatus } from './hooks/useEmailAutosave'
 import { useStoreStore } from '@/stores'
 import { UniversalScopePanel, useUniversalUsage, UniversalIcon } from './universal/UniversalBits'
+import { stableJson } from './universal/universal-doc'
 
 // Import dinâmico nos dois sentidos: o modal renderiza este mesmo editor
 // para abrir o universal sozinho, e o ciclo estático quebraria o build.
@@ -980,13 +981,21 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
             const row = byId.get(sec._savedSectionId)
             const saved = row?.block_json
             if (saved?._kind === 'section' && saved.section) {
-              changed = true
-              return {
+              // O nome vem da biblioteca, não do que ficou guardado no
+              // e-mail: renomear na lista tem de aparecer na marca da
+              // seção, e o valor antigo em cache nunca mais saía.
+              const next = {
                 ...saved.section,
                 id: sec.id,
                 _savedSectionId: sec._savedSectionId,
-                _savedSectionName: sec._savedSectionName || row.name,
+                _savedSectionName: row.name || sec._savedSectionName,
               } as EmailSection
+              // Só conta como alteração se o conteúdo for outro. Marcar
+              // sempre fazia todo e-mail com universal nascer "sujo" e
+              // gravar sozinho na abertura.
+              if (stableJson(next) === stableJson(sec)) return sec
+              changed = true
+              return next
             }
             if (!row) {
               // Library row deleted → strip the dangling link so the UI
@@ -1004,13 +1013,15 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
                 const row = byId.get(b._savedBlockId)
                 const saved = row?.block_json
                 if (saved && !saved._kind) {
-                  changed = true
-                  return {
+                  const next = {
                     ...saved,
                     id: b.id,
                     _savedBlockId: b._savedBlockId,
-                    _savedBlockName: b._savedBlockName || row.name,
+                    _savedBlockName: row.name || b._savedBlockName,
                   } as EmailBlock
+                  if (stableJson(next) === stableJson(b)) return b
+                  changed = true
+                  return next
                 }
                 if (!row) {
                   changed = true
@@ -1225,9 +1236,7 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
     onSave: async () => {
       try {
         const html = renderDocumentToHtml(doc)
-        const success = await onSave(doc as any, html)
-        if (success) setSavedLibraryVersion(v => v + 1)
-        return !!success
+        return !!(await onSave(doc as any, html))
       } catch { return false }
     },
     isDirty,

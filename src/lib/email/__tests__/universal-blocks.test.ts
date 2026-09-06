@@ -13,7 +13,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createFakeSupabase } from '@/tests/fake-supabase'
 
 const fake = createFakeSupabase()
-vi.mock('@/lib/supabase-admin', () => ({ supabaseAdmin: { from: (t: string) => fake.from(t) } }))
+vi.mock('@/lib/supabase-admin', () => ({
+  supabaseAdmin: { from: (t: string) => fake.from(t), rpc: (n: string, a: any) => fake.rpc(n, a) },
+}))
 
 import {
   savedKind, savedContent, wrapContent, stripLinks,
@@ -314,5 +316,60 @@ describe('histórico', () => {
   it('conteúdo vazio não vira versão', async () => {
     await snapshotVersion(ORG, RODAPE, null)
     expect(fake.tables['saved_block_versions']).toHaveLength(0)
+  })
+})
+
+describe('contagem da biblioteca', () => {
+  it('usa o agregado do banco quando ele existe', async () => {
+    fake.defineRpc('saved_block_usage_counts', () => ([
+      { saved_block_id: RODAPE, email_count: 3 },
+      { saved_block_id: BOTAO, email_count: 1 },
+    ]))
+    const counts = await usageCounts(ORG)
+    expect(counts[RODAPE]).toBe(3)
+    expect(counts[BOTAO]).toBe(1)
+    // E não caiu na leitura linha a linha.
+    expect(fake.calls.some(c => c[0] === 'email_universal_usage')).toBe(false)
+  })
+
+  it('sem a função no banco, lê a visão e conta igual', async () => {
+    // Sem defineRpc o falso responde "function does not exist", como um
+    // banco onde a migração ainda não rodou.
+    const counts = await usageCounts(ORG)
+    expect(counts[RODAPE]).toBe(3)
+    expect(counts[BOTAO]).toBe(1)
+  })
+
+  it('organização vazia devolve nada, sem consultar', async () => {
+    expect(await usageCounts('')).toEqual({})
+  })
+})
+
+describe('e-mail antigo, só com a coluna `design`', () => {
+  const T_LEGADO = 'a0000000-0000-4000-8000-00000000000f'
+
+  beforeEach(() => {
+    const legado = emailComRodape(T_LEGADO)
+    fake.tables['email_templates'].push({
+      id: T_LEGADO, organization_id: ORG, name: 'Antigo',
+      design_json: null, design: legado.design_json,
+    })
+    fake.tables['email_universal_usage'].push({
+      organization_id: ORG, saved_block_id: RODAPE, template_id: T_LEGADO,
+      template_name: 'Antigo', kind: 'section',
+    })
+  })
+
+  it('a propagação alcança também esse e-mail', async () => {
+    const row = fake.tables['saved_blocks'].find(r => r.id === RODAPE)!
+    const escritos = await propagateToTemplates(ORG, RODAPE, row as any)
+    expect(escritos).toBe(4)
+
+    const t = fake.tables['email_templates'].find(r => r.id === T_LEGADO)!
+    // A coluna nova passa a valer...
+    expect(t.design_json.sections[1].columns[0].blocks[0].props.contentHtml).toContain('Rodapé novo')
+    // ...e a antiga fica em dia, porque ainda há quem leia dela.
+    expect(t.design.sections[1].columns[0].blocks[0].props.contentHtml).toContain('Rodapé novo')
+    expect(t.html).toContain('Rodapé novo')
   })
 })

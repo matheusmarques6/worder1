@@ -17,7 +17,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createFakeSupabase } from '@/tests/fake-supabase'
 
 const fake = createFakeSupabase()
-vi.mock('@/lib/supabase-admin', () => ({ supabaseAdmin: { from: (t: string) => fake.from(t) } }))
+vi.mock('@/lib/supabase-admin', () => ({
+  supabaseAdmin: { from: (t: string) => fake.from(t), rpc: (n: string, a: any) => fake.rpc(n, a) },
+}))
 
 import { resolveSavedBlocks, hasUniversalContent } from '../render'
 

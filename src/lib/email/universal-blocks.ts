@@ -99,26 +99,48 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  */
 export async function usageCounts(orgId: string): Promise<Record<string, number>> {
   const out: Record<string, number> = {}
+  if (!orgId) return out
+
+  // Agregado no banco. Lendo a visão linha a linha, a contagem esbarra
+  // no teto de mil linhas do PostgREST e passa a mentir em silêncio
+  // conforme a biblioteca cresce.
   try {
-    const { data } = await supabaseAdmin
-      .from('email_universal_usage')
-      .select('saved_block_id, template_id')
-      .eq('organization_id', orgId)
-    // Conta E-MAIL, não vínculo: um e-mail com o mesmo rodapé no topo e
-    // no rodapé é um e-mail. O selo diz "N e-mails" e tem de bater com
-    // o número que o painel e a confirmação mostram.
-    const seen = new Map<string, Set<string>>()
-    for (const row of data || []) {
-      const id = (row as any).saved_block_id
-      const tpl = (row as any).template_id
-      if (!id || !tpl) continue
-      if (!seen.has(id)) seen.set(id, new Set())
-      seen.get(id)!.add(tpl)
+    const { data, error } = await supabaseAdmin.rpc('saved_block_usage_counts', { org: orgId })
+    if (!error && Array.isArray(data)) {
+      for (const row of data) {
+        const id = (row as any).saved_block_id
+        if (id) out[id] = Number((row as any).email_count) || 0
+      }
+      return out
     }
+  } catch { /* cai na leitura direta abaixo */ }
+
+  // Banco sem a função ainda: lê a visão paginando, para não truncar.
+  try {
+    const seen = new Map<string, Set<string>>()
+    const PAGE = 1000
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabaseAdmin
+        .from('email_universal_usage')
+        .select('saved_block_id, template_id')
+        .eq('organization_id', orgId)
+        .range(from, from + PAGE - 1)
+      if (error || !data || data.length === 0) break
+      for (const row of data) {
+        const id = (row as any).saved_block_id
+        const tpl = (row as any).template_id
+        if (!id || !tpl) continue
+        if (!seen.has(id)) seen.set(id, new Set())
+        seen.get(id)!.add(tpl)
+      }
+      if (data.length < PAGE) break
+    }
+    // Conta E-MAIL, não vínculo: um e-mail com o mesmo rodapé no topo e
+    // no fim é um e-mail. O selo diz "N e-mails" e tem de bater com o
+    // número que o painel e a confirmação mostram.
     for (const [id, templates] of seen) out[id] = templates.size
   } catch {
-    // Visão nova pode não existir num banco antigo: a tela some com o
-    // selo de uso em vez de quebrar.
+    // Nem visão nem função: a tela some com o selo em vez de quebrar.
   }
   return out
 }
@@ -242,9 +264,11 @@ async function rewriteTemplates(
   }
   if (ids.length === 0) return 0
 
+  // `design` junto: alguns e-mails antigos só têm essa coluna, e sem
+  // lê-la a propagação passaria por cima deles em silêncio.
   const { data: templates } = await supabaseAdmin
     .from('email_templates')
-    .select('id, design_json')
+    .select('id, design_json, design')
     .eq('organization_id', orgId)
     .in('id', ids)
 
@@ -259,10 +283,10 @@ async function rewriteTemplates(
       : { _savedBlockId: savedId, _savedBlockName: opts.name ?? target._savedBlockName ?? row.name }
   }
 
-  let written = 0
-  for (const t of templates || []) {
-    const design = t.design_json as any
-    if (!design?.sections) continue
+  const writeOne = async (t: any): Promise<boolean> => {
+    const legacyOnly = !t.design_json && !!t.design
+    const design = (t.design_json ?? t.design) as any
+    if (!design?.sections) return false
     let touched = false
 
     design.sections = design.sections.map((sec: any) => {
@@ -286,12 +310,15 @@ async function rewriteTemplates(
       return sec
     })
 
-    if (!touched) continue
+    if (!touched) return false
 
     // O html renderizado tem de acompanhar: é dele que a automação
     // envia. Se o render falhar, o design ainda é salvo — melhor um
     // html velho do que perder a alteração inteira.
     const patch: Record<string, any> = { design_json: design }
+    // E-mail que só tinha a coluna antiga: a nova passa a valer, mas a
+    // antiga fica em dia também, porque ainda há leitor dela por aí.
+    if (legacyOnly) patch.design = design
     try {
       patch.html = renderDocumentToHtml(design)
     } catch (err) {
@@ -303,7 +330,18 @@ async function rewriteTemplates(
       .update(patch)
       .eq('id', t.id)
       .eq('organization_id', orgId)
-    if (!error) written++
+    return !error
+  }
+
+  // Em lotes: um rodapé em vinte e três e-mails, um de cada vez, é uma
+  // espera de segundos com a pessoa olhando o botão. Cinco por vez
+  // encurta sem abrir conexões demais.
+  let written = 0
+  const list = templates || []
+  const LOTE = 5
+  for (let i = 0; i < list.length; i += LOTE) {
+    const results = await Promise.all(list.slice(i, i + LOTE).map((t) => writeOne(t).catch(() => false)))
+    written += results.filter(Boolean).length
   }
   return written
 }

@@ -13,6 +13,10 @@ export type Row = Record<string, any>
 
 export interface FakeSupabase {
   from: (table: string) => any
+  /** Chama uma função registrada com `defineRpc`; sem registro, devolve erro. */
+  rpc: (name: string, args?: Row) => Promise<{ data: any; error: any }>
+  /** Registra o retorno de uma função do banco para os testes. */
+  defineRpc: (name: string, fn: (args: Row) => any) => void
   tables: Record<string, Row[]>
   /** Chamadas registradas: [tabela, método, argumentos]. */
   calls: Array<[string, string, any[]]>
@@ -50,10 +54,13 @@ export function createFakeSupabase(): FakeSupabase {
   const tables: Record<string, Row[]> = {}
   const uniques: Record<string, string[][]> = {}
   const calls: Array<[string, string, any[]]> = []
+  const rpcs: Record<string, (args: Row) => any> = {}
 
   function builder(table: string) {
     const filters: Array<(r: Row) => boolean> = []
     let limitN: number | null = null
+    let rangeFrom: number | null = null
+    let rangeTo: number | null = null
     let single = false
     let head = false
     let orderCol: string | null = null
@@ -90,7 +97,7 @@ export function createFakeSupabase(): FakeSupabase {
     }))
     chain('order', (col: string, opts?: { ascending?: boolean }) => { orderCol = col; orderAsc = opts?.ascending !== false })
     chain('limit', (n: number) => { limitN = n })
-    chain('range', () => {})
+    chain('range', (from: number, to: number) => { rangeFrom = from; rangeTo = to })
     chain('single', () => { single = true })
     chain('maybeSingle', () => { single = true })
     chain('update', (patch: any) => { op = 'update'; payload = patch })
@@ -134,6 +141,7 @@ export function createFakeSupabase(): FakeSupabase {
             return (x > y ? 1 : -1) * (orderAsc ? 1 : -1)
           })
         }
+        if (rangeFrom != null) rows = rows.slice(rangeFrom, (rangeTo ?? rows.length) + 1)
         if (limitN != null) rows = rows.slice(0, limitN)
         result = head
           ? { data: null, count: rows.length, error: null }
@@ -150,8 +158,22 @@ export function createFakeSupabase(): FakeSupabase {
     tables,
     calls,
     from: (table: string) => builder(table),
+    defineRpc(name, fn) { rpcs[name] = fn },
+    async rpc(name, args = {}) {
+      calls.push(['<rpc>', name, [args]])
+      const fn = rpcs[name]
+      // Sem registro: como um banco que ainda não tem a função. É o que
+      // faz o código exercitar o caminho de reserva.
+      if (!fn) return { data: null, error: { code: '42883', message: `function ${name} does not exist` } }
+      return { data: fn(args), error: null }
+    },
     seed(table, rows) { tables[table] = rows.map((r) => ({ ...r })) },
     unique(table, cols) { uniques[table] = [...(uniques[table] || []), cols] },
-    reset() { for (const k of Object.keys(tables)) delete tables[k]; for (const k of Object.keys(uniques)) delete uniques[k]; calls.length = 0 },
+    reset() {
+      for (const k of Object.keys(tables)) delete tables[k]
+      for (const k of Object.keys(uniques)) delete uniques[k]
+      for (const k of Object.keys(rpcs)) delete rpcs[k]
+      calls.length = 0
+    },
   }
 }

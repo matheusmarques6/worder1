@@ -81,6 +81,21 @@ export function docToUniversal(docOut: Record<string, any>, kind: UniversalKind)
   return clean
 }
 
+/**
+ * Serialização com as chaves em ordem, para comparar dois pedaços do
+ * documento por conteúdo. `JSON.stringify` puro depende da ordem em que
+ * as chaves foram criadas, e o mesmo rodapé escrito por caminhos
+ * diferentes gera ordens diferentes — a comparação diria "mudou" sempre.
+ */
+export function stableJson(value: any): string {
+  return JSON.stringify(value, (_k, v) => {
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+      return Object.keys(v).sort().reduce((acc: any, k) => { acc[k] = v[k]; return acc }, {})
+    }
+    return v
+  })
+}
+
 /** Avisa as outras abas que a biblioteca mudou, para elas re-hidratarem. */
 export function broadcastUniversalSaved(id: string) {
   try {

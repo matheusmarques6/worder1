@@ -23,7 +23,7 @@ import {
   kindLabel, kindNoun, EMPTY_USAGE, type Usage,
 } from '../universal/UniversalBits'
 import {
-  universalToDoc, docToUniversal, universalKindOf, broadcastUniversalSaved,
+  universalToDoc, docToUniversal, universalKindOf, broadcastUniversalSaved, stableJson,
   type UniversalKind,
 } from '../universal/universal-doc'
 import type { EmailDocument } from '../config/types'
@@ -97,7 +97,7 @@ export default function UniversalEditorModal({ savedId, onClose, onSaved, onOpen
   // O ponto de partida da comparação, refeito quando o universal troca
   // ou quando um salvamento passa a ser o novo conteúdo em vigor.
   useEffect(() => {
-    baseline.current = design ? JSON.stringify(design.sections) : ''
+    baseline.current = design ? stableJson(design.sections) : ''
     setDirty(false)
   }, [design])
 
@@ -144,7 +144,7 @@ export default function UniversalEditorModal({ savedId, onClose, onSaved, onOpen
       broadcastUniversalSaved(savedId)
       setSaved((prev) => (prev ? { ...prev, block_json: body, name: data.block?.name || prev.name } : prev))
       setJustSaved(written)
-      baseline.current = JSON.stringify(docOut?.sections ?? [])
+      baseline.current = stableJson(docOut?.sections ?? [])
       setDirty(false)
       setTimeout(() => setJustSaved(0), 4000)
       reloadUsage()
@@ -304,7 +304,7 @@ export default function UniversalEditorModal({ savedId, onClose, onSaved, onOpen
           autosave={false}
           onDocChange={(d: any) => {
             setLiveDoc(d)
-            setDirty(JSON.stringify(d?.sections ?? []) !== baseline.current)
+            setDirty(stableJson(d?.sections ?? []) !== baseline.current)
           }}
           onSave={handleSave}
           onBack={requestClose}
