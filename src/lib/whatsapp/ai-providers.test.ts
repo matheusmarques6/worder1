@@ -30,6 +30,26 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+describe('OpenRouter — custo factual', () => {
+  const openrouter = { provider: 'openrouter' as const, apiKey: 'or-key', model: 'google/new-model' };
+
+  it.each([0, 0.123, undefined])('preserva usage.cost=%s sem tools', async (cost) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true, status: 200,
+      json: async () => ({ choices: [{ message: { content: 'oi' } }], usage: { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3, ...(cost === undefined ? {} : { cost }) } }),
+    }));
+    expect((await callAI(openrouter, [{ role: 'user', content: 'oi' }])).usage?.costUsd).toBe(cost);
+  });
+
+  it('preserva usage.cost na rodada com tools', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true, status: 200,
+      json: async () => ({ choices: [{ message: { content: 'oi', tool_calls: [] } }], usage: { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3, cost: 0.123 } }),
+    }));
+    expect((await callAIWithTools(openrouter, [{ role: 'user', content: 'oi' }], [])).usage?.costUsd).toBe(0.123);
+  });
+});
+
 describe('callAI/gemini — transporte da API key', () => {
   it('URL montada nao contem a chave (nem key=, nem qualquer outro param)', async () => {
     const fetchMock = vi.fn().mockResolvedValue(geminiTextResponse());

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { TOOL_CATALOG } from '../tools/catalog'
+import { TOOL_CATALOG, toolCatalogForRuntimeMode } from '../tools/catalog'
 import { ALL_TOOLS } from '../tools/registry'
 
 describe('TOOL_CATALOG', () => {
@@ -22,5 +22,17 @@ describe('TOOL_CATALOG', () => {
       expect(entry.label.length).toBeGreaterThan(0)
       expect(entry.description.length).toBeGreaterThan(0)
     }
+  })
+
+  it('no runtime oferece apenas search_knowledge', () => {
+    expect(toolCatalogForRuntimeMode('runtime').map((tool) => tool.name)).toEqual([
+      'search_knowledge',
+    ])
+  })
+
+  it('no legacy preserva o catálogo completo na ordem atual', () => {
+    expect(toolCatalogForRuntimeMode('legacy').map((tool) => tool.name)).toEqual(
+      TOOL_CATALOG.map((tool) => tool.name),
+    )
   })
 })

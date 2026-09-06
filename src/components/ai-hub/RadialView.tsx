@@ -9,6 +9,7 @@ import {
   HUB_AREAS, ORBIT_POS, hubAreaDone, hubDoneCount,
   type HubAreaId, type HubState,
 } from '@/lib/ai/agent-hub'
+import type { RuntimeMode } from '@/lib/ai/runtime-rollout'
 import AreaFields from './AreaFields'
 
 /**
@@ -34,11 +35,12 @@ export interface RadialViewProps {
   onChange: (next: HubState) => void
   organizationId: string
   agentId: string | null
+  runtimeMode: RuntimeMode
 }
 
 interface PreviewBlock { kind: string; text: string }
 
-export default function RadialView({ hub, onChange, organizationId, agentId }: RadialViewProps) {
+export default function RadialView({ hub, onChange, organizationId, agentId, runtimeMode }: RadialViewProps) {
   const [selected, setSelected] = useState<HubAreaId | null>(null)
   const [showPrompt, setShowPrompt] = useState(false)
   const [preview, setPreview] = useState<PreviewBlock[] | null>(null)
@@ -194,7 +196,7 @@ export default function RadialView({ hub, onChange, organizationId, agentId }: R
             </div>
             <div className="hub-drawer-body">
               <AreaFields area={area.id} hub={hub} onChange={onChange}
-                organizationId={organizationId} agentId={agentId} />
+                organizationId={organizationId} agentId={agentId} runtimeMode={runtimeMode} />
             </div>
           </div>
         )}

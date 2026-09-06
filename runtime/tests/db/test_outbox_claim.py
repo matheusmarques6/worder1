@@ -235,6 +235,35 @@ class TestLastInboundWamid:
         (row,) = claim(admin, uuid.uuid4())
         assert row[11] == "wamid.newer"
 
+    def test_the_wamid_matches_the_claimed_outbox_channel(
+        self, admin: psycopg.Connection, two_tenants: TwoTenants, thread: Thread
+    ) -> None:
+        create_message(
+            admin,
+            two_tenants.a.id,
+            thread,
+            direction="inbound",
+            seq=1,
+            provider_message_id="wamid.whatsapp",
+        )
+        admin.execute(
+            """
+            insert into public.messages
+                (organization_id, conversation_id, direction, seq, channel, author_type,
+                 content, provider_message_id)
+            values (%s, %s, 'inbound', 2, 'email', 'contact', %s, 'email.newer')
+            """,
+            (
+                two_tenants.a.id,
+                thread.conversation_id,
+                psycopg.types.json.Jsonb({"text": "email mais novo"}),
+            ),
+        )
+        create_outbox_item(admin, two_tenants.a.id, thread)
+
+        (row,) = claim(admin, uuid.uuid4())
+        assert row[11] == "wamid.whatsapp"
+
     def test_an_outbound_message_never_counts_as_the_last_inbound(
         self, admin: psycopg.Connection, two_tenants: TwoTenants, thread: Thread
     ) -> None:

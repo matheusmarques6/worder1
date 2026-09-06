@@ -38,16 +38,6 @@ export async function POST(request: NextRequest) {
 
     // 3. Ler body como texto (necessário para validação HMAC)
     const rawBody = await request.text();
-    let payload: any;
-    
-    try {
-      payload = JSON.parse(rawBody);
-    } catch {
-      return NextResponse.json(
-        { error: 'Invalid JSON payload' },
-        { status: 400 }
-      );
-    }
 
     console.log(`📦 Shopify webhook received: ${topic} from ${shopDomain} (event: ${eventId || 'unknown'})`);
 
@@ -103,6 +93,16 @@ export async function POST(request: NextRequest) {
     }
 
     // 6. Verificar se evento está habilitado
+    let payload: any;
+    try {
+      payload = JSON.parse(rawBody);
+    } catch {
+      return NextResponse.json(
+        { error: 'Invalid JSON payload' },
+        { status: 400 }
+      );
+    }
+
     const eventEnabled = checkEventEnabled(topic, store);
     if (!eventEnabled) {
       console.log(`Event ${topic} is disabled for ${shopDomain}`);

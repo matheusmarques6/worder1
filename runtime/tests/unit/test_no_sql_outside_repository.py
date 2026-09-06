@@ -32,6 +32,10 @@ _SQL_START = re.compile(
     r"|GRANT|REVOKE|WITH|COPY|SET\s+LOCAL|SET\s+ROLE)\b",
     re.IGNORECASE,
 )
+_SQL_LEADING_TRIVIA = re.compile(
+    r"^(?:\s+|--[^\r\n]*(?:\r\n|\r|\n|$)|/\*.*?\*/)*",
+    re.DOTALL,
+)
 
 
 def _docstring_nodes(tree: ast.AST) -> set[int]:
@@ -60,7 +64,7 @@ def _violations(source: str) -> list[str]:
             continue
         if id(node) in docstrings:
             continue
-        if _SQL_START.match(node.value):
+        if _SQL_START.match(_SQL_LEADING_TRIVIA.sub("", node.value, count=1)):
             found.append(f"line {node.lineno}: {node.value.strip()[:60]!r}")
     return found
 
@@ -132,6 +136,8 @@ class TestTheDetectorItself:
         # entrada listados em _KNOWN_SET_ROLE_DEBT.
         assert _violations('q = "set role " + role\n')
         assert _violations('q = "SET ROLE tenant_reader"\n')
+        assert _violations('q = "/* role */ SET ROLE worker_role"\n')
+        assert _violations('q = "-- role\\nSET ROLE worker_role"\n')
 
     def test_ignores_a_docstring_quoting_sql(self) -> None:
         assert not _violations('"""SELECT max(seq)+1 is forbidden — see ADR-04."""\n')

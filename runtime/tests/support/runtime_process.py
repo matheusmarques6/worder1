@@ -53,6 +53,7 @@ class RuntimeProcess:
             # the harness's choice, not a default the process invents. A test
             # that wants another responder overrides it through `extra_env`.
             "AGENTS_RESPONDER": "tests.support.constant_reply:create_responder",
+            "AGENTS_TOUCHER": "tests.support.constant_reply:create_toucher",
             "PYTHONPATH": str(RUNTIME_ROOT),
             **TINY_INTERVALS,
             **self._extra_env,

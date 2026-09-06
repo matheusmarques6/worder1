@@ -436,7 +436,7 @@ export async function maybeRunAgentForCloudConversation(
 
   if (agentErr) {
     console.error('[cloud-runner] erro ao resolver agente:', agentErr.message);
-    return { replied: false, transferred: false, error: agentErr.message };
+    return { replied: false, transferred: false, error: agentErr.message, failure: 'transient' };
   }
   if (!agentRows || agentRows.length === 0) {
     await skip('Nenhum agente de IA ativo para este canal');
@@ -539,7 +539,17 @@ export async function maybeRunAgentForCloudConversation(
   if (maxMessages > 0) {
     // Mesma consulta que o badge do inbox usa (conversation-ai-status.ts) —
     // compartilhada para os dois nunca discordarem sobre por que o bot calou.
-    const count = await countBotMessages(organizationId, conversation.id);
+    let count: number;
+    try {
+      count = await countBotMessages(organizationId, conversation.id);
+    } catch (error) {
+      return {
+        replied: false,
+        transferred: false,
+        failure: 'transient',
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
 
     if (count >= maxMessages) {
       await skip(`Limite de ${maxMessages} resposta(s) por conversa atingido`);
@@ -550,7 +560,18 @@ export async function maybeRunAgentForCloudConversation(
   // stop_on_human_reply: humano já respondeu manualmente nesta conversa.
   if (behavior.stop_on_human_reply !== false) {
     // Idem: predicado compartilhado com conversation-ai-status.ts.
-    if (await hasHumanReply(organizationId, conversation.id)) {
+    let humanReplied: boolean;
+    try {
+      humanReplied = await hasHumanReply(organizationId, conversation.id);
+    } catch (error) {
+      return {
+        replied: false,
+        transferred: false,
+        failure: 'transient',
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+    if (humanReplied) {
       // Guard PERMANENTE por conversa: uma unica mensagem manual no passado
       // silencia o agente para sempre nela. Sem este passo o inbox nao tinha
       // como explicar o silencio — o badge continua "Bot Ativo", porque

@@ -152,6 +152,42 @@ class TestTheSearchOnlyReadsSpacesItUnderstands:
     exatamente assim que a divergência ada-002 contra 3-small passou despercebida.
     """
 
+    def test_ts_rag_rpc_excludes_legacy_space_even_with_an_identical_vector(
+        self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+    ) -> None:
+        agent_id = create_agent(admin, tenant)
+        query = an_embedding()
+        create_knowledge_chunk(
+            admin,
+            tenant,
+            agent_id=agent_id,
+            content="legacy vector",
+            embedding=query,
+            embedding_space="openai:text-embedding-ada-002",
+        )
+        current_chunk = create_knowledge_chunk(
+            admin,
+            tenant,
+            agent_id=agent_id,
+            content="current vector",
+            embedding=query,
+            embedding_space="openai:text-embedding-3-small",
+        )
+
+        # Exercise the TS reader's real RPC and role, not the runtime repository.
+        with psycopg.connect(dsn) as conn:
+            conn.execute("set local role service_role")
+            found = conn.execute(
+                """
+                select chunk_id from public.search_agent_knowledge(
+                    %s, %s, %s::vector, 0.7, 5
+                )
+                """,
+                (agent_id, tenant, query),
+            ).fetchall()
+
+        assert found == [(current_chunk,)]
+
     async def test_a_chunk_from_a_foreign_space_never_comes_back(
         self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
     ) -> None:

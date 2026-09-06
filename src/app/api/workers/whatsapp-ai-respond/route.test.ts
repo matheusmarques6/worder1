@@ -26,6 +26,10 @@ vi.mock('@/lib/whatsapp/alerts', () => ({
 }))
 
 const mockRunner = vi.fn()
+const mockEnqueue = vi.fn()
+vi.mock('@/lib/queue', () => ({
+  enqueueWhatsAppAiRespond: (...args: any[]) => mockEnqueue(...args),
+}))
 // Fix (item 14 da auditoria): o claim atômico foi extraído pra cloud-runner.ts
 // pra ser o MESMO guard do fallback síncrono do webhook. Mockado aqui como
 // sempre bem-sucedido — o comportamento do claim em si (already_consumed)
@@ -51,6 +55,8 @@ function resetMocks() {
   mockRunner.mockResolvedValue({ replied: true })
   mockClaim.mockReset()
   mockClaim.mockResolvedValue(true)
+  mockEnqueue.mockReset()
+  mockEnqueue.mockResolvedValue('retry-job-1')
 }
 function track(name: string, args: any[]) {
   calls[name] = calls[name] || []
@@ -216,5 +222,55 @@ describe('POST /api/workers/whatsapp-ai-respond — guard de mídia sem ponteiro
 
     expect(data.skipped).toBe('no_inbound_text')
     expect(mockRunner).not.toHaveBeenCalled()
+  })
+})
+
+describe('POST /api/workers/whatsapp-ai-respond — recovery transient pre-envio', () => {
+  beforeEach(() => {
+    resetMocks()
+    tableResults['whatsapp_cloud_conversations'] = { data: { ...BASE_CONVERSATION }, error: null }
+    tableResults['whatsapp_business_accounts'] = { data: BASE_ACCOUNT, error: null }
+    tableResults['whatsapp_cloud_messages'] = {
+      data: { message_id: 'msg-text-1', text_body: 'oi', message_type: 'text' },
+      error: null,
+    }
+  })
+
+  it('falha de token transient reabre pending e agenda a primeira tentativa em 30s', async () => {
+    mockRunner.mockResolvedValue({
+      replied: false,
+      transferred: false,
+      failure: 'transient',
+      error: 'No access token for account acc-1',
+    })
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(new Date('2026-09-05T15:00:00Z'))
+      const res = await POST(fakeReq({ conversationId: 'conv-1', accountId: 'acc-1', organizationId: 'org-1' }))
+
+      expect(await res.json()).toEqual({ ok: false, retry_scheduled: true, attempt: 1 })
+      expect(calls['whatsapp_cloud_conversations.update']).toEqual([[{
+        ai_pending: true,
+        ai_retry_count: 1,
+        ai_debounce_until: '2026-09-05T15:00:30.000Z',
+      }]])
+      expect(mockEnqueue).toHaveBeenCalledTimes(1)
+      expect(mockEnqueue).toHaveBeenCalledWith(
+        { conversationId: 'conv-1', accountId: 'acc-1', organizationId: 'org-1' }, 30,
+      )
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('transient no limite nao reabre pending nem agenda outra tentativa', async () => {
+    tableResults['whatsapp_cloud_conversations'].data.ai_retry_count = 3
+    mockRunner.mockResolvedValue({ replied: false, transferred: false, failure: 'transient', error: 'No access token for account acc-1' })
+
+    const res = await POST(fakeReq({ conversationId: 'conv-1', accountId: 'acc-1', organizationId: 'org-1' }))
+
+    expect(await res.json()).toEqual({ ok: false, gave_up: true })
+    expect(calls['whatsapp_cloud_conversations.update']).toEqual([[{ ai_retry_count: 0 }]])
+    expect(mockEnqueue).not.toHaveBeenCalled()
   })
 })

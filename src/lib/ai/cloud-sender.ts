@@ -230,9 +230,16 @@ export async function sendHumanizedReply(
     return { sent: false, reason: 'empty_text' };
   }
 
+  let accessToken: string;
+  try {
+    accessToken = getAccessToken(account);
+  } catch (error) {
+    return { sent: false, error: error instanceof Error ? error.message : String(error) };
+  }
+
   const client = createWhatsAppCloudClient({
     phoneNumberId: account.phone_number_id,
-    accessToken: getAccessToken(account),
+    accessToken,
   });
 
   // ---------- Orçamento de tempo (CAP) ----------

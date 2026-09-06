@@ -174,6 +174,7 @@ export class AIAgentEngine {
           // sem isso o checkAiBudget não via custo de agentes com tools.
           inputTokens: loopResult.promptTokens,
           outputTokens: loopResult.completionTokens,
+          costUsdOverride: loopResult.costUsd,
           responseTimeMs,
           sourcesUsed,
           actionsTriggered,
@@ -217,8 +218,9 @@ export class AIAgentEngine {
 
       await this.logUsage({
         conversationId,
-        inputTokens: llmResponse.usage?.promptTokens || 0,
-        outputTokens: llmResponse.usage?.completionTokens || 0,
+        inputTokens: llmResponse.usage?.promptTokens,
+        outputTokens: llmResponse.usage?.completionTokens,
+        costUsdOverride: llmResponse.usage?.costUsd,
         responseTimeMs,
         sourcesUsed,
         actionsTriggered,
@@ -294,8 +296,9 @@ export class AIAgentEngine {
    */
   private async logUsage(params: {
     conversationId?: string
-    inputTokens: number
-    outputTokens: number
+    inputTokens?: number
+    outputTokens?: number
+    costUsdOverride?: number | null
     responseTimeMs: number
     sourcesUsed: string[]
     actionsTriggered: string[]
@@ -311,6 +314,7 @@ export class AIAgentEngine {
       conversationId: params.conversationId,
       promptTokens: params.inputTokens,
       completionTokens: params.outputTokens,
+      costUsdOverride: params.costUsdOverride,
       durationMs: params.responseTimeMs,
       success: params.success,
       error: params.errorMessage,
@@ -323,7 +327,7 @@ export class AIAgentEngine {
 
     // Atualizar estatísticas do agente (best-effort)
     if (params.success) {
-      const totalTokens = params.inputTokens + params.outputTokens
+      const totalTokens = (params.inputTokens ?? 0) + (params.outputTokens ?? 0)
       const { error: rpcError } = await this.supabase.rpc('update_agent_stats', {
         p_agent_id: this.agent.id,
         p_tokens: totalTokens,

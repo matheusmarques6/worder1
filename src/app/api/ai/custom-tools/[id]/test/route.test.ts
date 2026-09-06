@@ -53,7 +53,9 @@ vi.mock('node:dns/promises', () => ({ lookup: vi.fn() }))
 import { lookup } from 'node:dns/promises'
 const mockLookup = lookup as unknown as ReturnType<typeof vi.fn>
 
-import { POST, GENERIC_REFUSAL_MESSAGE } from './route'
+import { POST } from './route'
+
+const GENERIC_REFUSAL_MESSAGE = 'endpoint recusado: use uma URL pública e válida'
 
 const AUTH = { user: { id: 'u1', email: 'a@b.com', organization_id: 'org-1' } }
 
@@ -163,5 +165,45 @@ describe('POST /api/ai/custom-tools/[id]/test — portão SSRF', () => {
 
     expect(json.status).toBe('ok')
     expect(json.detail.body).toContain('ok')
+  })
+
+  it('endpoint publico de texto curto continua devolvendo texto', async () => {
+    chainResult = { data: tool({ endpoint: 'https://api.loja-publica.com/dados' }) }
+    fetchMock.mockResolvedValue(new Response('resposta curta', { status: 200 }))
+
+    const res = await POST(postReq(), { params: { id: 'tool-1' } })
+    const json = await res.json()
+
+    expect(json.status).toBe('ok')
+    expect(json.detail.body).toBe('resposta curta')
+  })
+
+  it('uma resposta no teto de bytes cancela antes de puxar outro chunk', async () => {
+    chainResult = { data: tool({ endpoint: 'https://api.loja-publica.com/dados' }) }
+    const cap = 2_000 * 4
+    let pulls = 0
+    let cancelled = false
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulls += 1
+        if (pulls === 1) {
+          controller.enqueue(new TextEncoder().encode('x'.repeat(cap)))
+          return
+        }
+        throw new Error('a leitura passou do teto')
+      },
+      cancel() {
+        cancelled = true
+      },
+    }, { highWaterMark: 0 })
+    fetchMock.mockResolvedValue(new Response(stream, { status: 200 }))
+
+    const res = await POST(postReq(), { params: { id: 'tool-1' } })
+    const json = await res.json()
+
+    expect(json.status).toBe('ok')
+    expect(json.detail.body).toHaveLength(2_000)
+    expect(pulls).toBe(1)
+    expect(cancelled).toBe(true)
   })
 })

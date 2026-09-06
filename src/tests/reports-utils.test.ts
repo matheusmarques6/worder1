@@ -222,13 +222,21 @@ describe('formatDate', () => {
   it('retorna - para data inválida', () => {
     expect(formatDate('invalid')).toBe('-')
   })
+
+  it.each([
+    '2024-01-15T02:30:00+01:00',
+    new Date('2024-01-15T02:30:00+01:00'),
+  ])('preserva o instante na exibição local: %s', (value) => {
+    const expected = new Date(Date.UTC(2024, 0, 15, 1, 30)).toLocaleDateString('pt-BR')
+    expect(formatDate(value)).toBe(expected)
+  })
 })
 
 describe('formatReportPeriod', () => {
   it('formata período corretamente', () => {
     const result = formatReportPeriod(
-      new Date('2024-01-01'),
-      new Date('2024-01-31')
+      new Date(2024, 0, 1),
+      new Date(2024, 0, 31)
     )
     expect(result).toBe('01/01/2024 - 31/01/2024')
   })

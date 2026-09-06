@@ -7,12 +7,46 @@ import { safeFetch, BLOCKED_PREFIX } from '@/lib/ai/ssrf-guard'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+const MAX_BODY_CHARS = 2_000
+const MAX_BODY_BYTES = MAX_BODY_CHARS * 4
+
+async function readResponseText(response: Response): Promise<string> {
+  const reader = response.body?.getReader()
+  if (!reader) return ''
+
+  const chunks: Uint8Array[] = []
+  let total = 0
+  try {
+    while (total < MAX_BODY_BYTES) {
+      const { done, value } = await reader.read()
+      if (done) break
+      const remaining = MAX_BODY_BYTES - total
+      chunks.push(value.slice(0, remaining))
+      total += Math.min(value.byteLength, remaining)
+      if (value.byteLength >= remaining) {
+        await reader.cancel()
+        break
+      }
+    }
+  } finally {
+    reader.releaseLock()
+  }
+
+  const bytes = new Uint8Array(total)
+  let offset = 0
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return new TextDecoder().decode(bytes)
+}
+
 // Fix round 1 (review do item 19): o guard distingue "não foi possível
 // resolver o host" de "o host resolve para uma rede interna" — útil no log,
 // mas um oráculo de DNS interno se voltar pro lojista (autenticado, mas não
 // deveria conseguir mapear hostnames internos testando endpoints). Uma
 // mensagem só pro caller; a mensagem específica do guard vai pro log.
-export const GENERIC_REFUSAL_MESSAGE =
+const GENERIC_REFUSAL_MESSAGE =
   'endpoint recusado: use uma URL pública e válida'
 
 // POST — o teste OBRIGATÓRIO antes de ligar (10.7): chamada real, feita do
@@ -66,9 +100,9 @@ export async function POST(
       body: tool.method === 'POST' ? JSON.stringify(args) : undefined,
       signal: AbortSignal.timeout(10_000),
     })
-    const text = await response.text()
+    const text = await readResponseText(response)
     status = response.ok ? 'ok' : 'failed'
-    detail = { http_status: response.status, body: text.slice(0, 2000) }
+    detail = { http_status: response.status, body: text.slice(0, MAX_BODY_CHARS) }
   } catch (e: any) {
     const message: string = e?.message || 'falha na chamada'
     if (message.startsWith(BLOCKED_PREFIX)) {

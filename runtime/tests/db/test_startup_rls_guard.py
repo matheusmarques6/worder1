@@ -28,7 +28,10 @@ import pytest
 
 from agents_runtime import server
 from agents_runtime.__main__ import _serve
+from agents_runtime.agent_core.responder import build_responder
+from agents_runtime.agent_core.toucher import build_toucher
 from agents_runtime.app import _connect
+from agents_runtime.queueing.jobs import InboundJob, MissionTouchJob
 from agents_runtime.repository.scope import (
     SENDER_ROLE,
     WORKER_ROLE,
@@ -36,6 +39,7 @@ from agents_runtime.repository.scope import (
     assert_rls_enforced,
 )
 from tests.support.database import as_platform, as_runtime_worker
+from tests.support.llm import ScriptedLlm
 
 
 class TestTheStartupGuard:
@@ -79,6 +83,41 @@ class TestTheGuardIsWiredIntoTheOnlySeam:
             assert not conn.closed
         finally:
             await conn.close()
+
+
+class TestTheTurnConnectionsAreGuarded:
+    async def test_turn_factories_refuse_bypassrls_before_reading_or_calling_an_llm(
+        self, dsn: str
+    ) -> None:
+        """The closures own physical connections, so each must fail closed itself."""
+        organization_id = uuid.uuid4()
+        responder_llm = ScriptedLlm()
+        toucher_llm = ScriptedLlm()
+
+        responder = build_responder(dsn, llm=responder_llm, set_role=None)
+        with pytest.raises(RlsNotEnforced):
+            await responder(
+                InboundJob(
+                    conversation_id=uuid.uuid4(),
+                    generation=1,
+                    target_seq=1,
+                    organization_id=organization_id,
+                )
+            )
+
+        toucher = build_toucher(dsn, llm=toucher_llm, set_role=None)
+        with pytest.raises(RlsNotEnforced):
+            await toucher(
+                MissionTouchJob(
+                    organization_id=organization_id,
+                    contact_id=uuid.uuid4(),
+                    conversation_id=uuid.uuid4(),
+                    event_family="cart.abandoned",
+                )
+            )
+
+        assert responder_llm.asked == []
+        assert toucher_llm.asked == []
 
 
 class TestTheGuardDemandsAnIdentity:

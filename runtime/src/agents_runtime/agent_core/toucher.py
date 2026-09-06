@@ -80,7 +80,7 @@ from agents_runtime.repository import missions as missions_repo
 from agents_runtime.repository import moments as moments_repo
 from agents_runtime.repository import orders as orders_repo
 from agents_runtime.repository import provider_keys as keys_repo
-from agents_runtime.repository.scope import scope_to_organization
+from agents_runtime.repository.scope import WORKER_ROLE, assert_rls_enforced, scope_to_organization
 from agents_runtime.tools.base import ToolContext, run_tool
 from agents_runtime.tools.coupon import CreateCoupon
 
@@ -151,6 +151,7 @@ def build_toucher(
         async with await psycopg.AsyncConnection.connect(dsn, autocommit=True) as conn:
             if set_role:
                 await conn.execute("set role " + set_role)
+            await assert_rls_enforced(conn, WORKER_ROLE)
 
             # --- leitura: uma transação curta, fechada antes de qualquer rede
             async with conn.transaction():

@@ -39,6 +39,7 @@ logger = logging.getLogger(__name__)
 #: O corpo devolvido ao modelo é truncado aqui: resposta gigante vira custo
 #: de prompt e não vira informação.
 MAX_BODY_CHARS = 3000
+MAX_BODY_BYTES = MAX_BODY_CHARS * 4
 
 # Achado 1 do follow-up de segurança (fase 3): o guard distingue "não foi
 # possível resolver o host" de "o host resolve para uma rede interna" — útil
@@ -165,39 +166,49 @@ class CustomHttpTool:
             async with httpx.AsyncClient(
                 timeout=timeout, transport=self._transport, follow_redirects=False
             ) as client:
+                request_args: dict[str, Any] = {"headers": headers}
                 if self._row.method == "GET":
-                    response = await client.get(
-                        str(safe_url), params=dict(arguments), headers=headers
-                    )
+                    request_args["params"] = dict(arguments)
                 else:
-                    response = await client.post(
-                        str(safe_url), json=dict(arguments), headers=headers
-                    )
+                    request_args["json"] = dict(arguments)
+                async with client.stream(
+                    self._row.method, str(safe_url), **request_args
+                ) as response:
+                    body = await self._parse_body(response)
+                    status_code = response.status_code
         except httpx.HTTPError as error:
             return ToolResult(
                 tool=self.name, success=False, error=f"consulta falhou: {error}"
             )
 
-        body = self._parse_body(response)
-        if response.status_code >= 400:
+        if status_code >= 400:
             return ToolResult(
                 tool=self.name,
                 success=False,
-                error=f"HTTP {response.status_code} do endpoint da tool",
-                output={"status": response.status_code, "body": body},
+                error=f"HTTP {status_code} do endpoint da tool",
+                output={"status": status_code, "body": body},
             )
         return ToolResult(
             tool=self.name,
             success=True,
-            output={"status": response.status_code, "body": body},
+            output={"status": status_code, "body": body},
         )
 
     @staticmethod
-    def _parse_body(response: httpx.Response) -> Any:
+    async def _parse_body(response: httpx.Response) -> Any:
+        chunks: list[bytes] = []
+        total = 0
+        async for chunk in response.aiter_bytes():
+            remaining = MAX_BODY_BYTES - total
+            chunks.append(chunk[:remaining])
+            total += min(len(chunk), remaining)
+            if len(chunk) >= remaining:
+                break
+        raw_body = b"".join(chunks)
         try:
-            body: Any = response.json()
+            body: Any = json.loads(raw_body)
         except ValueError:
-            body = response.text
+            body = raw_body.decode(response.encoding or "utf-8", errors="replace")
         serialized = body if isinstance(body, str) else json.dumps(body, ensure_ascii=False)
         if len(serialized) > MAX_BODY_CHARS:
             return serialized[:MAX_BODY_CHARS] + "…(truncado)"

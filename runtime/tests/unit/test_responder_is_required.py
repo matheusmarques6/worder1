@@ -36,6 +36,7 @@ and the last test pins it so a future tidy-up cannot "make them consistent".
 """
 
 import asyncio
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -88,6 +89,34 @@ class TestTheChannelKeepsItsOwnRule:
         """Without a channel nothing is sent, so absent is safe — unlike the
         responder, where absent means "reply without judging"."""
         assert _factory_from_env("AGENTS_CHANNEL_THAT_IS_NOT_SET", UNUSED_DSN) is None
+
+
+@pytest.mark.parametrize("toucher_configured", [False, True], ids=["missing", "configured"])
+def test_process_requires_toucher_but_not_channel(
+    monkeypatch: pytest.MonkeyPatch, toucher_configured: bool
+) -> None:
+    factory = "tests.unit.test_responder_is_required:_a_responder_factory"
+    monkeypatch.setenv(RESPONDER_VARIABLE, factory)
+    monkeypatch.delenv("AGENTS_TOUCHER", raising=False)
+    monkeypatch.delenv("AGENTS_CHANNEL", raising=False)
+    monkeypatch.delenv("AGENTS_HTTP_PORT", raising=False)
+    run = AsyncMock()
+    connect = AsyncMock(side_effect=AssertionError("startup must not open a database"))
+    monkeypatch.setattr("agents_runtime.__main__.run", run)
+    monkeypatch.setattr("agents_runtime.__main__._connect", connect)
+
+    if toucher_configured:
+        monkeypatch.setenv("AGENTS_TOUCHER", factory)
+        asyncio.run(_serve(UNUSED_DSN))
+        run.assert_awaited_once()
+        assert run.await_args.kwargs["respond"] is _sentinel_responder
+        assert run.await_args.kwargs["touch"] is _sentinel_responder
+        assert run.await_args.kwargs["channel"] is None
+    else:
+        with pytest.raises(RuntimeError, match="AGENTS_TOUCHER"):
+            asyncio.run(_serve(UNUSED_DSN))
+        run.assert_not_awaited()
+    connect.assert_not_awaited()
 
 
 async def _sentinel_responder(job):

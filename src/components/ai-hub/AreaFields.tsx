@@ -10,7 +10,8 @@ import {
   type HubAreaId,
   type HubState,
 } from '@/lib/ai/agent-hub'
-import { TOOL_CATALOG } from '@/lib/ai/tools/catalog'
+import { toolCatalogForRuntimeMode } from '@/lib/ai/tools/catalog'
+import type { RuntimeMode } from '@/lib/ai/runtime-rollout'
 import MissionEditorModal from '@/components/flow-builder/panels/MissionEditorModal'
 import { describeConcession, type Mission } from '@/lib/ai/missions'
 
@@ -109,9 +110,10 @@ export interface AreaFieldsProps {
   onChange: (next: HubState) => void
   organizationId: string
   agentId: string | null
+  runtimeMode: RuntimeMode
 }
 
-export default function AreaFields({ area, hub, onChange, organizationId, agentId }: AreaFieldsProps) {
+export default function AreaFields({ area, hub, onChange, organizationId, agentId, runtimeMode }: AreaFieldsProps) {
   // keyof HubState (não HubAreaId): "delivery" é dado do hub sem nó próprio
   // na órbita — mora dentro da área Adaptação (Pacote B 17/08).
   const patch = <K extends keyof HubState>(key: K, value: HubState[K]) =>
@@ -241,9 +243,10 @@ export default function AreaFields({ area, hub, onChange, organizationId, agentI
   }
 
   if (area === 'tools') {
+    const catalog = toolCatalogForRuntimeMode(runtimeMode)
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {TOOL_CATALOG.map((tool) => {
+        {catalog.map((tool) => {
           const on = hub.tools.enabled.includes(tool.name)
           return (
             <div key={tool.name} className={`act-row${on ? ' on' : ''}`}>
@@ -260,9 +263,11 @@ export default function AreaFields({ area, hub, onChange, organizationId, agentI
             </div>
           )
         })}
-        <div style={{ fontSize: 11.5, color: 'var(--text-3)' }}>
-          No runtime novo, create_coupon só chega ao modelo se a missão do turno também a permitir (interseção missão∩agente).
-        </div>
+        {runtimeMode === 'runtime' && (
+          <div style={{ fontSize: 11.5, color: 'var(--text-3)' }}>
+            No runtime novo, só aparecem ferramentas compatíveis com esse modo.
+          </div>
+        )}
         {/* 10.7 — as tools custom, no mesmo drawer */}
         <CustomToolsSection />
       </div>

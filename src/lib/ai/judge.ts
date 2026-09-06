@@ -34,6 +34,7 @@ export interface JudgeVerdict {
   score: number
   /** nota textual curta do juiz */
   note: string
+  usage?: { promptTokens?: number; completionTokens?: number; totalTokens?: number; costUsd?: number }
   /** sinalizações por turno */
   flags: JudgeFlag[]
 }
@@ -165,6 +166,7 @@ export interface CaseVerdict {
   criteria: CriterionResult[]
   /** nota textual curta do juiz */
   note: string
+  usage?: { promptTokens?: number; completionTokens?: number; totalTokens?: number; costUsd?: number }
 }
 
 const JUDGE_CASE_SYSTEM_PROMPT = `Você é um avaliador rigoroso e imparcial de respostas de atendimento.
@@ -284,13 +286,14 @@ export async function judgeCase(args: JudgeCaseArgs): Promise<CaseVerdict> {
   )
 
   const parsed = parseCaseJson(response.content, args.criteria)
-  if (parsed) return parsed
+  if (parsed) return { ...parsed, usage: response.usage }
 
   return {
     score: 0,
     verdict: 'fail',
     criteria: args.criteria.map((c) => ({ id: c.id, pass: false })),
     note: 'Não foi possível interpretar a avaliação do juiz.',
+    usage: response.usage,
   }
 }
 

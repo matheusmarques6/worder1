@@ -170,6 +170,7 @@ export async function generateScenarios(
       agentId: agent.id,
       promptTokens: res.usage?.promptTokens,
       completionTokens: res.usage?.completionTokens,
+      costUsdOverride: res.usage?.costUsd,
       success: true,
     })
   } catch {

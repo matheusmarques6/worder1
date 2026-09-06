@@ -147,6 +147,12 @@ function isAdminOnlyApi(pathname: string): boolean {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Internal document producers use Bearer auth and do not have browser
+  // session cookies. The route handler owns that exact-path authorization.
+  if (pathname === '/api/ai/process/document') {
+    return NextResponse.next();
+  }
+
   // Allow public API routes (webhooks, etc)
   if (isPublicApiRoute(pathname)) {
     // Public popup/storefront endpoints are called cross-origin from the

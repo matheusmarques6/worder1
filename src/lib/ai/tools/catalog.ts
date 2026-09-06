@@ -6,6 +6,8 @@
 // supabase-admin.ts, que lança erro no browser. A paridade de nomes com
 // ALL_TOOLS é garantida por teste (tools-catalog.test.ts).
 
+import type { RuntimeMode } from '../runtime-rollout'
+
 export interface ToolCatalogEntry {
   /** Nome canônico da tool — deve bater com Tool.name no registry. */
   name: string
@@ -77,3 +79,9 @@ export const TOOL_CATALOG: ToolCatalogEntry[] = [
     requiresStore: true,
   },
 ]
+
+export function toolCatalogForRuntimeMode(mode: RuntimeMode): ToolCatalogEntry[] {
+  return mode === 'runtime'
+    ? TOOL_CATALOG.filter((tool) => tool.name === 'search_knowledge')
+    : TOOL_CATALOG
+}

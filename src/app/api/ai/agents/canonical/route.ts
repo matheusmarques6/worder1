@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { getAuthClient } from '@/lib/api-utils'
+import { getRuntimeMode } from '@/lib/ai/runtime-rollout'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -21,7 +22,9 @@ export async function GET() {
       return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 })
     }
 
-    const { data, error } = await getSupabaseAdmin()
+    const supabase = getSupabaseAdmin()
+    const runtimeMode = await getRuntimeMode(supabase, organizationId)
+    const { data, error } = await supabase
       .from('ai_agents')
       .select(
         'id, name, model, provider, is_active, presentation_mode, client_adaptation, persona, settings, created_at'
@@ -41,6 +44,7 @@ export async function GET() {
       })),
       canonical,
       needsChoice: canonical === null && agents.length > 1,
+      runtimeMode,
     })
   } catch (error: any) {
     console.error('Error in GET /api/ai/agents/canonical:', error)

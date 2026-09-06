@@ -15,6 +15,7 @@ import { claimRecipientForSend } from './recipient-claim'
 import { sendAlert } from './alerts'
 import { wlog } from '@/lib/observability/whatsapp-logger'
 import { ensureCampaignTemplateApproved } from './template-approval'
+import { buildTemplateComponents, type TemplateShape } from './template-components'
 
 // =============================================
 // SUPABASE CLIENT
@@ -72,6 +73,7 @@ export interface CampaignBatchData {
   template: {
     name: string
     language: string
+    shape: TemplateShape
     category?: 'MARKETING' | 'UTILITY' | 'AUTHENTICATION'
   }
   organizationId: string
@@ -233,6 +235,8 @@ export class CampaignProcessor {
       // de pipeline (SET em pipeline Redis em vez de N round-trips individuais)
       // é mantido. Se delay exato entre batches for crítico, avaliar suporte a
       // per-item options em addBatch.
+      const approvedTemplate = tplCheck.template
+      if (!approvedTemplate) throw new Error('Approved campaign template shape is missing. Restart the campaign.')
       const batchItems: CampaignBatchData[] = batches.map((batch, i) => ({
         campaignId,
         batchIndex: i,
@@ -251,10 +255,16 @@ export class CampaignProcessor {
           tier: tierFromMessagingLimit(instance.messaging_limit_tier),
         },
         template: {
-          name: campaign.template_name || campaign.template?.name,
-          language: campaign.template?.language || 'pt_BR',
+          name: approvedTemplate.name,
+          language: approvedTemplate.language,
+          shape: {
+            components: approvedTemplate.components,
+            header_type: approvedTemplate.header_type,
+            body_text: approvedTemplate.body_text,
+            buttons: approvedTemplate.buttons,
+          },
           category: (() => {
-            const c = (campaign.template?.category as string | undefined)?.toUpperCase()
+            const c = approvedTemplate.category?.toUpperCase()
             return c === 'MARKETING' || c === 'UTILITY' || c === 'AUTHENTICATION' ? c : undefined
           })(),
         },
@@ -491,7 +501,7 @@ export class CampaignProcessor {
    * Processar batch de mensagens
    */
   private async processBatch(data: CampaignBatchData): Promise<ProcessResult> {
-    const { campaignId, recipients, instance, template, mediaUrl, mediaType, organizationId } = data
+    const { campaignId, recipients, instance, template, mediaUrl, organizationId } = data
 
     // Obter rate limiter e circuit breaker
     // Chave = phoneNumberId (número físico da Meta), NÃO instance.id —
@@ -563,11 +573,17 @@ export class CampaignProcessor {
         }
 
         // Preparar componentes do template
-        const components = this.buildTemplateComponents(
-          recipient.resolved_variables,
-          mediaUrl,
-          mediaType
-        )
+        // Jobs antigos não carregam a forma aprovada; não inferir ausência de parâmetros.
+        if (!template.shape) {
+          throw new Error('Campaign template shape is missing. Recreate the campaign for unsent recipients before retrying.')
+        }
+        const components = buildTemplateComponents(template.shape, {
+          bodyVars: Object.entries(recipient.resolved_variables || {})
+            .sort(([a], [b]) => parseInt(a) - parseInt(b))
+            .map(([, value]) => String(value)),
+          headerMediaUrl: mediaUrl,
+          // A campanha não tem fonte separada de buttonVars: o builder recusa se exigidas.
+        })
 
         // Enviar com retry
         const sendResult = await this.whatsAppRetry(() =>
@@ -653,41 +669,6 @@ export class CampaignProcessor {
       this.circuitBreakers.set(instanceId, cb)
     }
     return cb
-  }
-
-  private buildTemplateComponents(
-    variables: Record<string, string>,
-    mediaUrl?: string,
-    mediaType?: string
-  ): any[] {
-    const components: any[] = []
-
-    // Body variables
-    if (variables && Object.keys(variables).length > 0) {
-      const bodyParams = Object.entries(variables)
-        .sort(([a], [b]) => parseInt(a) - parseInt(b))
-        .map(([_, value]) => ({ type: 'text', text: String(value) }))
-
-      if (bodyParams.length > 0) {
-        components.push({
-          type: 'body',
-          parameters: bodyParams,
-        })
-      }
-    }
-
-    // Header com mídia
-    if (mediaUrl && mediaType) {
-      components.push({
-        type: 'header',
-        parameters: [{
-          type: mediaType,
-          [mediaType]: { link: mediaUrl },
-        }],
-      })
-    }
-
-    return components
   }
 
   private async getRecipients(campaign: any): Promise<any[]> {

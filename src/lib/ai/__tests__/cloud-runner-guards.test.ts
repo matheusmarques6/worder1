@@ -118,6 +118,80 @@ beforeEach(() => {
   mockRpc.mockResolvedValue({ data: [{ agent_id: 'agent-1' }], error: null })
 })
 
+describe('cloud-runner guards — resolução do agente', () => {
+  it('erro da RPC antes do engine/envio é transient', async () => {
+    mockRpc.mockResolvedValue({
+      data: null,
+      error: { code: '08006', message: 'connection temporarily unavailable' },
+    })
+
+    const result = await maybeRunAgentForCloudConversation({
+      account,
+      conversation: conv(),
+      text: 'oi',
+    })
+
+    expect(result).toMatchObject({
+      replied: false,
+      transferred: false,
+      failure: 'transient',
+      error: 'connection temporarily unavailable',
+    })
+    expect(mockCreateAgentEngine).not.toHaveBeenCalled()
+    expect(mockSendHumanizedReply).not.toHaveBeenCalled()
+  })
+
+  it('ausência real de agente não é transient', async () => {
+    mockRpc.mockResolvedValue({ data: [], error: null })
+
+    const result = await maybeRunAgentForCloudConversation({
+      account,
+      conversation: conv(),
+      text: 'oi',
+    })
+
+    expect(result).toMatchObject({
+      replied: false,
+      transferred: false,
+      skipped: 'no_active_agent',
+    })
+    expect(result.failure).toBeUndefined()
+    expect(mockCreateAgentEngine).not.toHaveBeenCalled()
+    expect(mockSendHumanizedReply).not.toHaveBeenCalled()
+  })
+})
+
+describe('cloud-runner guards — falhas de leitura pré-envio', () => {
+  it.each([
+    { guard: 'count', maxMessages: 1, error: 'bot message count failed' },
+    { guard: 'human', maxMessages: 0, error: 'human reply lookup failed' },
+  ])('$guard indisponível retorna transient sem engine ou sender', async ({ maxMessages, error }) => {
+    queueResult('ai_agents', {
+      data: agentRow({ settings: { behavior: { max_messages_per_conversation: maxMessages } } }),
+      error: null,
+    })
+    queueResult('whatsapp_cloud_messages', { data: null, error: null }) // cooldown
+    queueResult('whatsapp_cloud_messages', {
+      data: null,
+      count: null,
+      error: { code: '08006', message: 'temporary read failure' },
+    })
+
+    await expect(maybeRunAgentForCloudConversation({
+      account,
+      conversation: conv(),
+      text: 'oi',
+    })).resolves.toMatchObject({
+      replied: false,
+      transferred: false,
+      failure: 'transient',
+      error,
+    })
+    expect(mockCreateAgentEngine).not.toHaveBeenCalled()
+    expect(mockSendHumanizedReply).not.toHaveBeenCalled()
+  })
+})
+
 describe('cloud-runner guards — activate_on manual', () => {
   it('agente manual NAO dispara sem atribuicao explicita na conversa', async () => {
     queueResult('ai_agents', {
@@ -340,5 +414,25 @@ describe('cloud-runner — bloqueio do send guard e terminal (sem retry)', () =>
 
     expect(r.replied).toBe(true)
     expect(r.failure).toBeUndefined()
+  })
+
+  it('falha de token pre-envio vira transient e preserva o erro do sender', async () => {
+    mockSendHumanizedReply.mockResolvedValue({
+      sent: false,
+      error: 'No access token for account waba-1',
+    })
+
+    const result = await maybeRunAgentForCloudConversation({
+      account,
+      conversation: conv(),
+      text: 'oi',
+    })
+
+    expect(result).toMatchObject({
+      replied: false,
+      transferred: false,
+      failure: 'transient',
+      error: 'No access token for account waba-1',
+    })
   })
 })

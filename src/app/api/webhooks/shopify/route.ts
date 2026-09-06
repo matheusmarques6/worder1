@@ -2514,13 +2514,6 @@ export async function POST(request: NextRequest) {
   try {
     // 1. Ler body raw para verificação
     const bodyText = await request.text();
-    let body: any;
-    
-    try {
-      body = JSON.parse(bodyText);
-    } catch {
-      return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
-    }
 
     // 2. Headers do Shopify
     const topic = request.headers.get('X-Shopify-Topic');
@@ -2601,7 +2594,7 @@ export async function POST(request: NextRequest) {
           webhook_id: webhookId,
           topic,
           shop_domain: shopDomain,
-          shopify_resource_id: body?.id ? String(body.id) : null,
+          shopify_resource_id: null,
           status,
           error_message: errMsg,
           attempts: 1,
@@ -2635,6 +2628,13 @@ export async function POST(request: NextRequest) {
     }
 
     // 5. Verificar idempotência via shopify_webhook_log
+    let body: any;
+    try {
+      body = JSON.parse(bodyText);
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+    }
+
     if (webhookId) {
       const supabase = getSupabase();
 

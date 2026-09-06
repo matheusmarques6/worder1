@@ -16,6 +16,7 @@ juntos.
 import json
 import logging
 import sys
+import traceback
 from datetime import UTC, datetime
 
 from agents_runtime.obs.telemetry import SAFE_ATTRIBUTES
@@ -87,8 +88,14 @@ class JsonFormatter(logging.Formatter):
         if omitted:
             line["_omitted_keys"] = sorted(omitted)
         if record.exc_info and record.exc_info[1] is not None:
-            line["error"] = _truncate(repr(record.exc_info[1]), MAX_ERROR_CHARS)
-            line["stack"] = _truncate(self.formatException(record.exc_info), MAX_STACK_CHARS)
+            error_type = type(record.exc_info[1]).__name__
+            frames = traceback.extract_tb(record.exc_info[2])
+            stack = "\n".join(
+                f'File "{frame.filename}", line {frame.lineno}, in {frame.name}'
+                for frame in frames
+            )
+            line["error"] = _truncate(error_type, MAX_ERROR_CHARS)
+            line["stack"] = _truncate(f"{stack}\n{error_type}", MAX_STACK_CHARS)
         return json.dumps(line, ensure_ascii=False, default=repr)
 
 

@@ -21,6 +21,26 @@ export async function GET(request: NextRequest) {
     }
     
     // 2. Se não é agente, é admin - tem acesso total
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('organization_id')
+      .eq('id', user.id)
+      .single();
+
+    if (profileError) {
+      console.error('[/api/whatsapp/agents/me] Erro ao buscar perfil:', profileError);
+      return NextResponse.json(
+        { error: 'Erro ao buscar perfil', isAgent: false, isAdmin: false, permissions: null },
+        { status: 500 },
+      );
+    }
+    if (!profile?.organization_id) {
+      return NextResponse.json(
+        { error: 'Organization not found', isAgent: false, isAdmin: false, permissions: null },
+        { status: 404 },
+      );
+    }
+
     if (!user.user_metadata?.is_agent) {
       return NextResponse.json({
         isAgent: false,
@@ -52,10 +72,21 @@ export async function GET(request: NextRequest) {
       .from('agents')
       .select('*')
       .eq('id', agentId)
+      .eq('organization_id', profile.organization_id)
       .single();
 
     if (agentError) {
       console.error('[/api/whatsapp/agents/me] Erro ao buscar agente:', agentError);
+      return NextResponse.json(
+        { error: 'Erro ao buscar agente', isAgent: true, isAdmin: false, permissions: null },
+        { status: 500 },
+      );
+    }
+    if (!agent) {
+      return NextResponse.json(
+        { error: 'Agente não encontrado', isAgent: true, isAdmin: false, permissions: null },
+        { status: 404 },
+      );
     }
 
     // 5. Buscar permissões do agente
@@ -67,6 +98,10 @@ export async function GET(request: NextRequest) {
 
     if (permError && permError.code !== 'PGRST116') {
       console.error('[/api/whatsapp/agents/me] Erro ao buscar permissões:', permError);
+      return NextResponse.json(
+        { error: 'Erro ao buscar permissões', isAgent: true, isAdmin: false, permissions: null },
+        { status: 500 },
+      );
     }
 
     // 6. Montar resposta com permissões (ou defaults se não existirem)

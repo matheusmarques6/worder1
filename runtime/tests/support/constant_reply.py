@@ -15,7 +15,12 @@ scenarios, same behaviour, one fewer way for production to reach the constant.
 """
 
 from agents_runtime.agent_core.responder import Responder, fixed_responder
+from agents_runtime.agent_core.toucher import fixed_toucher
 
 
 def create_responder(dsn: str) -> Responder:
     return fixed_responder()
+
+
+def create_toucher(dsn: str):
+    return fixed_toucher()

@@ -44,6 +44,7 @@ export async function GET(request: NextRequest) {
         )
       `)
       .eq('organization_id', organizationId)
+      .eq('profile.organization_id', organizationId)
       .order('status', { ascending: true })
       .order('current_conversations', { ascending: true });
 

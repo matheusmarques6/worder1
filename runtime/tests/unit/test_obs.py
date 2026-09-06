@@ -47,7 +47,7 @@ class TestJsonLines:
         line = _format(_record(provider=Opaque()))
         assert line["provider"] == "<opaque>"
 
-    def test_an_exception_carries_error_and_stack(self) -> None:
+    def test_an_exception_carries_its_type_and_traceback_location(self) -> None:
         try:
             raise RuntimeError("a causa")
         except RuntimeError:
@@ -56,8 +56,9 @@ class TestJsonLines:
             record = _record()
             record.exc_info = sys.exc_info()
         line = _format(record)
-        assert "a causa" in line["error"]
+        assert line["error"] == "RuntimeError"
         assert "RuntimeError" in line["stack"]
+        assert "test_obs.py" in line["stack"]
 
     def test_exception_error_and_stack_are_bounded(self) -> None:
         # Achado 4 (follow-up fase 3): `error`/`stack` vêm de `exc_info`, fora
@@ -76,8 +77,27 @@ class TestJsonLines:
             record.exc_info = sys.exc_info()
         line = _format(record)
         assert len(line["error"]) <= MAX_ERROR_CHARS + len("…(truncado)")
-        assert line["error"].endswith("…(truncado)")
         assert len(line["stack"]) <= MAX_STACK_CHARS + len("…(truncado)")
+
+    def test_exception_text_never_enters_json_error_or_stack(self) -> None:
+        token = "TASK28_SYNTHETIC_TOKEN"
+        phone = "+15551234567"
+        content = "TASK28_SYNTHETIC_CONTENT"
+        try:
+            raise RuntimeError(f"token={token} phone={phone} content={content}")
+        except RuntimeError:
+            import sys
+
+            record = _record()
+            record.exc_info = sys.exc_info()
+
+        raw = JsonFormatter().format(record)
+        line = json.loads(raw)
+        for marker in (token, phone, content):
+            assert marker not in raw
+        assert line["error"] == "RuntimeError"
+        assert "RuntimeError" in line["stack"]
+        assert "test_obs.py" in line["stack"]
 
     def test_configure_twice_keeps_one_handler(self) -> None:
         configure_logging("INFO")

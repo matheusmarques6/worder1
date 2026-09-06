@@ -406,6 +406,7 @@ export async function generateProposals(
       agentId: agent.id,
       promptTokens: response.usage?.promptTokens,
       completionTokens: response.usage?.completionTokens,
+      costUsdOverride: response.usage?.costUsd,
       success: true,
     })
   } catch {

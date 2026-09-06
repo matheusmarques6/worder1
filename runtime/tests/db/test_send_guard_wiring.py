@@ -8,20 +8,24 @@ resultado de cada chamada ao Graph volta para o breaker.
 Ruling N, o desenho que estes testes prendem: **o gate é por LINHA, o alimento
 é por CHAMADA.** Uma checagem antes da primeira bolha — checar antes de cada
 bolha abriria o caso de bloquear no meio de uma mensagem já parcialmente
-entregue — e um relato depois de CADA `channel.send`, porque é a chamada ao
-Graph que a Meta conta e é ela que falha.
+entregue — e um relato depois de CADA POST de mensagem ou read/typing,
+porque é a chamada ao Graph que a Meta conta e é ela que falha.
 """
 
+import json
 import uuid
 from collections.abc import Iterator
 from contextlib import asynccontextmanager
 
+import httpx
 import psycopg
 import pytest
 
+from agents_runtime.channels.cloud_api import CloudApiChannel
 from agents_runtime.config import QueueingConfig
-from agents_runtime.queueing.sender import sender_pass
+from agents_runtime.queueing.sender import _mark_read_and_typing, sender_pass
 from agents_runtime.randomness import SystemRandomness
+from agents_runtime.repository.outbox import ClaimedSend
 from tests.db.conftest import TwoTenants
 from tests.db.factories import (
     Thread,
@@ -32,7 +36,13 @@ from tests.db.factories import (
     create_thread,
     open_window,
 )
-from tests.db.test_send_guard import FAILURE_THRESHOLD, close_breaker, report
+from tests.db.test_send_guard import (
+    FAILURE_THRESHOLD,
+    close_breaker,
+    expire_window,
+    report,
+    streak,
+)
 from tests.support.fake_channel import SCHEMA_SQL, FakeChannel
 
 NO_DELAYS = QueueingConfig(humanize_delays=False)
@@ -313,6 +323,90 @@ class TestTheVerdictIsExecuted:
 
         assert outbox_row(admin, outbox_id)[0] == "sent"
         assert sends_of(admin, outbox_id) == 1
+
+
+class TestReadAndTypingFeedsTheBreaker:
+    @pytest.mark.parametrize("status", [200, 429, 400])
+    async def test_each_real_presence_post_reports_once(
+        self, dsn: str, admin: psycopg.Connection, two_tenants: TwoTenants, status: int
+    ) -> None:
+        thread = create_thread(admin, two_tenants.a.id)
+        pnid = account_number(admin, thread)
+        for _ in range(5 if status == 200 else 9):
+            report(admin, pnid, success=False, rate_limited=status != 200)
+        if status == 200:
+            expire_window(admin, pnid, "open_until")
+        seen: list[httpx.Request] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen.append(request)
+            return httpx.Response(
+                status,
+                json={"success": True} if status == 200 else {
+                    "error": {"message": "x" * 400, "code": 130429},
+                },
+            )
+
+        async def load_token(conn, organization_id):
+            return "test-token"
+
+        channel = CloudApiChannel(load_token=load_token, transport=httpx.MockTransport(handler))
+        send = ClaimedSend(
+            outbox_id=uuid.uuid4(), organization_id=two_tenants.a.id,
+            channel_type="whatsapp", channel_external_id=pnid, to_phone_e164="+15551234567",
+            payload={"text": "oi"}, idempotency_key="presence", attempt_count=1,
+            last_inbound_wamid="wamid.inbound",
+        )
+        try:
+            async with as_sender(dsn) as conn:
+                await _mark_read_and_typing(channel, conn, send)
+        finally:
+            await channel.aclose()
+
+        assert len(seen) == 1
+        assert seen[0].method == "POST"
+        assert seen[0].url.path.endswith(f"/{pnid}/messages")
+        assert json.loads(seen[0].content)["status"] == "read"
+        if status == 200:
+            assert streak(admin, pnid) == 1  # zero or duplicate reports both fail
+        else:
+            assert guard_row(admin, pnid) == (10, 10, True)
+            remaining = admin.execute(
+                "select throttled_until - now() from internal.whatsapp_send_guard"
+                " where phone_number_id = %s", (pnid,),
+            ).fetchone()[0]
+            assert 55 <= remaining.total_seconds() <= 60
+
+    @pytest.mark.parametrize("no_wamid", [True, False])
+    async def test_no_graph_call_leaves_the_guard_untouched(
+        self, dsn: str, admin: psycopg.Connection, two_tenants: TwoTenants, no_wamid: bool
+    ) -> None:
+        thread = create_thread(admin, two_tenants.a.id)
+        pnid = account_number(admin, thread)
+        reached: list[httpx.Request] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            reached.append(request)
+            return httpx.Response(200, json={"success": True})
+
+        async def load_token(conn, organization_id):
+            raise ValueError("local credential unavailable")
+
+        channel = CloudApiChannel(load_token=load_token, transport=httpx.MockTransport(handler))
+        send = ClaimedSend(
+            outbox_id=uuid.uuid4(), organization_id=two_tenants.a.id,
+            channel_type="whatsapp", channel_external_id=pnid, to_phone_e164="+15551234567",
+            payload={"text": "oi"}, idempotency_key="presence", attempt_count=1,
+            last_inbound_wamid=None if no_wamid else "wamid.inbound",
+        )
+        try:
+            async with as_sender(dsn) as conn:
+                await _mark_read_and_typing(channel, conn, send)
+        finally:
+            await channel.aclose()
+
+        assert reached == []
+        assert guard_row(admin, pnid) is None
 
 
 class TestTheResultFeedsTheBreaker:
