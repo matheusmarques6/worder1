@@ -161,6 +161,37 @@ describe('cloud-runner guards — resolução do agente', () => {
   })
 })
 
+describe('cloud-runner guards — falhas de leitura pré-envio', () => {
+  it.each([
+    { guard: 'count', maxMessages: 1, error: 'bot message count failed' },
+    { guard: 'human', maxMessages: 0, error: 'human reply lookup failed' },
+  ])('$guard indisponível retorna transient sem engine ou sender', async ({ maxMessages, error }) => {
+    queueResult('ai_agents', {
+      data: agentRow({ settings: { behavior: { max_messages_per_conversation: maxMessages } } }),
+      error: null,
+    })
+    queueResult('whatsapp_cloud_messages', { data: null, error: null }) // cooldown
+    queueResult('whatsapp_cloud_messages', {
+      data: null,
+      count: null,
+      error: { code: '08006', message: 'temporary read failure' },
+    })
+
+    await expect(maybeRunAgentForCloudConversation({
+      account,
+      conversation: conv(),
+      text: 'oi',
+    })).resolves.toMatchObject({
+      replied: false,
+      transferred: false,
+      failure: 'transient',
+      error,
+    })
+    expect(mockCreateAgentEngine).not.toHaveBeenCalled()
+    expect(mockSendHumanizedReply).not.toHaveBeenCalled()
+  })
+})
+
 describe('cloud-runner guards — activate_on manual', () => {
   it('agente manual NAO dispara sem atribuicao explicita na conversa', async () => {
     queueResult('ai_agents', {
