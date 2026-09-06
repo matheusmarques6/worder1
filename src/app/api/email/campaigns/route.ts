@@ -65,27 +65,43 @@ export async function GET(request: NextRequest) {
 
     if (campaignIds.length > 0) {
       try {
-        // Opened counts
-        const { data: openRows } = await supabaseAdmin
-          .from('email_sends')
-          .select('campaign_id')
-          .in('campaign_id', campaignIds)
-          .not('opened_at', 'is', null);
-
-        // Clicked counts
-        const { data: clickRows } = await supabaseAdmin
-          .from('email_sends')
-          .select('campaign_id')
-          .in('campaign_id', campaignIds)
-          .not('clicked_at', 'is', null);
-
-        for (const r of (openRows || []) as any[]) {
-          if (!engagementMap[r.campaign_id]) engagementMap[r.campaign_id] = { opened: 0, clicked: 0 };
-          engagementMap[r.campaign_id].opened++;
-        }
-        for (const r of (clickRows || []) as any[]) {
-          if (!engagementMap[r.campaign_id]) engagementMap[r.campaign_id] = { opened: 0, clicked: 0 };
-          engagementMap[r.campaign_id].clicked++;
+        // Somado no banco. Contar linha a linha aqui parava no teto de
+        // mil linhas do PostgREST: passando de mil aberturas na
+        // organização, as campanhas maiores começavam a aparecer com
+        // menos do que tiveram, sem aviso nenhum.
+        const { data: agg, error: aggErr } = await supabaseAdmin.rpc('campaign_email_stats', {
+          org: user.organization_id,
+          p_store_id: storeId || null,
+        });
+        if (!aggErr && Array.isArray(agg)) {
+          for (const row of agg as any[]) {
+            if (!row?.campaign_id) continue;
+            engagementMap[row.campaign_id] = {
+              opened: Number(row.opened) || 0,
+              clicked: Number(row.clicked) || 0,
+            };
+          }
+        } else {
+          // Banco sem a função ainda: lê paginando, que é o que faltava.
+          const PAGE = 1000;
+          for (const col of ['opened_at', 'clicked_at'] as const) {
+            for (let page = 0; page < 100; page++) {
+              const from = page * PAGE;
+              const { data: rows } = await supabaseAdmin
+                .from('email_sends')
+                .select('campaign_id')
+                .in('campaign_id', campaignIds)
+                .not(col, 'is', null)
+                .range(from, from + PAGE - 1);
+              const list = (rows || []) as any[];
+              for (const r of list) {
+                if (!engagementMap[r.campaign_id]) engagementMap[r.campaign_id] = { opened: 0, clicked: 0 };
+                if (col === 'opened_at') engagementMap[r.campaign_id].opened++;
+                else engagementMap[r.campaign_id].clicked++;
+              }
+              if (list.length < PAGE) break;
+            }
+          }
         }
       } catch {
         console.warn('[EmailCampaigns] Engagement query failed');

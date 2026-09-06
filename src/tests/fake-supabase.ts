@@ -2,7 +2,8 @@
 // Supabase de mentira para testes de isolamento entre lojas.
 //
 // Guarda tabelas em memória e entende o subconjunto do PostgREST que o
-// código usa: select / eq / neq / in / or / gte / order / limit /
+// código usa: select / eq / neq / in / or / gt / gte / lt / lte / not /
+// order / limit / range / rpc /
 // single / maybeSingle, e `await` no builder. O `.or()` aceita as
 // formas que aparecem nas consultas de loja:
 //   col.eq.valor · col.is.null · col.ilike.valor · col.cs.{valor}
@@ -78,6 +79,8 @@ export function createFakeSupabase(): FakeSupabase {
     chain('in', (col: string, vals: any[]) => filters.push((r) => (vals || []).map(String).includes(String(r[col]))))
     chain('gte', (col: string, val: any) => filters.push((r) => r[col] != null && r[col] >= val))
     chain('lte', (col: string, val: any) => filters.push((r) => r[col] != null && r[col] <= val))
+    chain('gt', (col: string, val: any) => filters.push((r) => r[col] != null && r[col] > val))
+    chain('lt', (col: string, val: any) => filters.push((r) => r[col] != null && r[col] < val))
     chain('ilike', (col: string, val: string) => filters.push((r) => String(r[col] ?? '').toLowerCase() === String(val).replace(/%/g, '').toLowerCase()))
     chain('or', (expr: string) => filters.push(orClause(expr)))
     // .not(col, op, valor) — o `in` recebe a lista já no formato PostgREST,

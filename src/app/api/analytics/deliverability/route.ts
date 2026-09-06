@@ -29,7 +29,21 @@ export async function GET(req: NextRequest) {
       .eq('organization_id', orgId)
       .gte('sent_at', since)
     if (storeId) sendsQuery = sendsQuery.eq('store_id', storeId)
-    const { data: allSends } = await sendsQuery
+
+    // Aqui as linhas são necessárias mesmo (o agrupamento é por
+    // provedor), então o jeito é paginar: sem isso o PostgREST corta em
+    // mil e o painel passa a descrever só uma fatia do período, com
+    // cara de número completo.
+    const PAGE = 1000
+    const allSends: any[] = []
+    for (let page = 0; page < 100; page++) {
+      const from = page * PAGE
+      const { data, error } = await sendsQuery.range(from, from + PAGE - 1)
+      if (error) break
+      const rows = data || []
+      allSends.push(...rows)
+      if (rows.length < PAGE) break
+    }
 
     const sends = allSends || []
     const total = sends.length
