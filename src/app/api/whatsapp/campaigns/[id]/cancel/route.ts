@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireOrg } from '@/lib/api/guards';
+import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
+import { requireOrgFromAuth } from '@/lib/auth/require-org';
 export const dynamic = 'force-dynamic';
 
 // POST /api/whatsapp/campaigns/[id]/cancel
@@ -9,9 +10,9 @@ export async function POST(
 ) {
   // A campanha vinha só pelo id, com a chave de serviço e sem sessão:
   // qualquer um cancelava a campanha de qualquer organização.
-  const guard = await requireOrg();
-  if (!guard.ok) return guard.response;
-  const { supabase, organizationId } = guard;
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const { orgId } = auth;
 
   try {
     const { id } = params
@@ -20,7 +21,7 @@ export async function POST(
       .from('whatsapp_campaigns')
       .select('status')
       .eq('id', id)
-      .eq('organization_id', organizationId)
+      .eq('organization_id', orgId)
       .single()
 
     if (!campaign) {
@@ -38,7 +39,7 @@ export async function POST(
         updated_at: new Date().toISOString()
       })
       .eq('id', id)
-      .eq('organization_id', organizationId)
+      .eq('organization_id', orgId)
       .select('*')
       .single()
 
@@ -53,7 +54,7 @@ export async function POST(
 
     await supabase.from('whatsapp_campaign_logs').insert({
       campaign_id: id,
-      organization_id: organizationId,
+      organization_id: orgId,
       log_type: 'warning',
       message: 'Campanha cancelada'
     })

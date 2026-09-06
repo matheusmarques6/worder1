@@ -10,9 +10,9 @@
 // ele — um id alheio bastava para operar a loja alheia.
 //
 // `requireStore` exige sessão e confirma que a loja é da organização de
-// quem pediu (ou de uma de que a pessoa é membro). `requireOrg` faz o
-// mínimo equivalente para as demais tabelas: devolve a organização da
-// sessão, para a rota cercar a consulta com ela.
+// quem pediu (ou de uma de que a pessoa é membro). Para as demais
+// tabelas o mínimo equivalente já existia: `requireOrgFromAuth`, em
+// `@/lib/auth/require-org`.
 // =============================================================
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -98,45 +98,6 @@ export async function requireStore(
   }
 }
 
-export type OrgGuardOk = {
-  ok: true
-  organizationId: string
-  userId: string
-  role?: string
-  /** Cliente de serviço; a rota é que cerca por `organizationId`. */
-  supabase: SupabaseClient
-}
-
-/**
- * Exige sessão e devolve a organização de quem pediu, junto do cliente
- * de serviço. Quem chama tem de aplicar `.eq('organization_id', …)` —
- * a chave de serviço não é filtrada por RLS.
- */
-export async function requireOrg(): Promise<OrgGuardOk | StoreGuardFail> {
-  const auth = await getAuthClient()
-  if (!auth) {
-    return {
-      ok: false,
-      response: NextResponse.json({ error: 'Não autenticado' }, { status: 401 }),
-    }
-  }
-
-  const supabase = getSupabaseClient()
-  if (!supabase) {
-    return {
-      ok: false,
-      response: NextResponse.json({ error: 'Banco não configurado' }, { status: 503 }),
-    }
-  }
-
-  return {
-    ok: true,
-    organizationId: auth.user.organization_id,
-    userId: auth.user.id,
-    role: auth.user.role,
-    supabase,
-  }
-}
 
 /**
  * Ids das lojas de uma organização.

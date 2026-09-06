@@ -39,7 +39,6 @@ import {
   BarChart,
   Bar,
 } from 'recharts'
-import { createBrowserClient } from '@/lib/supabase'
 
 interface CampaignData {
   id: string
@@ -97,19 +96,17 @@ export default function CampaignDetailPage() {
     if (!params.id) return
     try {
       setLoading(true)
-      const supabase = createBrowserClient()
-      const { data, error } = await supabase
-        .from('email_campaigns')
-        .select('*')
-        .eq('id', params.id)
-        .single()
-
-      if (error) {
-        console.error('Error fetching campaign:', error.message)
+      // Pela API, que tem a sessão e cerca por organização. Direto do
+      // browser a consulta ia anônima e trazia a campanha de qualquer
+      // organização, bastando o id.
+      const res = await fetch(`/api/email/campaigns/${params.id}`)
+      if (!res.ok) {
+        console.error('Error fetching campaign:', res.status)
         setCampaign(null)
         return
       }
-      setCampaign(data)
+      const data = await res.json()
+      setCampaign(data.campaign ?? data)
     } catch (err) {
       console.error('Failed to fetch campaign:', err)
       setCampaign(null)

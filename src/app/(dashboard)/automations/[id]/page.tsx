@@ -15,7 +15,6 @@ import {
   Calendar,
   Loader2,
 } from 'lucide-react'
-import { createBrowserClient } from '@/lib/supabase'
 
 interface AutomationData {
   id: string
@@ -47,19 +46,15 @@ export default function AutomationDetailPage() {
     if (!params.id) return
     try {
       setLoading(true)
-      const supabase = createBrowserClient()
-      const { data, error } = await supabase
-        .from('automations')
-        .select('*')
-        .eq('id', params.id)
-        .single()
-
-      if (error) {
-        console.error('Error fetching automation:', error.message)
+      // Pela API, que tem a sessão e cerca por organização.
+      const res = await fetch(`/api/automations/${params.id}`)
+      if (!res.ok) {
+        console.error('Error fetching automation:', res.status)
         setAutomation(null)
         return
       }
-      setAutomation(data)
+      const data = await res.json()
+      setAutomation(data.automation ?? data)
     } catch (err) {
       console.error('Failed to fetch automation:', err)
       setAutomation(null)
