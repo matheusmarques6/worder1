@@ -36,13 +36,14 @@ export function formatNumber(value: number | null | undefined): string {
 }
 
 /**
- * Formata data no padrão brasileiro
+ * Data ISO civil conserva o dia; timestamps e Date usam o fuso local.
  */
 export function formatDate(date: Date | string | null | undefined): string {
   if (!date) return '-'
   const d = typeof date === 'string' ? new Date(date) : date
   if (isNaN(d.getTime())) return '-'
-  return d.toLocaleDateString('pt-BR')
+  const dateOnly = typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)
+  return d.toLocaleDateString('pt-BR', dateOnly ? { timeZone: 'UTC' } : undefined)
 }
 
 /**
@@ -65,9 +66,7 @@ export function formatReportPeriod(
   startDate: Date | string,
   endDate: Date | string
 ): string {
-  const start = typeof startDate === 'string' ? new Date(startDate) : startDate
-  const end = typeof endDate === 'string' ? new Date(endDate) : endDate
-  return `${formatDate(start)} - ${formatDate(end)}`
+  return `${formatDate(startDate)} - ${formatDate(endDate)}`
 }
 
 /**
