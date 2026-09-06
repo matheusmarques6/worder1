@@ -83,11 +83,15 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Get campaign with template
+    // A organização vem no corpo e a campanha vinha só pelo id: nada
+    // conferia se uma é da outra. A rota é interna, mas quem chama
+    // monta as duas coisas separado — e um lote com a organização de um
+    // e a campanha de outro enviaria conteúdo alheio no nome errado.
     const { data: campaign, error: campaignError } = await supabaseAdmin
       .from('email_campaigns')
       .select('*, email_templates(*)')
       .eq('id', campaign_id)
+      .eq('organization_id', organizationId)
       .single();
 
     if (campaignError || !campaign) {

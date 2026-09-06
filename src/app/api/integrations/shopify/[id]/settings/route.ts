@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase'
+import { requireOrgFromAuth } from '@/lib/auth/require-org'
 export const dynamic = 'force-dynamic';
 
 // GET - Get store settings
@@ -12,17 +13,18 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  // A organização vinha na URL e nada exigia sessão: bastava informar o
+  // par (id da loja, id da organização) de outra empresa.
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const organizationId = auth.orgId;
+
   const supabase = createAdminClient()
   if (!supabase) {
     return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
   }
 
-  const searchParams = request.nextUrl.searchParams
-  const organizationId = searchParams.get('organizationId')
 
-  if (!organizationId) {
-    return NextResponse.json({ error: 'Organization ID required' }, { status: 400 })
-  }
 
   try {
     const { data: store, error } = await supabase
@@ -54,6 +56,12 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  // A organização vinha na URL e nada exigia sessão: bastava informar o
+  // par (id da loja, id da organização) de outra empresa.
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const organizationId = auth.orgId;
+
   const supabase = createAdminClient()
   if (!supabase) {
     return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
@@ -61,11 +69,9 @@ export async function PUT(
 
   try {
     const body = await request.json()
-    const { organizationId, tags, syncCustomers, syncOrders } = body
+    // A organização é a do token, não a que o corpo mandar.
+    const { tags, syncCustomers, syncOrders } = body
 
-    if (!organizationId) {
-      return NextResponse.json({ error: 'Organization ID required' }, { status: 400 })
-    }
 
     // Get current settings
     const { data: store } = await supabase

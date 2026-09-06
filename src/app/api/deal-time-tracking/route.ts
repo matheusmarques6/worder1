@@ -1,6 +1,7 @@
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { supabaseAdmin } from '@/lib/supabase-admin'
+import { orgStoreIds } from '@/lib/api/guards'
 import { NextRequest, NextResponse } from 'next/server'
+import { requireOrgFromAuth } from '@/lib/auth/require-org'
 
 // =============================================
 // Types
@@ -60,18 +61,22 @@ interface DealTimeData {
 // =============================================
 
 export async function GET(request: NextRequest) {
+  // Nenhuma sessão era exigida e a organização vinha na URL. O cliente
+  // aqui é o de componente de servidor, que depende de um cookie que
+  // este app não grava — então a consulta ia como anônima. A
+  // organização passa a vir do token.
+  const auth = await requireOrgFromAuth(request)
+  if (auth instanceof NextResponse) return auth
+  const organizationId = auth.orgId
+
   try {
-    const supabase = createServerComponentClient({ cookies })
+    const supabase = supabaseAdmin
     const { searchParams } = new URL(request.url)
 
-    const organizationId = searchParams.get('organization_id')
     const pipelineId = searchParams.get('pipeline_id')
     const dealId = searchParams.get('deal_id')
     const type = searchParams.get('type') || 'stats' // stats, deal, history
 
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
-    }
 
     switch (type) {
       case 'stats':
@@ -100,9 +105,15 @@ export async function GET(request: NextRequest) {
 // =============================================
 
 export async function POST(request: NextRequest) {
+  // Sessão obrigatória; a organização do corpo é substituída pela do
+  // token para que nenhum dos caminhos abaixo escreva em outra.
+  const auth = await requireOrgFromAuth(request)
+  if (auth instanceof NextResponse) return auth
+
   try {
-    const supabase = createServerComponentClient({ cookies })
+    const supabase = supabaseAdmin
     const body = await request.json()
+    body.organization_id = auth.orgId
 
     const {
       deal_id,
@@ -126,6 +137,7 @@ export async function POST(request: NextRequest) {
         .from('deal_stage_history')
         .select('created_at')
         .eq('deal_id', deal_id)
+        .eq('organization_id', organization_id)
         .eq('to_stage_id', from_stage_id)
         .order('created_at', { ascending: false })
         .limit(1)
@@ -177,10 +189,27 @@ async function getStageStats(
   organizationId: string,
   pipelineId?: string | null
 ): Promise<NextResponse> {
-  // Get all stages for the pipeline
+  // `pipeline_stages` e `deals` não têm coluna de organização: a cerca
+  // é a loja. As consultas daqui filtravam por `organization_id` numa
+  // tabela que não tem essa coluna — não cercavam nada e ainda erravam.
+  const storeIds = await orgStoreIds(supabase, organizationId)
+  if (storeIds.length === 0) {
+    return NextResponse.json({ stats: [] })
+  }
+
+  const { data: orgPipelines } = await supabase
+    .from('pipelines')
+    .select('id')
+    .in('store_id', storeIds)
+  const pipelineIds = (orgPipelines || []).map((p: any) => p.id)
+  if (pipelineIds.length === 0) {
+    return NextResponse.json({ stats: [] })
+  }
+
   let stagesQuery = supabase
     .from('pipeline_stages')
     .select('id, name, position')
+    .in('pipeline_id', pipelineIds)
     .order('position', { ascending: true })
 
   if (pipelineId) {
@@ -218,7 +247,7 @@ async function getStageStats(
       const { count: currentDeals } = await supabase
         .from('deals')
         .select('*', { count: 'exact', head: true })
-        .eq('organization_id', organizationId)
+        .in('store_id', storeIds)
         .eq('stage_id', stage.id)
         .eq('status', 'active')
 
@@ -260,7 +289,12 @@ async function getDealTimeData(
   dealId: string,
   organizationId: string
 ): Promise<NextResponse> {
-  // Get the deal
+  // Idem: `deals` se cerca pela loja.
+  const storeIds = await orgStoreIds(supabase, organizationId)
+  if (storeIds.length === 0) {
+    return NextResponse.json({ error: 'Deal nao encontrado' }, { status: 404 })
+  }
+
   const { data: deal, error: dealError } = await supabase
     .from('deals')
     .select(`
@@ -271,7 +305,7 @@ async function getDealTimeData(
       pipeline_stages (id, name)
     `)
     .eq('id', dealId)
-    .eq('organization_id', organizationId)
+    .in('store_id', storeIds)
     .single()
 
   if (dealError || !deal) {
@@ -286,6 +320,7 @@ async function getDealTimeData(
       to_stage:pipeline_stages!deal_stage_history_to_stage_id_fkey (id, name)
     `)
     .eq('deal_id', dealId)
+    .eq('organization_id', organizationId)
     .order('created_at', { ascending: true })
 
   // Build timeline

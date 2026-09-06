@@ -7,19 +7,23 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { requireOrgFromAuth } from '@/lib/auth/require-org';
 export const dynamic = 'force-dynamic';
 
 // =============================================
 // GET - Buscar configurações
 // =============================================
 export async function GET(request: NextRequest) {
+  // A organização vinha no pedido e nada exigia sessão: qualquer um
+  // lia e escrevia na organização que quisesse, só informando o id.
+  // Agora ela vem do token.
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const organizationId = auth.orgId;
+
   try {
     const { searchParams } = new URL(request.url);
-    const organizationId = searchParams.get('organization_id');
 
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 });
-    }
 
     // Buscar ou criar configurações
     let { data: settings, error } = await supabaseAdmin
@@ -53,10 +57,16 @@ export async function GET(request: NextRequest) {
 // PUT - Atualizar configurações
 // =============================================
 export async function PUT(request: NextRequest) {
+  // A organização vinha no pedido e nada exigia sessão: qualquer um
+  // lia e escrevia na organização que quisesse, só informando o id.
+  // Agora ela vem do token.
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const organization_id = auth.orgId;
+
   try {
     const body = await request.json();
     const {
-      organization_id,
       distribution_method,
       max_conversations_per_agent,
       max_wait_time_minutes,
@@ -67,10 +77,6 @@ export async function PUT(request: NextRequest) {
       auto_assign_enabled,
       notify_on_new_conversation,
     } = body;
-
-    if (!organization_id) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 });
-    }
 
     // Preparar updates
     const updates: Record<string, any> = {};

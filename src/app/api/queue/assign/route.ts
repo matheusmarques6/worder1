@@ -6,26 +6,29 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { requireOrgFromAuth } from '@/lib/auth/require-org';
 export const dynamic = 'force-dynamic';
 
 // =============================================
 // POST - Atribuir conversa
 // =============================================
 export async function POST(request: NextRequest) {
+  // A rota não pedia sessão nenhuma e aceitava `organization_id` pelo
+  // corpo: qualquer um atribuía conversas de qualquer organização. A
+  // organização passa a vir do token; o campo do corpo é ignorado.
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const organization_id = auth.orgId;
+
   try {
     const body = await request.json();
     const {
-      organization_id,
       queue_item_id,
       conversation_id,
       agent_id,
       agent_name,
       auto = false, // Se true, atribui automaticamente
     } = body;
-
-    if (!organization_id) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 });
-    }
 
     // Atribuição automática
     if (auto) {
@@ -84,6 +87,7 @@ export async function POST(request: NextRequest) {
         .from('queue_items')
         .select('*')
         .eq('id', queue_item_id)
+        .eq('organization_id', organization_id)
         .single();
       
       if (error || !data) {
@@ -95,6 +99,7 @@ export async function POST(request: NextRequest) {
         .from('queue_items')
         .select('*')
         .eq('conversation_id', conversation_id)
+        .eq('organization_id', organization_id)
         .eq('status', 'waiting')
         .single();
       
@@ -112,7 +117,8 @@ export async function POST(request: NextRequest) {
           assigned_to_name: agent_name || agent.profile?.full_name,
           wait_time_seconds: Math.floor((Date.now() - new Date(queueItem.entered_at).getTime()) / 1000),
         })
-        .eq('id', queueItem.id);
+        .eq('id', queueItem.id)
+        .eq('organization_id', organization_id);
     }
 
     // Atualizar contadores do agente
@@ -136,7 +142,8 @@ export async function POST(request: NextRequest) {
           assigned_agent_id: agent_id,
           assigned_at: new Date().toISOString(),
         })
-        .eq('id', conversationToUpdate);
+        .eq('id', conversationToUpdate)
+        .eq('organization_id', organization_id);
     }
 
     console.log('[Queue Assign] Assigned conversation to agent:', agent_id);

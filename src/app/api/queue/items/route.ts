@@ -7,21 +7,25 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { requireOrgFromAuth } from '@/lib/auth/require-org';
 export const dynamic = 'force-dynamic';
 
 // =============================================
 // GET - Listar itens na fila
 // =============================================
 export async function GET(request: NextRequest) {
+  // A organização vinha no pedido e nada exigia sessão: qualquer um
+  // lia e escrevia na organização que quisesse, só informando o id.
+  // Agora ela vem do token.
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const organizationId = auth.orgId;
+
   try {
     const { searchParams } = new URL(request.url);
-    const organizationId = searchParams.get('organization_id');
     const status = searchParams.get('status'); // waiting, assigned, all
     const limit = parseInt(searchParams.get('limit') || '50');
 
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id é obrigatório' }, { status: 400 });
-    }
 
     let query = supabaseAdmin
       .from('queue_items')
@@ -65,10 +69,16 @@ export async function GET(request: NextRequest) {
 // POST - Adicionar conversa à fila
 // =============================================
 export async function POST(request: NextRequest) {
+  // A organização vinha no pedido e nada exigia sessão: qualquer um
+  // lia e escrevia na organização que quisesse, só informando o id.
+  // Agora ela vem do token.
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const organization_id = auth.orgId;
+
   try {
     const body = await request.json();
     const {
-      organization_id,
       store_id,
       conversation_id,
       contact_id,
@@ -81,9 +91,9 @@ export async function POST(request: NextRequest) {
       metadata = {},
     } = body;
 
-    if (!organization_id || !conversation_id) {
+    if (!conversation_id) {
       return NextResponse.json({ 
-        error: 'organization_id e conversation_id são obrigatórios' 
+        error: 'conversation_id é obrigatório' 
       }, { status: 400 });
     }
 
@@ -115,7 +125,6 @@ export async function POST(request: NextRequest) {
     const { data: item, error } = await supabaseAdmin
       .from('queue_items')
       .insert({
-        organization_id,
         store_id,
         conversation_id,
         contact_id,

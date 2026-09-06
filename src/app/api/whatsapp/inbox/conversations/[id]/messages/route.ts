@@ -75,10 +75,14 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     if (!before && !after) {
       const firstMsg = messages?.[0]
       const provider = firstMsg?.provider
+      // A leitura acima já é cercada por organização; a escrita não era,
+      // e zerava o não-lido de uma conversa de qualquer organização.
       if (provider === 'cloud') {
-        await supabase.from('whatsapp_cloud_conversations').update({ unread_count: 0 }).eq('id', conversationId)
+        await supabase.from('whatsapp_cloud_conversations')
+          .update({ unread_count: 0 }).eq('id', conversationId).eq('organization_id', orgId)
       } else {
-        await supabase.from('whatsapp_conversations').update({ unread_count: 0 }).eq('id', conversationId)
+        await supabase.from('whatsapp_conversations')
+          .update({ unread_count: 0 }).eq('id', conversationId).eq('organization_id', orgId)
       }
     }
 
