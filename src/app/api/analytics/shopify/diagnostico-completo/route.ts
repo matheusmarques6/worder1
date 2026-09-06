@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { assertDebugAllowed } from '@/lib/debug-guard';
-import { getSupabaseClient } from '@/lib/api-utils';
+import { requireStore } from '@/lib/api/guards';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
@@ -266,28 +266,22 @@ async function analyzeOnePeriod(
 }
 
 export async function GET(request: NextRequest) {
+  // A loja vem pela URL e daqui sai o access_token dela para chamar a
+  // Shopify. Sem esta cerca, um id de loja de outra organização bastava.
+  const guard = await requireStore(request);
+  if (!guard.ok) return guard.response;
+  const { supabase, storeId, organizationId } = guard;
   const blocked = assertDebugAllowed(request); if (blocked) return blocked;
   const { searchParams } = new URL(request.url);
-  const storeId = searchParams.get('storeId');
   const periodos = searchParams.get('periodos')?.split(',') || ['yesterday', 'today', '7d', '30d'];
 
-  if (!storeId) {
-    return NextResponse.json({ 
-      error: 'Passe ?storeId=XXX',
-      exemplo: '/api/analytics/shopify/diagnostico-completo?storeId=123&periodos=yesterday,today,7d,30d'
-    });
-  }
 
   try {
-    const supabase = getSupabaseClient();
-    if (!supabase) {
-      return NextResponse.json({ error: 'Database error' }, { status: 500 });
-    }
-
     const { data: store } = await supabase
       .from('shopify_stores')
       .select('shop_domain, access_token')
       .eq('id', storeId)
+      .eq('organization_id', organizationId)
       .single();
 
     if (!store) {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError, getSupabaseClient } from '@/lib/api-utils';
+import { orgStoreIds } from '@/lib/api/guards';
 import { ExecutionEngine } from '@/lib/automation/execution-engine';
 import { decryptCredential } from '@/lib/automation/credential-encryption';
 export const dynamic = 'force-dynamic';
@@ -15,11 +16,12 @@ export async function POST(
   const auth = await getAuthClient();
   if (!auth) return authError();
   const { supabase } = auth;
+  const organizationId = auth.user.organization_id;
 
   try {
     const { id: automationId } = await params;
     const body = await request.json();
-    
+
     const {
       contactId,
       dealId,
@@ -28,11 +30,15 @@ export async function POST(
       isTest = false,
     } = body;
 
-    // Buscar automação - RLS filtra automaticamente
+    // O filtro por organização é explícito, não herdado. O comentário
+    // antigo dizia que a RLS filtrava sozinha, e a RLS está desligada
+    // nestas tabelas: sem o `.eq`, o id de uma automação de outra
+    // organização era suficiente para executá-la.
     const { data: automation, error: automationError } = await supabase
       .from('automations')
       .select('*')
       .eq('id', automationId)
+      .eq('organization_id', organizationId)
       .single();
 
     if (automationError || !automation) {
@@ -58,21 +64,27 @@ export async function POST(
         .from('contacts')
         .select('*')
         .eq('id', contactId)
+        .eq('organization_id', organizationId)
         .single();
-      
+
       contact = contactData;
     }
 
-    // Buscar deal se fornecido
+    // Buscar deal se fornecido. `deals` não tem coluna de organização:
+    // a cerca é a loja.
     let deal: Record<string, any> | null = null;
     if (dealId) {
-      const { data: dealData } = await supabase
-        .from('deals')
-        .select('*')
-        .eq('id', dealId)
-        .single();
-      
-      deal = dealData;
+      const storeIds = await orgStoreIds(supabase, organizationId);
+      if (storeIds.length > 0) {
+        const { data: dealData } = await supabase
+          .from('deals')
+          .select('*')
+          .eq('id', dealId)
+          .in('store_id', storeIds)
+          .single();
+
+        deal = dealData;
+      }
     }
 
     // Buscar credenciais necessárias para os nós
@@ -86,9 +98,13 @@ export async function POST(
 
     const credentials: Record<string, any> = {};
     if (credentialsNeeded.size > 0) {
+      // Sem o filtro de organização aqui, bastava apontar um nó da
+      // própria automação para o id de uma credencial alheia: a rota
+      // decriptava e usava. É o vazamento mais caro desta rota.
       const { data: credentialRecords } = await supabase
         .from('credentials')
         .select('id, type, encrypted_data')
+        .eq('organization_id', organizationId)
         .in('id', Array.from(credentialsNeeded));
 
       for (const cred of credentialRecords || []) {
