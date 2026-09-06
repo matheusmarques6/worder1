@@ -2857,22 +2857,26 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
             const opened = nodeMetrics?.opened ?? 0;
             const clicked = nodeMetrics?.clicked ?? 0;
             const revenue = nodeMetrics?.revenue ?? 0;
+            const waiting = (nodeMetrics as any)?.waiting ?? 0;
             const openRate = sent > 0 ? Math.round((opened / sent) * 100) : null;
             const clickRate = sent > 0 ? Math.round((clicked / sent) * 100) : null;
             const fmt = (n: number) =>
               n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             return (
               <>
+                {/* A contagem junto da taxa: uma taxa sozinha, com
+                    poucos envios, é lida como desempenho quando é só
+                    um clique ou dois. */}
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Taxa de abertura</span>
+                  <span className="text-sm text-gray-600">Aberturas</span>
                   <span className={`text-sm ${openRate === null ? 'text-gray-400' : 'text-gray-900 font-medium'}`}>
-                    {openRate === null ? '--' : `${openRate}%`}
+                    {openRate === null ? '--' : `${opened} de ${sent} · ${openRate}%`}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Taxa de cliques</span>
+                  <span className="text-sm text-gray-600">Cliques</span>
                   <span className={`text-sm ${clickRate === null ? 'text-gray-400' : 'text-gray-900 font-medium'}`}>
-                    {clickRate === null ? '--' : `${clickRate}%`}
+                    {clickRate === null ? '--' : `${clicked} de ${sent} · ${clickRate}%`}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
@@ -2885,6 +2889,21 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
                   <span className="text-xs text-gray-400">Enviados</span>
                   <span className="text-xs text-gray-500">{sent}</span>
                 </div>
+                {waiting > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-400">Aguardando aqui agora</span>
+                    <span className="text-xs text-amber-700 font-medium">{waiting}</span>
+                  </div>
+                )}
+                {sent > 0 && revenue === 0 && (
+                  // "R$ 0" sozinho não distingue "ninguém comprou" de
+                  // "isto não está medindo". A receita só entra quando um
+                  // pedido cai na janela de atribuição depois do e-mail.
+                  <p className="text-[11px] text-gray-400 leading-snug pt-1">
+                    Sem receita atribuída ainda: nenhum pedido caiu na janela de
+                    atribuição depois deste e-mail.
+                  </p>
+                )}
               </>
             );
           })()}

@@ -97,8 +97,8 @@ describe('GET /api/automations/[id]/stats — contagem por nó vem dos envios ca
 
     const { status, body } = await call('30d')
     expect(status).toBe(200)
-    expect(body.nodeStats[EMAIL1]).toEqual({ sent: 3, opened: 2, clicked: 1, revenue: 120.5 })
-    expect(body.nodeStats[EMAIL2]).toEqual({ sent: 1, opened: 1, clicked: 0, revenue: 0 })
+    expect(body.nodeStats[EMAIL1]).toEqual({ sent: 3, opened: 2, clicked: 1, revenue: 120.5, waiting: 0 })
+    expect(body.nodeStats[EMAIL2]).toEqual({ sent: 1, opened: 1, clicked: 0, revenue: 0, waiting: 0 })
     expect(body.totalRuns).toBe(1)
     expect(body.timeframe).toBe('30d')
   })
@@ -195,8 +195,8 @@ describe('GET /api/automations/[id]/stats — contagem por nó vem dos envios ca
     ])
 
     const { body } = await call('30d')
-    expect(body.nodeStats[WA1]).toEqual({ sent: 2, opened: 2, clicked: 1, revenue: 80 })
-    expect(body.nodeStats[SMS1]).toEqual({ sent: 1, opened: 1, clicked: 1, revenue: 10 })
+    expect(body.nodeStats[WA1]).toEqual({ sent: 2, opened: 2, clicked: 1, revenue: 80, waiting: 0 })
+    expect(body.nodeStats[SMS1]).toEqual({ sent: 1, opened: 1, clicked: 1, revenue: 10, waiting: 0 })
   })
 
   it('exige autenticação', async () => {

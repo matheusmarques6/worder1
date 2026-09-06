@@ -208,6 +208,13 @@ function BaseNodeComponent({ id, data, selected }: BaseNodeProps) {
   const analyticsData = useFlowStore((s) => s.analyticsData);
 
   const nodeMetrics = showAnalytics ? analyticsData[id] : null;
+  const sent = nodeMetrics?.sent ?? 0;
+  const revenue = nodeMetrics?.revenue ?? 0;
+  const waiting = (nodeMetrics as any)?.waiting ?? 0;
+  // Sem envio não há taxa a mostrar: "0%" afirma que se mediu e deu
+  // zero, quando na verdade não há o que medir.
+  const rate = (v: number | undefined) =>
+    sent > 0 ? `${Math.round(((v ?? 0) / sent) * 100)}%` : null;
   const summary = getNodeSummary(nodeType, nodeConfig || {});
   const typeLabel = nodeTypeLabels[nodeType] || cat.label;
   const removeNode = useFlowStore((s) => s.removeNode);
@@ -321,31 +328,33 @@ function BaseNodeComponent({ id, data, selected }: BaseNodeProps) {
           </div>
         </div>
 
-        {/* Metrics — shown when analytics toggle is ON */}
+        {/* Métricas — com o toggle de análise ligado.
+
+            O número que conta é a CONTAGEM; a taxa vem embaixo, menor.
+            Ao contrário, engana: "25%" num card é lido como taxa medida,
+            mas eram 4 envios e 1 clique — e um clique em quatro não é
+            uma taxa, é um clique. Foi exatamente assim que este painel
+            passou a impressão de estar errado quando estava certo. */}
         {showAnalytics && category === 'action' && (
           <div className="px-4 pb-3 pt-0">
-            <div className="flex items-center gap-5 border-t border-gray-100 pt-2.5">
-              <div>
-                <p className="text-[10px] text-gray-400">Sent</p>
-                <p className="text-sm font-bold text-gray-900">{nodeMetrics?.sent ?? 0}</p>
-              </div>
-              <div>
-                <p className="text-[10px] text-gray-400">Opened</p>
-                <p className="text-sm font-bold text-gray-900">
-                  {(nodeMetrics?.sent ?? 0) > 0 ? `${Math.round((nodeMetrics?.opened ?? 0) / nodeMetrics!.sent * 100)}%` : '0%'}
+            <div className="flex items-center gap-4 border-t border-gray-100 pt-2.5">
+              <Metric label="Enviados" value={sent} />
+              <Metric label="Aberturas" value={nodeMetrics?.opened ?? 0} rate={rate(nodeMetrics?.opened)} />
+              <Metric label="Cliques" value={nodeMetrics?.clicked ?? 0} rate={rate(nodeMetrics?.clicked)} />
+              <div className="min-w-0">
+                <p className="text-[10px] text-gray-400">Receita</p>
+                <p className={`text-sm font-bold tabular-nums ${revenue > 0 ? 'text-emerald-600' : 'text-gray-400'}`}>
+                  {revenue > 0 ? brl(revenue) : '—'}
                 </p>
-              </div>
-              <div>
-                <p className="text-[10px] text-gray-400">Clicked</p>
-                <p className="text-sm font-bold text-gray-900">
-                  {(nodeMetrics?.sent ?? 0) > 0 ? `${Math.round((nodeMetrics?.clicked ?? 0) / nodeMetrics!.sent * 100)}%` : '0%'}
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] text-gray-400">Sales</p>
-                <p className="text-sm font-bold text-emerald-600">R${(nodeMetrics?.revenue ?? 0).toFixed(0)}</p>
               </div>
             </div>
+            {/* Quem está parado aqui agora. Sem isto, o Email 2 com 3
+                contra 4 do Email 1 parece perda; costuma ser espera. */}
+            {waiting > 0 && (
+              <p className="mt-1.5 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 inline-block">
+                {waiting === 1 ? '1 pessoa aguardando aqui' : `${waiting} pessoas aguardando aqui`}
+              </p>
+            )}
           </div>
         )}
 
@@ -465,6 +474,28 @@ function BaseNodeComponent({ id, data, selected }: BaseNodeProps) {
     </div>
   );
 }
+
+/**
+ * Uma métrica do card: a contagem em destaque e a taxa abaixo, menor.
+ *
+ * A ordem importa. Com a taxa em destaque, "25%" de 1 clique em 4
+ * envios se lê como desempenho; com a contagem em destaque, se lê como
+ * o que é — um clique.
+ */
+function Metric({ label, value, rate }: { label: string; value: number; rate?: string | null }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[10px] text-gray-400">{label}</p>
+      <p className="text-sm font-bold text-gray-900 tabular-nums leading-tight">
+        {value}
+        {rate && <span className="ml-1 text-[10px] font-medium text-gray-400">{rate}</span>}
+      </p>
+    </div>
+  )
+}
+
+const brl = (v: number) =>
+  `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
 
 export const BaseNode = memo(BaseNodeComponent);
 export default BaseNode;

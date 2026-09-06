@@ -283,9 +283,16 @@ async function recordClick(
 
     const now = new Date().toISOString();
 
-    // email_sends.clicked_at — only the first click flips it.
-    await supabaseAdmin.from('email_sends')
-      .update({ clicked_at: now }).eq('id', emailSendId).is('clicked_at', null);
+    // Primeiro clique marca a data; todo clique soma no contador. A
+    // soma vai no banco porque dois cliques simultâneos lidos daqui
+    // virariam um.
+    const { error: bumpErr } = await supabaseAdmin.rpc('bump_email_send_click', {
+      p_send_id: emailSendId,
+    });
+    if (bumpErr) {
+      await supabaseAdmin.from('email_sends')
+        .update({ clicked_at: now }).eq('id', emailSendId).is('clicked_at', null);
+    }
 
     // CDP: contact_events
     if (attribution.organizationId && attribution.contactId) {

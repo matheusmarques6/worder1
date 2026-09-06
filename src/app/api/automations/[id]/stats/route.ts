@@ -24,7 +24,14 @@ export const dynamic = 'force-dynamic';
 // Response shape (unchanged so the canvas component keeps working):
 //   { nodeStats: { [nodeId]: { sent, opened, clicked, revenue } }, totalRuns, timeframe }
 
-type NodeStat = { sent: number; opened: number; clicked: number; revenue: number };
+type NodeStat = {
+  sent: number
+  opened: number
+  clicked: number
+  revenue: number
+  /** Execuções paradas NESTE nó agora, esperando o próximo passo. */
+  waiting: number
+};
 
 const PAGE = 1000;
 const MAX_PAGES = 50;
@@ -93,6 +100,22 @@ export async function GET(
       };
     }
 
+    // Execuções paradas em cada nó, agora. Sem isto o funil parece
+    // furado: o Email 2 mostra 3 contra 4 do Email 1 e nada explica que
+    // a diferença está esperando o atraso de 6 horas, não perdida.
+    const waitingByNode = new Map<string, number>();
+    try {
+      const { data: waitingRuns } = await supabase
+        .from('automation_runs')
+        .select('current_node_id')
+        .eq('automation_id', automationId)
+        .eq('status', 'waiting');
+      for (const r of waitingRuns || []) {
+        const n = (r as any).current_node_id;
+        if (n) waitingByNode.set(n, (waitingByNode.get(n) || 0) + 1);
+      }
+    } catch { /* sem esperando: o card só não mostra o aviso */ }
+
     // Runs are still loaded for totalRuns and for the legacy fallback:
     // a send row with no node stamp is attributed through the run
     // snapshot when that snapshot still carries its send id.
@@ -158,7 +181,7 @@ export async function GET(
 
     const nodeStats: Record<string, NodeStat> = {};
     const bump = (nodeId: string): NodeStat => {
-      if (!nodeStats[nodeId]) nodeStats[nodeId] = { sent: 0, opened: 0, clicked: 0, revenue: 0 };
+      if (!nodeStats[nodeId]) nodeStats[nodeId] = { sent: 0, opened: 0, clicked: 0, revenue: 0, waiting: 0 };
       return nodeStats[nodeId];
     };
     const nodeOf = (row: { id: string; node_id?: string | null; metadata?: any }): string | null => {
@@ -205,6 +228,13 @@ export async function GET(
       if (row.delivered_at) s.opened++;
       if (row.clicked_at) s.clicked++;
       s.revenue += money(row.conversion_value);
+    }
+
+    // Um nó pode ter gente esperando nele sem ter enviado nada ainda
+    // (um atraso, por exemplo) — por isso entra depois, criando a linha
+    // quando ela não existir.
+    for (const [nodeId, count] of waitingByNode) {
+      bump(nodeId).waiting = count;
     }
 
     return NextResponse.json({
