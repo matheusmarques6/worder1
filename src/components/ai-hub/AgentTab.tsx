@@ -5,6 +5,7 @@ import { Bot, Check, Loader2, Save } from 'lucide-react'
 import { AgentsTheme } from '@/components/agents/ui/AgentsTheme'
 import { Card } from '@/components/agents/ui/primitives'
 import { agentToHub, hubToAgentPatch, type HubState } from '@/lib/ai/agent-hub'
+import type { RuntimeMode } from '@/lib/ai/runtime-rollout'
 import RadialView from './RadialView'
 import ClassicView from './ClassicView'
 
@@ -56,6 +57,7 @@ export default function AgentTab({ organizationId }: { organizationId: string })
   const [agents, setAgents] = useState<AgentSummary[]>([])
   const [canonical, setCanonical] = useState<any | null>(null)
   const [needsChoice, setNeedsChoice] = useState(false)
+  const [runtimeMode, setRuntimeMode] = useState<RuntimeMode>('legacy')
   const [hub, setHub] = useState<HubState | null>(null)
   const [savedHub, setSavedHub] = useState<string>('')
   const [saving, setSaving] = useState(false)
@@ -84,6 +86,7 @@ export default function AgentTab({ organizationId }: { organizationId: string })
       setAgents(canonicalData.agents ?? [])
       setCanonical(canonicalData.canonical)
       setNeedsChoice(Boolean(canonicalData.needsChoice))
+      setRuntimeMode(canonicalData.runtimeMode === 'runtime' ? 'runtime' : 'legacy')
 
       if (canonicalData.canonical) {
         const next = agentToHub(canonicalData.canonical)
@@ -225,9 +228,9 @@ export default function AgentTab({ organizationId }: { organizationId: string })
             </Card>
           </div>
         ) : isDesktop ? (
-          <RadialView hub={hub} onChange={setHub} organizationId={organizationId} agentId={canonical.id} />
+          <RadialView hub={hub} onChange={setHub} organizationId={organizationId} agentId={canonical.id} runtimeMode={runtimeMode} />
         ) : (
-          <ClassicView hub={hub} onChange={setHub} organizationId={organizationId} agentId={canonical.id} />
+          <ClassicView hub={hub} onChange={setHub} organizationId={organizationId} agentId={canonical.id} runtimeMode={runtimeMode} />
         )}
       </div>
     </AgentsTheme>

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { ArrowLeft, ArrowRight, Check } from 'lucide-react'
 import { HUB_AREAS, hubAreaDone, type HubState } from '@/lib/ai/agent-hub'
+import type { RuntimeMode } from '@/lib/ai/runtime-rollout'
 import AreaFields from './AreaFields'
 
 /**
@@ -16,9 +17,10 @@ export interface ClassicViewProps {
   onChange: (next: HubState) => void
   organizationId: string
   agentId: string | null
+  runtimeMode: RuntimeMode
 }
 
-export default function ClassicView({ hub, onChange, organizationId, agentId }: ClassicViewProps) {
+export default function ClassicView({ hub, onChange, organizationId, agentId, runtimeMode }: ClassicViewProps) {
   const [step, setStep] = useState(HUB_AREAS[0].id)
   const idx = HUB_AREAS.findIndex((a) => a.id === step)
   const area = HUB_AREAS[idx]
@@ -45,7 +47,7 @@ export default function ClassicView({ hub, onChange, organizationId, agentId }: 
         </div>
         <div className="card" style={{ padding: 18, maxWidth: 560 }}>
           <AreaFields area={area.id} hub={hub} onChange={onChange}
-            organizationId={organizationId} agentId={agentId} />
+            organizationId={organizationId} agentId={agentId} runtimeMode={runtimeMode} />
         </div>
         <div style={{ display: 'flex', gap: 10, marginTop: 16, maxWidth: 560 }}>
           <button type="button" className="btn btn-ghost" disabled={idx === 0}
