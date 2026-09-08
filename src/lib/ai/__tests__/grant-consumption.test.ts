@@ -30,6 +30,7 @@ describe('consumeGrantsForOrder', () => {
       p_organization_id: ORG,
       p_coupon_code: 'WD-ABC123',
       p_order_ref: '987654',
+      p_contact_id: null,
     });
     expect(results[0]).toEqual({ code: 'WD-ABC123', status: 'consumed', grant_id: 'g1' });
   });

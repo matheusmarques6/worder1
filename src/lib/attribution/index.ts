@@ -22,7 +22,7 @@
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
 export type AttributionClassification = 'attributed' | 'recipient';
-export type AttributionChannel = 'email' | 'whatsapp' | 'sms';
+export type AttributionChannel = 'email' | 'whatsapp' | 'sms' | 'popup';
 
 export interface AttributionCallInput {
   contactId: string;
@@ -57,6 +57,9 @@ interface OrgWindows {
   email_window_days: number;
   whatsapp_window_days: number;
   sms_window_days: number;
+  // A inscrição num popup é um toque como os outros. Janela mais longa
+  // porque quem acabou de entrar na lista compra em dias, não em horas.
+  popup_window_days: number;
   count_opens: boolean;
   exclude_mpp_opens: boolean;
   model: 'last_touch' | 'first_touch';
@@ -66,6 +69,7 @@ const DEFAULT_WINDOWS: OrgWindows = {
   email_window_days: 5,
   whatsapp_window_days: 2,
   sms_window_days: 2,
+  popup_window_days: 30,
   count_opens: true,
   exclude_mpp_opens: true,
   model: 'last_touch',
@@ -85,6 +89,7 @@ async function loadWindows(organizationId: string): Promise<OrgWindows> {
       email_window_days: Number(a.email_window_days) || DEFAULT_WINDOWS.email_window_days,
       whatsapp_window_days: Number(a.whatsapp_window_days) || DEFAULT_WINDOWS.whatsapp_window_days,
       sms_window_days: Number(a.sms_window_days) || DEFAULT_WINDOWS.sms_window_days,
+      popup_window_days: Number(a.popup_window_days) || DEFAULT_WINDOWS.popup_window_days,
       count_opens: a.count_opens !== false,
       exclude_mpp_opens: a.exclude_mpp_opens !== false,
       // first_touch existia na tela e na API mas o motor nunca lia —
@@ -120,6 +125,7 @@ export async function attributeOrder(input: AttributionCallInput): Promise<Attri
       p_count_opens: w.count_opens,
       p_exclude_mpp: w.exclude_mpp_opens,
       p_model: w.model,
+      p_popup_days: w.popup_window_days,
     });
 
     if (error) {

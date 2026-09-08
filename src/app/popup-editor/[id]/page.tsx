@@ -691,13 +691,23 @@ function BlockPreview({ block, selected, onContentChange, onSelect }: { block: B
     // under-draw the gap. New inserts already carry height: 24.
     case 'spacer': return <div style={{ ...blockStyle, height: p.height ?? 24 }} />
     case 'line': return <div style={blockStyle}><hr style={{ border: 'none', borderTop: `${p.thickness || 1}px ${p.style || 'solid'} ${p.color || '#E5E7EB'}`, margin: '0 auto', width: `${p.width ?? 100}%` }} /></div>
-    case 'coupon':
+    case 'coupon': {
+      const unique = p.mode === 'unique' || p.mode === 'dynamic'
+      const preview = unique ? `${(p.codePrefix || 'POPUP').toUpperCase()}-XXXXXXXX` : (p.code || 'CODIGO')
+      const applied = unique && p.showCode === false
       return <div style={{ ...blockStyle, padding: '16px', border: `2px ${p.borderStyle || 'dashed'} ${p.borderColor || '#F97316'}`, borderRadius: p.borderRadius ?? 8, textAlign: 'center', background: p.bgColor || '#FFF7ED' }}>
-        <p style={{ fontSize: 12, color: '#6B7280', margin: '0 0 4px' }}>{p.description}</p>
-        <p onClick={() => { navigator.clipboard?.writeText(p.code || ''); }}
-          style={{ fontSize: p.fontSize || 20, fontWeight: 700, color: p.codeColor || '#F97316', letterSpacing: 2, margin: 0, cursor: 'pointer' }}
-          title="Clique para copiar">{p.code}</p>
+        {applied ? (
+          <p style={{ fontSize: Math.round((p.fontSize || 20) * 0.8), fontWeight: 700, color: p.codeColor || '#F97316', margin: 0 }}>{p.appliedText || 'Desconto aplicado no seu carrinho'}</p>
+        ) : (
+          <>
+            <p style={{ fontSize: 12, color: '#6B7280', margin: '0 0 4px' }}>{p.description}</p>
+            <p style={{ fontSize: p.fontSize || 20, fontWeight: 700, color: p.codeColor || '#F97316', letterSpacing: 2, margin: 0 }}
+              title={unique ? 'Cada inscrito recebe um código único' : 'Clique para copiar'}>{preview}</p>
+            {unique && <p style={{ fontSize: 10, color: '#9CA3AF', margin: '6px 0 0' }}>código único por inscrito</p>}
+          </>
+        )}
       </div>
+    }
     case 'countdown': {
       // Real remaining time (what the storefront shows). No endDate → zeros +
       // warning icon so the merchant sees the timer would render dead on site.
@@ -949,6 +959,69 @@ const BorderStyleControl = ({ p, up, def = 'solid' }: { p: any; up: (k: string, 
     { value: 'dotted', label: '· · ·', title: 'Pontilhada' },
   ]} />
 )
+
+// Estoque de códigos únicos do popup. Lê /api/forms/:id/coupon-pool; o
+// botão sincroniza o pool com o bloco e cria um lote agora, sem esperar o
+// cron. O popup precisa estar salvo com o bloco em modo único.
+function CouponPoolPanel() {
+  const params = useParams()
+  const formId = String(params?.id || '')
+  const [state, setState] = useState<{ loading: boolean; data: any; error: string | null; working: boolean }>({ loading: true, data: null, error: null, working: false })
+  const load = useCallback(async () => {
+    if (!formId) return
+    try {
+      const r = await fetch(`/api/forms/${formId}/coupon-pool`, { cache: 'no-store' })
+      const d = await r.json().catch(() => ({}))
+      setState(s => ({ ...s, loading: false, data: r.ok ? d : null, error: r.ok ? null : (d.error || 'Não foi possível ler o estoque') }))
+    } catch (e: any) {
+      setState(s => ({ ...s, loading: false, error: e?.message || 'erro' }))
+    }
+  }, [formId])
+  useEffect(() => { load() }, [load])
+  const generate = async () => {
+    setState(s => ({ ...s, working: true, error: null }))
+    try {
+      const r = await fetch(`/api/forms/${formId}/coupon-pool`, { method: 'POST' })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) setState(s => ({ ...s, working: false, error: d.error || 'Não foi possível gerar códigos' }))
+      else setState(s => ({ ...s, working: false, data: d, error: d.error || null }))
+    } catch (e: any) {
+      setState(s => ({ ...s, working: false, error: e?.message || 'erro' }))
+    }
+  }
+  const d = state.data
+  const stock = d?.stock
+  return (
+    <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] font-bold text-gray-500 uppercase tracking-[0.08em]">Estoque de códigos</p>
+        <button type="button" onClick={generate} disabled={state.working}
+          className="text-[11px] font-semibold text-zinc-900 underline underline-offset-2 disabled:opacity-50">
+          {state.working ? 'Gerando…' : 'Gerar códigos agora'}
+        </button>
+      </div>
+      {state.loading ? (
+        <p className="text-[11px] text-gray-400">Carregando…</p>
+      ) : !d?.pool ? (
+        <p className="text-[11px] text-gray-500 leading-snug">Nenhum pool ainda. Salve o popup com o cupom em modo único (e uma loja vinculada) — o pool é criado no save e os primeiros códigos ao publicar.</p>
+      ) : (
+        <>
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div><p className="text-[15px] font-semibold text-gray-900 tabular-nums">{stock.usable}</p><p className="text-[10px] text-gray-500">prontos</p></div>
+            <div><p className="text-[15px] font-semibold text-gray-900 tabular-nums">{stock.reserved}</p><p className="text-[10px] text-gray-500">entregues</p></div>
+            <div><p className="text-[15px] font-semibold text-gray-900 tabular-nums">{stock.consumed}</p><p className="text-[10px] text-gray-500">usados</p></div>
+          </div>
+          <p className="text-[11px] text-gray-500 leading-snug">
+            {d.pool.status === 'error' ? `Última reposição falhou: ${d.pool.last_error || 'erro'}` :
+              d.pool.status === 'paused' ? 'Pool pausado — o cupom deste popup não está em modo único.' :
+                d.needs_replenish ? `Abaixo do mínimo (${d.pool.min_stock}). O cron repõe a cada 2 minutos.` : 'Estoque em dia. O cron repõe sozinho.'}
+          </p>
+        </>
+      )}
+      {state.error && <p className="text-[11px] text-red-600">{state.error}</p>}
+    </div>
+  )
+}
 
 // ── Block Props Editor (Klaviyo-style per-block panels) ──────────────────────
 function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInputs }: { block: Block; onChange: (b: Block) => void; onDelete: () => void; onOpenMedia?: (cb: (url: string) => void) => void; onApplyToAllInputs?: (b: Block) => void }) {
@@ -1583,62 +1656,102 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
         return <div className="space-y-5">
           <div className="space-y-3">
             <SectionHeader title="Conteúdo" icon={<Tag className="w-3 h-3" />} />
-            <LabeledField label="Modo do cupom" hint="Estático: mesmo código para todos. Dinâmico: gera código único na Shopify para cada inscrição (anti-fraude).">
+            <LabeledField label="Modo do cupom" hint="Estático: o mesmo código para todo mundo. Único: cada inscrito recebe um código de uso único, criado antes na Shopify e reservado na hora.">
               <div className="grid grid-cols-2 gap-2">
-                <button type="button"
-                  onClick={() => up('mode', 'static')}
-                  className={`px-3 py-2 text-[12px] rounded-lg border transition-colors ${(p.mode || 'static') === 'static' ? 'border-zinc-900 bg-gray-100 text-gray-900 font-semibold' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
-                  Estático
-                </button>
-                <button type="button"
-                  onClick={() => up('mode', 'dynamic')}
-                  className={`px-3 py-2 text-[12px] rounded-lg border transition-colors ${p.mode === 'dynamic' ? 'border-zinc-900 bg-gray-100 text-gray-900 font-semibold' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
-                  Dinâmico (Shopify)
-                </button>
+                {([['static', 'Estático'], ['unique', 'Único por inscrito']] as const).map(([m, label]) => {
+                  const cur = p.mode === 'dynamic' ? 'unique' : (p.mode || 'static')
+                  return (
+                    <button key={m} type="button" onClick={() => up('mode', m)}
+                      className={`px-3 py-2 text-[12px] rounded-lg border transition-colors ${cur === m ? 'border-zinc-900 bg-gray-100 text-gray-900 font-semibold' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
+                      {label}
+                    </button>
+                  )
+                })}
               </div>
             </LabeledField>
-            {(p.mode || 'static') === 'static' ? (
-              <LabeledField label="Código do cupom" hint="Exibido em destaque para ser copiado.">
-                <input className={inp + ' font-mono tracking-wider uppercase'} value={p.code || ''} onChange={e => up('code', e.target.value.toUpperCase())} placeholder="DESCONTO10" />
-              </LabeledField>
-            ) : (
+            {(p.mode === 'unique' || p.mode === 'dynamic') ? (
               <>
                 <div className="grid grid-cols-2 gap-2">
                   <LabeledField label="Tipo">
                     <select className={inp} value={p.discountType || 'percentage'} onChange={e => up('discountType', e.target.value)}>
                       <option value="percentage">Percentual (%)</option>
                       <option value="fixed_amount">Valor fixo</option>
+                      <option value="free_shipping">Frete grátis</option>
                     </select>
                   </LabeledField>
-                  <LabeledField label={p.discountType === 'fixed_amount' ? 'Valor' : 'Desconto (%)'}>
-                    <input type="number" min={1} step="0.01" className={inp}
-                      value={p.discountValue ?? 10}
-                      onChange={e => up('discountValue', +e.target.value)} />
-                  </LabeledField>
+                  {p.discountType !== 'free_shipping' && (
+                    <LabeledField label={p.discountType === 'fixed_amount' ? 'Valor' : 'Desconto (%)'}>
+                      <input type="number" min={1} step="0.01" className={inp}
+                        value={p.discountValue ?? 10}
+                        onChange={e => up('discountValue', +e.target.value)} />
+                    </LabeledField>
+                  )}
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                  <LabeledField label="Prefixo" hint="Código fica PREFIXO-XXXXXX">
+                  <LabeledField label="Prefixo" hint="O código sai como PREFIXO-XXXXXXXX.">
                     <input className={inp + ' font-mono uppercase'}
                       value={p.codePrefix || 'POPUP'}
-                      onChange={e => up('codePrefix', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} />
+                      onChange={e => up('codePrefix', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12))} />
                   </LabeledField>
-                  <LabeledField label="Validade (dias)">
+                  <LabeledField label="Validade (dias)" hint="Contada da inscrição.">
                     <input type="number" min={1} max={365} className={inp}
                       value={p.validityDays ?? 7}
                       onChange={e => up('validityDays', +e.target.value)} />
                   </LabeledField>
                 </div>
-                <LabeledField label="Valor mínimo da compra (opcional)" hint="0 = sem mínimo. Bloqueia uso em pedidos menores.">
+                <LabeledField label="Valor mínimo do pedido" hint="0 = sem mínimo.">
                   <input type="number" min={0} step="0.01" className={inp}
                     value={p.minimumAmount ?? 0}
                     onChange={e => up('minimumAmount', +e.target.value)} />
                 </LabeledField>
-                <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg p-2.5 leading-snug">
-                  Cada inscrição gera um código novo na Shopify com uso único por cliente. Se a API da Shopify falhar, o popup mostra o código estático abaixo como fallback.
-                </p>
-                <LabeledField label="Código de fallback" hint="Mostrado se a Shopify estiver indisponível.">
+                <LabeledField label="Combina com" hint="Outros descontos que podem ser usados no mesmo pedido.">
+                  <div className="grid grid-cols-3 gap-2">
+                    {([['product', 'Produto'], ['order', 'Pedido'], ['shipping', 'Frete']] as const).map(([k, label]) => {
+                      const cw = p.combinesWith || { product: true, order: false, shipping: true }
+                      const on = k === 'order' ? cw.order === true : cw[k] !== false
+                      return (
+                        <button key={k} type="button" onClick={() => up('combinesWith', { ...cw, [k]: !on })}
+                          className={`px-2 py-2 text-[12px] rounded-lg border transition-colors ${on ? 'border-zinc-900 bg-gray-100 text-gray-900 font-semibold' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
+                          {label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </LabeledField>
+                <Toggle label="Aplicar no carrinho automaticamente" hint="O checkout já abre com o desconto. A pessoa não precisa digitar nada." checked={p.autoApply !== false} onChange={v => up('autoApply', v)} />
+                {p.autoApply !== false && (
+                  <Toggle label="Mostrar o código mesmo assim" hint="Desligado, o bloco diz só que o desconto foi aplicado." checked={p.showCode !== false} onChange={v => up('showCode', v)} />
+                )}
+                {p.autoApply !== false && p.showCode === false && (
+                  <LabeledField label="Texto quando aplicado">
+                    <input className={inp} value={p.appliedText || ''} onChange={e => up('appliedText', e.target.value)} placeholder="Desconto aplicado no seu carrinho" />
+                  </LabeledField>
+                )}
+                <LabeledField label="Código reserva" hint="Usado se o estoque de códigos únicos acabar. Fica registrado quando acontece.">
+                  <input className={inp + ' font-mono tracking-wider uppercase'} value={p.code || ''} onChange={e => up('code', e.target.value.toUpperCase())} placeholder="BEMVINDO10" />
+                </LabeledField>
+                <CouponPoolPanel />
+              </>
+            ) : (
+              <>
+                <LabeledField label="Código do cupom" hint="Crie o desconto na Shopify com este código. Ele aparece em destaque e é aplicado no carrinho.">
                   <input className={inp + ' font-mono tracking-wider uppercase'} value={p.code || ''} onChange={e => up('code', e.target.value.toUpperCase())} placeholder="DESCONTO10" />
                 </LabeledField>
+                <div className="grid grid-cols-2 gap-2">
+                  <LabeledField label="Tipo" hint="Só para o relatório.">
+                    <select className={inp} value={p.discountType || 'percentage'} onChange={e => up('discountType', e.target.value)}>
+                      <option value="percentage">Percentual (%)</option>
+                      <option value="fixed_amount">Valor fixo</option>
+                      <option value="free_shipping">Frete grátis</option>
+                    </select>
+                  </LabeledField>
+                  {p.discountType !== 'free_shipping' && (
+                    <LabeledField label={p.discountType === 'fixed_amount' ? 'Valor' : 'Desconto (%)'}>
+                      <input type="number" min={0} step="0.01" className={inp} value={p.discountValue ?? 10} onChange={e => up('discountValue', +e.target.value)} />
+                    </LabeledField>
+                  )}
+                </div>
+                <Toggle label="Aplicar no carrinho automaticamente" hint="O checkout já abre com o desconto." checked={p.autoApply !== false} onChange={v => up('autoApply', v)} />
               </>
             )}
             <LabeledField label="Descrição">

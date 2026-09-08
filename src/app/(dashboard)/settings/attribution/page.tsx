@@ -7,7 +7,7 @@ import { Card, Row, SaveBar, Title, LoadingCard, Tog, RadioCard, useForm } from 
 import { api } from '@/components/settings/format'
 import { useApi, useSave } from '@/components/settings/hooks'
 
-interface Attr { email_window_days: number; whatsapp_window_days: number; sms_window_days: number; count_opens: boolean; exclude_mpp_opens: boolean; model: 'last_touch' | 'first_touch' }
+interface Attr { email_window_days: number; whatsapp_window_days: number; sms_window_days: number; popup_window_days: number; count_opens: boolean; exclude_mpp_opens: boolean; model: 'last_touch' | 'first_touch' }
 const WINDOWS = [1, 2, 3, 4, 5, 6, 7, 10, 14, 21, 30, 60, 90]
 const dias = (n: number) => `${n} ${n === 1 ? 'dia' : 'dias'}`
 
@@ -29,22 +29,23 @@ function Form({ data, onSaved }: { data: Attr; onSaved: () => void }) {
   const w = useSave(); const m = useSave(); const s = useSave()
   const v = f.val!
   const persist = async () => { await api('/api/settings/attribution', { method: 'POST', json: f.val }); onSaved() }
-  const dirtyW = v.email_window_days !== data.email_window_days || v.whatsapp_window_days !== data.whatsapp_window_days || v.sms_window_days !== data.sms_window_days
+  const dirtyW = v.email_window_days !== data.email_window_days || v.whatsapp_window_days !== data.whatsapp_window_days || v.sms_window_days !== data.sms_window_days || (v.popup_window_days ?? 30) !== (data.popup_window_days ?? 30)
   const dirtyM = v.model !== data.model
   const dirtyS = v.count_opens !== data.count_opens || v.exclude_mpp_opens !== data.exclude_mpp_opens
   const cancel = (keys: (keyof Attr)[]) => () => { const p: any = {}; for (const k of keys) p[k] = data[k]; f.patch(p) }
-  const sel = (k: 'email_window_days' | 'whatsapp_window_days' | 'sms_window_days', opts: number[]) => (
-    <select className="in" style={{ maxWidth: 200 }} value={v[k]} onChange={(e) => f.set(k, Number(e.target.value))} aria-label={k}>
-      {!opts.includes(v[k]) && <option value={v[k]}>{dias(v[k])}</option>}
+  const sel = (k: 'email_window_days' | 'whatsapp_window_days' | 'sms_window_days' | 'popup_window_days', opts: number[]) => (
+    <select className="in" style={{ maxWidth: 200 }} value={v[k] ?? 30} onChange={(e) => f.set(k, Number(e.target.value))} aria-label={k}>
+      {!opts.includes(v[k] ?? 30) && <option value={v[k] ?? 30}>{dias(v[k] ?? 30)}</option>}
       {opts.map((d) => <option key={d} value={d}>{dias(d)}</option>)}
     </select>
   )
   return (
     <>
-      <Card title="Janela de atribuição" desc="Por quantos dias uma compra pode ser creditada após a interação." foot={<SaveBar dirty={dirtyW} saving={w.saving} error={w.error} onSave={() => w.save(persist, 'Janela salva')} onCancel={cancel(['email_window_days', 'whatsapp_window_days', 'sms_window_days'])} />}>
+      <Card title="Janela de atribuição" desc="Por quantos dias uma compra pode ser creditada após a interação." foot={<SaveBar dirty={dirtyW} saving={w.saving} error={w.error} onSave={() => w.save(persist, 'Janela salva')} onCancel={cancel(['email_window_days', 'whatsapp_window_days', 'sms_window_days', 'popup_window_days'])} />}>
         <Row label="E-mail" help="Padrão do mercado: 5 dias.">{sel('email_window_days', WINDOWS)}</Row>
         <Row label="WhatsApp" help="Conversas convertem rápido.">{sel('whatsapp_window_days', [1, 2, 3, 5, 7, 14])}</Row>
         <Row label="SMS">{sel('sms_window_days', [1, 2, 3, 5, 7])}</Row>
+        <Row label="Popup" help="A inscrição num popup conta como toque. Só o primeiro pedido depois dela pode ser creditado.">{sel('popup_window_days', [7, 14, 30, 60, 90])}</Row>
       </Card>
       <Card title="Modelo" foot={<SaveBar dirty={dirtyM} saving={m.saving} error={m.error} onSave={() => m.save(persist, 'Modelo salvo')} onCancel={cancel(['model'])} />}>
         <div style={{ display: 'grid', gap: 10, padding: '14px 0 18px' }} role="radiogroup">

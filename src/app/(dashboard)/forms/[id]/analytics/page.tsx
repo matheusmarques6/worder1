@@ -27,10 +27,22 @@ interface Analytics {
     opt_ins: { email: number; whatsapp: number; sms: number; denied: number }
     coupons_issued: number
     attributed_revenue: number; attributed_orders: number; driven_revenue: number; driven_orders: number
+    influenced_revenue: number; influenced_orders: number
     period_conversions: number; period_conversion_value: number
     median_time_to_purchase_hours: number | null
   }
   devices: { mobile: number; desktop: number; tablet: number; unknown: number }
+  holdout: {
+    configured: boolean
+    rows: Array<{ bucket: string; visitors: number; buyers: number; revenue: number }>
+    incremental: null | {
+      exposed: { visitors: number; buyers: number; revenue: number; conversion: number; revenue_per_visitor: number }
+      control: { visitors: number; buyers: number; revenue: number; conversion: number; revenue_per_visitor: number }
+      lift_conversion: number | null
+      incremental_revenue: number
+      reliable: boolean
+    }
+  }
   recent_submissions: Array<{ id: string; created_at: string; answers: Record<string, unknown>; device: string | null; country: string | null; coupon_code: string | null; converted_at: string | null; conversion_value: number | null }>
 }
 
@@ -132,13 +144,53 @@ export default function FormAnalyticsPage() {
         <Kpi label="Fechamentos" value={int(t.dismissals)} hint={`taxa de fechamento ${pct(t.dismiss_rate)}`} />
       </div>
 
-      {/* Receita */}
+      {/* Receita — três leituras, três perguntas diferentes */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Kpi label="Receita atribuída" value={formatCurrency(t.attributed_revenue)} hint={`${int(t.attributed_orders)} pedido${t.attributed_orders === 1 ? '' : 's'} desde sempre`} />
+        <Kpi label="Receita atribuída" value={formatCurrency(t.attributed_revenue)} hint={`${int(t.attributed_orders)} pedido${t.attributed_orders === 1 ? '' : 's'} · crédito único ao popup`} />
+        <Kpi label="Receita influenciada" value={formatCurrency(t.influenced_revenue)} hint={`${int(t.influenced_orders)} pedido${t.influenced_orders === 1 ? '' : 's'} após a inscrição, creditados a qualquer canal`} />
         <Kpi label="Receita com o cupom" value={formatCurrency(t.driven_revenue)} hint={`${int(t.driven_orders)} pedido${t.driven_orders === 1 ? '' : 's'} usaram o código`} />
-        <Kpi label="Cupons emitidos" value={int(t.coupons_issued)} hint="no período" />
         <Kpi label="Tempo até a compra" value={hoursLabel(t.median_time_to_purchase_hours)} hint="mediana, da inscrição ao pedido" />
       </div>
+
+      {/* Incremental: a única que responde "quanto o popup gerou de verdade" */}
+      {data.holdout.configured && (
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <div className="flex items-start justify-between gap-4 mb-4">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900">Receita incremental</h3>
+              <p className="text-xs text-gray-500 mt-0.5">Quem viu o popup contra quem foi sorteado para não ver, com compras na janela após o sorteio.</p>
+            </div>
+            {data.holdout.incremental && (
+              <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${data.holdout.incremental.reliable ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                {data.holdout.incremental.reliable ? 'amostra suficiente' : 'amostra pequena'}
+              </span>
+            )}
+          </div>
+          {!data.holdout.incremental ? (
+            <p className="text-xs text-gray-400">Ainda faltam visitantes nos dois grupos (mínimo 30 em cada) para comparar.</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {([['exposed', 'Viram o popup'], ['control', 'Grupo de controle']] as const).map(([k, label]) => {
+                const g = data.holdout.incremental![k]
+                return (
+                  <div key={k} className="rounded-lg border border-gray-100 p-4">
+                    <p className="text-xs font-medium text-gray-500">{label}</p>
+                    <p className="text-lg font-semibold text-gray-900 mt-1 tabular-nums">{pct(g.conversion)} <span className="text-xs font-normal text-gray-400">compraram</span></p>
+                    <p className="text-[11px] text-gray-400 mt-0.5">{int(g.visitors)} visitantes · {int(g.buyers)} compradores · {formatCurrency(g.revenue_per_visitor)} por visitante</p>
+                  </div>
+                )
+              })}
+              <div className="rounded-lg border border-gray-900 bg-gray-900 text-white p-4">
+                <p className="text-xs font-medium text-gray-300">Incremental estimada</p>
+                <p className="text-lg font-semibold mt-1 tabular-nums">{formatCurrency(Math.max(0, data.holdout.incremental.incremental_revenue))}</p>
+                <p className="text-[11px] text-gray-400 mt-0.5">
+                  {data.holdout.incremental.lift_conversion == null ? 'sem base de comparação' : `conversão ${data.holdout.incremental.lift_conversion >= 0 ? '+' : ''}${(data.holdout.incremental.lift_conversion * 100).toFixed(0)}% sobre o controle`}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Série diária */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">

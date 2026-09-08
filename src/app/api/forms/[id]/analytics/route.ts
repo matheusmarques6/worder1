@@ -33,14 +33,15 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   // popup alheio pelo id.
   const { data: form } = await admin
     .from('crm_forms')
-    .select('id, name, form_type, status, store_id, created_at, attributed_revenue, attributed_orders, driven_revenue, driven_orders, views_count, submissions_count, dismissals_count')
+    .select('id, name, form_type, status, store_id, created_at, attributed_revenue, attributed_orders, driven_revenue, driven_orders, influenced_revenue, influenced_orders, views_count, submissions_count, dismissals_count')
     .eq('id', formId)
     .eq('organization_id', orgId)
     .maybeSingle()
   if (!form) return NextResponse.json({ error: 'Formulário não encontrado' }, { status: 404 })
 
-  const [daily, subs, consents] = await Promise.all([
+  const [daily, subs, consents, holdout] = await Promise.all([
     admin.rpc('popup_daily_stats', { p_organization_id: orgId, p_form_id: formId, p_days: days }),
+    admin.rpc('popup_holdout_report', { p_organization_id: orgId, p_form_id: formId, p_days: days }),
     admin
       .from('crm_form_submissions')
       .select('id, answers, created_at, user_agent, device, country, coupon_code, coupon_kind, converted_at, conversion_value, contact_id')
@@ -56,7 +57,25 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       .eq('source_ref', formId)
       .gte('occurred_at', since)
       .limit(5000),
-  ])
+  ].map((p) => Promise.resolve(p)))
+
+  // Relatório de hold-out: quem viu × quem foi sorteado para não ver, no
+  // mesmo período, com compras na janela após o sorteio. Receita
+  // incremental = a diferença por visitante, escalada para os expostos.
+  const holdoutRows = ((holdout as any)?.data || []) as Array<{ bucket: string; visitors: number; identified: number; buyers: number; orders: number; revenue: number }>
+  const exposed = holdoutRows.find((r) => r.bucket === 'exposed')
+  const control = holdoutRows.find((r) => r.bucket === 'holdout')
+  const perVisitor = (r?: typeof exposed) => (r && Number(r.visitors) > 0 ? Number(r.revenue) / Number(r.visitors) : 0)
+  const convRate = (r?: typeof exposed) => (r && Number(r.visitors) > 0 ? Number(r.buyers) / Number(r.visitors) : 0)
+  const incremental = exposed && control && Number(control.visitors) >= 30 && Number(exposed.visitors) >= 30
+    ? {
+        exposed: { visitors: Number(exposed.visitors), buyers: Number(exposed.buyers), revenue: Number(exposed.revenue), conversion: convRate(exposed), revenue_per_visitor: perVisitor(exposed) },
+        control: { visitors: Number(control.visitors), buyers: Number(control.buyers), revenue: Number(control.revenue), conversion: convRate(control), revenue_per_visitor: perVisitor(control) },
+        lift_conversion: convRate(control) > 0 ? convRate(exposed) / convRate(control) - 1 : null,
+        incremental_revenue: (perVisitor(exposed) - perVisitor(control)) * Number(exposed.visitors),
+        reliable: Number(control.visitors) >= 200 && Number(exposed.visitors) >= 200,
+      }
+    : null
 
   const missingMigration = daily.error && (daily.error.code === '42883' || /does not exist/i.test(daily.error.message || ''))
   interface SeriesPoint { date: string; impressions: number; submissions: number; dismissals: number; holdouts: number }
@@ -130,11 +149,18 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       attributed_orders: Number(form.attributed_orders) || 0,
       driven_revenue: Number(form.driven_revenue) || 0,
       driven_orders: Number(form.driven_orders) || 0,
+      influenced_revenue: Number((form as any).influenced_revenue) || 0,
+      influenced_orders: Number((form as any).influenced_orders) || 0,
       period_conversions: converted.length,
       period_conversion_value: converted.reduce((s, r) => s + (Number(r.conversion_value) || 0), 0),
       median_time_to_purchase_hours: medianHours,
     },
     devices: byDevice,
+    holdout: {
+      configured: holdoutRows.length > 0 && !!control,
+      rows: holdoutRows,
+      incremental,
+    },
     recent_submissions: submissions.slice(0, 50).map((s) => ({
       id: s.id,
       created_at: s.created_at,

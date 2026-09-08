@@ -1338,55 +1338,74 @@ export async function POST(
       }
     }
 
-    // 8.5. Dynamic Shopify coupon. If the design has a coupon block in
-    // `dynamic` mode, generate a unique price_rule + discount_code on
-    // the merchant's Shopify so each subscriber gets a single-use code
-    // (anti-abuse). Falls back silently to whatever is in block.code on
-    // any error so the success step still shows *something*.
-    let dynamicCoupon: { code: string; endsAt: string } | null = null
-    const allBlocks: any[] = []
-    if (Array.isArray(designJson.steps)) {
-      for (const step of designJson.steps) {
-        if (Array.isArray(step?.blocks)) allBlocks.push(...step.blocks)
-      }
-    }
-    if (Array.isArray(designJson.successStep?.blocks)) {
-      allBlocks.push(...designJson.successStep.blocks)
-    }
-    const dynamicCouponBlock = allBlocks.find(
-      (b: any) => b?.type === 'coupon' && b?.props?.mode === 'dynamic'
-    )
-    if (dynamicCouponBlock && form.store_id) {
-      try {
-        const { data: store } = await supabase
-          .from('shopify_stores')
-          .select('shop_domain, access_token')
-          .eq('id', form.store_id)
-          .maybeSingle()
-        if (store?.shop_domain && store?.access_token) {
-          const cp = dynamicCouponBlock.props || {}
-          const { generateShopifyCoupon } = await import('@/lib/services/whatsapp/shopify-coupon-service')
-          const result = await generateShopifyCoupon({
-            shopDomain: store.shop_domain,
-            accessToken: store.access_token,
-            discountType: cp.discountType === 'fixed_amount' ? 'fixed_amount' : 'percentage',
-            value: Number(cp.discountValue) || 10,
-            validityDays: Number(cp.validityDays) || 7,
-            prefix: String(cp.codePrefix || 'POPUP').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12) || 'POPUP',
-            usageLimit: 1,
-            minimumAmount: cp.minimumAmount > 0 ? Number(cp.minimumAmount) : undefined,
-            contactEmail: contactData.email,
-            title: `Popup ${form.name || form.id}`,
-          })
-          if (result.data) {
-            dynamicCoupon = { code: result.data.code, endsAt: result.data.endsAt }
-          } else {
-            console.warn('[Form Submit] dynamic coupon failed (using fallback):', result.error)
-          }
+    // 8.5. Cupom — sempre pelo ledger de incentivos. Nada é criado na
+    // Shopify aqui: o pool já tem códigos únicos prontos (cron), e
+    // issue_popup_incentive reserva um deles atomicamente. UM grant por
+    // pessoa por popup — reenvio devolve o mesmo código. Pool vazio cai no
+    // código estático do bloco, e a queda fica registrada no ledger.
+    // Código estático também passa pelo ledger: é o que liga o pedido de
+    // volta ao popup ("receita por código") mesmo sem código único.
+    let issuedCoupon: {
+      code: string; kind: string; value: number; ends_at: string | null
+      auto_apply: boolean; show_code: boolean; source: string
+    } | null = null
+    try {
+      const { readCouponBlock } = await import('@/lib/coupons/pool-service')
+      const cp = readCouponBlock(designJson)
+      if (cp) {
+        let poolId: string | null = null
+        if (cp.mode === 'unique' && form.store_id) {
+          const { data: pool } = await supabase
+            .from('coupon_pools')
+            .select('id')
+            .eq('organization_id', form.organization_id)
+            .eq('form_id', formId)
+            .eq('status', 'active')
+            .maybeSingle()
+          poolId = pool?.id || null
+          if (!poolId) console.warn('[Form Submit] popup em modo único sem pool ativo — caindo no código estático', { formId })
         }
-      } catch (e: any) {
-        console.warn('[Form Submit] dynamic coupon errored (using fallback):', e?.message)
+        const base = { kind: cp.kind, value: cp.value, auto_apply: cp.autoApply, show_code: cp.showCode }
+
+        if (contactId) {
+          const { data, error } = await supabase.rpc('issue_popup_incentive', {
+            p_organization_id: form.organization_id,
+            p_store_id: form.store_id || null,
+            p_contact_id: contactId,
+            p_form_id: formId,
+            p_submission_id: submission.id,
+            p_kind: cp.kind,
+            p_value: cp.value,
+            p_validity_days: cp.validityDays,
+            p_pool_id: poolId,
+            p_static_code: cp.staticCode,
+          })
+          if (error) {
+            console.error('[Form Submit] issue_popup_incentive failed:', error.message)
+            // Sem ledger não há código único; o estático ainda vale.
+            if (cp.staticCode) issuedCoupon = { ...base, code: cp.staticCode, ends_at: null, source: 'static_ledger_error' }
+          } else {
+            const row: any = Array.isArray(data) ? data[0] : data
+            if (row?.coupon_code) {
+              issuedCoupon = { ...base, code: row.coupon_code, ends_at: row.validity_until || null, source: row.outcome || 'issued' }
+              supabase.from('crm_form_submissions')
+                .update({ coupon_code: row.coupon_code, coupon_kind: cp.kind, grant_id: row.grant_id || null })
+                .eq('id', submission.id)
+                .then(({ error: upErr }) => {
+                  if (upErr && upErr.code !== '42703' && upErr.code !== 'PGRST204') console.warn('[Form Submit] submission coupon update failed:', upErr.message)
+                })
+            } else if (row?.outcome === 'already_used') {
+              console.log('[Form Submit] cupom deste popup já usado por este contato — sem novo código')
+            }
+          }
+        } else if (cp.staticCode) {
+          // Sem e-mail nem telefone não há contato, logo não há grant. O
+          // código estático aparece mesmo assim — o popup prometeu.
+          issuedCoupon = { ...base, code: cp.staticCode, ends_at: null, source: 'static_no_contact' }
+        }
       }
+    } catch (e: any) {
+      console.warn('[Form Submit] coupon issuance errored:', e?.message)
     }
 
     // 9. Return success with tracking data for client-side pixels
@@ -1398,9 +1417,10 @@ export async function POST(
       events_fired: eventsFired,
       redirect_url: form.redirect_url || null,
       success_message: form.success_message,
-      // Dynamic coupon (null when the form is static-only or generation failed).
-      // The popup script splices this into any coupon block on the success step.
-      coupon: dynamicCoupon,
+      // O cupom emitido (null quando não há bloco, ou a pessoa já usou o
+      // dela). O runtime encaixa no bloco de cupom da etapa de sucesso e,
+      // com auto_apply, grava na sessão do carrinho da Shopify.
+      coupon: issuedCoupon,
       // True when a double-opt-in confirmation email was just dispatched.
       // The popup script can swap the success copy to "check your inbox".
       double_optin_sent: doubleOptInSent,

@@ -1140,26 +1140,16 @@ async function processOrderPaid(store: ShopifyStoreConfig, order: any) {
 
   const supabase = getSupabase();
 
-  // Ciclo de vida do grant (9.2): cupom emitido pelo offer_engine que volta
-  // no pedido pago é consumido (uses++ → consumed + ledger). Best-effort e
-  // idempotente no banco — reentrega do webhook recebe 'already'.
-  try {
-    const { consumeGrantsForOrder } = await import('@/lib/ai/grant-consumption');
-    await consumeGrantsForOrder(store.organization_id, order);
-  } catch (grantErr: any) {
-    console.warn('[Shopify] grant consumption failed (best-effort):', grantErr?.message);
-  }
-  
   // Atualizar pedido
   await supabase
     .from('shopify_orders')
-    .update({ 
+    .update({
       financial_status: 'paid',
       updated_at: new Date().toISOString(),
     })
     .eq('store_id', store.id)
     .eq('shopify_order_id', String(order.id));
-  
+
   // Buscar contato
   const { data: contact } = await supabase
     .from('contacts')
@@ -1167,7 +1157,34 @@ async function processOrderPaid(store: ShopifyStoreConfig, order: any) {
     .eq('organization_id', store.organization_id)
     .ilike('email', escapeLike(order.email) as string)
     .maybeSingle();
-  
+
+  // Ciclo de vida do grant (9.2): cupom emitido pelo offer_engine — ou por
+  // um popup — que volta no pedido pago é consumido (uses++ → consumed +
+  // ledger). O contato vai junto: com código estático, é ele que diz qual
+  // grant foi usado. Best-effort e idempotente no banco — reentrega do
+  // webhook recebe 'already'. Um grant de popup consumido vira receita
+  // "por código" do popup que o emitiu.
+  try {
+    const { consumeGrantsForOrder } = await import('@/lib/ai/grant-consumption');
+    const consumed = await consumeGrantsForOrder(store.organization_id, order, contact?.id ?? null);
+    const orderRef = String(order.id ?? order.order_number ?? '').trim();
+    const orderValue = parseFloat(order.total_price || '0') || 0;
+    for (const c of consumed) {
+      if (!c.grant_id || (c.status !== 'consumed' && c.status !== 'already') || !orderRef || order.test) continue;
+      const { error } = await supabase.rpc('record_popup_driven_order', {
+        p_organization_id: store.organization_id,
+        p_grant_id: c.grant_id,
+        p_order_ref: orderRef,
+        p_revenue: orderValue,
+        p_currency: order.currency || 'BRL',
+        p_order_at: order.created_at || order.processed_at || new Date().toISOString(),
+      });
+      if (error && error.code !== '42883') console.warn('[Shopify] record_popup_driven_order failed (best-effort):', error.message);
+    }
+  } catch (grantErr: any) {
+    console.warn('[Shopify] grant consumption failed (best-effort):', grantErr?.message);
+  }
+
   if (contact) {
     // Tracking: Registrar atividade
     await trackActivity({

@@ -7,6 +7,8 @@ import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { isVisualPopupForm } from '@/lib/forms/submit-utils'
 
 export const dynamic = 'force-dynamic'
+// Publicar cria os primeiros códigos únicos na Shopify (até 10, ~8 s).
+export const maxDuration = 30
 
 // GET - Obter formulário com campos e eventos
 export async function GET(
@@ -195,7 +197,33 @@ export async function PUT(
       fireInstallExtrasForPublishedForm(form.store_id)
     }
 
-    return NextResponse.json({ form })
+    // O pool de cupons acompanha o bloco de cupom. Ao publicar, um lote
+    // pequeno é criado agora para o primeiro inscrito não cair no código
+    // estático; o cron repõe o resto. Falha aqui não derruba o save — o
+    // estado vai na resposta para a tela avisar.
+    let couponPool: any = null
+    if (form && (design_json !== undefined || status !== undefined)) {
+      try {
+        const { syncPoolFromForm, replenishPool, getPoolStatus } = await import('@/lib/coupons/pool-service')
+        const synced = await syncPoolFromForm(form)
+        if (synced.pool && form.status === 'published') {
+          await replenishPool(synced.pool.id, user.organization_id, { maxCreate: 10, timeBudgetMs: 8000 })
+        }
+        const st = await getPoolStatus(user.organization_id, form.id)
+        couponPool = {
+          active: !!st.pool && st.pool.status === 'active',
+          status: st.pool?.status || null,
+          usable: st.usable,
+          last_error: st.pool?.last_error || null,
+          reason: synced.reason || null,
+        }
+      } catch (e: any) {
+        console.warn('[Forms] coupon pool sync failed (non-blocking):', e?.message)
+        couponPool = { active: false, status: 'error', usable: 0, last_error: e?.message || 'erro', reason: null }
+      }
+    }
+
+    return NextResponse.json({ form, coupon_pool: couponPool })
   } catch (error: any) {
     console.error('[Forms] PUT error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
