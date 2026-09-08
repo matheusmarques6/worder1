@@ -1,4 +1,5 @@
 import copy
+import io
 import json
 import os
 from pathlib import Path
@@ -1840,3 +1841,477 @@ def test_upgrade_noop_reproves_and_stays_ready_without_migration(
     assert ex.read_json(run / "manifest.prospective.json") == old
     assert ex.read_json(run / "manifest.json") == old
     assert executor.gate["state"] == "ready"
+
+
+def lifecycle_run(tmp_path):
+    repo = tmp_path / "repo"
+    run = repo / ".superpowers/sdd/auditoria-ia-disposable" / ("a" * 32)
+    run.mkdir(parents=True)
+    ex.write_json(run / "identity.json", valid_identity())
+    executor = ex.Executor(repo, run)
+    executor.gate.update(commit="d" * 40, state="ready")
+    executor.save()
+    executor.runner = lambda argv, **kwargs: ex.subprocess.CompletedProcess(
+        argv, 0, "e" * 40 if argv == ["git", "rev-parse", "HEAD"] else "", ""
+    )
+    return executor
+
+
+@pytest.mark.parametrize("action", ["Replay", "Upgrade", "Test", "Prepare"])
+def test_stopped_run_refuses_reuse_without_processes(tmp_path, action):
+    executor = lifecycle_run(tmp_path)
+    executor.gate["state"] = "stopped"
+    executor.save()
+    before = (executor.run / "gates.json").read_bytes()
+    executor.runner = lambda *_a, **_k: pytest.fail("unexpected process")
+    with pytest.raises(ValueError):
+        executor.execute(action)
+    assert (executor.run / "gates.json").read_bytes() == before
+    assert executor.execute("Stop") == 0
+
+
+@pytest.mark.parametrize("action,values,through", [
+    ("Other", [], None), ("Replay", ["tests/db/x.py"], None),
+    ("Test", [], "20260812000001"), ("Upgrade", [], "20260621"),
+    ("Test", "tests/db/x.py", None),
+])
+def test_lifecycle_rejects_parameters_without_processes(tmp_path, action, values, through):
+    executor = lifecycle_run(tmp_path)
+    executor.runner = lambda *_a, **_k: pytest.fail("unexpected process")
+    with pytest.raises(ValueError):
+        executor.execute(action, values, through)
+
+
+@pytest.mark.parametrize("action_code,cleanup_code,expected", [
+    (0, 0, 0), (9, 0, 9), (9, 18, 9), (0, 18, 18), (130, 18, 130),
+])
+def test_test_finally_stops_preserving_original_failure(
+    tmp_path, monkeypatch, action_code, cleanup_code, expected
+):
+    executor = lifecycle_run(tmp_path)
+    events = []
+    before = dict(os.environ)
+    monkeypatch.setattr(executor, "preflight", lambda: None)
+    monkeypatch.setattr(executor, "source", lambda focal: [])
+    monkeypatch.setattr(executor, "clean_commit", lambda commit: None)
+
+    def test_action(values):
+        assert values == []
+        executor.gate["stage"] = "db"
+        events.append("test")
+        if action_code == 130:
+            raise KeyboardInterrupt()
+        if action_code:
+            raise ex.CommandFailure(action_code)
+
+    def stop_action():
+        events.append("stop")
+        if cleanup_code:
+            raise ex.CommandFailure(cleanup_code)
+        executor.gate["state"] = "stopped"
+
+    monkeypatch.setattr(executor, "test", test_action)
+    monkeypatch.setattr(executor, "stop", stop_action)
+    assert executor.execute("Test") == expected
+    assert events == ["test", "stop"]
+    gate = ex.read_json(executor.run / "gates.json")
+    assert gate["state"] == ("failed" if cleanup_code else "stopped")
+    assert gate["failure"] == (
+        {"stage": "db" if action_code else "stop",
+         "kind": "KeyboardInterrupt" if action_code == 130 else "CommandFailure",
+         "exitCode": expected} if expected else None
+    )
+    assert dict(os.environ) == before
+    assert not (executor.run.parent / ".executor.lock").exists()
+
+
+def test_cleanup_evidence_write_failure_does_not_replace_action_failure(tmp_path, monkeypatch):
+    executor = lifecycle_run(tmp_path)
+    real_save = executor.save
+    monkeypatch.setattr(executor, "preflight", lambda: None)
+    monkeypatch.setattr(executor, "source", lambda focal: [])
+    monkeypatch.setattr(executor, "clean_commit", lambda commit: None)
+
+    def fail_test(values):
+        executor.gate["stage"] = "db"
+        raise ex.CommandFailure(17)
+
+    def fail_save():
+        raise OSError("evidence write failed")
+
+    def stop():
+        assert executor.gate["failure"]["exitCode"] == 17
+        real_save()
+        monkeypatch.setattr(executor, "save", fail_save)
+        fail_save()
+
+    monkeypatch.setattr(executor, "test", fail_test)
+    monkeypatch.setattr(executor, "stop", stop)
+    assert executor.execute("Test") == 17
+    assert executor.gate["failure"] == {
+        "stage": "db", "kind": "CommandFailure", "exitCode": 17,
+    }
+    assert not (executor.run.parent / ".executor.lock").exists()
+
+
+@pytest.mark.parametrize("action,state,method,next_state", [
+    ("Replay", "prepared", "replay", "ready"),
+    ("Upgrade", "ready", "upgrade", "ready"),
+    ("Stop", "failed", "stop", "stopped"),
+])
+def test_lifecycle_dispatches_valid_actions_under_exclusive_lock(
+    tmp_path, monkeypatch, action, state, method, next_state
+):
+    executor = lifecycle_run(tmp_path)
+    executor.gate["state"] = state
+    executor.save()
+    monkeypatch.setattr(executor, "preflight", lambda: None)
+    calls = []
+
+    def operation(*args):
+        calls.append(args)
+        assert (executor.run.parent / ".executor.lock").read_text() == str(os.getpid())
+        executor.gate["state"] = next_state
+
+    monkeypatch.setattr(executor, method, operation)
+    assert executor.execute(action) == 0
+    assert calls == ([(None,)] if action == "Upgrade" else [()])
+    assert ex.read_json(executor.run / "gates.json")["state"] == next_state
+    assert not (executor.run.parent / ".executor.lock").exists()
+
+
+def test_existing_lock_is_never_removed_or_used(tmp_path):
+    executor = lifecycle_run(tmp_path)
+    lock = executor.run.parent / ".executor.lock"
+    lock.write_text("another-owner")
+    executor.runner = lambda *_a, **_k: pytest.fail("unexpected process")
+    with pytest.raises(FileExistsError):
+        executor.execute("Test")
+    assert lock.read_text() == "another-owner"
+
+
+def test_lock_write_failure_releases_only_owned_lock(tmp_path, monkeypatch):
+    executor = lifecycle_run(tmp_path)
+    lock = executor.run.parent / ".executor.lock"
+    original_open = Path.open
+
+    class BrokenWriter:
+        def __enter__(self):
+            return self
+
+        def write(self, text):
+            raise OSError("PID write failed")
+
+        def __exit__(self, *args):
+            return None
+
+    def open_file(path, *args, **kwargs):
+        handle = original_open(path, *args, **kwargs)
+        if path == lock:
+            handle.close()
+            return BrokenWriter()
+        return handle
+
+    monkeypatch.setattr(Path, "open", open_file)
+    executor.runner = lambda *_a, **_k: pytest.fail("unexpected process")
+    with pytest.raises(OSError, match="PID write failed"):
+        executor.execute("Test")
+    assert not lock.exists()
+
+
+@pytest.mark.parametrize("failed_check", ["source", "clean_commit"])
+def test_full_precheck_failure_never_relabels_commit_or_runs_tests(
+    tmp_path, monkeypatch, failed_check
+):
+    executor = lifecycle_run(tmp_path)
+    monkeypatch.setattr(executor, "source", lambda focal: [])
+    monkeypatch.setattr(executor, "clean_commit", lambda commit: None)
+    monkeypatch.setattr(executor, "test", lambda *_a: pytest.fail("tests before full proof"))
+    monkeypatch.setattr(executor, "stop", lambda: executor.gate.update(state="stopped"))
+
+    def refused(*args):
+        raise ValueError("unapproved checkout")
+
+    monkeypatch.setattr(executor, failed_check, refused)
+    assert executor.execute("Test") == 2
+    saved = ex.read_json(executor.run / "gates.json")
+    assert saved["commit"] == "d" * 40
+    assert saved["state"] == "stopped"
+    assert saved["failure"]["stage"] == "preflight"
+
+
+def test_prepare_failure_without_persisted_identity_records_only_unproven(
+    tmp_path, monkeypatch
+):
+    repo = tmp_path / "repo"
+    run = repo / ".superpowers/sdd/auditoria-ia-disposable" / ("a" * 32)
+    calls = []
+
+    def runner(argv, **kwargs):
+        calls.append(argv)
+        output = "e" * 40 if argv[0] == "git" else "a" * 64 + "\nraw secret\n"
+        return ex.subprocess.CompletedProcess(argv, 0, output, "")
+
+    executor = ex.Executor(repo, run, runner=runner)
+
+    def prepare(through):
+        assert through == "20260812000001"
+        executor.gate["stage"] = "prepare-identity"
+        # In-memory proof cannot authorize cleanup if identity persistence failed.
+        executor.identity = valid_identity()
+        raise ex.CommandFailure(17)
+
+    monkeypatch.setattr(executor, "prepare", prepare)
+    assert executor.execute("Prepare", through="20260812000001") == 17
+    assert calls == [
+        ["git", "rev-parse", "HEAD"],
+        ["docker", "ps", "-a", "--no-trunc", "--filter",
+         "label=com.supabase.cli.project=" + PROJECT, "--format", "{{.ID}}"],
+    ]
+    assert ex.read_json(run / "unproven.json") == {
+        "projectId": PROJECT, "containerIds": ["a" * 64],
+    }
+    assert ex.read_json(run / "gates.json")["state"] == "unproven"
+    assert not (run.parent / ".executor.lock").exists()
+
+
+@pytest.mark.parametrize("payload", [
+    '<testsuite><testcase name="ok"/><testcase><failure>secret</failure></testcase>'
+    '<testcase><error message="secret"/></testcase><testcase><skipped/></testcase></testsuite>',
+    '<invalid>postgresql://secret',
+])
+def test_sanitize_report_removes_raw_content_including_invalid_xml(tmp_path, payload):
+    path = tmp_path / "report.xml"
+    sentinel = "c" * 64
+    payload = payload.replace('name="ok"', f'name="{sentinel} postgresql://secret"')
+    path.write_text(payload, encoding="utf-8")
+    if payload.startswith("<invalid>"):
+        with pytest.raises(ValueError):
+            ex.sanitize_report(path, sentinel)
+    else:
+        assert ex.sanitize_report(path, sentinel) == {
+            "tests": 4, "skipped": 1, "failures": 1, "errors": 1,
+        }
+    sanitized = path.read_text(encoding="utf-8")
+    assert all(secret not in sanitized for secret in ("secret", "postgresql://", sentinel))
+
+
+@pytest.mark.parametrize("code,report,expected", [
+    (17, "<broken>secret", 17), (0, "<broken>secret", 2),
+    (0, "<testsuite/>", 2),
+    (0, '<testsuite><testcase><skipped/></testcase></testsuite>', 2),
+    (0, '<testsuite><testcase><failure/></testcase></testsuite>', 2),
+    (0, '<testsuite><testcase><error/></testcase></testsuite>', 2),
+    (0, '<testsuite><testcase name="one"/></testsuite>', 0),
+])
+def test_suite_sanitizes_before_deciding_exit_code(tmp_path, monkeypatch, code, report, expected):
+    executor = lifecycle_run(tmp_path)
+    executor.identity = valid_identity()
+
+    def pytest_command(arguments, stage):
+        assert stage == "db"
+        path = Path(arguments[-1].removeprefix("--junitxml="))
+        path.write_text(report, encoding="utf-8")
+        return ex.subprocess.CompletedProcess([], code, "raw stdout", "raw stderr")
+
+    monkeypatch.setattr(executor, "pytest_command", pytest_command)
+    if expected:
+        with pytest.raises((ex.CommandFailure, ValueError)) as failure:
+            executor.suite(["-m", "db and not rls"], "db")
+        assert getattr(failure.value, "code", 2) == expected
+    else:
+        assert executor.suite(["-m", "db and not rls"], "db") == 1
+    text = (executor.run / "artifacts/db.xml").read_text()
+    assert "secret" not in text and "raw" not in text
+
+
+def test_suite_sanitizes_even_when_pytest_raises(tmp_path, monkeypatch):
+    executor = lifecycle_run(tmp_path)
+    executor.identity = valid_identity()
+
+    def interrupted(arguments, stage):
+        Path(arguments[-1].removeprefix("--junitxml=")).write_text("<broken>secret")
+        raise KeyboardInterrupt()
+
+    monkeypatch.setattr(executor, "pytest_command", interrupted)
+    with pytest.raises(KeyboardInterrupt):
+        executor.suite([], "db")
+    assert "secret" not in (executor.run / "artifacts/db.xml").read_text()
+
+
+@pytest.mark.parametrize("failure,expected_stages", [
+    (None, ["collect-rls", "db", "rls", "pipeline"]),
+    ("collect-rls", ["collect-rls"]), ("empty", ["collect-rls"]),
+    ("duplicate", ["collect-rls"]), ("db", ["collect-rls", "db"]),
+    ("mismatch", ["collect-rls", "db", "rls"]),
+])
+def test_full_suites_are_serial_and_stop_at_first_failure(
+    tmp_path, monkeypatch, failure, expected_stages
+):
+    executor = lifecycle_run(tmp_path)
+    executor.identity = valid_identity()
+    events = []
+    monkeypatch.setattr(executor, "source", lambda focal: events.append(("source", focal)) or [])
+    monkeypatch.setattr(executor, "clean_commit", lambda sha: events.append(("clean", sha)))
+    monkeypatch.setattr(executor, "proof", lambda: events.append("proof"))
+    monkeypatch.setattr(executor, "history", lambda rows: events.append("history"))
+    stages = []
+
+    def runner(argv, **kwargs):
+        stage = executor.gate["stage"]
+        stages.append(stage)
+        assert events[-4:] == [("source", False), ("clean", "d" * 40), "proof", "history"]
+        assert argv[:6] == ["uv", "run", "--directory", str(executor.repo / "runtime"),
+                            "pytest", "--collect-only" if stage == "collect-rls" else "-m"]
+        assert kwargs["env"]["WORDER_TEST_DB_SENTINEL"] == "c" * 64
+        if stage != "collect-rls":
+            assert argv[6] == {"db": "db and not rls", "rls": "rls", "pipeline": "pipeline"}[stage]
+            if stage == "rls":
+                assert "secret" not in (executor.run / "artifacts/db.xml").read_text()
+            path = Path(argv[-1].removeprefix("--junitxml="))
+            cases = '<testcase name="one"><system-out>secret</system-out></testcase>'
+            if stage == "rls" and failure == "mismatch":
+                cases *= 2
+            path.write_text("<testsuite>" + cases + "</testsuite>")
+            stdout = ""
+        else:
+            assert argv[6:] == ["-m", "rls", "-q"]
+            stdout = "tests/db/test_rls.py::test_one\n"
+            if failure == "empty":
+                stdout = ""
+            elif failure == "duplicate":
+                stdout *= 2
+        return ex.subprocess.CompletedProcess(argv, 17 if stage == failure else 0, stdout, "")
+
+    executor.runner = runner
+    if failure:
+        with pytest.raises((ValueError, ex.CommandFailure)):
+            executor.test([])
+    else:
+        executor.test([])
+        assert executor.gate["collectedRls"] == 1
+    assert stages == expected_stages
+    assert executor.gate["scope"] == "full"
+
+
+def test_focal_uses_literal_targets_and_keeps_scope(tmp_path, monkeypatch):
+    executor = lifecycle_run(tmp_path)
+    file = executor.repo / "runtime/tests/db/test_one.py"
+    file.parent.mkdir(parents=True)
+    file.touch()
+    selected = ["tests/db/test_one.py::test_one", "tests/db/test_one.py::test_two"]
+    calls = []
+    monkeypatch.setattr(executor, "suite", lambda args, name: calls.append((args, name)))
+    executor.test(selected)
+    assert calls == [([*selected, "-q"], "focal")]
+    assert executor.gate["scope"] == "focal" and executor.gate["collectedRls"] == 0
+
+
+def test_source_allows_only_exact_full_or_immutable_focal_prefix(tmp_path, monkeypatch):
+    executor = lifecycle_run(tmp_path)
+    folder = executor.repo / "supabase/migrations"
+    folder.mkdir(parents=True)
+    first = folder / "20260812000001_a.sql"
+    first.write_text("select 1;")
+    approved = ex.inventory(folder)
+    monkeypatch.setattr(executor, "files", lambda: approved)
+    assert executor.source(False) == approved
+    (folder / "20260812000002_b.sql").write_text("select 2;")
+    assert executor.source(True) == approved
+    with pytest.raises(ValueError):
+        executor.source(False)
+    first.write_text("select 3;")
+    with pytest.raises(ValueError):
+        executor.source(True)
+
+
+@pytest.mark.parametrize("sha,dirty", [("e" * 40, ""), ("d" * 40, " M runtime/x.py")])
+def test_clean_commit_refuses_changed_sha_or_dirty_test_inputs(tmp_path, sha, dirty):
+    executor = lifecycle_run(tmp_path)
+    calls = []
+
+    def runner(argv, **kwargs):
+        calls.append(argv)
+        return ex.subprocess.CompletedProcess(argv, 0, sha if argv[1] == "rev-parse" else dirty, "")
+
+    executor.runner = runner
+    with pytest.raises(ValueError):
+        executor.clean_commit("d" * 40)
+    if dirty:
+        assert calls[-1] == ["git", "status", "--porcelain=v1", "--untracked-files=all", "--",
+                             "runtime", "scripts/test-disposable-db.ps1", "supabase/config.toml",
+                             "supabase/migrations"]
+
+
+@pytest.mark.parametrize("remaining", ["", "container", "volume", "identity-changed"])
+def test_stop_reproves_persisted_identity_and_confirms_removal(tmp_path, monkeypatch, remaining):
+    run = executor_run(tmp_path)
+    ex.write_json(run / "volumes-before.json", [])
+    ex.write_json(run / "identity.json", valid_identity() | {"sentinel": None})
+    calls = []
+
+    def runner(argv, **kwargs):
+        calls.append(argv)
+        if argv[:2] == ["docker", "inspect"]:
+            record = container_record()
+            if remaining == "identity-changed":
+                record["Id"] = "f" * 64
+            stdout = json.dumps([record])
+        elif argv[:2] == ["docker", "exec"]:
+            assert kwargs["input"] == "select system_identifier::text from pg_control_system()\n"
+            stdout = "123456"
+        elif argv == ["supabase", "--version"]:
+            stdout = "2.111.0"
+        elif argv[:2] == ["supabase", "stop"]:
+            assert argv == ["supabase", "stop", "--no-backup", "--workdir", str(run)]
+            stdout = ""
+        elif argv[:2] == ["docker", "ps"]:
+            assert argv[5] == "label=com.supabase.cli.project=" + PROJECT
+            stdout = "a" * 64 if remaining == "container" else ""
+        elif argv[:3] == ["docker", "volume", "ls"]:
+            stdout = valid_identity()["volumeName"] if remaining == "volume" else "old-volume"
+        else:
+            pytest.fail(f"unexpected argv: {argv}")
+        return ex.subprocess.CompletedProcess(argv, 0, stdout, "")
+
+    executor = ex.Executor(REPO, run, runner=runner)
+    monkeypatch.setattr(ex, "read_system_identifier", lambda dsn: "123456")
+    if remaining:
+        with pytest.raises(ValueError):
+            executor.stop()
+        assert executor.gate["state"] != "stopped"
+    else:
+        executor.stop()
+        assert executor.gate["state"] == "stopped"
+    if remaining == "identity-changed":
+        assert not any(call[:2] == ["supabase", "stop"] for call in calls)
+
+
+@pytest.mark.parametrize("payload", ["not JSON", "[]", '{"Action":"Test"}'])
+def test_main_refuses_invalid_requests_without_leaking_input(monkeypatch, capsys, payload):
+    monkeypatch.setattr(ex.sys, "stdin", io.StringIO(payload))
+    monkeypatch.setattr(ex, "Executor", lambda *_a: pytest.fail("unexpected executor"))
+    assert ex.main() == 2
+    output = capsys.readouterr()
+    assert output.out == "" and payload not in output.err
+
+
+def test_main_transports_json_and_exact_result(monkeypatch):
+    run = REPO / ".superpowers/sdd/auditoria-ia-disposable" / ("a" * 32)
+    selected = ["tests/db/test_one.py::test_one", "tests/db/test_two.py::test_two"]
+    request = {"Action": "Test", "RunDirectory": str(run), "TestTargets": selected,
+               "MigrationThrough": None}
+    observed = []
+
+    class ExecutorDouble:
+        def __init__(self, repo, directory):
+            observed.append((repo, directory))
+
+        def execute(self, action, values, through):
+            observed.append((action, values, through))
+            return 23
+
+    monkeypatch.setattr(ex.sys, "stdin", io.StringIO(json.dumps(request)))
+    monkeypatch.setattr(ex, "Executor", ExecutorDouble)
+    assert ex.main() == 23
+    assert observed == [(REPO, run), ("Test", selected, None)]

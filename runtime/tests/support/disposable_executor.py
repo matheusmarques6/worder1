@@ -12,7 +12,9 @@ import signal
 import socket
 import stat
 import subprocess
+import sys
 import tomllib
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import psycopg
@@ -553,6 +555,41 @@ def free_ports():
             listener.close()
 
 
+def sanitize_report(path, sentinel):
+    no_links(path)
+    summary = {"tests": 0, "skipped": 0, "failures": 0, "errors": 0}
+    output = ET.Element("testsuites")
+    suite = ET.SubElement(output, "testsuite", name="disposable")
+    problem = None
+    try:
+        root = ET.parse(path).getroot()
+        for case in root.iter("testcase"):
+            summary["tests"] += 1
+            attributes = {}
+            for key in ("name", "classname", "file", "line", "time"):
+                if key in case.attrib:
+                    value = case.attrib[key].replace(sentinel, "[redacted]")
+                    attributes[key] = re.sub(
+                        r"[A-Za-z][A-Za-z0-9+.-]*://\S+", "[redacted]", value
+                    )
+            safe = ET.SubElement(suite, "testcase", attributes)
+            for child, counter in (
+                ("skipped", "skipped"), ("failure", "failures"), ("error", "errors")
+            ):
+                if case.find(child) is not None:
+                    summary[counter] += 1
+                    ET.SubElement(safe, child, message="details omitted from disposable evidence")
+    except (OSError, ET.ParseError, ValueError, LookupError) as error:
+        problem = error
+        summary["errors"] += 1
+    for key, value in summary.items():
+        suite.set(key, str(value))
+    ET.ElementTree(output).write(path, encoding="utf-8", xml_declaration=True)
+    if problem:
+        raise ValueError("missing or invalid pytest report") from None
+    return summary
+
+
 class Executor:
     def __init__(self, repo, run, *, runner=run_process):
         self.repo, self.run, self.runner = Path(repo), Path(run), runner
@@ -866,3 +903,254 @@ class Executor:
         write_json(self.run / "manifest.json", new)
         self.gate["state"] = "ready"
         self.save()
+
+    def source(self, focal):
+        approved = self.files()
+        current = inventory(self.repo / "supabase/migrations")
+        if focal:
+            prospective(approved, current)
+        else:
+            require(
+                approved == current, "full gate requires the complete current checkout manifest"
+            )
+        return approved
+
+    def clean_commit(self, expected):
+        actual = self.command("git", "rev-parse", "HEAD", timeout=30).stdout.strip()
+        require(actual == expected, "checkout commit changed during gate")
+        dirty = self.command(
+            "git", "status", "--porcelain=v1", "--untracked-files=all", "--",
+            "runtime", "scripts/test-disposable-db.ps1", "supabase/config.toml",
+            "supabase/migrations", timeout=30,
+        ).stdout.strip()
+        require(not dirty, "full gate requires committed runtime and migration inputs")
+
+    def pytest_command(self, arguments, stage):
+        self.gate["stage"] = stage
+        approved = self.source(self.gate["scope"] == "focal")
+        if self.gate["scope"] == "full":
+            self.clean_commit(self.gate["commit"])
+        self.proof()
+        self.history(approved)
+        return self.command(
+            "uv", "run", "--directory", self.repo / "runtime", "pytest",
+            *arguments, identity=self.identity, check=False,
+        )
+
+    def suite(self, arguments, name):
+        path = self.run / "artifacts" / (name + ".xml")
+        no_links(path)
+        path.parent.mkdir(exist_ok=True)
+        summary, problem, result = None, None, None
+        try:
+            result = self.pytest_command([*arguments, "--junitxml=" + str(path)], name)
+        finally:
+            try:
+                summary = sanitize_report(path, self.identity["sentinel"])
+            except (Exception, KeyboardInterrupt) as error:
+                problem = error
+        if result.returncode:
+            raise CommandFailure(result.returncode)
+        if problem:
+            raise problem
+        require(
+            summary["tests"] > 0
+            and not any(summary[key] for key in ("skipped", "failures", "errors")),
+            "pytest did not execute a clean nonempty suite",
+        )
+        return summary["tests"]
+
+    def test(self, test_targets):
+        self.gate.update(state="testing", scope="focal" if test_targets else "full", collectedRls=0)
+        selected = targets(self.repo, test_targets)
+        if selected:
+            self.suite([*selected, "-q"], "focal")
+            return
+        result = self.pytest_command(["--collect-only", "-m", "rls", "-q"], "collect-rls")
+        if result.returncode:
+            raise CommandFailure(result.returncode)
+        nodeids = [
+            line.strip() for line in result.stdout.splitlines()
+            if re.fullmatch(r"tests/db/[^\s:]+\.py::.+", line.strip())
+        ]
+        require(
+            nodeids and len(set(nodeids)) == len(nodeids), "RLS collection is empty or ambiguous"
+        )
+        self.gate["collectedRls"] = len(nodeids)
+        self.save()
+        self.suite(["-m", "db and not rls"], "db")
+        executed = self.suite(["-m", "rls"], "rls")
+        require(executed == self.gate["collectedRls"], "collected and executed RLS counts differ")
+        self.suite(["-m", "pipeline"], "pipeline")
+
+    def stop(self):
+        self.gate["stage"] = "stop"
+        persisted = identity_shape(read_json(self.run / "identity.json"), self.project)
+        if self.identity:
+            require(
+                all(persisted[key] == self.identity[key] for key in persisted if key != "sentinel"),
+                "persisted cleanup identity changed",
+            )
+        self.identity = persisted
+        self.physical()
+        self.local("stop", "--no-backup")
+        remaining = self.command(
+            "docker", "ps", "-a", "--no-trunc", "--filter",
+            "label=com.supabase.cli.project=" + self.project, "--format", "{{.ID}}", timeout=30,
+        ).stdout.strip()
+        volumes = self.command(
+            "docker", "volume", "ls", "--format", "{{.Name}}", timeout=30,
+        ).stdout.splitlines()
+        require(
+            not remaining and self.identity["volumeName"] not in volumes,
+            "Stop did not remove the approved project",
+        )
+        self.gate["state"] = "stopped"
+        self.save()
+
+    def unproven(self):
+        result = self.command(
+            "docker", "ps", "-a", "--no-trunc", "--filter",
+            "label=com.supabase.cli.project=" + self.project, "--format", "{{.ID}}",
+            timeout=30, check=False,
+        )
+        ids = [
+            value for value in result.stdout.splitlines() if re.fullmatch(r"[0-9a-f]{64}", value)
+        ]
+        write_json(self.run / "unproven.json", {"projectId": self.project, "containerIds": ids})
+        self.gate["state"] = "unproven"
+
+    def execute(self, action, test_targets=None, through=None):
+        test_targets = [] if test_targets is None else test_targets
+        require(
+            isinstance(action, str) and action in {"Prepare", "Replay", "Upgrade", "Test", "Stop"},
+            "invalid Action",
+        )
+        require(
+            isinstance(test_targets, list)
+            and all(isinstance(value, str) for value in test_targets),
+            "invalid TestTargets",
+        )
+        require(not test_targets or action == "Test", "TestTargets only applies to Test")
+        require(
+            through is None or (isinstance(through, str) and re.fullmatch(r"[0-9]{14}", through)),
+            "invalid MigrationThrough",
+        )
+        require(
+            through is None or action in {"Prepare", "Upgrade"},
+            "MigrationThrough only applies to Prepare or Upgrade",
+        )
+        self.run = safe_run(self.repo, self.run)
+        self.project = "worder-audit-" + self.run.name
+        root = self.run.parent
+        no_links(root)
+        root.mkdir(parents=True, exist_ok=True)
+        lock = root / ".executor.lock"
+        no_links(lock)
+        handle = lock.open("x", encoding="utf-8")
+        try:
+            with handle:
+                handle.write(str(os.getpid()))
+            if action == "Prepare":
+                require(not self.run.exists(), "Prepare requires a new directory")
+                self.run.mkdir()
+            else:
+                self.gate = gate_shape(read_json(self.run / "gates.json"))
+                allowed = {
+                    "Replay": {"prepared"}, "Upgrade": {"ready"}, "Test": {"ready"},
+                    "Stop": {"prepared", "ready", "preparing", "replaying", "upgrading",
+                             "testing", "failed", "stopped"},
+                }
+                require(self.gate["state"] in allowed[action], "invalid transition")
+                if action == "Stop" and self.gate["state"] == "stopped":
+                    return 0
+            code = 0
+            self.identity = None
+            try:
+                self.save()
+                self.gate["stage"] = "preflight"
+                if action != "Prepare":
+                    self.identity = identity_shape(
+                        read_json(self.run / "identity.json"), self.project
+                    )
+                commit = self.command("git", "rev-parse", "HEAD", timeout=30).stdout.strip()
+                require(re.fullmatch(r"[0-9a-f]{40}", commit), "invalid checkout commit")
+                if action == "Test":
+                    self.gate["scope"] = "focal" if test_targets else "full"
+                    self.source(bool(test_targets))
+                    if not test_targets:
+                        self.clean_commit(commit)
+                self.gate["commit"] = commit
+                if action != "Prepare":
+                    self.preflight()
+                if action == "Prepare":
+                    self.prepare(through)
+                elif action == "Replay":
+                    self.replay()
+                elif action == "Upgrade":
+                    self.upgrade(through)
+                elif action == "Test":
+                    self.test(test_targets)
+                else:
+                    self.stop()
+            except (Exception, KeyboardInterrupt) as error:
+                code = error.code if isinstance(error, CommandFailure) else (
+                    130 if isinstance(error, KeyboardInterrupt) else 2
+                )
+                self.gate["failure"] = {
+                    "stage": self.gate["stage"], "kind": type(error).__name__, "exitCode": code,
+                }
+                self.gate["state"] = "failed"
+            finally:
+                if action != "Stop" and (action == "Test" or code):
+                    try:
+                        if self.identity and (self.run / "identity.json").is_file():
+                            self.stop()
+                        else:
+                            self.identity = None
+                            self.unproven()
+                    except (Exception, KeyboardInterrupt) as cleanup:
+                        cleanup_code = cleanup.code if isinstance(cleanup, CommandFailure) else (
+                            130 if isinstance(cleanup, KeyboardInterrupt) else 2
+                        )
+                        if not code:
+                            code = cleanup_code
+                            self.gate["failure"] = {
+                                "stage": "stop", "kind": type(cleanup).__name__, "exitCode": code,
+                            }
+                        self.gate["state"] = "failed" if self.identity else "unproven"
+                try:
+                    self.save()
+                except (Exception, KeyboardInterrupt):
+                    if not code:
+                        raise
+            return code
+        finally:
+            no_links(lock)
+            lock.unlink()
+
+
+def main():
+    try:
+        request = json.loads(sys.stdin.read())
+        require(
+            isinstance(request, dict) and set(request) == {
+                "Action", "RunDirectory", "TestTargets", "MigrationThrough",
+            },
+            "invalid executor request",
+        )
+        require(isinstance(request["RunDirectory"], str), "invalid RunDirectory")
+        repo = Path(__file__).resolve().parents[3]
+        run = safe_run(repo, request["RunDirectory"])
+        return Executor(repo, run).execute(
+            request["Action"], request["TestTargets"], request["MigrationThrough"],
+        )
+    except (Exception, KeyboardInterrupt) as error:
+        sys.stderr.write("disposable executor refused request; inspect local gates evidence\n")
+        return error.code if isinstance(error, CommandFailure) else (
+            130 if isinstance(error, KeyboardInterrupt) else 2
+        )
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
