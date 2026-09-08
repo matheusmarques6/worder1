@@ -12,13 +12,18 @@ from contextlib import asynccontextmanager
 
 import psycopg
 
-# The port the Supabase CLI binds locally (supabase/config.toml [db].port).
-DEFAULT_DSN = "postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+from tests.support.disposable_db import assert_database_identity, validate_dsn
 
 
 def dsn_from_env() -> str:
-    """The DSN of the database under test — CI overrides it, locally it is the CLI's."""
-    return os.environ.get("SUPABASE_DB_URL", DEFAULT_DSN)
+    """Only the disposable executor can provide all three required proofs."""
+    dsn = os.environ["SUPABASE_DB_URL"]
+    system_identifier = os.environ["WORDER_TEST_DB_SYSTEM_IDENTIFIER"]
+    sentinel = os.environ["WORDER_TEST_DB_SENTINEL"]
+    validate_dsn(dsn)
+    with psycopg.connect(dsn, connect_timeout=3, options="-c statement_timeout=3000") as conn:
+        assert_database_identity(conn, system_identifier=system_identifier, sentinel=sentinel)
+    return dsn
 
 
 @asynccontextmanager
