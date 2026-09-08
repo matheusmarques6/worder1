@@ -1637,15 +1637,18 @@ def test_upgrade_copies_only_suffix_and_promotes_after_verification(
 
     def files(expected=None):
         events.append(("files", expected))
+        assert executor.gate["state"] == "upgrading"
         assert ex.read_json(run / "manifest.json") == old
         return old if expected is None else expected
 
     def proof():
         events.append("proof")
+        assert executor.gate["state"] == "upgrading"
         assert ex.read_json(run / "manifest.json") == old
 
     def history(rows):
         events.append(("history", rows))
+        assert executor.gate["state"] == "upgrading"
         assert ex.read_json(run / "manifest.json") == old
 
     def copyfile(source, destination):
@@ -1661,7 +1664,12 @@ def test_upgrade_copies_only_suffix_and_promotes_after_verification(
     monkeypatch.setattr(executor, "files", files)
     monkeypatch.setattr(executor, "proof", proof)
     monkeypatch.setattr(executor, "history", history)
-    monkeypatch.setattr(ex, "inventory", lambda *_args: new)
+    monkeypatch.setattr(
+        ex,
+        "inventory",
+        lambda folder, through: events.append(("inventory", Path(folder), through))
+        or new,
+    )
     monkeypatch.setattr(ex.shutil, "copyfile", copyfile)
     monkeypatch.setattr(executor, "local", local)
 
@@ -1671,6 +1679,11 @@ def test_upgrade_copies_only_suffix_and_promotes_after_verification(
         ("files", None),
         "proof",
         ("history", old),
+        (
+            "inventory",
+            REPO / "supabase/migrations",
+            "20260812000002",
+        ),
         (
             "copy",
             REPO / "supabase/migrations" / second["filename"],
@@ -1686,6 +1699,56 @@ def test_upgrade_copies_only_suffix_and_promotes_after_verification(
     ]
     assert ex.read_json(run / "manifest.json") == new
     assert executor.gate["state"] == "ready"
+
+
+@pytest.mark.parametrize("failing_step", ["proof", "files", "history"])
+def test_upgrade_final_verification_failure_never_promotes_manifest(
+    monkeypatch, tmp_path, failing_step
+):
+    first = {
+        "filename": "20260812000001_a.sql",
+        "version": "20260812000001",
+        "sha256": "A" * 64,
+    }
+    second = {
+        "filename": "20260812000002_b.sql",
+        "version": "20260812000002",
+        "sha256": "B" * 64,
+    }
+    old, new = [first], [first, second]
+    run = executor_run(tmp_path)
+    ex.write_json(run / "manifest.json", old)
+    executor = ex.Executor(REPO, run)
+    executor.gate.update(commit="d" * 40, state="ready")
+    executor.identity = valid_identity()
+    calls = {"proof": 0, "files": 0, "history": 0}
+    failure = RuntimeError(f"final {failing_step} failed")
+
+    def verify(step):
+        calls[step] += 1
+        assert executor.gate["state"] == "upgrading"
+        if step == failing_step and calls[step] == 3:
+            raise failure
+
+    def files(expected=None):
+        verify("files")
+        return old if expected is None else expected
+
+    monkeypatch.setattr(executor, "files", files)
+    monkeypatch.setattr(executor, "proof", lambda: verify("proof"))
+    monkeypatch.setattr(executor, "history", lambda _rows: verify("history"))
+    monkeypatch.setattr(ex, "inventory", lambda *_args: new)
+    monkeypatch.setattr(ex.shutil, "copyfile", lambda *_args: None)
+    monkeypatch.setattr(executor, "local", lambda *_args: None)
+
+    with pytest.raises(RuntimeError, match=f"final {failing_step} failed") as result:
+        executor.upgrade("20260812000002")
+
+    assert result.value is failure
+    assert ex.read_json(run / "manifest.json") == old
+    assert ex.read_json(run / "manifest.prospective.json") == new
+    assert executor.gate["state"] == "upgrading"
+    assert ex.read_json(run / "gates.json")["state"] == "upgrading"
 
 
 def test_upgrade_never_overwrites_existing_suffix_destination(monkeypatch, tmp_path):
@@ -1750,7 +1813,12 @@ def test_upgrade_noop_reproves_and_stays_ready_without_migration(
     monkeypatch.setattr(
         executor, "history", lambda rows: events.append(("history", rows))
     )
-    monkeypatch.setattr(ex, "inventory", lambda *_args: old)
+    monkeypatch.setattr(
+        ex,
+        "inventory",
+        lambda folder, through: events.append(("inventory", Path(folder), through))
+        or old,
+    )
     monkeypatch.setattr(
         ex.shutil, "copyfile", lambda *_args: pytest.fail("noop copied a migration")
     )
@@ -1764,6 +1832,7 @@ def test_upgrade_noop_reproves_and_stays_ready_without_migration(
         ("files", None),
         "proof",
         ("history", old),
+        ("inventory", REPO / "supabase/migrations", "20260812000001"),
         "proof",
         ("files", old),
         ("history", old),
