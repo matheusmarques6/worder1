@@ -14,6 +14,15 @@ import {
   buildCapiUserData,
   isVisualPopupForm,
 } from '@/lib/forms/submit-utils'
+import {
+  collectConsentBlocks,
+  resolveConsentDecisions,
+  recordConsent,
+  writePhoneChannelConsent,
+  deviceClassFromUserAgent,
+  countryFromHeaders,
+  type ConsentRecordInput,
+} from '@/lib/forms/consent'
 import { isValidEmail } from '@/lib/email/validation'
 
 export const dynamic = 'force-dynamic'
@@ -514,20 +523,28 @@ export async function POST(
     }
     const contactData = extractContactData(answers, isVisualForm ? [] : (form.fields || []), designBlocks)
 
-    // Legal consent (LGPD): the script renders the legal-consent block
-    // as <input type="checkbox" name="consent"> — checked posts
-    // answers.consent='on', unchecked omits the key entirely. When the
-    // design HAS a legal-consent block and the visitor did NOT check it,
-    // we still save the contact + submission but never grant marketing
-    // e-mail consent (and skip the DOI e-mail).
-    const hasLegalConsentBlock = designBlocks.some((b: any) => b?.type === 'legal-consent')
-    const consentRaw = (answers as any)?.consent
-    const consentChecked =
-      consentRaw !== undefined && consentRaw !== null &&
-      String(consentRaw) !== '' &&
-      String(consentRaw).toLowerCase() !== 'false' &&
-      String(consentRaw) !== '0'
-    const marketingConsentDenied = hasLegalConsentBlock && !consentChecked
+    // Consentimento (LGPD): cada bloco legal-consent declara os canais que
+    // cobre e rende um checkbox próprio. A decisão por canal sai daqui; a
+    // prova (texto exibido, IP, página) é gravada depois da submissão
+    // existir, em consent_records. Um canal sem bloco não tem decisão —
+    // e-mail cai no opt-in único de sempre; WhatsApp e SMS exigem bloco.
+    const consentBlocks = collectConsentBlocks(designBlocks)
+    const consentDecisions = resolveConsentDecisions(consentBlocks, answers)
+    const emailDecision = consentDecisions.find((d) => d.channel === 'email')
+    const whatsappDecision = consentDecisions.find((d) => d.channel === 'whatsapp')
+    const smsDecision = consentDecisions.find((d) => d.channel === 'sms')
+    const marketingConsentDenied = !!emailDecision && !emailDecision.checked
+
+    // Contexto da captura — de onde a pessoa veio quando disse sim.
+    const requestUserAgent = request.headers.get('user-agent') || null
+    const requestIp = (request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || '')
+      .split(',')[0].trim() || null
+    const pageUrl = typeof (body as any)?.page_url === 'string' && (body as any).page_url.length <= 2048
+      ? (body as any).page_url
+      : request.headers.get('referer') || null
+    const visitorCountry = countryFromHeaders(request.headers)
+    const visitorDevice = deviceClassFromUserAgent(requestUserAgent)
+    const visitorLocale = (request.headers.get('accept-language') || '').split(',')[0].trim() || null
 
     // UTM data for contact profile (if behavior.utm.storeOnConsent is true)
     const popupBehavior = (form.behavior as any) || (designJson.behavior as any) || {}
@@ -714,6 +731,27 @@ export async function POST(
       await writeEmailConsent(supabase, contactId, 'denied', `popup_form:${form.id}`)
     }
 
+    // 4.6. WhatsApp e SMS. Antes disto o submit capturava o telefone e não
+    // gravava consentimento nenhum: a régua de boas-vindas no WhatsApp
+    // partia de um contato sem opt-in — o que a Meta proíbe e a LGPD
+    // pune. Só existe decisão quando há bloco cobrindo o canal E um
+    // telefone para receber a mensagem.
+    const contactPhone = contactData.phone || contactData.whatsapp || null
+    if (contactId && contactPhone) {
+      if (whatsappDecision) {
+        await writePhoneChannelConsent(
+          supabase, contactId, 'whatsapp',
+          whatsappDecision.checked ? 'granted' : 'denied', `popup_form:${form.id}`,
+        )
+      }
+      if (smsDecision) {
+        await writePhoneChannelConsent(
+          supabase, contactId, 'sms',
+          smsDecision.checked ? 'granted' : 'denied', `popup_form:${form.id}`,
+        )
+      }
+    }
+
     // 5. Criar deal no pipeline (se configurado)
     let dealId: string | null = null
     if (form.pipeline_id && contactId) {
@@ -834,30 +872,103 @@ export async function POST(
     }
 
     // 6. Criar submission
-    const { data: submission, error: subError } = await supabase
+    const submissionBase = {
+      form_id: formId,
+      organization_id: form.organization_id,
+      contact_id: contactId,
+      deal_id: dealId,
+      answers,
+      ip_address: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || null,
+      user_agent: requestUserAgent,
+      referrer: request.headers.get('referer') || null,
+      utm_source: utm_source || null,
+      utm_medium: utm_medium || null,
+      utm_campaign: utm_campaign || null,
+      utm_term: utm_term || null,
+      utm_content: utm_content || null,
+      status: 'new',
+    }
+    // Contexto (migration popup_foundation). Se o banco ainda não tiver as
+    // colunas, a submissão entra sem elas — perder o contexto é aceitável,
+    // perder a inscrição não.
+    const submissionContext = {
+      visitor_id: typeof visitorId === 'string' && visitorId.length <= 128 ? visitorId : null,
+      session_id: typeof sessionId === 'string' && sessionId.length <= 128 ? sessionId : null,
+      page_url: pageUrl,
+      country: visitorCountry,
+      device: visitorDevice,
+    }
+    let { data: submission, error: subError } = await supabase
       .from('crm_form_submissions')
-      .insert({
-        form_id: formId,
-        organization_id: form.organization_id,
-        contact_id: contactId,
-        deal_id: dealId,
-        answers,
-        ip_address: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || null,
-        user_agent: request.headers.get('user-agent') || null,
-        referrer: request.headers.get('referer') || null,
-        utm_source: utm_source || null,
-        utm_medium: utm_medium || null,
-        utm_campaign: utm_campaign || null,
-        utm_term: utm_term || null,
-        utm_content: utm_content || null,
-        status: 'new',
-      })
+      .insert({ ...submissionBase, ...submissionContext })
       .select()
       .single()
+
+    if (subError && (subError.code === '42703' || subError.code === 'PGRST204' || /column .* does not exist|Could not find the '.*' column/i.test(subError.message || ''))) {
+      console.warn('[Form Submit] submission context columns missing — apply migration 20260910100000_popup_foundation')
+      const retry = await supabase.from('crm_form_submissions').insert(submissionBase).select().single()
+      submission = retry.data
+      subError = retry.error
+    }
 
     if (subError) {
       console.error('[Form Submit] Error creating submission:', subError)
       return corsError(subError.message, 500, 'server_error')
+    }
+
+    // 6.1. O evento 'submitted' na série diária. As impressões e os
+    // fechamentos chegam pelo beacon do runtime; o envio é gravado aqui,
+    // do lado do servidor, porque é o único ponto que sabe que ele
+    // aconteceu de verdade.
+    supabase.from('form_events').insert({
+      organization_id: form.organization_id,
+      form_id: formId,
+      event_type: 'submitted',
+      properties: {
+        submission_id: submission.id,
+        contact_id: contactId,
+        visitor_id: submissionContext.visitor_id,
+        url: pageUrl,
+        country: visitorCountry,
+        device: visitorDevice,
+      },
+      occurred_at: new Date().toISOString(),
+    }).then(({ error }) => {
+      if (error && error.code !== '42P01') console.warn('[Form Submit] form_events submitted insert failed:', error.message)
+    })
+
+    // 6.2. A prova do consentimento — uma linha por canal decidido, com o
+    // texto exato que a pessoa viu. E-mail em DOI entra como 'pending' e
+    // vira 'confirmed' em /api/public/confirm-opt-in.
+    {
+      const proofs: ConsentRecordInput[] = []
+      for (const d of consentDecisions) {
+        if (d.channel === 'email' && !contactData.email) continue
+        if ((d.channel === 'whatsapp' || d.channel === 'sms') && !contactPhone) continue
+        const action = !d.checked
+          ? 'denied'
+          : d.channel === 'email' && doubleOptInEnabled ? 'pending' : 'granted'
+        proofs.push({ channel: d.channel, action, text: d.block.text || null, version: d.block.version })
+      }
+      // Opt-in único de e-mail sem bloco: a prova registra que não houve
+      // texto — o que é, em si, a informação que o jurídico precisa.
+      if (!emailDecision && contactData.email && !doubleOptInEnabled) {
+        proofs.push({ channel: 'email', action: 'granted', text: null, version: null })
+      }
+      if (!emailDecision && contactData.email && doubleOptInEnabled) {
+        proofs.push({ channel: 'email', action: 'pending', text: null, version: null })
+      }
+      await recordConsent(supabase, {
+        organizationId: form.organization_id,
+        contactId,
+        submissionId: submission.id,
+        source: 'popup_form',
+        sourceRef: form.id,
+        pageUrl,
+        ipAddress: requestIp,
+        userAgent: requestUserAgent,
+        locale: visitorLocale,
+      }, proofs)
     }
 
     // Bump the form's submissions_count + views_count so the /forms
@@ -1293,6 +1404,15 @@ export async function POST(
       // True when a double-opt-in confirmation email was just dispatched.
       // The popup script can swap the success copy to "check your inbox".
       double_optin_sent: doubleOptInSent,
+      // O que ficou decidido por canal — o runtime expõe no evento
+      // worder:signup para o script da loja.
+      consent: {
+        email: !contactData.email ? null
+          : marketingConsentDenied ? 'denied'
+          : doubleOptInEnabled ? 'pending' : 'granted',
+        whatsapp: !contactPhone || !whatsappDecision ? null : (whatsappDecision.checked ? 'granted' : 'denied'),
+        sms: !contactPhone || !smsDecision ? null : (smsDecision.checked ? 'granted' : 'denied'),
+      },
       // Client-side tracking data
       tracking: {
         facebook_pixel_id: form.facebook_pixel_id,

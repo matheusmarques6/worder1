@@ -4,11 +4,17 @@
 // POST /api/public/forms/{id}/events
 //
 // CLIENT CONTRACT (popup script beacon):
-//   body: { type: 'impression' | 'dismissed' | 'submitted' | 'engaged',
-//           visitor_id?, url?, referrer?, reason? }
+//   body: { type: 'impression' | 'dismissed' | 'engaged' | 'holdout' | 'step' | 'reward',
+//           visitor_id?, session_id?, url?, referrer?, reason?,
+//           bucket?: 'exposed' | 'holdout', step?: number, variant_id? }
 //   (legacy `event_type` key still accepted)
 //   → 200 { received: true }
 //   errors: { success:false, error, code } with CORS on every status.
+//
+// 'submitted' NÃO vem do beacon: o submit grava o evento do lado do
+// servidor, que é o único que sabe que a inscrição existiu de fato. Um
+// beacon 'submitted' é aceito e descartado para não quebrar scripts
+// antigos em cache.
 //
 // The organization is derived server-side from the form row (popups
 // live in crm_forms — the previous version queried a nonexistent
@@ -25,7 +31,16 @@ import { corsJson, corsError, corsPreflight } from '@/lib/forms/public-cors';
 
 export const dynamic = 'force-dynamic';
 
-const ALLOWED_EVENTS = new Set(['impression', 'dismissed', 'submitted', 'engaged']);
+const ALLOWED_EVENTS = new Set(['impression', 'dismissed', 'submitted', 'engaged', 'holdout', 'step', 'reward']);
+// Persistidos na série diária. 'submitted' fica de fora de propósito (ver
+// contrato acima); 'engaged' segue só nos contadores.
+const PERSISTED_EVENTS = new Set(['impression', 'dismissed', 'holdout', 'step', 'reward']);
+
+function shortText(v: unknown, max: number): string | null {
+  if (typeof v !== 'string') return null;
+  const s = v.trim();
+  return s ? s.slice(0, max) : null;
+}
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -75,42 +90,56 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const userAgent = req.headers.get('user-agent') || '';
 
     // 1) Persist the raw event for time-series analytics
-    try {
-      const { error: insertErr } = await supabaseAdmin.from('form_events').insert({
-        organization_id: form.organization_id,
-        form_id: params.id,
-        event_type: eventType,
-        properties: {
-          url: body.url || null,
-          reason: body.reason || null,
-          visitor_id: body.visitor_id || null,
-          user_agent: userAgent,
-          ip_address: ip,
-          referrer: body.referrer || null,
-        },
-        occurred_at: occurredAt,
-      });
-      // Table may not exist on deployments that haven't applied the
-      // 2026_07_02 migration yet — counters below still move.
-      if (insertErr && insertErr.code !== '42P01') {
-        console.warn('[FormEvents] insert failed (non-blocking):', insertErr);
+    if (PERSISTED_EVENTS.has(eventType)) {
+      try {
+        const { countryFromHeaders, deviceClassFromUserAgent } = await import('@/lib/forms/consent');
+        const bucket = body.bucket === 'holdout' || eventType === 'holdout' ? 'holdout' : 'exposed';
+        const stepIdx = Number.isInteger(body.step) && body.step >= 0 && body.step < 100 ? body.step : null;
+        const { error: insertErr } = await supabaseAdmin.from('form_events').insert({
+          organization_id: form.organization_id,
+          form_id: params.id,
+          event_type: eventType,
+          properties: {
+            url: shortText(body.url, 2048),
+            reason: shortText(body.reason, 64),
+            visitor_id: shortText(body.visitor_id, 128),
+            session_id: shortText(body.session_id, 128),
+            variant_id: shortText(body.variant_id, 64),
+            bucket,
+            step: stepIdx,
+            // O código do cupom não entra aqui — só o tipo. O código vive
+            // no grant e na submissão.
+            reward_kind: eventType === 'reward' ? shortText(body.kind, 32) : null,
+            country: countryFromHeaders(req.headers),
+            device: deviceClassFromUserAgent(userAgent),
+            user_agent: userAgent,
+            ip_address: ip,
+            referrer: shortText(body.referrer, 2048),
+          },
+          occurred_at: occurredAt,
+        });
+        // Table may not exist on deployments that haven't applied the
+        // 2026_07_02 migration yet — counters below still move.
+        if (insertErr && insertErr.code !== '42P01') {
+          console.warn('[FormEvents] insert failed (non-blocking):', insertErr);
+        }
+      } catch (insertErr: any) {
+        console.warn('[FormEvents] insert threw (non-blocking):', insertErr?.message);
       }
-    } catch (insertErr: any) {
-      console.warn('[FormEvents] insert threw (non-blocking):', insertErr?.message);
     }
 
     // 2) Increment the per-form running counters so the list view stays
     //    accurate even without the events table. Atomic RPC
     //    (increment_crm_form_counter) with a read-then-write fallback
     //    for databases where the migration hasn't landed.
+    // 'submitted' não bate contador aqui: o submit já bate (bumpFormCounters)
+    // e um beacon duplicado inflaria a taxa de envio.
     const counterColumns: string[] =
       eventType === 'impression'
         ? ['views_count', 'impressions_count']
-        : eventType === 'submitted'
-          ? ['submissions_count']
-          : eventType === 'dismissed'
-            ? ['dismissals_count']
-            : [];
+        : eventType === 'dismissed'
+          ? ['dismissals_count']
+          : [];
 
     for (const column of counterColumns) {
       const { error: rpcErr } = await supabaseAdmin.rpc('increment_crm_form_counter', {

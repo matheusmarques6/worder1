@@ -104,14 +104,39 @@ describe('buildPopupScript (generated string)', () => {
 
   it('R6: dismissal beacon to /events, once per pageview, not after subscribe', () => {
     expect(js).toContain('/events')
-    expect(js).toContain('{type:"dismissed"}')
+    expect(js).toContain('beacon("dismissed"')
     expect(js).toContain('navigator.sendBeacon')
     expect(js).toContain('if(byUser&&!submitted)sendDismiss()')
     expect(js).toContain('if(dismissSent)return')
   })
 
-  it('R6: impressions still tracked via submit _track (no double count)', () => {
-    expect(js).toContain('{_track:"impression"}')
+  it('R6: impressions go through the /events beacon — never the submit _track path', () => {
+    expect(js).toContain('beacon("impression",{bucket:"exposed"})')
+    expect(js).not.toContain('_track:"impression"')
+  })
+
+  it('beacon posts text/plain so sendBeacon never needs a CORS preflight', () => {
+    expect(js).toContain('type:"text/plain;charset=UTF-8"')
+    expect(js).not.toContain('type:"application/json"')
+  })
+
+  it('geo gate uses the first-party endpoint, never a third party', () => {
+    expect(js).toContain('/api/public/geo')
+    expect(js).not.toContain('ipapi')
+  })
+
+  it('subscriber and per-visitor gates use the unified visitor id', () => {
+    expect(js).not.toContain('var vid=gc("__worder_id")')
+  })
+
+  it('legal-consent renders one input per block with its channels', () => {
+    expect(js).toContain('name="consent__\'+bid(b.id)+\'"')
+    expect(js).toContain('data-channels=')
+  })
+
+  it('fonts are injected on show, not on script load', () => {
+    expect(js).toContain('function ensureFonts()')
+    expect(js).not.toMatch(/\n\}\)\(\);`$/) // trailing font block removed
   })
 
   it('R7: button label escaped, style-sanitizer applied, URL whitelists in place', () => {

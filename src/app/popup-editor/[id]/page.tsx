@@ -106,6 +106,11 @@ interface PopupDesign {
       hideKnownFields: boolean
       prefillKnownFields: boolean
     }
+    // Grupo de controle: fatia dos elegíveis que nunca vê o popup, para
+    // medir receita incremental (não só atribuída). 0 = desligado; teto 50.
+    experiment?: {
+      holdoutPercent: number
+    }
   }
   postSubmit?: {
     action: 'close' | 'redirect' | 'show-success'
@@ -290,6 +295,7 @@ const defaultDesign: PopupDesign = {
     clickOutsideClose: { desktop: true, mobile: true },
     customTrigger: false,
     cart: { enabled: false, minTotal: 0, maxTotal: 0, minItems: 0 },
+    experiment: { holdoutPercent: 0 },
   },
   postSubmit: { action: 'show-success', redirectUrl: '', closeDelay: 4 },
   successMessage: '',
@@ -1531,11 +1537,32 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
         return <div className="space-y-5">
           <div className="space-y-3">
             <SectionHeader title="Conteúdo" icon={<ShieldCheck className="w-3 h-3" />} />
-            <LabeledField label="Texto de consentimento" hint='Suporta HTML. Use <a href="url">link</a> para links.'>
+            <LabeledField label="Texto de consentimento" hint='Suporta HTML. Use <a href="url">link</a> para links. Diga o nome da loja e o que a pessoa vai receber — autorização genérica não vale.'>
               <textarea className={inp} rows={4} value={p.text || ''} onChange={e => up('text', e.target.value)}
-                placeholder='Aceito receber comunicações e concordo com a <a href="/politica">política de privacidade</a>.' />
+                placeholder='Aceito receber ofertas da Loja por e-mail e concordo com a <a href="/politica">política de privacidade</a>.' />
             </LabeledField>
-            <Toggle label="Obrigatório" checked={p.required !== false} onChange={v => up('required', v)} hint="Usuário precisa marcar para enviar." />
+            <LabeledField label="Canais cobertos" hint="Marcar a caixa autoriza estes canais. WhatsApp e SMS só recebem mensagem com autorização explícita aqui.">
+              <div className="grid grid-cols-3 gap-2">
+                {([['email', 'E-mail'], ['whatsapp', 'WhatsApp'], ['sms', 'SMS']] as const).map(([ch, label]) => {
+                  const channels: string[] = Array.isArray(p.channels) && p.channels.length ? p.channels : ['email']
+                  const on = channels.includes(ch)
+                  return (
+                    <button key={ch} type="button"
+                      onClick={() => {
+                        const next = on ? channels.filter(c => c !== ch) : [...channels, ch]
+                        up('channels', next.length ? next : ['email'])
+                      }}
+                      className={`px-2 py-2 text-[12px] rounded-lg border transition-colors ${on ? 'border-zinc-900 bg-gray-100 text-gray-900 font-semibold' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
+            </LabeledField>
+            <LabeledField label="Versão do texto" hint="Mude quando alterar o texto. Fica registrada em cada consentimento como prova do que foi aceito.">
+              <input className={inp} value={p.consentVersion || ''} onChange={e => up('consentVersion', e.target.value)} placeholder="v1" />
+            </LabeledField>
+            <Toggle label="Obrigatório" checked={p.required !== false} onChange={v => up('required', v)} hint="Usuário precisa marcar para enviar. Nunca vem pré-marcado." />
           </div>
           <div className="pt-4 border-t border-gray-100 space-y-3">
             <SectionHeader title="Estilo" icon={<Type className="w-3 h-3" />} />
@@ -2123,6 +2150,20 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
                 </Field>
               </div>
             )}
+          </Section>
+
+          <Section title="Grupo de controle">
+            <p className="text-[11px] text-gray-400 leading-snug">
+              Uma parte dos visitantes elegíveis não vê o popup. Comparar as compras dos dois grupos mostra quanto o popup gera de verdade — e não só quanto é creditado a ele. O sorteio é fixo por visitante.
+            </p>
+            <Field label="Visitantes no grupo de controle" hint="0 desliga. Entre 5% e 20% costuma bastar; o máximo é 50%.">
+              <div className="flex items-center gap-2">
+                <input type="number" min={0} max={50} step={1} className={inp + ' max-w-[100px]'}
+                  value={beh.experiment?.holdoutPercent ?? 0}
+                  onChange={e => setG('experiment', { holdoutPercent: Math.max(0, Math.min(50, Math.round(Number(e.target.value) || 0))) })} />
+                <span className="text-[12px] text-gray-500">%</span>
+              </div>
+            </Field>
           </Section>
 
           <Section title="Perfil progressivo">

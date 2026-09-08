@@ -122,6 +122,22 @@ export async function GET(req: NextRequest) {
         }
       }
 
+      // A prova da confirmação: o clique no e-mail é a manifestação
+      // inequívoca que a LGPD pede — fica registrada com IP e user-agent
+      // do clique, ligada ao popup de origem.
+      const { recordConsent } = await import('@/lib/forms/consent')
+      await recordConsent(supabaseAdmin, {
+        organizationId: payload.orgId,
+        contactId: contact.id,
+        submissionId: null,
+        source: 'double_opt_in',
+        sourceRef: payload.formId,
+        pageUrl: req.nextUrl.pathname,
+        ipAddress: (req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || '').split(',')[0].trim() || null,
+        userAgent: req.headers.get('user-agent'),
+        locale: (req.headers.get('accept-language') || '').split(',')[0].trim() || null,
+      }, [{ channel: 'email', action: 'confirmed', text: null, version: null }])
+
       // Welcome flow fires HERE for double opt-in popups — not at submit.
       // The subscriber has just confirmed, so consent is now granted and
       // the flow's email node will actually send (at submit the contact

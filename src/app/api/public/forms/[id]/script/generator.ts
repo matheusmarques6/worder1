@@ -149,7 +149,7 @@ export function buildPopupScript(form: PopupFormRecord, baseUrl: string): string
 
   return `(function(){
 "use strict";
-var FID=${JSON.stringify(String(form.id))},BU=${JSON.stringify(baseUrl)},D=${JSON.stringify(design)},B=${JSON.stringify(beh)};
+var FID=${JSON.stringify(String(form.id))},FNAME=${JSON.stringify(String(form.name || ''))},BU=${JSON.stringify(baseUrl)},D=${JSON.stringify(design)},B=${JSON.stringify(beh)};
 // Guard against double injection (Theme App Embed + ScriptTag loader).
 if(window["__wf_ran_"+FID])return;
 window["__wf_ran_"+FID]=true;
@@ -179,6 +179,17 @@ function lsSet(n,v,d){try{localStorage.setItem("_wfls_"+n,JSON.stringify({v:v,e:
 function lsGet(n){try{var r=localStorage.getItem("_wfls_"+n);if(!r)return null;var j=JSON.parse(r);if(j&&j.e&&Date.now()<j.e)return j.v;localStorage.removeItem("_wfls_"+n);return null}catch(e){return null}}
 function gcx(n){return gc(n)||lsGet(n)}
 function scx(n,v,d){sc(n,v,d);lsSet(n,v,d)}
+// Eventos para o script da loja (GTM, pixels próprios, testes):
+//   window.addEventListener("worder:signup", function(e){ e.detail... })
+// Nomes: campaignMatched, popupView, stepView, popupClose, signup,
+// rewardClaimed, submitError. O detail sempre carrega formId e formName.
+function wfEmit(n,d){
+  try{
+    var det={formId:FID,formName:FNAME};
+    if(d)for(var k in d)det[k]=d[k];
+    window.dispatchEvent(new CustomEvent("worder:"+n,{detail:det}));
+  }catch(e){}
+}
 ${helpers}
 function nv(x,d){var n=parseFloat(x);return isFinite(n)?n:d}
 function bid(x){return String(x==null?"":x).replace(/[^a-zA-Z0-9_-]/g,"")}
@@ -200,6 +211,25 @@ function getVisitorId(){
   return null;
 }
 function getSessionId(){try{return sessionStorage.getItem("_worder_sid")||sessionStorage.getItem("__worder_sid")||null}catch(e){return null}}
+// Beacon do ciclo de vida → /events (persistido na série diária).
+// text/plain de propósito: application/json exige preflight, e sendBeacon
+// não faz preflight — o navegador descartava o envio cross-origin em
+// silêncio. O servidor aceita e faz o parse do texto.
+function beacon(type,extra){
+  var body={type:type};
+  var vid=getVisitorId();if(vid)body.visitor_id=vid;
+  var sid=getSessionId();if(sid)body.session_id=sid;
+  try{body.url=location.href;if(document.referrer)body.referrer=document.referrer}catch(e){}
+  if(extra)for(var k in extra)if(extra[k]!=null)body[k]=extra[k];
+  var payload=JSON.stringify(body);
+  var url=BU+"/api/public/forms/"+FID+"/events";
+  try{
+    if(navigator.sendBeacon&&navigator.sendBeacon(url,new Blob([payload],{type:"text/plain;charset=UTF-8"})))return;
+  }catch(e){}
+  try{
+    fetch(url,{method:"POST",headers:{"Content-Type":"text/plain;charset=UTF-8"},body:payload,keepalive:true}).catch(function(){});
+  }catch(e){}
+}
 function cornerPx(c,r){return c==="none"?0:c==="small"?4:c==="medium"?8:c==="large"?16:c==="custom"?nv(r,0):8}
 function inputStyleStr(p){
   var r=cornerPx(p.corners||"medium",p.cornerRadius||8);
@@ -306,23 +336,26 @@ var tgt=B.targeting||{};
 if(tgt.pages==="specific"&&tgt.pageUrls&&tgt.pageUrls.length>0){
   if(!tgt.pageUrls.some(function(p){return pagePath.indexOf(p)>=0}))return;
 }
-// Location gate (async best-effort via ipapi — fails open)
+// Location gate — país resolvido pela NOSSA borda (/api/public/geo), nunca
+// por um terceiro que receberia o IP do visitante. Cache de sessão; falha
+// aberta.
 var locCfg=B.location||{};
 function runLocationGate(cb){
   var needs=(locCfg.includeEnabled&&locCfg.includeCountries&&locCfg.includeCountries.length>0)||
             (locCfg.excludeEnabled&&locCfg.excludeCountries&&locCfg.excludeCountries.length>0);
   if(!needs){cb(true);return}
-  var cached=localStorage.getItem("_wf_country");
+  var cached=null;try{cached=sessionStorage.getItem("_wf_country")}catch(e){}
   function check(cc){
     cc=(cc||"").toUpperCase();
+    if(!cc){cb(true);return}
     if(locCfg.includeEnabled&&locCfg.includeCountries.length>0&&locCfg.includeCountries.indexOf(cc)<0){cb(false);return}
     if(locCfg.excludeEnabled&&locCfg.excludeCountries.length>0&&locCfg.excludeCountries.indexOf(cc)>=0){cb(false);return}
     cb(true);
   }
   if(cached){check(cached);return}
-  fetch("https://ipapi.co/json/").then(function(r){return r.json()}).then(function(j){
-    var cc=j&&j.country_code||"";
-    if(cc)localStorage.setItem("_wf_country",cc);
+  fetch(BU+"/api/public/geo",{cache:"no-store"}).then(function(r){return r.json()}).then(function(j){
+    var cc=(j&&j.country)||"";
+    if(cc){try{sessionStorage.setItem("_wf_country",cc)}catch(e){}}
     check(cc);
   }).catch(function(){cb(true)});
 }
@@ -491,7 +524,10 @@ function renderBlock(b){
     }
     case"legal-consent":{
       // R7: escape everything, re-allow only whitelisted-scheme anchors.
-      h='<div style="'+blockStyleStr(p,true)+'"><label style="display:flex;align-items:flex-start;gap:8px;font-size:'+nv(p.fontSize,12)+'px;color:'+sv(p.color,"#6B7280")+';cursor:pointer;line-height:'+nv(p.lineHeight,1.4)+'"><input type="checkbox" name="consent"'+(p.required?" required":"")+vaStr(p)+' style="margin-top:2px;flex-shrink:0" /><span>'+legalHtml(p.text||"",p.linkColor)+'</span></label></div>';
+      // Um input por bloco (consent__<id>): cada bloco é uma decisão
+      // própria, por canal. Nunca pré-marcado — a ANPD veda.
+      var chs=Array.isArray(p.channels)&&p.channels.length?p.channels.join(","):"email";
+      h='<div style="'+blockStyleStr(p,true)+'"><label style="display:flex;align-items:flex-start;gap:8px;font-size:'+nv(p.fontSize,12)+'px;color:'+sv(p.color,"#6B7280")+';cursor:pointer;line-height:'+nv(p.lineHeight,1.4)+'"><input type="checkbox" name="consent__'+bid(b.id)+'" data-channels="'+esc(chs)+'"'+(p.required?" required":"")+vaStr(p)+' style="margin-top:2px;flex-shrink:0" /><span>'+legalHtml(p.text||"",p.linkColor)+'</span></label></div>';
       break;
     }
     case"button":{
@@ -513,10 +549,15 @@ function renderBlock(b){
     case"line":h='<div style="'+blockStyleStr(p)+'"><hr style="border:none;border-top:'+nv(p.thickness,1)+'px '+sv(p.style,"solid")+' '+sv(p.color,"#E5E7EB")+';margin:0 auto;width:'+Math.min(Math.max(nv(p.width!=null?p.width:p.widthPct,100),1),100)+'%" /></div>';break;
     case"coupon":{
       var couponCode=p.code||"CODIGO";
-      if(p.mode==="dynamic"&&window.__wfDynCoupon&&window.__wfDynCoupon[FID]){
-        couponCode=window.__wfDynCoupon[FID];
+      var dyn=window.__wfDynCoupon&&window.__wfDynCoupon[FID];
+      if(dyn&&dyn.code)couponCode=dyn.code;
+      var boxCss=blockStyleStr(p,true)+'padding:12px 16px;border:2px '+sv(p.borderStyle,"dashed")+' '+sv(p.borderColor,"#F97316")+';border-radius:'+nv(p.borderRadius,8)+'px;text-align:center;background:'+sv(p.bgColor,"#FFF7ED");
+      if(dyn&&dyn.show_code===false){
+        // Aplicado sozinho no checkout: mostrar o código só confunde.
+        h='<div style="'+boxCss+'"><p style="font-size:'+Math.round(nv(p.fontSize,20)*0.8)+'px;font-weight:bold;color:'+sv(p.codeColor,"#F97316")+';margin:0">'+esc(p.appliedText||"Desconto aplicado no seu carrinho")+'</p></div>';
+      } else {
+        h='<div style="'+boxCss+'"><p style="font-size:11px;color:#6B7280;margin:0 0 4px">'+esc(p.description||"")+'</p><p style="font-size:'+nv(p.fontSize,20)+'px;font-weight:bold;color:'+sv(p.codeColor,"#F97316")+';letter-spacing:2px;margin:0;cursor:pointer" onclick="navigator.clipboard&&navigator.clipboard.writeText(this.textContent)">'+esc(couponCode)+'</p></div>';
       }
-      h='<div style="'+blockStyleStr(p,true)+'padding:12px 16px;border:2px '+sv(p.borderStyle,"dashed")+' '+sv(p.borderColor,"#F97316")+';border-radius:'+nv(p.borderRadius,8)+'px;text-align:center;background:'+sv(p.bgColor,"#FFF7ED")+'"><p style="font-size:11px;color:#6B7280;margin:0 0 4px">'+esc(p.description||"")+'</p><p style="font-size:'+nv(p.fontSize,20)+'px;font-weight:bold;color:'+sv(p.codeColor,"#F97316")+';letter-spacing:2px;margin:0;cursor:pointer" onclick="navigator.clipboard&&navigator.clipboard.writeText(this.textContent)">'+esc(couponCode)+'</p></div>';
       break;
     }
     case"countdown":{
@@ -559,22 +600,21 @@ function renderStep(stepIdx){
   }
   return visibleBlocks(step.blocks||[]).map(renderBlock).join("");
 }
-// R6: dismissal beacon — impressions KEEP flowing through submit
-// {_track:'impression'}; this only reports user-initiated dismissals.
+// R6: at most one dismissal beacon per pageview, only for user-initiated closes.
 function sendDismiss(){
   if(dismissSent)return;
   dismissSent=true;
-  var body={type:"dismissed"};
-  var vid=getVisitorId();
-  if(vid)body.visitor_id=vid;
-  var payload=JSON.stringify(body);
-  var url=BU+"/api/public/forms/"+FID+"/events";
-  try{
-    if(navigator.sendBeacon&&navigator.sendBeacon(url,new Blob([payload],{type:"application/json"})))return;
-  }catch(e){}
-  try{
-    fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:payload,keepalive:true}).catch(function(){});
-  }catch(e){}
+  beacon("dismissed",{step:curStep});
+}
+// Fonts só quando o popup aparece: injetar o <link> em toda página, mesmo
+// sem popup, custava LCP em cada visita da loja.
+function ensureFonts(){
+  if(document.getElementById("wf-fonts-link"))return;
+  var fl=document.createElement("link");
+  fl.id="wf-fonts-link";
+  fl.rel="stylesheet";
+  fl.href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Montserrat:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700;800&family=Roboto:wght@400;500;700&family=Open+Sans:wght@400;500;600;700&display=swap";
+  document.head.appendChild(fl);
 }
 // R1: merchant-configurable error copy → server 400 error string → neutral
 // English fallback (never PT-BR to international visitors).
@@ -593,6 +633,7 @@ function show(){
   }
   shown=true;
   dlog("show() — popup rendering now");
+  ensureFonts();
   try{
     if(perVisitorCfg.enabled){
       var perVisitorCk2="_wf_vt_"+FID;
@@ -681,6 +722,7 @@ function show(){
   if(st.closeButton&&st.closeButton.show!==false){
     var cbs=Math.min(Math.max(nv(st.closeButton.size,32),20),56);
     var cb=document.createElement("button");cb.innerHTML="&times;";
+    cb.type="button";cb.setAttribute("aria-label","Fechar");cb.setAttribute("data-action","close");
     cb.onclick=function(ev){if(ev&&ev.preventDefault)ev.preventDefault();close(true)};
     cb.style.cssText="position:absolute;top:12px;right:12px;z-index:2;width:"+cbs+"px;height:"+cbs+"px;border-radius:50%;background:rgba(0,0,0,0.06);border:none;font-size:"+Math.round(cbs*0.625)+"px;color:"+sv(st.closeButton.color,"#6B7280")+";cursor:pointer;display:flex;align-items:center;justify-content:center";
     pop.appendChild(cb);
@@ -709,8 +751,10 @@ function show(){
     ov.appendChild(pop);
     document.body.appendChild(ov);
   }
-  // Track impression (unchanged contract — submit {_track:'impression'}).
-  fetch(BU+"/api/public/forms/"+FID+"/submit",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({_track:"impression"})}).catch(function(){});
+  // Impressão → /events: persiste na série diária E bate os contadores.
+  // (O antigo {_track:'impression'} no submit só batia contador.)
+  beacon("impression",{bucket:"exposed"});
+  wfEmit("popupView",{formType:formType});
   // novalidate: our validator replaces browser-native bubbles (R9), so
   // visitors never see the browser's locale-specific messages.
   function renderForm(html){
@@ -722,6 +766,8 @@ function show(){
     var hp='<div aria-hidden="true" style="position:absolute!important;left:-9999px!important;top:auto!important;width:1px!important;height:1px!important;overflow:hidden!important"><label>Deixe este campo em branco<input type="text" name="_wf_hp" tabindex="-1" autocomplete="off" value="" /></label></div>';
     content.innerHTML='<form id="wf-form-'+FID+'" novalidate style="margin:auto 0;width:100%">'+hp+html+'</form>';
     bindForm();
+    wfEmit("stepView",{step:curStep,steps:steps.length});
+    if(curStep>0)beacon("step",{step:curStep});
   }
   // R9: shared validator for submit AND next-step. Paints borders with the
   // block's errorColor and shows the block's requiredMsg/errorMsg when
@@ -873,6 +919,7 @@ function show(){
       if(vid)payload.visitor_id=vid;
       var sid=getSessionId();
       if(sid)payload.session_id=sid;
+      try{payload.page_url=location.href}catch(e){}
       fetch(BU+"/api/public/forms/"+FID+"/submit",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})
       .then(function(r){return r.json().catch(function(){return{}}).then(function(j){return{ok:r.ok,status:r.status,body:j}})})
       .then(function(out){
@@ -883,6 +930,7 @@ function show(){
           submitting=false;
           setLoading(false);
           showFormError(submitErrorText(out.status,res));
+          wfEmit("submitError",{status:out.status,code:res&&res.code||null});
           dlog("submit failed",out.status,res);
           return;
         }
@@ -892,6 +940,7 @@ function show(){
         submitting=false;
         setLoading(false);
         showFormError(submitErrorText(0,null));
+        wfEmit("submitError",{status:0,code:"network"});
         dlog("submit network error",err);
       });
     });
@@ -981,9 +1030,26 @@ function show(){
       close(false);
       return;
     }
+    wfEmit("signup",{
+      email:allData.email||null,phone:allData.phone||null,
+      submissionId:res&&res.submission_id||null,contactId:res&&res.contact_id||null,
+      consent:res&&res.consent||null,doubleOptIn:!!(res&&res.double_optin_sent)
+    });
     if(res&&res.coupon&&res.coupon.code){
       window.__wfDynCoupon=window.__wfDynCoupon||{};
-      window.__wfDynCoupon[FID]=res.coupon.code;
+      window.__wfDynCoupon[FID]=res.coupon;
+      // Auto-apply: a rota /discount/CODE da Shopify grava o cupom na
+      // sessão do carrinho e o checkout já nasce com ele. Um fetch
+      // same-origin com credenciais basta — sem navegar, sem piscar.
+      if(res.coupon.auto_apply!==false&&window.Shopify){
+        try{
+          var du="/discount/"+encodeURIComponent(res.coupon.code)+"?redirect="+encodeURIComponent(location.pathname||"/");
+          fetch(du,{credentials:"same-origin",redirect:"follow",cache:"no-store"}).catch(function(){});
+        }catch(e){}
+      }
+      try{localStorage.setItem("_worder_coupon",JSON.stringify({code:res.coupon.code,kind:res.coupon.kind||null,ends_at:res.coupon.ends_at||null}))}catch(e){}
+      beacon("reward",{kind:res.coupon.kind||null});
+      wfEmit("rewardClaimed",{code:res.coupon.code,kind:res.coupon.kind||null,value:res.coupon.value!=null?res.coupon.value:null,endsAt:res.coupon.ends_at||null,autoApplied:res.coupon.auto_apply!==false&&!!window.Shopify});
     }
     // R10: success content carries the same vertical-centering wrapper.
     content.innerHTML='<div id="wf-succ-'+FID+'" style="margin:auto 0;width:100%">'+renderStep(-1)+'</div>';
@@ -1019,6 +1085,7 @@ function close(byUser){
   if(window.__wfOpenPopup===FID)window.__wfOpenPopup=null;
   if(_cleanupSize){_cleanupSize();_cleanupSize=null}
   if(byUser&&!submitted)sendDismiss();
+  if(shown)wfEmit("popupClose",{byUser:!!byUser,submitted:submitted,step:curStep});
   if(isEmbed)return;
   if(!submitted)scx(ck,"1",SHOW_AFTER_DAYS);
 }
@@ -1064,7 +1131,7 @@ function runCartGate(cb){
 var perVisitorCfg=freq.perVisitor||{};
 function perVisitorBlocked(){
   if(!perVisitorCfg.enabled)return false;
-  var vid=gc("__worder_id");
+  var vid=getVisitorId();
   if(!vid)return false;
   var perVisitorCk="_wf_vt_"+FID;
   var raw=localStorage.getItem(perVisitorCk);
@@ -1079,11 +1146,28 @@ function perVisitorBlocked(){
 }
 if(perVisitorBlocked()&&!useCustomTrigger&&!isEmbed)return;
 
+var expCfg=B.experiment||{};
+var HOLDOUT_PCT=Math.max(0,Math.min(50,nv(expCfg.holdoutPercent,0)));
+function holdoutBucket(){
+  if(HOLDOUT_PCT<=0)return"exposed";
+  var key="bk_"+FID;
+  var prev=lsGet(key);
+  if(prev==="holdout"||prev==="exposed")return prev;
+  var vid=getVisitorId();
+  if(!vid){try{vid=sessionStorage.getItem("_wf_anon")||"";if(!vid){vid="anon-"+Math.random().toString(36).slice(2);sessionStorage.setItem("_wf_anon",vid)}}catch(e){vid="anon"}}
+  var s=vid+"|"+FID,h=0;
+  for(var i=0;i<s.length;i++){h=(h*31+s.charCodeAt(i))>>>0}
+  var b=(h%100)<HOLDOUT_PCT?"holdout":"exposed";
+  lsSet(key,b,90);
+  return b;
+}
+
 // Async subscriber gate — server check, 10-minute cache, fails open.
 function runSubscriberGate(cb){
   if(DBG){dlog("subscriber gate bypassed (debug mode)");cb(true);return}
   if(!vis.hideFromSubscribers){cb(true);return}
-  var vid=gc("__worder_id");
+  // O mesmo id que a submissão grava — não só o cookie, que o Safari apaga.
+  var vid=getVisitorId();
   if(!vid){cb(true);return}
   var ckCache="_wf_paw_"+FID;
   try{
@@ -1113,6 +1197,18 @@ runLocationGate(function(locOk){
 runCartGate(function(cartOk){
   if(!cartOk){blockedBy("cart gate");return}
   dlog("all gates passed",{ useExit:useExit, useTime:useTime, useScroll:useScroll, usePageView:usePageView, useCustomTrigger:useCustomTrigger, matchAll:matchAll, delay:delaySec });
+  // Grupo de controle (hold-out): uma fatia dos elegíveis nunca vê o popup.
+  // É o que separa receita ATRIBUÍDA de receita INCREMENTAL. Sorteio
+  // determinístico por visitante+popup e pegajoso por 90 dias, para a
+  // mesma pessoa não mudar de grupo entre visitas.
+  var bucket=holdoutBucket();
+  if(bucket==="holdout"&&!isEmbed&&!DBG){
+    if(!window["__wf_ho_"+FID]){window["__wf_ho_"+FID]=true;beacon("holdout",{bucket:"holdout"})}
+    wfEmit("campaignMatched",{holdout:true});
+    blockedBy("holdout group ("+HOLDOUT_PCT+"%)");
+    return;
+  }
+  wfEmit("campaignMatched",{holdout:false});
   // S10: embedded forms render immediately — no triggers, no frequency.
   if(isEmbed){dlog("embed form type — rendering immediately");show();return}
   if(!anyEnabled&&!useCustomTrigger){
@@ -1190,13 +1286,6 @@ runCartGate(function(cartOk){
   });
 });
 });
-var s=document.createElement("style");s.textContent="@keyframes wfFade{from{opacity:0}to{opacity:1}}@keyframes wfSlide{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}";document.head.appendChild(s);
-if(!document.getElementById("wf-fonts-link")){
-  var fl=document.createElement("link");
-  fl.id="wf-fonts-link";
-  fl.rel="stylesheet";
-  fl.href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Montserrat:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700;800&family=Roboto:wght@400;500;700&family=Open+Sans:wght@400;500;600;700&display=swap";
-  document.head.appendChild(fl);
-}
+if(!document.getElementById("wf-anim-style")){var s=document.createElement("style");s.id="wf-anim-style";s.textContent="@keyframes wfFade{from{opacity:0}to{opacity:1}}@keyframes wfSlide{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}";document.head.appendChild(s)}
 })();`
 }

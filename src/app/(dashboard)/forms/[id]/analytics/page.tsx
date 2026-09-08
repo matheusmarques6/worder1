@@ -1,193 +1,247 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useParams, useRouter } from 'next/navigation'
-import Link from 'next/link'
-import { ArrowLeft, Loader2, Eye, Users, TrendingUp, Monitor, Smartphone, BarChart3 } from 'lucide-react'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
+// =============================================
+// Analytics de um popup
+//
+// Lê /api/forms/:id/analytics: a série diária vem de form_events (cada
+// impressão, envio e fechamento é uma linha), o opt-in vem da prova de
+// consentimento, a receita vem do motor de atribuição. Nada é derivado
+// de contador dividido por dias.
+// =============================================
 
-interface DailyStats { date: string; impressions: number; submissions: number }
-interface Submission { id: string; answers: Record<string, any>; created_at: string; ip_address?: string; user_agent?: string }
+import { useEffect, useState } from 'react'
+import { useParams, useRouter } from 'next/navigation'
+import { ArrowLeft, Loader2 } from 'lucide-react'
+import { ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
+import { formatCurrency } from '@/lib/utils/formatters'
+
+interface SeriesPoint { date: string; impressions: number; submissions: number; dismissals: number; holdouts: number }
+interface Analytics {
+  days: number
+  form: { id: string; name: string; form_type: string; status: string; created_at: string }
+  missing_migration: string | null
+  series: SeriesPoint[]
+  totals: {
+    impressions: number; submissions: number; dismissals: number; holdouts: number
+    submit_rate: number; dismiss_rate: number; opt_in_rate: number
+    opt_ins: { email: number; whatsapp: number; sms: number; denied: number }
+    coupons_issued: number
+    attributed_revenue: number; attributed_orders: number; driven_revenue: number; driven_orders: number
+    period_conversions: number; period_conversion_value: number
+    median_time_to_purchase_hours: number | null
+  }
+  devices: { mobile: number; desktop: number; tablet: number; unknown: number }
+  recent_submissions: Array<{ id: string; created_at: string; answers: Record<string, unknown>; device: string | null; country: string | null; coupon_code: string | null; converted_at: string | null; conversion_value: number | null }>
+}
+
+const pct = (v: number) => `${(v * 100).toFixed(1).replace('.', ',')}%`
+const int = (v: number) => v.toLocaleString('pt-BR')
+
+function hoursLabel(h: number | null): string {
+  if (h == null) return '—'
+  if (h < 1) return `${Math.round(h * 60)} min`
+  if (h < 48) return `${h.toFixed(1).replace('.', ',')} h`
+  return `${(h / 24).toFixed(1).replace('.', ',')} dias`
+}
 
 export default function FormAnalyticsPage() {
   const params = useParams()
   const router = useRouter()
   const formId = params.id as string
-  const [loading, setLoading] = useState(true)
-  const [form, setForm] = useState<any>(null)
-  const [submissions, setSubmissions] = useState<Submission[]>([])
-  const [chartData, setChartData] = useState<DailyStats[]>([])
   const [days, setDays] = useState(30)
+  const [data, setData] = useState<Analytics | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    async function load() {
-      setLoading(true)
-      try {
-        const [formRes, subsRes] = await Promise.all([
-          fetch(`/api/forms/${formId}`),
-          fetch(`/api/forms/${formId}/submissions?limit=50`),
-        ])
-        if (formRes.ok) {
-          const d = await formRes.json()
-          setForm(d.form || d)
-        }
-        if (subsRes.ok) {
-          const d = await subsRes.json()
-          setSubmissions(d.submissions || d || [])
-        }
-      } catch {}
-
-      // Build chart data from submissions
-      const daily: Record<string, { impressions: number; submissions: number }> = {}
-      const now = new Date()
-      for (let i = days - 1; i >= 0; i--) {
-        const d = new Date(now)
-        d.setDate(d.getDate() - i)
-        const key = d.toISOString().slice(0, 10)
-        daily[key] = { impressions: 0, submissions: 0 }
-      }
-      submissions.forEach(s => {
-        const key = new Date(s.created_at).toISOString().slice(0, 10)
-        if (daily[key]) daily[key].submissions++
+    let cancelled = false
+    setLoading(true)
+    fetch(`/api/forms/${formId}/analytics?days=${days}`, { cache: 'no-store' })
+      .then(async (r) => {
+        const d = await r.json().catch(() => ({}))
+        if (!r.ok) throw new Error(d.error || `Erro ${r.status}`)
+        return d as Analytics
       })
-      const avgImpressions = (form?.impressions_count || 0) > 0 ? Math.round(form.impressions_count / days) : 0
-      setChartData(Object.entries(daily).map(([date, v]) => ({
-        date: new Date(date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }),
-        impressions: avgImpressions || v.impressions,
-        submissions: v.submissions,
-      })))
-      setLoading(false)
-    }
-    load()
+      .then((d) => { if (!cancelled) { setData(d); setError(null) } })
+      .catch((e) => { if (!cancelled) setError(e.message) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
   }, [formId, days])
 
-  const totalImpressions = form?.impressions_count || form?.views_count || 0
-  const totalSubmissions = form?.submissions_count || submissions.length || 0
-  const conversionRate = totalImpressions > 0 ? ((totalSubmissions / totalImpressions) * 100).toFixed(1) : '0'
-  const mobileCount = submissions.filter(s => /mobile|android|iphone|ipad/i.test(s.user_agent || '')).length
-  const desktopCount = submissions.length - mobileCount
-  const desktopPct = submissions.length > 0 ? Math.round((desktopCount / submissions.length) * 100) : 0
-  const mobilePct = submissions.length > 0 ? 100 - desktopPct : 0
-
-  if (loading) {
+  if (loading && !data) {
     return <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>
   }
+  if (error || !data) {
+    return (
+      <div className="py-20 text-center">
+        <p className="text-sm text-gray-700">{error || 'Sem dados'}</p>
+        <button onClick={() => router.push('/site/forms')} className="mt-4 text-sm text-brand-600 underline">Voltar para a lista</button>
+      </div>
+    )
+  }
+
+  const t = data.totals
+  const chart = data.series.map((p) => ({
+    ...p,
+    label: new Date(p.date + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }),
+  }))
+  const deviceTotal = data.devices.mobile + data.devices.desktop + data.devices.tablet + data.devices.unknown
+  const devicePct = (n: number) => (deviceTotal > 0 ? Math.round((n / deviceTotal) * 100) : 0)
+
+  const funnel = [
+    { label: 'Visualizações', value: t.impressions },
+    { label: 'Inscrições', value: t.submissions },
+    { label: 'Opt-in confirmado', value: t.opt_ins.email + t.opt_ins.whatsapp + t.opt_ins.sms },
+    { label: 'Pedidos no período', value: t.period_conversions },
+  ]
+  const funnelMax = Math.max(1, funnel[0].value)
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <button onClick={() => router.push('/forms')} className="p-2 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100">
-          <ArrowLeft size={18} />
-        </button>
-        <div>
-          <h1 className="text-xl font-semibold text-gray-900">{form?.name || 'Formulário'}</h1>
-          <p className="text-sm text-gray-500">Analytics</p>
-        </div>
-      </div>
-
-      {/* KPIs */}
-      <div className="grid grid-cols-4 gap-4">
-        {[
-          { label: 'Impressões', value: totalImpressions.toLocaleString('pt-BR'), icon: Eye, color: 'text-blue-500', bg: 'bg-blue-50' },
-          { label: 'Submissões', value: totalSubmissions.toLocaleString('pt-BR'), icon: Users, color: 'text-emerald-500', bg: 'bg-emerald-50' },
-          { label: 'Taxa Conversão', value: `${conversionRate}%`, icon: TrendingUp, color: 'text-zinc-700', bg: 'bg-zinc-50' },
-          { label: 'Dispositivos', value: submissions.length > 0 ? `${desktopPct}% / ${mobilePct}%` : '—', icon: Monitor, color: 'text-gray-500', bg: 'bg-gray-50' },
-        ].map(kpi => (
-          <div key={kpi.label} className="bg-white rounded-xl border border-gray-200 p-5">
-            <div className="flex items-center gap-3">
-              <div className={`w-10 h-10 ${kpi.bg} rounded-lg flex items-center justify-center`}>
-                <kpi.icon className={`w-5 h-5 ${kpi.color}`} />
-              </div>
-              <div>
-                <p className="text-xs font-medium text-gray-400 uppercase">{kpi.label}</p>
-                <p className="text-xl font-semibold text-gray-900">{kpi.value}</p>
-              </div>
-            </div>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <button onClick={() => router.push('/site/forms')} className="p-2 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100" aria-label="Voltar">
+            <ArrowLeft size={18} />
+          </button>
+          <div>
+            <h1 className="text-xl font-semibold text-gray-900">{data.form.name}</h1>
+            <p className="text-sm text-gray-500">
+              {data.form.status === 'published' ? 'Ativo' : 'Rascunho'} · últimos {data.days} dias
+            </p>
           </div>
-        ))}
+        </div>
+        <select value={days} onChange={(e) => setDays(Number(e.target.value))}
+          className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm bg-white" aria-label="Período">
+          <option value={7}>7 dias</option>
+          <option value={30}>30 dias</option>
+          <option value={90}>90 dias</option>
+        </select>
       </div>
 
-      {/* Chart */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-semibold text-gray-900">Impressões vs Submissões</h2>
-          <select value={days} onChange={e => setDays(Number(e.target.value))}
-            className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm bg-white">
-            <option value={7}>7 dias</option>
-            <option value={30}>30 dias</option>
-            <option value={90}>90 dias</option>
-          </select>
+      {data.missing_migration && (
+        <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-xs text-amber-700">
+          A série diária depende da migration <code className="font-mono">{data.missing_migration}</code>, ainda não aplicada neste ambiente.
         </div>
+      )}
+
+      {/* KPIs do período */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <Kpi label="Visualizações" value={int(t.impressions)} hint={t.holdouts > 0 ? `+${int(t.holdouts)} no grupo de controle` : 'impressões do popup'} />
+        <Kpi label="Inscrições" value={int(t.submissions)} hint={`taxa de envio ${pct(t.submit_rate)}`} />
+        <Kpi label="Opt-in confirmado" value={int(t.opt_ins.email + t.opt_ins.whatsapp + t.opt_ins.sms)} hint={`e-mail ${int(t.opt_ins.email)} · WhatsApp ${int(t.opt_ins.whatsapp)}${t.opt_ins.denied ? ` · ${int(t.opt_ins.denied)} recusaram` : ''}`} />
+        <Kpi label="Fechamentos" value={int(t.dismissals)} hint={`taxa de fechamento ${pct(t.dismiss_rate)}`} />
+      </div>
+
+      {/* Receita */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <Kpi label="Receita atribuída" value={formatCurrency(t.attributed_revenue)} hint={`${int(t.attributed_orders)} pedido${t.attributed_orders === 1 ? '' : 's'} desde sempre`} />
+        <Kpi label="Receita com o cupom" value={formatCurrency(t.driven_revenue)} hint={`${int(t.driven_orders)} pedido${t.driven_orders === 1 ? '' : 's'} usaram o código`} />
+        <Kpi label="Cupons emitidos" value={int(t.coupons_issued)} hint="no período" />
+        <Kpi label="Tempo até a compra" value={hoursLabel(t.median_time_to_purchase_hours)} hint="mediana, da inscrição ao pedido" />
+      </div>
+
+      {/* Série diária */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <h2 className="text-sm font-semibold text-gray-900 mb-4">Por dia</h2>
         <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-              <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} />
-              <Tooltip />
-              <Legend />
-              <Line type="monotone" dataKey="impressions" name="Impressões" stroke="#94A3B8" strokeWidth={2} dot={{ r: 3 }} />
-              <Line type="monotone" dataKey="submissions" name="Submissões" stroke="#18181B" strokeWidth={2} dot={{ r: 3 }} />
-            </LineChart>
+            <ComposedChart data={chart} margin={{ top: 4, right: 8, left: -12, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} minTickGap={24} />
+              <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} allowDecimals={false} />
+              <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #E5E7EB' }} />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <Area type="monotone" dataKey="impressions" name="Visualizações" stroke="#94A3B8" fill="#E2E8F0" strokeWidth={1.5} />
+              <Line type="monotone" dataKey="submissions" name="Inscrições" stroke="#18181B" strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="dismissals" name="Fechamentos" stroke="#F26B2A" strokeWidth={1.5} dot={false} strokeDasharray="4 3" />
+            </ComposedChart>
           </ResponsiveContainer>
         </div>
       </div>
 
-      {/* Device breakdown */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Funil */}
         <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <h3 className="text-sm font-semibold text-gray-900 mb-3">Por Dispositivo</h3>
+          <h3 className="text-sm font-semibold text-gray-900 mb-4">Funil do período</h3>
           <div className="space-y-3">
-            <div>
-              <div className="flex justify-between text-xs text-gray-500 mb-1"><span>Desktop</span><span>{desktopPct}%</span></div>
-              <div className="h-2 bg-gray-100 rounded-full"><div className="h-2 bg-blue-500 rounded-full" style={{ width: `${desktopPct}%` }} /></div>
-            </div>
-            <div>
-              <div className="flex justify-between text-xs text-gray-500 mb-1"><span>Mobile</span><span>{mobilePct}%</span></div>
-              <div className="h-2 bg-gray-100 rounded-full"><div className="h-2 bg-emerald-500 rounded-full" style={{ width: `${mobilePct}%` }} /></div>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <h3 className="text-sm font-semibold text-gray-900 mb-3">Por Step</h3>
-          <div className="space-y-3">
-            <div>
-              <div className="flex justify-between text-xs text-gray-500 mb-1"><span>Step 1</span><span>100%</span></div>
-              <div className="h-2 bg-gray-100 rounded-full"><div className="h-2 bg-zinc-500 rounded-full" style={{ width: '100%' }} /></div>
-            </div>
-            <div>
-              <div className="flex justify-between text-xs text-gray-500 mb-1"><span>Submetido</span><span>{conversionRate}%</span></div>
-              <div className="h-2 bg-gray-100 rounded-full"><div className="h-2 bg-zinc-500 rounded-full" style={{ width: `${conversionRate}%` }} /></div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Recent submissions */}
-      <div className="bg-white rounded-xl border border-gray-200">
-        <div className="px-5 py-4 border-b border-gray-100">
-          <h3 className="text-sm font-semibold text-gray-900">Últimas Submissões</h3>
-        </div>
-        {submissions.length === 0 ? (
-          <div className="py-12 text-center text-sm text-gray-400">Nenhuma submissão ainda</div>
-        ) : (
-          <div className="divide-y divide-gray-50">
-            {submissions.slice(0, 20).map(sub => (
-              <div key={sub.id} className="px-5 py-3 flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-900">{sub.answers?.email || sub.answers?.name || sub.answers?.phone || 'Anônimo'}</p>
-                  <p className="text-xs text-gray-400">
-                    {Object.entries(sub.answers || {}).filter(([k]) => k !== 'email' && k !== 'name').map(([k, v]) => `${k}: ${v}`).join(' · ')}
-                  </p>
+            {funnel.map((f, i) => (
+              <div key={f.label}>
+                <div className="flex justify-between text-xs text-gray-600 mb-1">
+                  <span>{f.label}</span>
+                  <span className="tabular-nums">{int(f.value)}{i > 0 && funnel[0].value > 0 && <span className="text-gray-400"> · {pct(f.value / funnel[0].value)}</span>}</span>
                 </div>
-                <span className="text-xs text-gray-400">
-                  {new Date(sub.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                </span>
+                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <div className="h-2 bg-gray-900 rounded-full" style={{ width: `${Math.max(1, Math.round((f.value / funnelMax) * 100))}%` }} />
+                </div>
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Dispositivos */}
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <h3 className="text-sm font-semibold text-gray-900 mb-4">Inscrições por dispositivo</h3>
+          {deviceTotal === 0 ? (
+            <p className="text-xs text-gray-400">Sem inscrições no período.</p>
+          ) : (
+            <div className="space-y-3">
+              {([['mobile', 'Celular'], ['desktop', 'Computador'], ['tablet', 'Tablet']] as const).map(([k, label]) => (
+                <div key={k}>
+                  <div className="flex justify-between text-xs text-gray-600 mb-1"><span>{label}</span><span className="tabular-nums">{devicePct(data.devices[k])}%</span></div>
+                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden"><div className="h-2 bg-gray-700 rounded-full" style={{ width: `${devicePct(data.devices[k])}%` }} /></div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Últimas inscrições */}
+      <div className="bg-white rounded-xl border border-gray-200">
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-gray-900">Últimas inscrições</h3>
+          <span className="text-xs text-gray-400">{int(data.recent_submissions.length)} mais recentes</span>
+        </div>
+        {data.recent_submissions.length === 0 ? (
+          <div className="py-12 text-center text-sm text-gray-400">Nenhuma inscrição no período</div>
+        ) : (
+          <div className="divide-y divide-gray-50">
+            {data.recent_submissions.map((s) => {
+              const a = s.answers || {}
+              const who = String(a.email || a.whatsapp || a.phone || a.first_name || 'Anônimo')
+              const rest = Object.entries(a).filter(([k]) => !['email', 'whatsapp', 'phone', 'first_name', 'last_name'].includes(k))
+              return (
+                <div key={s.id} className="px-5 py-3 flex items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-sm text-gray-900 truncate">{who}</p>
+                    <p className="text-xs text-gray-400 truncate">
+                      {[s.device, s.country, s.coupon_code ? `cupom ${s.coupon_code}` : null, ...rest.map(([k, v]) => `${k}: ${String(v)}`)].filter(Boolean).join(' · ') || '—'}
+                    </p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-xs text-gray-500 tabular-nums">
+                      {new Date(s.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                    {s.converted_at && (
+                      <p className="text-[11px] text-emerald-600 font-medium tabular-nums">comprou · {formatCurrency(Number(s.conversion_value) || 0)}</p>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         )}
       </div>
+    </div>
+  )
+}
+
+function Kpi({ label, value, hint }: { label: string; value: string; hint?: string }) {
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-5">
+      <p className="text-xs font-medium text-gray-500">{label}</p>
+      <p className="text-xl font-semibold text-gray-900 mt-1 tabular-nums">{value}</p>
+      {hint && <p className="text-[11px] text-gray-400 mt-0.5">{hint}</p>}
     </div>
   )
 }

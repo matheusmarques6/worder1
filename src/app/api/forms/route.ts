@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
       submissions_count, views_count,
       pipeline_id, stage_id, store_id,
       facebook_pixel_id, google_ads_id,
-      theme, logo_url,
+      theme, logo_url, design_json,
       created_at, updated_at
     `
 
@@ -79,7 +79,14 @@ export async function GET(request: NextRequest) {
       result = result.filter(f => !f.store_id)
     }
 
-    return NextResponse.json({ forms: result })
+    // O design inteiro não vai para a lista — só o suficiente para a tela
+    // saber se abre o editor visual ou o de campos clássicos.
+    const slim = result.map(({ design_json, ...rest }: any) => ({
+      ...rest,
+      has_design: isVisualPopupForm(rest.form_type, design_json) || !!(design_json?.steps?.length),
+    }))
+
+    return NextResponse.json({ forms: slim })
   } catch (error: any) {
     console.error('[Forms] GET error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
