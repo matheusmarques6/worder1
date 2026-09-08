@@ -78,6 +78,17 @@ function eventsFor(id: string) {
   return calls.filter((c) => c.url === `${BU}/api/public/forms/${id}/events`).map((c) => c.body)
 }
 
+// O popup vive num shadow root: nada dele é visível por document.getElementById.
+function root(id: string): ShadowRoot | null {
+  return document.getElementById(`wf-host-${id}`)?.shadowRoot ?? null
+}
+function ov(id: string): HTMLElement | null {
+  return (root(id)?.getElementById(`wf-ov-${id}`) as HTMLElement | null) ?? null
+}
+function formEl(id: string): HTMLFormElement | null {
+  return (root(id)?.getElementById(`wf-form-${id}`) as HTMLFormElement | null) ?? null
+}
+
 function listen(name: string): any[] {
   const got: any[] = []
   window.addEventListener(`worder:${name}`, (e: any) => got.push(e.detail))
@@ -138,7 +149,7 @@ describe('runtime no DOM', () => {
   it('gate de dispositivo bloqueia sem impressão nem popup', () => {
     const id = run(design(), behavior({ visibility: { devices: 'mobile', visitorType: 'all' } }))
     vi.advanceTimersByTime(2000)
-    expect(document.getElementById(`wf-ov-${id}`)).toBeNull()
+    expect(ov(id)).toBeNull()
     expect(eventsFor(id)).toHaveLength(0)
   })
 
@@ -146,9 +157,9 @@ describe('runtime no DOM', () => {
     const views = listen('popupView')
     const matched = listen('campaignMatched')
     const id = run()
-    expect(document.getElementById(`wf-ov-${id}`)).toBeNull()
+    expect(ov(id)).toBeNull()
     vi.advanceTimersByTime(1000)
-    expect(document.getElementById(`wf-ov-${id}`)).not.toBeNull()
+    expect(ov(id)).not.toBeNull()
     const ev = eventsFor(id)
     expect(ev).toHaveLength(1)
     expect(ev[0]).toMatchObject({ type: 'impression', bucket: 'exposed', visitor_id: 'visitor-abc' })
@@ -161,6 +172,52 @@ describe('runtime no DOM', () => {
     expect((imp.init!.headers as any)['Content-Type']).toMatch(/text\/plain/)
   })
 
+  it('o popup vive num shadow root com o próprio CSS, invisível ao CSS do tema', () => {
+    const id = run()
+    vi.advanceTimersByTime(1000)
+    const host = document.getElementById(`wf-host-${id}`)!
+    expect(host).not.toBeNull()
+    expect(host.shadowRoot).not.toBeNull()
+    // Nada do popup está no DOM claro.
+    expect(document.getElementById(`wf-ov-${id}`)).toBeNull()
+    expect(document.querySelector('form')).toBeNull()
+    // Keyframes e reset moram dentro do shadow.
+    const css = host.shadowRoot!.querySelector('style')!.textContent!
+    expect(css).toContain('@keyframes wfFade')
+    expect(css).toContain(':host{all:initial}')
+    expect(root(id)!.querySelector('.wf-pop')).not.toBeNull()
+    // Fechar remove o host inteiro.
+    ov(id)!.querySelector<HTMLElement>('[data-action="close"]')!.click()
+    expect(document.getElementById(`wf-host-${id}`)).toBeNull()
+  })
+
+  it('prioridade: o popup de maior prioridade fala primeiro; o outro espera e desiste', () => {
+    const low = nextId()
+    const high = nextId()
+    // O de prioridade baixa dispara em 1 s; o alto em 2 s. Sem prioridade,
+    // o baixo abriria primeiro e travaria o mutex.
+    run(design(), behavior({ priority: 1, display: { timeEnabled: true, delay: 1 } }), low)
+    run(design(), behavior({ priority: 10, display: { timeEnabled: true, delay: 2 } }), high)
+    vi.advanceTimersByTime(1000)
+    expect(ov(low)).toBeNull() // esperando o alto decidir
+    vi.advanceTimersByTime(1000)
+    expect(ov(high)).not.toBeNull()
+    vi.advanceTimersByTime(4000)
+    expect(ov(low)).toBeNull() // mutex: só um por página
+    expect((window as any).__wfReg[high].state).toBe('shown')
+    expect((window as any).__wfReg[low].state).toBe('blocked')
+  })
+
+  it('prioridade: se o mais importante for bloqueado por um gate, o outro segue', () => {
+    const low = nextId()
+    const high = nextId()
+    run(design(), behavior({ priority: 1, display: { timeEnabled: true, delay: 1 } }), low)
+    run(design(), behavior({ priority: 10, visibility: { devices: 'mobile', visitorType: 'all' } }), high)
+    vi.advanceTimersByTime(1000)
+    expect(ov(low)).not.toBeNull()
+    expect((window as any).__wfReg[high].state).toBe('blocked')
+  })
+
   it('fonts só entram no head quando o popup aparece', () => {
     run()
     expect(document.getElementById('wf-fonts-link')).toBeNull()
@@ -171,7 +228,7 @@ describe('runtime no DOM', () => {
   it('bloco de consentimento nasce desmarcado, com nome próprio e canais', () => {
     const id = run()
     vi.advanceTimersByTime(1000)
-    const box = document.querySelector<HTMLInputElement>(`#wf-form-${id} input[name="consent__c1"]`)!
+    const box = formEl(id)!.querySelector<HTMLInputElement>('input[name="consent__c1"]')!
     expect(box).not.toBeNull()
     expect(box.checked).toBe(false)
     expect(box.getAttribute('data-channels')).toBe('email,whatsapp')
@@ -183,7 +240,7 @@ describe('runtime no DOM', () => {
     const rewards = listen('rewardClaimed')
     const id = run()
     vi.advanceTimersByTime(1000)
-    const form = document.getElementById(`wf-form-${id}`) as HTMLFormElement
+    const form = formEl(id) as HTMLFormElement
     const email = form.querySelector<HTMLInputElement>('input[name="email"]')!
     email.value = 'ana@example.com'
     form.querySelector<HTMLInputElement>('input[name="consent__c1"]')!.checked = true
@@ -207,13 +264,13 @@ describe('runtime no DOM', () => {
     expect(JSON.parse(localStorage.getItem('_worder_coupon')!)).toMatchObject({ code: 'POPUP-ABC123' })
     expect(eventsFor(id).some((e) => e.type === 'reward' && e.kind === 'percent')).toBe(true)
     // O código único entra no bloco de cupom da etapa de sucesso.
-    expect(document.getElementById(`wf-succ-${id}`)!.textContent).toContain('POPUP-ABC123')
+    expect(root(id)!.getElementById(`wf-succ-${id}`)!.textContent).toContain('POPUP-ABC123')
   })
 
   it('sem window.Shopify não tenta /discount', async () => {
     const id = run()
     vi.advanceTimersByTime(1000)
-    const form = document.getElementById(`wf-form-${id}`) as HTMLFormElement
+    const form = formEl(id) as HTMLFormElement
     form.querySelector<HTMLInputElement>('input[name="email"]')!.value = 'b@example.com'
     form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
     await vi.runAllTimersAsync()
@@ -224,14 +281,14 @@ describe('runtime no DOM', () => {
     const closes = listen('popupClose')
     const id = run()
     vi.advanceTimersByTime(1000)
-    const closeBtn = document.querySelector<HTMLElement>(`#wf-ov-${id} [data-action="close"]`)!
+    const closeBtn = ov(id)!.querySelector<HTMLElement>('[data-action="close"]')!
     closeBtn.click()
     const ev = eventsFor(id)
     expect(ev.map((e) => e.type)).toEqual(['impression', 'dismissed'])
     expect(ev[1]).toMatchObject({ step: 0, visitor_id: 'visitor-abc' })
     expect(closes[0]).toMatchObject({ byUser: true, submitted: false })
     expect(document.cookie).toContain(`_wf_${id}=1`)
-    expect(document.getElementById(`wf-ov-${id}`)).toBeNull()
+    expect(ov(id)).toBeNull()
   })
 
   it('hold-out: determinístico, pegajoso, sem popup, um beacon por pageview', () => {
@@ -241,7 +298,7 @@ describe('runtime no DOM', () => {
     document.cookie = `__worder_id=${vid};path=/`
     run(design(), behavior({ experiment: { holdoutPercent: 30 } }), id)
     vi.advanceTimersByTime(2000)
-    expect(document.getElementById(`wf-ov-${id}`)).toBeNull()
+    expect(ov(id)).toBeNull()
     const ev = eventsFor(id)
     expect(ev).toHaveLength(1)
     expect(ev[0]).toMatchObject({ type: 'holdout', bucket: 'holdout', visitor_id: vid })
@@ -255,7 +312,7 @@ describe('runtime no DOM', () => {
     document.cookie = `__worder_id=${vid};path=/`
     run(design(), behavior({ experiment: { holdoutPercent: 30 } }), id)
     vi.advanceTimersByTime(1000)
-    expect(document.getElementById(`wf-ov-${id}`)).not.toBeNull()
+    expect(ov(id)).not.toBeNull()
     expect(eventsFor(id)[0]).toMatchObject({ type: 'impression', bucket: 'exposed' })
     expect(JSON.parse(localStorage.getItem(`_wfls_bk_${id}`)!).v).toBe('exposed')
   })
@@ -265,7 +322,7 @@ describe('runtime no DOM', () => {
     localStorage.setItem(`_wfls_bk_${id}`, JSON.stringify({ v: 'holdout', e: Date.now() + 86400000 }))
     run(design(), behavior({ experiment: { holdoutPercent: 1 } }), id)
     vi.advanceTimersByTime(2000)
-    expect(document.getElementById(`wf-ov-${id}`)).toBeNull()
+    expect(ov(id)).toBeNull()
     expect(eventsFor(id)[0]).toMatchObject({ type: 'holdout' })
   })
 
@@ -277,7 +334,7 @@ describe('runtime no DOM', () => {
   it('hold-out 0% nunca sorteia ninguém para o controle', () => {
     const id = run(design(), behavior({ experiment: { holdoutPercent: 0 } }))
     vi.advanceTimersByTime(1000)
-    expect(document.getElementById(`wf-ov-${id}`)).not.toBeNull()
+    expect(ov(id)).not.toBeNull()
     expect(localStorage.getItem(`_wfls_bk_${id}`)).toBeNull()
   })
 
@@ -286,13 +343,13 @@ describe('runtime no DOM', () => {
     await vi.runAllTimersAsync()
     expect(calls.some((c) => c.url === `${BU}/api/public/geo`)).toBe(true)
     expect(calls.some((c) => c.url.includes('ipapi'))).toBe(false)
-    expect(document.getElementById(`wf-ov-${id}`)).toBeNull()
+    expect(ov(id)).toBeNull()
     expect(sessionStorage.getItem('_wf_country')).toBe('BR')
   })
 
   it('gate de país deixa passar quando o país está na lista', async () => {
     const id = run(design(), behavior({ location: { includeEnabled: true, includeCountries: ['BR', 'PT'] } }))
     await vi.runAllTimersAsync()
-    expect(document.getElementById(`wf-ov-${id}`)).not.toBeNull()
+    expect(ov(id)).not.toBeNull()
   })
 })

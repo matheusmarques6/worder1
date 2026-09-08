@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   buildPopupScript,
+  compactScript,
   escHtml,
   sv,
   safeUrl,
@@ -132,6 +133,14 @@ describe('buildPopupScript (generated string)', () => {
   it('legal-consent renders one input per block with its channels', () => {
     expect(js).toContain('name="consent__\'+bid(b.id)+\'"')
     expect(js).toContain('data-channels=')
+  })
+
+  it('compactScript drops comment lines and indentation but keeps URLs and strings intact', () => {
+    const src = '  // comentário\nvar a="https://x.y/z"; // fim de linha fica\n\n    if(a){\n      b()\n    }\n'
+    const out = compactScript(src)
+    expect(out).toBe('var a="https://x.y/z"; // fim de linha fica\nif(a){\nb()\n}')
+    expect(compactScript(js).length).toBeLessThan(js.length * 0.85)
+    expect(() => new Function(compactScript(js))).not.toThrow()
   })
 
   it('fonts are injected on show, not on script load', () => {

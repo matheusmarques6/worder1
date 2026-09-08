@@ -111,6 +111,9 @@ interface PopupDesign {
     experiment?: {
       holdoutPercent: number
     }
+    // Quando dois popups são elegíveis na mesma página, o de maior número
+    // aparece; o outro espera a próxima visita. 0 = normal.
+    priority?: number
   }
   postSubmit?: {
     action: 'close' | 'redirect' | 'show-success'
@@ -2263,6 +2266,17 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
                 </Field>
               </div>
             )}
+          </Section>
+
+          <Section title="Prioridade">
+            <Field label="Quando outro popup também for elegível" hint="O de maior número aparece; o outro fica para a próxima visita. Só um popup por página.">
+              <div className="flex items-center gap-2">
+                <input type="number" min={0} max={100} step={1} className={inp + ' max-w-[100px]'}
+                  value={beh.priority ?? 0}
+                  onChange={e => onChange({ ...beh, priority: Math.max(0, Math.min(100, Math.round(Number(e.target.value) || 0))) })} />
+                <span className="text-[12px] text-gray-500">0 = normal · 100 = sempre primeiro</span>
+              </div>
+            </Field>
           </Section>
 
           <Section title="Grupo de controle">

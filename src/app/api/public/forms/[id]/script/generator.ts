@@ -131,6 +131,20 @@ export interface PopupFormRecord {
   behavior?: any
 }
 
+/**
+ * Tira o que o navegador não precisa: linhas de comentário e recuo. Não é
+ * um minificador (não renomeia nada) — é o corte barato e seguro que cabe
+ * num template literal: linhas cujo conteúdo começa com `//` e espaços à
+ * esquerda. Uma URL dentro de string ("https://…") nunca começa a linha.
+ */
+export function compactScript(js: string): string {
+  return js
+    .split('\n')
+    .map((line) => line.replace(/^\s+/, ''))
+    .filter((line) => line.length > 0 && !line.startsWith('//'))
+    .join('\n')
+}
+
 export function buildPopupScript(form: PopupFormRecord, baseUrl: string): string {
   const design = form.design_json || {}
   const beh = form.behavior || design.behavior || {}
@@ -154,6 +168,43 @@ var FID=${JSON.stringify(String(form.id))},FNAME=${JSON.stringify(String(form.na
 if(window["__wf_ran_"+FID])return;
 window["__wf_ran_"+FID]=true;
 var shown=false,ck="_wf_"+FID;
+// Shadow DOM: o popup inteiro vive num shadow root. O CSS do tema não entra
+// (nenhum "div{margin:8px!important}" quebra o layout), o nosso não sai, e os
+// keyframes moram aqui dentro porque animação não atravessa a fronteira.
+var ROOT=null,HOST=null;
+function $(id){try{if(ROOT){var e=ROOT.getElementById(id);if(e)return e}return document.getElementById(id)}catch(e){return null}}
+var BASE_CSS=":host{all:initial}*,*::before,*::after{box-sizing:border-box}@keyframes wfFade{from{opacity:0}to{opacity:1}}@keyframes wfSlide{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}.wf-pop{color:#111827;line-height:1.4;font-size:14px;-webkit-font-smoothing:antialiased;text-align:left}.wf-pop button,.wf-pop input,.wf-pop select,.wf-pop textarea{font:inherit;color:inherit;margin:0}.wf-pop input::placeholder{opacity:1}.wf-pop a{color:inherit}.wf-pop p,.wf-pop h1,.wf-pop h2,.wf-pop h3{margin:0}";
+function mountRoot(target){
+  var host=document.createElement("div");
+  host.id="wf-host-"+FID;
+  host.setAttribute("data-worder-popup",FID);
+  // display:contents: o host não ocupa lugar; o overlay é fixed e o embed
+  // flui no lugar do container do lojista.
+  host.style.cssText="all:initial;display:contents";
+  var r=host.attachShadow?host.attachShadow({mode:"open"}):null;
+  var css=document.createElement("style");css.textContent=BASE_CSS;
+  if(r){r.appendChild(css);ROOT=r}else{host.appendChild(css);ROOT=null}
+  target.appendChild(host);
+  HOST=host;
+  return r||host;
+}
+function unmountRoot(){
+  if(HOST&&HOST.parentNode)HOST.parentNode.removeChild(HOST);
+  HOST=null;ROOT=null;
+}
+// Prioridade entre popups (behavior.priority, maior vence). Cada script se
+// registra; quando o gatilho de um dispara e há outro de prioridade maior
+// ainda decidindo (delay maior, gate assíncrono), ele espera até 3 s antes
+// de tomar a vez. Sem isso a ordem era "quem chegou primeiro".
+var PRIORITY=nv((B&&B.priority),0);
+window.__wfReg=window.__wfReg||{};
+window.__wfReg[FID]={priority:PRIORITY,state:"pending"};
+function regState(s){try{window.__wfReg[FID].state=s}catch(e){}}
+function higherPending(){
+  var reg=window.__wfReg||{};
+  for(var k in reg){if(k!==FID&&reg[k]&&reg[k].state==="pending"&&reg[k].priority>PRIORITY)return k}
+  return null;
+}
 var submitted=false;// R3: suppression cookie must not be clobbered by close() after subscribe
 var dismissSent=false;// R6: at most one dismissal beacon per pageview
 var _cleanupSize=null;
@@ -168,7 +219,7 @@ function dlog(){if(!DBG)return;try{
   var args=["[WorderPopup]","["+FID.slice(0,8)+"]"].concat(Array.prototype.slice.call(arguments));
   console.log.apply(console,args);
 }catch(e){}}
-function blockedBy(reason){dlog("BLOCKED:",reason);}
+function blockedBy(reason){dlog("BLOCKED:",reason);try{if(window.__wfReg&&window.__wfReg[FID])window.__wfReg[FID].state="blocked"}catch(e){}}
 dlog("script start",{ design: !!D, behavior: B });
 function gc(n){var m=document.cookie.match("(^|;)\\\\s*"+n+"=([^;]*)");return m?m[2]:null}
 function sc(n,v,d){var e=new Date();e.setDate(e.getDate()+d);document.cookie=n+"="+v+";path=/;expires="+e.toUTCString()+";SameSite=Lax"}
@@ -377,7 +428,7 @@ if(utmCfg.filterEnabled&&utmCfg.filters&&utmCfg.filters.length>0){
     if(!f.param||!f.value)return true;
     return(currentUtms[f.param]||"").toLowerCase().indexOf(f.value.toLowerCase())>=0;
   });
-  if(!utmOk)return;
+  if(!utmOk){blockedBy("utm filter");return}
 }
 // Page view count (R8): bump ONCE per pageview globally — N popups on the
 // page used to inflate the counter by N.
@@ -609,7 +660,7 @@ function sendDismiss(){
 // Fonts só quando o popup aparece: injetar o <link> em toda página, mesmo
 // sem popup, custava LCP em cada visita da loja.
 function ensureFonts(){
-  if(document.getElementById("wf-fonts-link"))return;
+  if($("wf-fonts-link"))return;
   var fl=document.createElement("link");
   fl.id="wf-fonts-link";
   fl.rel="stylesheet";
@@ -624,14 +675,19 @@ function submitErrorText(status,res){
   if(status===400&&res&&typeof res.error==="string"&&res.error)return res.error;
   return "Something went wrong. Please try again.";
 }
+var showWaits=0;
 function show(){
   if(shown){dlog("show() ignored — already shown this pageview");return}
   // R11: one-popup-at-a-time mutex (embed exempt — it's page content).
   if(!isEmbed){
-    if(window.__wfOpenPopup&&window.__wfOpenPopup!==FID){dlog("another popup ("+window.__wfOpenPopup+") is open — skipping this pageview");return}
+    if(window.__wfOpenPopup&&window.__wfOpenPopup!==FID){dlog("another popup ("+window.__wfOpenPopup+") is open — skipping this pageview");regState("blocked");return}
+    // Um popup mais importante ainda não decidiu: espera até 3 s por ele.
+    var hp=higherPending();
+    if(hp&&showWaits<2){showWaits++;dlog("waiting for higher-priority popup "+hp);setTimeout(show,1500);return}
     window.__wfOpenPopup=FID;
   }
   shown=true;
+  regState("shown");
   dlog("show() — popup rendering now");
   ensureFonts();
   try{
@@ -670,7 +726,7 @@ function show(){
   // R10: side image collapses on mobile; banner/flyout never host one.
   function hasSideAt(m){return sideUrlOk&&!!si.enabled&&!m&&formType!=="banner"&&formType!=="flyout"}
   var embedHost=isEmbed?document.querySelector('[data-worder-form="'+FID+'"]'):null;
-  var pop=document.createElement("div");pop.id="wf-pop-"+FID;
+  var pop=document.createElement("div");pop.id="wf-pop-"+FID;pop.className="wf-pop";
   var padT=st.paddingTop!=null?nv(st.paddingTop,32):(typeof st.padding==="number"?st.padding:32);
   var padR=st.paddingRight!=null?nv(st.paddingRight,32):(typeof st.padding==="number"?st.padding:32);
   var padB=st.paddingBottom!=null?nv(st.paddingBottom,32):(typeof st.padding==="number"?st.padding:32);
@@ -742,14 +798,14 @@ function show(){
   }
   if(isEmbed&&embedHost){
     embedHost.innerHTML="";
-    embedHost.appendChild(pop);
+    mountRoot(embedHost).appendChild(pop);
   } else if(isEmbed){
     ov.style.cssText="position:fixed;inset:0;z-index:999999;display:flex;align-items:center;justify-content:center;background:"+ovBgStr+";animation:wfFade .3s ease";
     ov.appendChild(pop);
-    document.body.appendChild(ov);
+    mountRoot(document.body).appendChild(ov);
   } else {
     ov.appendChild(pop);
-    document.body.appendChild(ov);
+    mountRoot(document.body).appendChild(ov);
   }
   // Impressão → /events: persiste na série diária E bate os contadores.
   // (O antigo {_track:'impression'} no submit só batia contador.)
@@ -776,7 +832,7 @@ function show(){
     f.querySelectorAll(".wf-fe").forEach(function(el){if(el.parentNode)el.parentNode.removeChild(el)});
     f.querySelectorAll("input,select,textarea").forEach(function(el){el.style.borderColor="";el.style.outline=""});
     f.querySelectorAll("[data-wfreq]").forEach(function(el){el.style.outline="";el.style.outlineOffset=""});
-    var ea=document.getElementById("wf-err-"+FID);
+    var ea=$("wf-err-"+FID);
     if(ea)ea.style.display="none";
   }
   function fieldErr(afterEl,msg,color){
@@ -849,7 +905,7 @@ function show(){
     dlog("button click action="+act);
     if(act==="next-step"){
       e.preventDefault();
-      var frm=btn.closest("form")||document.getElementById("wf-form-"+FID);
+      var frm=btn.closest("form")||$("wf-form-"+FID);
       // R2: validate the CURRENT step before advancing, then harvest it.
       if(frm&&!validateStep(frm)){dlog("next-step blocked by validation");return}
       if(frm)harvest(frm);
@@ -859,7 +915,7 @@ function show(){
     if(act==="url"&&btn.dataset.url){e.preventDefault();var uu=safeUrl(btn.dataset.url);if(uu)window.open(uu,"_blank","noopener")}
     if(act==="submit"){
       e.preventDefault();
-      var fEl=btn.closest("form")||document.getElementById("wf-form-"+FID);
+      var fEl=btn.closest("form")||$("wf-form-"+FID);
       if(fEl){
         if(typeof fEl.requestSubmit==="function"){fEl.requestSubmit();}
         else{
@@ -870,7 +926,7 @@ function show(){
     }
   });
   function bindForm(){
-    var f=document.getElementById("wf-form-"+FID);
+    var f=$("wf-form-"+FID);
     if(!f)return;
     f.addEventListener("submit",function(e){
       e.preventDefault();
@@ -889,7 +945,7 @@ function show(){
       }
       // R1: inline error area INSIDE the form — no step navigation on failure.
       function showFormError(txt){
-        var ea=document.getElementById("wf-err-"+FID);
+        var ea=$("wf-err-"+FID);
         if(!ea){
           ea=document.createElement("div");
           ea.id="wf-err-"+FID;
@@ -1061,7 +1117,7 @@ function show(){
       var doiMsg=D.doiMessage||B.doiMessage||"";
       if(doiMsg){doi.textContent=String(doiMsg)}
       else{doi.innerHTML="<strong>Quase l\\u00e1!</strong> Enviamos um email para voc\\u00ea confirmar sua inscri\\u00e7\\u00e3o. Verifique sua caixa de entrada."}
-      var sw=document.getElementById("wf-succ-"+FID);
+      var sw=$("wf-succ-"+FID);
       if(sw&&sw.firstChild)sw.insertBefore(doi,sw.firstChild);
       else if(sw)sw.appendChild(doi);
       else content.insertBefore(doi,content.firstChild);
@@ -1076,12 +1132,14 @@ function show(){
 // (once, never after subscribe). The suppression cookie is only (re)written
 // when the visitor did NOT subscribe, and never for embeds.
 function close(byUser){
-  var o=document.getElementById("wf-ov-"+FID);
+  var o=$("wf-ov-"+FID);
   if(o){o.remove()}
   else{
-    var pp=document.getElementById("wf-pop-"+FID);
+    var pp=$("wf-pop-"+FID);
     if(pp&&pp.parentNode)pp.parentNode.removeChild(pp);
   }
+  unmountRoot();
+  regState("done");
   if(window.__wfOpenPopup===FID)window.__wfOpenPopup=null;
   if(_cleanupSize){_cleanupSize();_cleanupSize=null}
   if(byUser&&!submitted)sendDismiss();
@@ -1144,7 +1202,7 @@ function perVisitorBlocked(){
     return recent.length>=Number(perVisitorCfg.maxShows||1);
   }catch(e){return false}
 }
-if(perVisitorBlocked()&&!useCustomTrigger&&!isEmbed)return;
+if(perVisitorBlocked()&&!useCustomTrigger&&!isEmbed){blockedBy("per-visitor cap");return}
 
 var expCfg=B.experiment||{};
 var HOLDOUT_PCT=Math.max(0,Math.min(50,nv(expCfg.holdoutPercent,0)));
@@ -1286,6 +1344,5 @@ runCartGate(function(cartOk){
   });
 });
 });
-if(!document.getElementById("wf-anim-style")){var s=document.createElement("style");s.id="wf-anim-style";s.textContent="@keyframes wfFade{from{opacity:0}to{opacity:1}}@keyframes wfSlide{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}";document.head.appendChild(s)}
 })();`
 }
