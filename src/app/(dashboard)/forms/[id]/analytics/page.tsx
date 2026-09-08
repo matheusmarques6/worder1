@@ -11,11 +11,28 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
+import { ArrowLeft } from '@phosphor-icons/react'
+import { useStoreStore } from '@/stores'
 import { ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { formatCurrency } from '@/lib/utils/formatters'
 
 interface SeriesPoint { date: string; impressions: number; submissions: number; dismissals: number; holdouts: number }
+
+const STATUS_LABEL: Record<string, string> = { published: 'Ativo', paused: 'Pausado', draft: 'Rascunho', archived: 'Arquivado' }
+const DEVICE_LABEL: Record<string, string> = { mobile: 'Celular', desktop: 'Computador', tablet: 'Tablet' }
+const COUNTRY_LABEL = (c: string) => { try { return new Intl.DisplayNames(['pt-BR'], { type: 'region' }).of(c) || c } catch { return c } }
+const KEY_LABEL: Record<string, string> = { gender: 'Gênero', birthday: 'Nascimento', city: 'Cidade', state: 'Estado', country: 'País', company: 'Empresa', zip: 'CEP', address: 'Endereço' }
+function humanKey(k: string): string {
+  if (KEY_LABEL[k]) return KEY_LABEL[k]
+  return k.replace(/^custom:/, '').replace(/[_-]+/g, ' ')
+}
+function periodCaption(days: number): string {
+  const end = new Date()
+  const start = new Date(end.getTime() - (days - 1) * 86400000)
+  const f = (d: Date) => d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
+  return `${f(start)} – ${f(end)}`
+}
 interface Analytics {
   days: number
   form: { id: string; name: string; form_type: string; status: string; created_at: string }
@@ -25,6 +42,7 @@ interface Analytics {
     impressions: number; submissions: number; dismissals: number; holdouts: number
     submit_rate: number; dismiss_rate: number; opt_in_rate: number
     opt_ins: { email: number; whatsapp: number; sms: number; denied: number }
+    opt_in_people: number
     coupons_issued: number
     attributed_revenue: number; attributed_orders: number; driven_revenue: number; driven_orders: number
     influenced_revenue: number; influenced_orders: number
@@ -34,6 +52,7 @@ interface Analytics {
   devices: { mobile: number; desktop: number; tablet: number; unknown: number }
   holdout: {
     configured: boolean
+    min_visitors: number
     rows: Array<{ bucket: string; visitors: number; buyers: number; revenue: number }>
     incremental: null | {
       exposed: { visitors: number; buyers: number; revenue: number; conversion: number; revenue_per_visitor: number }
@@ -41,6 +60,7 @@ interface Analytics {
       lift_conversion: number | null
       incremental_revenue: number
       reliable: boolean
+      min_reliable: number
     }
   }
   recent_submissions: Array<{ id: string; created_at: string; answers: Record<string, unknown>; device: string | null; country: string | null; coupon_code: string | null; converted_at: string | null; conversion_value: number | null }>
@@ -64,11 +84,16 @@ export default function FormAnalyticsPage() {
   const [data, setData] = useState<Analytics | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const { currentStore } = useStoreStore()
+  const currency = currentStore?.currency
+  const money = (v: number) => formatCurrency(v, currency)
 
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    fetch(`/api/forms/${formId}/analytics?days=${days}`, { cache: 'no-store' })
+    let tz = 'America/Sao_Paulo'
+    try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || tz } catch {}
+    fetch(`/api/forms/${formId}/analytics?days=${days}&tz=${encodeURIComponent(tz)}`, { cache: 'no-store' })
       .then(async (r) => {
         const d = await r.json().catch(() => ({}))
         if (!r.ok) throw new Error(d.error || `Erro ${r.status}`)
@@ -103,7 +128,7 @@ export default function FormAnalyticsPage() {
   const funnel = [
     { label: 'Visualizações', value: t.impressions },
     { label: 'Inscrições', value: t.submissions },
-    { label: 'Opt-in confirmado', value: t.opt_ins.email + t.opt_ins.whatsapp + t.opt_ins.sms },
+    { label: 'Opt-in confirmado', value: t.opt_in_people },
     { label: 'Pedidos no período', value: t.period_conversions },
   ]
   const funnelMax = Math.max(1, funnel[0].value)
@@ -112,21 +137,21 @@ export default function FormAnalyticsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <button onClick={() => router.push('/site/forms')} className="p-2 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100" aria-label="Voltar">
-            <ArrowLeft size={18} />
+          <button onClick={() => router.push('/site/forms')} className="p-2 rounded-xl bg-gray-50 hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors" aria-label="Voltar">
+            <ArrowLeft size={18} weight="bold" />
           </button>
           <div>
-            <h1 className="text-xl font-semibold text-gray-900">{data.form.name}</h1>
-            <p className="text-sm text-gray-500">
-              {data.form.status === 'published' ? 'Ativo' : 'Rascunho'} · últimos {data.days} dias
+            <h1 className="text-2xl font-bold font-display text-gray-900">{data.form.name}</h1>
+            <p className="text-sm text-gray-500 mt-0.5">
+              {STATUS_LABEL[data.form.status] || 'Rascunho'} · últimos {data.days} dias · {periodCaption(data.days)}
             </p>
           </div>
         </div>
         <select value={days} onChange={(e) => setDays(Number(e.target.value))}
-          className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm bg-white" aria-label="Período">
-          <option value={7}>7 dias</option>
-          <option value={30}>30 dias</option>
-          <option value={90}>90 dias</option>
+          className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-700 focus:outline-none" aria-label="Período">
+          <option value={7}>Últimos 7 dias</option>
+          <option value={30}>Últimos 30 dias</option>
+          <option value={90}>Últimos 90 dias</option>
         </select>
       </div>
 
@@ -140,34 +165,41 @@ export default function FormAnalyticsPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Kpi label="Visualizações" value={int(t.impressions)} hint={t.holdouts > 0 ? `+${int(t.holdouts)} no grupo de controle` : 'impressões do popup'} />
         <Kpi label="Inscrições" value={int(t.submissions)} hint={`taxa de envio ${pct(t.submit_rate)}`} />
-        <Kpi label="Opt-in confirmado" value={int(t.opt_ins.email + t.opt_ins.whatsapp + t.opt_ins.sms)} hint={`e-mail ${int(t.opt_ins.email)} · WhatsApp ${int(t.opt_ins.whatsapp)}${t.opt_ins.denied ? ` · ${int(t.opt_ins.denied)} recusaram` : ''}`} />
+        <Kpi label="Opt-in confirmado" value={int(t.opt_in_people)} hint={`e-mail ${int(t.opt_ins.email)} · WhatsApp ${int(t.opt_ins.whatsapp)}${t.opt_ins.sms ? ` · SMS ${int(t.opt_ins.sms)}` : ''}${t.opt_ins.denied ? ` · ${int(t.opt_ins.denied)} recusaram` : ''}`} />
         <Kpi label="Fechamentos" value={int(t.dismissals)} hint={`taxa de fechamento ${pct(t.dismiss_rate)}`} />
       </div>
 
-      {/* Receita — três leituras, três perguntas diferentes */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Kpi label="Receita atribuída" value={formatCurrency(t.attributed_revenue)} hint={`${int(t.attributed_orders)} pedido${t.attributed_orders === 1 ? '' : 's'} · crédito único ao popup`} />
-        <Kpi label="Receita influenciada" value={formatCurrency(t.influenced_revenue)} hint={`${int(t.influenced_orders)} pedido${t.influenced_orders === 1 ? '' : 's'} após a inscrição, creditados a qualquer canal`} />
-        <Kpi label="Receita com o cupom" value={formatCurrency(t.driven_revenue)} hint={`${int(t.driven_orders)} pedido${t.driven_orders === 1 ? '' : 's'} usaram o código`} />
-        <Kpi label="Tempo até a compra" value={hoursLabel(t.median_time_to_purchase_hours)} hint="mediana, da inscrição ao pedido" />
+      {/* Receita — três leituras, três perguntas diferentes. Os três totais
+          são desde a criação do popup (o motor de atribuição recalcula);
+          "no período" é o que os inscritos destes dias compraram. */}
+      <div>
+        <p className="text-[11px] text-gray-400 mb-2">Receita · <span className="font-medium text-gray-500">totais desde a criação</span> · no período: {money(t.period_conversion_value)} em {int(t.period_conversions)} pedido{t.period_conversions === 1 ? '' : 's'} de inscritos destes {data.days} dias{t.coupons_issued ? ` · ${int(t.coupons_issued)} cupons emitidos` : ''}</p>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <Kpi label="Receita atribuída" value={money(t.attributed_revenue)} hint={`${int(t.attributed_orders)} pedido${t.attributed_orders === 1 ? '' : 's'} · crédito único ao popup (último toque)`} />
+          <Kpi label="Receita influenciada" value={money(t.influenced_revenue)} hint={`${int(t.influenced_orders)} pedido${t.influenced_orders === 1 ? '' : 's'} após a inscrição, creditados a qualquer canal`} />
+          <Kpi label="Receita com o cupom" value={money(t.driven_revenue)} hint={`${int(t.driven_orders)} pedido${t.driven_orders === 1 ? '' : 's'} usaram o código do popup`} />
+          <Kpi label="Tempo até a compra" value={hoursLabel(t.median_time_to_purchase_hours)} hint="mediana, da inscrição ao pedido" />
+        </div>
       </div>
 
       {/* Incremental: a única que responde "quanto o popup gerou de verdade" */}
-      {data.holdout.configured && (
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
           <div className="flex items-start justify-between gap-4 mb-4">
             <div>
               <h3 className="text-sm font-semibold text-gray-900">Receita incremental</h3>
-              <p className="text-xs text-gray-500 mt-0.5">Quem viu o popup contra quem foi sorteado para não ver, com compras na janela após o sorteio.</p>
+              <p className="text-xs text-gray-500 mt-0.5">Quem viu o popup contra quem foi sorteado para não ver, com compras na janela após o sorteio. É a única leitura que separa o que o popup gerou do que aconteceria de qualquer jeito.</p>
             </div>
             {data.holdout.incremental && (
-              <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${data.holdout.incremental.reliable ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
-                {data.holdout.incremental.reliable ? 'amostra suficiente' : 'amostra pequena'}
+              <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${data.holdout.incremental.reliable ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}
+                title={`Confiável a partir de ${int(data.holdout.incremental.min_reliable)} visitantes em cada grupo`}>
+                {data.holdout.incremental.reliable ? 'amostra suficiente' : `amostra pequena · confiável com ${int(data.holdout.incremental.min_reliable)} por grupo`}
               </span>
             )}
           </div>
-          {!data.holdout.incremental ? (
-            <p className="text-xs text-gray-400">Ainda faltam visitantes nos dois grupos (mínimo 30 em cada) para comparar.</p>
+          {!data.holdout.configured ? (
+            <p className="text-xs text-gray-500">Sem grupo de controle. Ative em <span className="font-medium text-gray-700">Editor → Regras → Grupo de controle</span>: uma fatia dos visitantes elegíveis deixa de ver o popup e vira a base de comparação.</p>
+          ) : !data.holdout.incremental ? (
+            <p className="text-xs text-gray-400">Ainda faltam visitantes nos dois grupos (mínimo {int(data.holdout.min_visitors)} em cada) para comparar.</p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {([['exposed', 'Viram o popup'], ['control', 'Grupo de controle']] as const).map(([k, label]) => {
@@ -176,36 +208,38 @@ export default function FormAnalyticsPage() {
                   <div key={k} className="rounded-lg border border-gray-100 p-4">
                     <p className="text-xs font-medium text-gray-500">{label}</p>
                     <p className="text-lg font-semibold text-gray-900 mt-1 tabular-nums">{pct(g.conversion)} <span className="text-xs font-normal text-gray-400">compraram</span></p>
-                    <p className="text-[11px] text-gray-400 mt-0.5">{int(g.visitors)} visitantes · {int(g.buyers)} compradores · {formatCurrency(g.revenue_per_visitor)} por visitante</p>
+                    <p className="text-[11px] text-gray-400 mt-0.5">{int(g.visitors)} visitantes · {int(g.buyers)} compradores · {money(g.revenue_per_visitor)} por visitante</p>
                   </div>
                 )
               })}
               <div className="rounded-lg border border-gray-900 bg-gray-900 text-white p-4">
                 <p className="text-xs font-medium text-gray-300">Incremental estimada</p>
-                <p className="text-lg font-semibold mt-1 tabular-nums">{formatCurrency(Math.max(0, data.holdout.incremental.incremental_revenue))}</p>
+                <p className="text-lg font-semibold mt-1 tabular-nums">
+                  {data.holdout.incremental.incremental_revenue >= 0 ? money(data.holdout.incremental.incremental_revenue) : `− ${money(Math.abs(data.holdout.incremental.incremental_revenue))}`}
+                </p>
                 <p className="text-[11px] text-gray-400 mt-0.5">
-                  {data.holdout.incremental.lift_conversion == null ? 'sem base de comparação' : `conversão ${data.holdout.incremental.lift_conversion >= 0 ? '+' : ''}${(data.holdout.incremental.lift_conversion * 100).toFixed(0)}% sobre o controle`}
+                  {data.holdout.incremental.lift_conversion == null ? 'sem base de comparação' : data.holdout.incremental.incremental_revenue < 0 ? `o controle comprou mais (conversão ${(data.holdout.incremental.lift_conversion * 100).toFixed(0)}%) — sem ganho mensurável ainda` : `conversão ${data.holdout.incremental.lift_conversion >= 0 ? '+' : ''}${(data.holdout.incremental.lift_conversion * 100).toFixed(0)}% sobre o controle`}
                 </p>
               </div>
             </div>
           )}
         </div>
-      )}
 
       {/* Série diária */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <h2 className="text-sm font-semibold text-gray-900 mb-4">Por dia</h2>
         <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={chart} margin={{ top: 4, right: 8, left: -12, bottom: 0 }}>
+            <ComposedChart data={chart} margin={{ top: 4, right: -8, left: -12, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
               <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} minTickGap={24} />
-              <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} allowDecimals={false} />
+              <YAxis yAxisId="left" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} allowDecimals={false} />
+              <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} allowDecimals={false} />
               <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #E5E7EB' }} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Area type="monotone" dataKey="impressions" name="Visualizações" stroke="#94A3B8" fill="#E2E8F0" strokeWidth={1.5} />
-              <Line type="monotone" dataKey="submissions" name="Inscrições" stroke="#18181B" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="dismissals" name="Fechamentos" stroke="#F26B2A" strokeWidth={1.5} dot={false} strokeDasharray="4 3" />
+              <Area yAxisId="left" type="monotone" dataKey="impressions" name="Visualizações" stroke="#94A3B8" fill="#E2E8F0" strokeWidth={1.5} />
+              <Line yAxisId="right" type="monotone" dataKey="submissions" name="Inscrições (eixo direito)" stroke="#18181B" strokeWidth={2} dot={false} />
+              <Line yAxisId="right" type="monotone" dataKey="dismissals" name="Fechamentos (eixo direito)" stroke="#F26B2A" strokeWidth={1.5} dot={false} strokeDasharray="4 3" />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
@@ -261,13 +295,15 @@ export default function FormAnalyticsPage() {
             {data.recent_submissions.map((s) => {
               const a = s.answers || {}
               const who = String(a.email || a.whatsapp || a.phone || a.first_name || 'Anônimo')
-              const rest = Object.entries(a).filter(([k]) => !['email', 'whatsapp', 'phone', 'first_name', 'last_name'].includes(k))
+              const rest = Object.entries(a)
+                .filter(([k, v]) => !['email', 'whatsapp', 'phone', 'first_name', 'last_name'].includes(k) && (typeof v === 'string' || typeof v === 'number') && String(v).trim() !== '')
+                .map(([k, v]) => `${humanKey(k)}: ${String(v).slice(0, 60)}`)
               return (
                 <div key={s.id} className="px-5 py-3 flex items-center justify-between gap-4">
                   <div className="min-w-0">
                     <p className="text-sm text-gray-900 truncate">{who}</p>
                     <p className="text-xs text-gray-400 truncate">
-                      {[s.device, s.country, s.coupon_code ? `cupom ${s.coupon_code}` : null, ...rest.map(([k, v]) => `${k}: ${String(v)}`)].filter(Boolean).join(' · ') || '—'}
+                      {[s.device ? DEVICE_LABEL[s.device] || s.device : null, s.country ? COUNTRY_LABEL(s.country) : null, s.coupon_code ? `cupom ${s.coupon_code}` : null, ...rest].filter(Boolean).join(' · ') || '—'}
                     </p>
                   </div>
                   <div className="text-right flex-shrink-0">
@@ -275,7 +311,7 @@ export default function FormAnalyticsPage() {
                       {new Date(s.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
                     </p>
                     {s.converted_at && (
-                      <p className="text-[11px] text-emerald-600 font-medium tabular-nums">comprou · {formatCurrency(Number(s.conversion_value) || 0)}</p>
+                      <p className="text-[11px] text-emerald-600 font-medium tabular-nums">comprou · {money(Number(s.conversion_value) || 0)}</p>
                     )}
                   </div>
                 </div>

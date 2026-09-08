@@ -95,7 +95,7 @@ export async function contactIdForVisitor(admin: SupabaseClient, orgId: string, 
   const vid = (visitorId || '').trim()
   if (!vid || vid.length > 128) return null
 
-  const { data: identity } = await admin
+  const { data: identity, error: e1 } = await admin
     .from('visitor_identities')
     .select('contact_id')
     .eq('organization_id', orgId)
@@ -104,14 +104,16 @@ export async function contactIdForVisitor(admin: SupabaseClient, orgId: string, 
     .order('updated_at', { ascending: false })
     .limit(1)
     .maybeSingle()
+  if (e1) throw new Error(e1.message)
   if (identity?.contact_id) return identity.contact_id as string
 
-  const { data: alias } = await admin
+  const { data: alias, error: e2 } = await admin
     .from('visitor_id_aliases')
     .select('identity_id')
     .eq('organization_id', orgId)
     .eq('alias_visitor_id', vid)
     .maybeSingle()
+  if (e2) throw new Error(e2.message)
   if (!alias?.identity_id) return null
 
   const { data: aliased } = await admin
@@ -144,50 +146,55 @@ export async function isMemberOfAudience(
   targeting: AudienceTargeting,
 ): Promise<MembershipResult> {
   if (targeting.listIds.length) {
-    const { data: lists } = await admin
+    const { data: lists, error: le } = await admin
       .from('contact_lists')
       .select('id')
       .eq('organization_id', orgId)
       .in('id', targeting.listIds)
+    if (le) throw new Error(le.message)
     const ownedListIds = (lists || []).map((l: any) => l.id as string)
     if (ownedListIds.length) {
-      const { data: m } = await admin
+      const { data: m, error: me } = await admin
         .from('contact_list_members')
         .select('list_id')
         .eq('contact_id', contactId)
         .in('list_id', ownedListIds)
         .limit(1)
+      if (me) throw new Error(me.message)
       if (m && m.length) return { member: true, via: 'list' }
     }
   }
 
   if (targeting.segmentIds.length) {
-    const { data: segs } = await admin
+    const { data: segs, error: se } = await admin
       .from('customer_segments')
       .select('id, segment_type')
       .eq('organization_id', orgId)
       .in('id', targeting.segmentIds)
+    if (se) throw new Error(se.message)
     const owned = segs || []
     const staticIds = owned.filter((s: any) => s.segment_type === 'static').map((s: any) => s.id as string)
     const dynamicIds = owned.filter((s: any) => s.segment_type !== 'static').map((s: any) => s.id as string)
 
     if (staticIds.length) {
-      const { data: m } = await admin
+      const { data: m, error: me } = await admin
         .from('segment_members')
         .select('segment_id')
         .eq('contact_id', contactId)
         .in('segment_id', staticIds)
         .limit(1)
+      if (me) throw new Error(me.message)
       if (m && m.length) return { member: true, via: 'segment_static' }
     }
     if (dynamicIds.length) {
-      const { data: m } = await admin
+      const { data: m, error: me } = await admin
         .from('segment_memberships_snapshot')
         .select('segment_id')
         .eq('organization_id', orgId)
         .in('segment_id', dynamicIds)
         .contains('contact_ids', [contactId])
         .limit(1)
+      if (me) throw new Error(me.message)
       if (m && m.length) return { member: true, via: 'segment_dynamic' }
     }
   }

@@ -73,6 +73,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (!rl.allowed) {
       return corsError('Muitas tentativas. Aguarde e tente novamente.', 429, 'rate_limited');
     }
+    const rlGlobal = await checkRateLimit(`form-events:global:${ip}`, { limit: 240, windowSec: 60 });
+    if (!rlGlobal.allowed) {
+      return corsError('Muitas tentativas. Aguarde e tente novamente.', 429, 'rate_limited');
+    }
 
     // Resolve form + org. Public endpoint — no auth, but we do verify
     // the form exists and is published. Popups live in crm_forms.
@@ -94,7 +98,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (PERSISTED_EVENTS.has(eventType)) {
       try {
         const { countryFromHeaders, deviceClassFromUserAgent } = await import('@/lib/forms/consent');
-        const bucket = body.bucket === 'holdout' || eventType === 'holdout' ? 'holdout' : 'exposed';
+        // O grupo vem do TIPO do evento: impressão é sempre do exposto,
+        // 'holdout' é sempre do controle. Um beacon não escolhe o grupo.
+        const bucket = eventType === 'holdout' ? 'holdout' : 'exposed';
         const stepIdx = Number.isInteger(body.step) && body.step >= 0 && body.step < 100 ? body.step : null;
         const { error: insertErr } = await supabaseAdmin.from('form_events').insert({
           organization_id: form.organization_id,
@@ -113,8 +119,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
             reward_kind: eventType === 'reward' ? shortText(body.kind, 32) : null,
             country: countryFromHeaders(req.headers),
             device: deviceClassFromUserAgent(userAgent),
-            user_agent: userAgent,
-            ip_address: ip,
             referrer: shortText(body.referrer, 2048),
             traffic: trafficTypeOrNull(body.traffic),
             page: pageKindOrNull(body.page),

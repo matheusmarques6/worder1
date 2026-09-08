@@ -2183,6 +2183,13 @@ async function processRefundCreated(store: ShopifyStoreConfig, refund: any) {
 
       const { refundOrderAttribution } = await import('@/lib/attribution');
       await refundOrderAttribution(store.organization_id, String(refund.order_id), totalRefunded);
+      // Receita "com o cupom" do popup também desconta o reembolso.
+      const { error: drivenErr } = await supabase.rpc('refund_popup_driven_order', {
+        p_organization_id: store.organization_id,
+        p_order_ref: String(refund.order_id),
+        p_refunded_total: totalRefunded,
+      });
+      if (drivenErr && drivenErr.code !== '42883') console.warn('[Shopify Webhook] refund_popup_driven_order failed (best-effort):', drivenErr.message);
     } catch (refundErr) {
       console.error('[Shopify Webhook] Refund attribution adjust failed:', refundErr);
     }

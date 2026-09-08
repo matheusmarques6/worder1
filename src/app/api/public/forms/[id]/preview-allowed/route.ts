@@ -30,6 +30,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { audienceBlockReason, contactIdForVisitor, readAudienceTargeting } from '@/lib/popups/targeting';
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,9 +54,17 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const allow = () => NextResponse.json({ allowed: true }, { headers });
   const deny = (reason: string) => NextResponse.json({ allowed: false, reason }, { headers });
 
+  // Modo "somente quem está no segmento" fecha na dúvida; o resto abre.
+  let failClosed = false;
   try {
     const { searchParams } = req.nextUrl;
     const vid = (searchParams.get('vid') || '').trim();
+
+    // Até seis consultas por chamada e o cache da borda é por vid: um vid
+    // aleatório furaria o cache. Mesmo orçamento do known-fields.
+    const ip = getClientIp(req);
+    const rl = await checkRateLimit(`preview-allowed:${params.id}:${ip}`, { limit: 30, windowSec: 60 });
+    if (!rl.allowed) return NextResponse.json({ allowed: true, rate_limited: true }, { status: 429, headers: { ...headers, 'Cache-Control': 'no-store' } });
 
     const { data: form } = await supabaseAdmin
       .from('crm_forms')
@@ -68,6 +77,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const hideFromSubscribers = !!form.behavior?.visibility?.hideFromSubscribers;
     const audience = readAudienceTargeting(form.behavior);
     if (!hideFromSubscribers && audience.mode === 'off') return allow();
+    failClosed = audience.mode === 'include';
 
     const orgId = form.organization_id as string;
 
@@ -114,8 +124,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
     return allow();
   } catch (err: any) {
-    // Falha aberta: um erro de consulta nunca esconde um popup ativo.
+    // Falha aberta, exceto "somente quem está": aí mostrar a quem não
+    // deveria é o erro pior.
     console.warn('[preview-allowed] error:', err?.message || err);
-    return allow();
+    return failClosed ? deny('lookup_failed') : allow();
   }
 }

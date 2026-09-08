@@ -159,6 +159,31 @@ interface PopupDesign {
 
 const uid = () => Math.random().toString(36).slice(2, 9)
 
+// Etapa apagada: nenhuma ramificação, botão ou nível de recompensa pode
+// continuar apontando para ela — o runtime ignoraria em silêncio.
+function stripStepRefs(d: PopupDesign, stepId: string | undefined): PopupDesign {
+  if (!stepId) return d
+  const clean = (b: Block): Block => {
+    const p: any = { ...b.props }
+    let changed = false
+    if (p.nextStepId === stepId) { delete p.nextStepId; changed = true }
+    if (p.branches && typeof p.branches === 'object') {
+      const next: Record<string, string> = {}
+      for (const [k, v] of Object.entries(p.branches)) if (v !== stepId) next[k] = v as string
+      if (Object.keys(next).length !== Object.keys(p.branches).length) { p.branches = next; changed = true }
+    }
+    if (Array.isArray(p.tiers) && p.tiers.some((t: any) => t?.afterStepId === stepId)) {
+      p.tiers = p.tiers.map((t: any) => (t?.afterStepId === stepId ? { ...t, afterStepId: '' } : t)); changed = true
+    }
+    return changed ? { ...b, props: p } : b
+  }
+  return {
+    ...d,
+    steps: d.steps.map(s => ({ ...s, blocks: s.blocks.map(clean) })),
+    successStep: d.successStep ? { ...d.successStep, blocks: d.successStep.blocks.map(clean) } : d.successStep,
+  }
+}
+
 // Stable IDs for the brand-new-popup defaults. Using uid() (Math.random)
 // here breaks SSR hydration: Next.js evaluates this module on the server
 // AND on the client, each pass produces different random IDs, and React
@@ -224,14 +249,14 @@ const PROFILE_FIELDS = [
   { value: 'phone', label: 'Telefone' },
   { value: 'whatsapp', label: 'WhatsApp' },
   { value: 'birthday', label: 'Data de nascimento' },
-  { value: 'gender', label: 'Genero' },
+  { value: 'gender', label: 'Gênero' },
   { value: 'company', label: 'Empresa' },
   { value: 'position', label: 'Cargo' },
   { value: 'city', label: 'Cidade' },
   { value: 'state', label: 'Estado' },
-  { value: 'country', label: 'Pais' },
+  { value: 'country', label: 'País' },
   { value: 'zip', label: 'CEP' },
-  { value: 'address', label: 'Endereco' },
+  { value: 'address', label: 'Endereço' },
   { value: 'custom', label: 'Campo personalizado' },
 ]
 
@@ -239,7 +264,7 @@ const PROFILE_FIELDS = [
 const INPUT_BASE_DEFAULTS = {
   // Input config
   required: false,
-  requiredMsg: 'Este campo e obrigatorio',
+  requiredMsg: 'Este campo é obrigatório',
   showLabel: false,
   mapTo: '',
   mapToCustom: '',
@@ -273,9 +298,9 @@ const defaultProps: Record<string, Record<string, any>> = {
   'name-input': { ...INPUT_BASE_DEFAULTS, placeholder: 'Seu nome', label: 'Nome', mapTo: 'first_name' },
   'text-input': { ...INPUT_BASE_DEFAULTS, placeholder: 'Digite aqui...', label: 'Campo', showLabel: true, mapTo: 'custom' },
   'date-input': { ...INPUT_BASE_DEFAULTS, label: 'Data de nascimento', showLabel: true, mapTo: 'birthday' },
-  dropdown: { label: 'Selecione', options: ['Opcao 1', 'Opcao 2'], placeholder: 'Escolha...', showLabel: true, mapTo: 'custom', mapToCustom: '' },
-  radio: { label: 'Escolha', options: ['Opcao 1', 'Opcao 2'], layout: 'vertical', showLabel: true, mapTo: 'custom', mapToCustom: '' },
-  checkbox: { label: 'Escolha', options: ['Opcao 1', 'Opcao 2'], showLabel: true, mapTo: 'custom', mapToCustom: '' },
+  dropdown: { label: 'Selecione', options: ['Opção 1', 'Opção 2'], placeholder: 'Escolha...', showLabel: true, mapTo: 'custom', mapToCustom: '' },
+  radio: { label: 'Escolha', options: ['Opção 1', 'Opção 2'], layout: 'vertical', showLabel: true, mapTo: 'custom', mapToCustom: '' },
+  checkbox: { label: 'Escolha', options: ['Opção 1', 'Opção 2'], showLabel: true, mapTo: 'custom', mapToCustom: '' },
   'legal-consent': { text: 'Aceito receber comunicações e concordo com a política de privacidade.', required: true, fontSize: 12, color: '#6B7280' },
   text: { content: 'Ganhe 10% de desconto!', fontSize: 28, color: '#111827', fontWeight: 'bold', align: 'center', tag: 'h2', lineHeight: 1.3 },
   button: { text: 'QUERO MEU DESCONTO', bgColor: '#F97316', textColor: '#fff', fontSize: 15, borderRadius: 8, fullWidth: true, action: 'submit', paddingV: 14, paddingH: 28 },
@@ -328,8 +353,13 @@ const defaultDesign: PopupDesign = {
     utm: { storeOnConsent: false, filterEnabled: false, filters: [] },
     clickOutsideClose: { desktop: true, mobile: true },
     customTrigger: false,
-    cart: { enabled: false, minTotal: 0, maxTotal: 0, minItems: 0 },
+    cart: { enabled: false, minTotal: 0, maxTotal: 0, minItems: 0, contains: { enabled: false, match: 'any', handles: [], types: [], vendors: [] } },
     experiment: { holdoutPercent: 0 },
+    priority: 0,
+    audienceTargeting: { mode: 'off', segmentIds: [], listIds: [] },
+    page: { enabled: false, templates: [], productHandles: [], productTypes: [], productVendors: [], productTags: [], collectionHandles: [] },
+    traffic: { enabled: false, types: [] },
+    whatsapp: { doubleOptIn: false, templateName: '', templateLanguage: 'pt_BR', bodyVariables: [] },
   },
   postSubmit: { action: 'show-success', redirectUrl: '', closeDelay: 4 },
   successMessage: '',
@@ -391,6 +421,28 @@ function CheckList({ items, selected, onToggle }: { items: Array<{ id: string; n
         </label>
       ))}
     </div>
+  )
+}
+
+// Uma linha por item. Guarda o texto cru enquanto a pessoa digita (senão o
+// Enter some: "a\n" vira ['a'] e o React devolve "a") e entrega a lista limpa.
+export function splitLines(v: string, transform?: (s: string) => string): string[] {
+  return v.split('\n').map(x => (transform ? transform(x.trim()) : x.trim())).filter(Boolean)
+}
+function LinesTextarea({ value, onChange, rows = 2, className, placeholder, transform }: {
+  value: string[]; onChange: (lines: string[]) => void; rows?: number; className?: string; placeholder?: string; transform?: (s: string) => string
+}) {
+  const joined = (value || []).join('\n')
+  const [raw, setRaw] = useState(joined)
+  useEffect(() => {
+    // Mudança vinda de fora (undo, troca de bloco): ressincroniza sem
+    // apagar a linha em branco que a pessoa acabou de abrir.
+    if (splitLines(raw, transform).join('\n') !== joined) setRaw(joined)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [joined])
+  return (
+    <textarea rows={rows} className={className} placeholder={placeholder} value={raw}
+      onChange={e => { setRaw(e.target.value); onChange(splitLines(e.target.value, transform)) }} />
   )
 }
 
@@ -752,6 +804,7 @@ function BlockPreview({ block, selected, onContentChange, onSelect }: { block: B
             <p style={{ fontSize: p.fontSize || 20, fontWeight: 700, color: p.codeColor || '#F97316', letterSpacing: 2, margin: 0 }}
               title={unique ? 'Cada inscrito recebe um código único' : 'Clique para copiar'}>{preview}</p>
             {unique && <p style={{ fontSize: 10, color: '#9CA3AF', margin: '6px 0 0' }}>código único por inscrito</p>}
+            {Array.isArray(p.tiers) && p.tiers.length > 0 && <p style={{ fontSize: 10, color: '#9CA3AF', margin: '4px 0 0' }}>+{p.tiers.length} {p.tiers.length === 1 ? 'nível progressivo' : 'níveis progressivos'}</p>}
           </>
         )}
       </div>
@@ -867,7 +920,6 @@ const ColorRow = ({ label, value, onChange: oc, hint }: { label: string; value: 
     <ColorPicker value={value || ''} onChange={oc} />
   </LabeledField>
 )
-const CleanColor = ColorRow
 const ColorField = ColorRow
 
 const UnitInput = ({ value, onChange: oc, unit = 'px', min = 0, max = 999, step = 1, className = '' }: { value: number; onChange: (v: number) => void; unit?: string; min?: number; max?: number; step?: number; className?: string }) => (
@@ -1021,15 +1073,18 @@ function RewardTiersEditor({ p, up, steps }: { p: any; up: (k: string, v: any) =
       <div className="flex items-center justify-between">
         <p className="text-[11px] font-bold text-gray-500 uppercase tracking-[0.08em]">Recompensa progressiva</p>
         <button type="button"
-          onClick={() => up('tiers', [...tiers, { id: 't' + Math.random().toString(36).slice(2, 8), label: `Nível ${tiers.length + 2}`, afterStepId: steps[Math.min(1, steps.length - 1)]?.id || '', discountType: p.discountType || 'percentage', discountValue: (Number(p.discountValue) || 10) + 5, code: '' }])}
+          onClick={() => up('tiers', [...tiers, { id: 't' + Math.random().toString(36).slice(2, 8), label: `Nível ${tiers.length + 2}`, afterStepId: steps.length >= 2 ? steps[1].id : '', discountType: p.discountType || 'percentage', discountValue: (Number(p.discountValue) || 10) + 5, code: '' }])}
           className="text-[11px] font-semibold text-zinc-900 underline underline-offset-2">
           Adicionar nível
         </button>
       </div>
       {tiers.length === 0 ? (
-        <p className="text-[11px] text-gray-400 leading-snug">Sem níveis: todo inscrito recebe o desconto acima. Adicione um nível para dar mais a quem completa uma etapa (quiz, lição).</p>
+        <p className="text-[11px] text-gray-400 leading-snug">Sem níveis: todo inscrito recebe o desconto acima. Adicione um nível para dar mais a quem chega a uma etapa (quiz, lição).</p>
       ) : (
-        <p className="text-[11px] text-gray-400 leading-snug">Vale o último nível cuja etapa a pessoa visitou. A base é o desconto acima.</p>
+        <p className="text-[11px] text-gray-400 leading-snug">Vale o último nível cuja etapa a pessoa chegou a ver. A base é o desconto acima.</p>
+      )}
+      {steps.length < 2 && tiers.length > 0 && (
+        <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">Com uma etapa só, nenhum nível é desbloqueado. Adicione uma segunda etapa e ligue o nível a ela.</p>
       )}
       {tiers.map((t, i) => (
         <div key={t.id || i} className="rounded-lg border border-gray-200 p-2.5 space-y-2">
@@ -1039,15 +1094,15 @@ function RewardTiersEditor({ p, up, steps }: { p: any; up: (k: string, v: any) =
               <Trash2 className="w-3 h-3" />
             </button>
           </div>
-          <LabeledField label="Desbloqueia ao concluir">
-            <select className={sel} value={t.afterStepId || ''} onChange={e => setTier(i, { afterStepId: e.target.value })}>
+          <LabeledField label="Desbloqueia ao chegar em" hint={t.afterStepId && !steps.some(s => s.id === t.afterStepId) ? 'A etapa ligada a este nível foi apagada. Escolha outra.' : undefined}>
+            <select className={sel} value={steps.some(s => s.id === t.afterStepId) ? t.afterStepId : ''} onChange={e => setTier(i, { afterStepId: e.target.value })}>
               <option value="">Escolha a etapa</option>
               {steps.map((s, j) => <option key={s.id} value={s.id}>{j + 1}. {s.name}</option>)}
             </select>
           </LabeledField>
           <div className="grid grid-cols-2 gap-2">
             <LabeledField label="Tipo">
-              <select className={inp} value={t.discountType || 'percentage'} onChange={e => setTier(i, { discountType: e.target.value })}>
+              <select className={sel} value={t.discountType || 'percentage'} onChange={e => setTier(i, { discountType: e.target.value })}>
                 <option value="percentage">Percentual (%)</option>
                 <option value="fixed_amount">Valor fixo</option>
                 <option value="free_shipping">Frete grátis</option>
@@ -1077,7 +1132,7 @@ function RewardTiersEditor({ p, up, steps }: { p: any; up: (k: string, v: any) =
 // Lê /api/forms/:id/coupon-pool; o botão sincroniza os pools com o bloco e
 // cria um lote agora, sem esperar o cron. O popup precisa estar salvo com
 // o bloco em modo único.
-function CouponPoolPanel() {
+function CouponPoolPanel({ dirty = false }: { dirty?: boolean }) {
   const params = useParams()
   const formId = String(params?.id || '')
   const [state, setState] = useState<{ loading: boolean; data: any; error: string | null; working: boolean }>({ loading: true, data: null, error: null, working: false })
@@ -1108,9 +1163,10 @@ function CouponPoolPanel() {
     <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2">
       <div className="flex items-center justify-between">
         <p className="text-[11px] font-bold text-gray-500 uppercase tracking-[0.08em]">Estoque de códigos</p>
-        <button type="button" onClick={generate} disabled={state.working}
-          className="text-[11px] font-semibold text-zinc-900 underline underline-offset-2 disabled:opacity-50">
-          {state.working ? 'Gerando…' : 'Gerar códigos agora'}
+        <button type="button" onClick={generate} disabled={state.working || dirty}
+          title={dirty ? 'Salve o popup primeiro: os códigos seguem o desconto salvo.' : undefined}
+          className="text-[11px] font-semibold text-zinc-900 underline underline-offset-2 disabled:opacity-50 disabled:no-underline">
+          {state.working ? 'Gerando…' : dirty ? 'Salve para gerar' : 'Gerar códigos agora'}
         </button>
       </div>
       {state.loading ? (
@@ -1144,7 +1200,7 @@ function CouponPoolPanel() {
 }
 
 // ── Block Props Editor (Klaviyo-style per-block panels) ──────────────────────
-function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInputs, steps = [] }: { block: Block; onChange: (b: Block) => void; onDelete: () => void; onOpenMedia?: (cb: (url: string) => void) => void; onApplyToAllInputs?: (b: Block) => void; steps?: Array<{ id: string; name: string }> }) {
+function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInputs, steps = [], dirty = false, couponBlocks = 1 }: { block: Block; onChange: (b: Block) => void; onDelete: () => void; onOpenMedia?: (cb: (url: string) => void) => void; onApplyToAllInputs?: (b: Block) => void; steps?: Array<{ id: string; name: string }>; dirty?: boolean; couponBlocks?: number }) {
   const up = (key: string, val: any) => onChange(mergeBlockProps(block, { [key]: val }))
   // Multi-key updates MUST go through a single onChange — two `up()` calls in
   // a row both spread the same stale block.props and the 2nd reverts the 1st.
@@ -1686,7 +1742,18 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
                 <div key={i} className="flex items-center gap-1.5 group">
                   <div className="w-6 h-6 flex items-center justify-center rounded bg-gray-50 border border-gray-200 text-[10px] font-semibold text-gray-400 flex-shrink-0">{i + 1}</div>
                   <input className={inp + ' flex-1'} value={opt} onChange={e => {
-                    const next = [...(p.options || [])]; next[i] = e.target.value; up('options', next)
+                    const next = [...(p.options || [])]; next[i] = e.target.value
+                    // Ramificação e tags são indexadas pelo rótulo: renomear
+                    // a opção leva o que estava ligado a ela junto.
+                    const patch: Record<string, any> = { options: next }
+                    for (const key of ['branches', 'tagsByOption'] as const) {
+                      const map = p[key]
+                      if (map && typeof map === 'object' && opt in map) {
+                        const { [opt]: moved, ...rest } = map
+                        patch[key] = { ...rest, [e.target.value]: moved }
+                      }
+                    }
+                    upMany(patch)
                   }} placeholder={`Opção ${i + 1}`} />
                   <button onClick={() => { const next = [...(p.options || [])]; if (i > 0) { [next[i-1], next[i]] = [next[i], next[i-1]]; up('options', next) } }}
                     className="p-1.5 text-gray-300 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors" title="Mover para cima" disabled={i === 0}>
@@ -1831,7 +1898,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
               <>
                 <div className="grid grid-cols-2 gap-2">
                   <LabeledField label="Tipo">
-                    <select className={inp} value={p.discountType || 'percentage'} onChange={e => up('discountType', e.target.value)}>
+                    <select className={sel} value={p.discountType || 'percentage'} onChange={e => up('discountType', e.target.value)}>
                       <option value="percentage">Percentual (%)</option>
                       <option value="fixed_amount">Valor fixo</option>
                       <option value="free_shipping">Frete grátis</option>
@@ -1862,6 +1929,11 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
                     value={p.minimumAmount ?? 0}
                     onChange={e => up('minimumAmount', +e.target.value)} />
                 </LabeledField>
+                <LabeledField label="Só nestas coleções" hint="Opcional. ID da coleção na Shopify (gid://shopify/Collection/123 ou só o número), um por linha. Vazio = loja inteira.">
+                  <LinesTextarea rows={2} className={inp + ' font-mono text-[11px]'} value={Array.isArray(p.collectionIds) ? p.collectionIds : []}
+                    transform={c => (/^\d+$/.test(c) ? `gid://shopify/Collection/${c}` : c)}
+                    onChange={v => up('collectionIds', v)} />
+                </LabeledField>
                 <LabeledField label="Combina com" hint="Outros descontos que podem ser usados no mesmo pedido.">
                   <div className="grid grid-cols-3 gap-2">
                     {([['product', 'Produto'], ['order', 'Pedido'], ['shipping', 'Frete']] as const).map(([k, label]) => {
@@ -1876,7 +1948,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
                     })}
                   </div>
                 </LabeledField>
-                <Toggle label="Aplicar no carrinho automaticamente" hint="O checkout já abre com o desconto. A pessoa não precisa digitar nada." checked={p.autoApply !== false} onChange={v => up('autoApply', v)} />
+                <Toggle label="Aplicar no carrinho automaticamente" hint="O checkout já abre com o desconto. A pessoa não precisa digitar nada." checked={p.autoApply !== false} onChange={v => (v ? up('autoApply', true) : upMany({ autoApply: false, showCode: true }))} />
                 {p.autoApply !== false && (
                   <Toggle label="Mostrar o código mesmo assim" hint="Desligado, o bloco diz só que o desconto foi aplicado." checked={p.showCode !== false} onChange={v => up('showCode', v)} />
                 )}
@@ -1888,8 +1960,11 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
                 <LabeledField label="Código reserva" hint="Usado se o estoque de códigos únicos acabar. Fica registrado quando acontece.">
                   <input className={inp + ' font-mono tracking-wider uppercase'} value={p.code || ''} onChange={e => up('code', e.target.value.toUpperCase())} placeholder="BEMVINDO10" />
                 </LabeledField>
+                {couponBlocks > 1 && (
+                  <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">Há {couponBlocks} blocos de cupom neste popup. O desconto e o estoque seguem o primeiro; os outros só repetem o mesmo código.</p>
+                )}
                 <RewardTiersEditor p={p} up={up} steps={steps} />
-                <CouponPoolPanel />
+                <CouponPoolPanel dirty={dirty} />
               </>
             ) : (
               <>
@@ -1898,7 +1973,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
                 </LabeledField>
                 <div className="grid grid-cols-2 gap-2">
                   <LabeledField label="Tipo" hint="Só para o relatório.">
-                    <select className={inp} value={p.discountType || 'percentage'} onChange={e => up('discountType', e.target.value)}>
+                    <select className={sel} value={p.discountType || 'percentage'} onChange={e => up('discountType', e.target.value)}>
                       <option value="percentage">Percentual (%)</option>
                       <option value="fixed_amount">Valor fixo</option>
                       <option value="free_shipping">Frete grátis</option>
@@ -1910,7 +1985,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
                     </LabeledField>
                   )}
                 </div>
-                <Toggle label="Aplicar no carrinho automaticamente" hint="O checkout já abre com o desconto." checked={p.autoApply !== false} onChange={v => up('autoApply', v)} />
+                <Toggle label="Aplicar no carrinho automaticamente" hint="O checkout já abre com o desconto." checked={p.autoApply !== false} onChange={v => (v ? up('autoApply', true) : upMany({ autoApply: false, showCode: true }))} />
                 <RewardTiersEditor p={p} up={up} steps={steps} />
               </>
             )}
@@ -2226,12 +2301,11 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
   const freq = beh.frequency
   const vis = beh.visibility
   const wa = beh.whatsapp || { doubleOptIn: false, templateName: '', templateLanguage: 'pt_BR', bodyVariables: [] }
-  const waTemplate = waTemplates.find(t => t.name === wa.templateName) || null
+  const waTemplate = waTemplates.find(t => t.name === wa.templateName && (!wa.templateLanguage || t.language === wa.templateLanguage)) || waTemplates.find(t => t.name === wa.templateName) || null
   const aud = beh.audienceTargeting || { mode: 'off' as const, segmentIds: [], listIds: [] }
   const page = beh.page || { enabled: false, templates: [], productHandles: [], productTypes: [], productVendors: [], productTags: [], collectionHandles: [] }
   const traffic = beh.traffic || { enabled: false, types: [] }
   const cartHas = beh.cart?.contains || { enabled: false, match: 'any' as const, handles: [], types: [], vendors: [] }
-  const linesOf = (v: string) => v.split('\n').map(x => x.trim()).filter(Boolean)
   const toggleIn = (list: string[], key: string) => list.includes(key) ? list.filter(k => k !== key) : [...list, key]
   const urls = beh.urls || { includeEnabled: false, includeUrls: [], excludeEnabled: false, excludeUrls: [] }
   const loc = beh.location || { includeEnabled: false, includeCountries: [], excludeEnabled: false, excludeCountries: [] }
@@ -2252,24 +2326,24 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
       {/* Sub-tabs: Display | Targeting | Post-submit */}
       <div className="flex border-b border-gray-200">
         <button onClick={() => setTab('display')} className={`flex-1 py-3 text-[12px] font-semibold transition-colors ${tab === 'display' ? 'text-gray-900 border-b-2 border-gray-900' : 'text-gray-400 hover:text-gray-600'}`}>
-          Exibicao
+          Exibição
         </button>
         <button onClick={() => setTab('targeting')} className={`flex-1 py-3 text-[12px] font-semibold transition-colors ${tab === 'targeting' ? 'text-gray-900 border-b-2 border-gray-900' : 'text-gray-400 hover:text-gray-600'}`}>
-          Segmentacao
+          Segmentação
         </button>
         <button onClick={() => setTab('postsubmit')} className={`flex-1 py-3 text-[12px] font-semibold transition-colors ${tab === 'postsubmit' ? 'text-gray-900 border-b-2 border-gray-900' : 'text-gray-400 hover:text-gray-600'}`}>
-          Apos envio
+          Após envio
         </button>
       </div>
 
       {tab === 'postsubmit' ? (
         <div>
-          <Section title="Acao apos envio" defaultOpen>
+          <Section title="Ação após envio" defaultOpen>
             <div className="space-y-2">
               {[
                 { value: 'show-success', label: 'Mostrar mensagem de sucesso', hint: 'Exibe a etapa de sucesso configurada dentro do popup.' },
-                { value: 'close', label: 'Fechar formulario', hint: 'Fecha o popup imediatamente apos o envio.' },
-                { value: 'redirect', label: 'Redirecionar para URL', hint: 'Envia o visitante para uma pagina especifica.' },
+                { value: 'close', label: 'Fechar formulário', hint: 'Fecha o popup imediatamente após o envio.' },
+                { value: 'redirect', label: 'Redirecionar para URL', hint: 'Envia o visitante para uma página especifica.' },
               ].map(opt => (
                 <label key={opt.value} className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${postSubmit.action === opt.value ? 'border-zinc-900 bg-gray-100' : 'border-gray-200 hover:border-gray-300'}`}>
                   <input type="radio" name="postAction" value={opt.value} checked={postSubmit.action === opt.value}
@@ -2295,7 +2369,7 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
 
             {postSubmit.action === 'show-success' && (
               <div className="pt-3 border-t border-gray-100 mt-3 space-y-3">
-                <Field label="Fechar automaticamente apos" hint="Segundos ate fechar o popup. Zero mantem aberto ate o visitante fechar.">
+                <Field label="Fechar automaticamente após" hint="Segundos ate fechar o popup. Zero mantem aberto ate o visitante fechar.">
                   <div className="flex items-center gap-2">
                     <input type="number" min={0} max={60} className={inp + ' w-24'}
                       value={postSubmit.closeDelay ?? 4}
@@ -2318,11 +2392,97 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
             </Field>
           </Section>
 
+          <Section title="Audiência">
+            <p className="text-[11px] text-gray-400 leading-snug -mt-1">Tags e listas aplicadas ao contato quando o formulário for enviado.</p>
+            <Field label="Tags (separadas por virgula)" hint="Ex: newsletter, promo. Adicionadas ao contato criado.">
+              <input className={inp} placeholder="newsletter, promo"
+                value={(beh.audience?.tags || []).join(', ')}
+                onChange={e => setG('audience', { tags: e.target.value.split(',').map(t => t.trim()).filter(Boolean) })} />
+            </Field>
+            <Field label="Lista de contatos (opcional)" hint="O contato sera adicionado a esta lista quando o formulário for enviado.">
+              {listsLoaded && orgLists.length > 0 ? (
+                <select className={sel}
+                  value={beh.audience?.listId || ''}
+                  onChange={e => setG('audience', { listId: e.target.value })}>
+                  <option value="">Sem lista</option>
+                  {orgLists.map(l => (
+                    <option key={l.id} value={l.id}>{l.name}</option>
+                  ))}
+                </select>
+              ) : listsLoaded && orgLists.length === 0 ? (
+                <div className="text-[11px] text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
+                  Nenhuma lista criada ainda. <a href="/contacts/lists" target="_blank" className="text-zinc-900 underline underline-offset-2 font-medium">Criar agora</a>.
+                </div>
+              ) : (
+                <input className={inp + ' opacity-60'} placeholder="Carregando..." disabled />
+              )}
+            </Field>
+            <ToggleRow label="Double opt-in" hint="Envia email de confirmacao antes de marcar como inscrito."
+              checked={!!beh.audience?.doubleOptIn}
+              onChange={v => setG('audience', { doubleOptIn: v })} />
+
+            <div className="pt-3 border-t border-gray-100">
+              <ToggleRow label="WhatsApp: confirmar por mensagem" hint="Quem marcar o consentimento de WhatsApp recebe um template pedindo para responder SIM. O opt-in só vale depois da resposta — e a régua no WhatsApp começa daí."
+                checked={!!wa.doubleOptIn}
+                onChange={v => setG('whatsapp', { ...wa, doubleOptIn: v })} />
+              {wa.doubleOptIn && (
+                <div className="mt-2 space-y-2">
+                  <Field label="Template de confirmação" hint="Precisa estar aprovado pela Meta na categoria Utilidade (UTILITY). Um botão de resposta rápida 'Confirmar' torna a resposta mais fácil.">
+                    {!waTemplatesLoaded ? (
+                      <input className={inp + ' opacity-60'} placeholder="Carregando..." disabled />
+                    ) : waTemplates.length === 0 ? (
+                      <div className="text-[11px] text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
+                        Nenhum template aprovado. <a href="/whatsapp/templates" target="_blank" className="text-zinc-900 underline underline-offset-2 font-medium">Criar template</a>.
+                      </div>
+                    ) : (
+                      <select className={sel} value={wa.templateName ? `${wa.templateName}|${wa.templateLanguage || ''}` : ''}
+                        onChange={e => {
+                          const [name, language] = e.target.value.split('|')
+                          const t = waTemplates.find(x => x.name === name && x.language === language) || waTemplates.find(x => x.name === name)
+                          setG('whatsapp', { ...wa, templateName: name || '', templateLanguage: t?.language || language || 'pt_BR', bodyVariables: Array.from({ length: t?.body_variables || 0 }, (_, i) => wa.bodyVariables?.[i] || (i === 0 ? '{{first_name}}' : '')) })
+                        }}>
+                        <option value="">Escolha um template</option>
+                        {waTemplates.map(t => (
+                          <option key={t.name + t.language} value={`${t.name}|${t.language}`}>{t.name} · {t.language} · {t.category === 'UTILITY' ? 'Utilidade' : t.category === 'MARKETING' ? 'Marketing' : t.category}</option>
+                        ))}
+                      </select>
+                    )}
+                  </Field>
+                  {wa.doubleOptIn && !wa.templateName && (
+                    <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">Sem template escolhido a confirmação fica desligada: o consentimento marcado no popup vale na hora, sem pedido no WhatsApp.</p>
+                  )}
+                  {waTemplatesLoaded && wa.templateName && !waTemplate && (
+                    <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">O template salvo ("{wa.templateName}") não está mais aprovado ou foi removido. Escolha outro — até lá o pedido não sai.</p>
+                  )}
+                  {waTemplate && waTemplate.category !== 'UTILITY' && (
+                    <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">Este template é de {waTemplate.category === 'MARKETING' ? 'Marketing' : waTemplate.category}. A Meta não permite marketing antes do opt-in, então o pedido não será enviado. Use um template de Utilidade.</p>
+                  )}
+                  {waTemplate?.body_text && (
+                    <p className="text-[11px] text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 whitespace-pre-wrap leading-snug">{waTemplate.body_text}</p>
+                  )}
+                  {waTemplate && waTemplate.body_variables > 0 && (
+                    <div className="space-y-1.5">
+                      <p className="text-[11px] font-bold text-gray-500 uppercase tracking-[0.08em]">Variáveis do corpo <span className="normal-case font-normal tracking-normal text-gray-400">({'{{first_name}}'}, {'{{form_name}}'}, {'{{store_name}}'})</span></p>
+                      {Array.from({ length: waTemplate.body_variables }, (_, i) => (
+                        <div key={i} className="flex items-center gap-2">
+                          <span className="text-[11px] font-mono text-gray-400 w-8">{'{{' + (i + 1) + '}}'}</span>
+                          <input className={inp} value={wa.bodyVariables?.[i] || ''} placeholder={i === 0 ? '{{first_name}}' : ''}
+                            onChange={e => { const next = [...(wa.bodyVariables || [])]; next[i] = e.target.value; setG('whatsapp', { ...wa, bodyVariables: next }) }} />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-[11px] text-gray-400 leading-snug">Valem como confirmação: SIM, CONFIRMAR, QUERO, ACEITO, OK, 1 ou o botão do template. Quem já tinha opt-in não recebe o pedido. Enquanto não responde, nenhuma campanha ou automação de marketing fala com a pessoa.</p>
+                </div>
+              )}
+            </div>
+          </Section>
+
           <Section title="Rastreamento (Pixels)">
             <p className="text-[11px] text-gray-400 leading-snug -mt-1">
-              Dispara eventos de conversao para Facebook Ads e Google Ads/Analytics quando o formulario e enviado. Deixe em branco para nao rastrear.
+              Dispara eventos de conversão para Facebook Ads e Google Ads/Analytics quando o formulário é enviado. Deixe em branco para não rastrear.
             </p>
-            <Field label="Facebook Pixel ID" hint="Numero do pixel (ex: 1234567890123456). Dispara o evento Lead.">
+            <Field label="Facebook Pixel ID" hint="Número do pixel (ex: 1234567890123456). Dispara o evento Lead.">
               <input className={inp} placeholder="1234567890123456"
                 value={trackingIds.facebook_pixel_id}
                 onChange={e => onTrackingIdsChange(s => ({ ...s, facebook_pixel_id: e.target.value }))} />
@@ -2342,11 +2502,11 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
       ) : tab === 'display' ? (
         <div>
           <Section title="Quando exibir" defaultOpen>
-            <ToggleRow label="Quando o visitante estiver saindo da pagina" hint="Detecta movimento do mouse em direcao a barra de enderecos."
+            <ToggleRow label="Quando o visitante estiver saindo da página" hint="Detecta movimento do mouse em direcao a barra de enderecos."
               checked={exitOn} onChange={v => setG('display', { exitEnabled: v })} />
 
             <div className="pt-3 border-t border-gray-100">
-              <ToggleRow label="Apos tempo decorrido" hint="Tempo que o visitante precisa permanecer na pagina."
+              <ToggleRow label="Após tempo decorrido" hint="Tempo que o visitante precisa permanecer na página."
                 checked={timeOn} onChange={v => setG('display', { timeEnabled: v })} />
               {timeOn && (
                 <div className="flex items-center gap-2 mt-2 ml-0">
@@ -2358,25 +2518,25 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
             </div>
 
             <div className="pt-3 border-t border-gray-100">
-              <ToggleRow label="Apos rolar uma certa quantidade" hint="Percentual de rolagem da pagina."
+              <ToggleRow label="Após rolar uma certa quantidade" hint="Percentual de rolagem da página."
                 checked={scrollOn} onChange={v => setG('display', { scrollEnabled: v })} />
               {scrollOn && (
                 <div className="flex items-center gap-2 mt-2">
                   <input type="number" min={0} max={100} className="w-20 border border-gray-200 rounded-lg px-2.5 py-1.5 text-[13px] focus:border-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
                     value={d.scrollPercent ?? 30} onChange={e => setG('display', { scrollPercent: +e.target.value })} />
-                  <span className="text-[12px] text-gray-500">% da pagina</span>
+                  <span className="text-[12px] text-gray-500">% da página</span>
                 </div>
               )}
             </div>
 
             <div className="pt-3 border-t border-gray-100">
-              <ToggleRow label="Apos visitar X paginas" hint="Numero minimo de paginas visitadas antes de exibir."
+              <ToggleRow label="Após visitar X páginas" hint="Número mínimo de páginas visitadas antes de exibir."
                 checked={pvOn} onChange={v => setG('display', { pageViewEnabled: v })} />
               {pvOn && (
                 <div className="flex items-center gap-2 mt-2">
                   <input type="number" min={1} max={50} className="w-20 border border-gray-200 rounded-lg px-2.5 py-1.5 text-[13px] focus:border-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
                     value={d.pageViewCount ?? 3} onChange={e => setG('display', { pageViewCount: +e.target.value })} />
-                  <span className="text-[12px] text-gray-500">paginas</span>
+                  <span className="text-[12px] text-gray-500">páginas</span>
                 </div>
               )}
             </div>
@@ -2388,11 +2548,11 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
             </div>
           </Section>
 
-          <Section title="Frequencia">
-            <ToggleRow label="Nao mostrar novamente se o formulario foi enviado"
+          <Section title="Frequência">
+            <ToggleRow label="Não mostrar novamente se o formulário foi enviado"
               checked={freq.stopAfterSubmission} onChange={v => setG('frequency', { stopAfterSubmission: v })} />
             <div className="pt-2">
-              <Field label="Se o visitante fechar, mostrar novamente apos" hint="Numero de dias ate reaparecer.">
+              <Field label="Se o visitante fechar, mostrar novamente após" hint="Número de dias até reaparecer.">
                 <div className="flex items-center gap-2">
                   <input type="number" min={0} max={365} className={inp + ' w-24'}
                     value={freq.showAfterDays} onChange={e => setG('frequency', { showAfterDays: +e.target.value })} />
@@ -2402,12 +2562,12 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
             </div>
             <div className="pt-3 border-t border-gray-100">
               <ToggleRow label="Limite por visitante (anti-spam)"
-                hint="Limite por pessoa, independente de qual formulario. Usa o cookie __worder_id para identificar o mesmo visitante entre sessoes."
+                hint="Limite por pessoa, independente de qual formulário. Usa o cookie __worder_id para identificar o mesmo visitante entre sessões."
                 checked={!!freq.perVisitor?.enabled}
                 onChange={v => setG('frequency', { perVisitor: { ...(freq.perVisitor || {}), enabled: v } })} />
               {freq.perVisitor?.enabled && (
                 <div className="mt-2 grid grid-cols-2 gap-2">
-                  <Field label="Maximo de exibicoes">
+                  <Field label="Máximo de exibicoes">
                     <input type="number" min={1} max={20} className={inp}
                       value={freq.perVisitor?.maxShows ?? 1}
                       onChange={e => setG('frequency', { perVisitor: { ...(freq.perVisitor || {}), maxShows: +e.target.value } })} />
@@ -2494,7 +2654,7 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
               onChange={v => onChange({ ...beh, progressiveProfiling: { ...(beh as any).progressiveProfiling, enabled: v } })} />
             {(beh as any).progressiveProfiling?.enabled && (
               <div className="space-y-2 mt-2">
-                <ToggleRow label="Esconder campos ja conhecidos" hint="Ex: se ja temos o email, nao mostra o campo email."
+                <ToggleRow label="Esconder campos ja conhecidos" hint="Ex: se ja temos o email, não mostra o campo email."
                   checked={(beh as any).progressiveProfiling?.hideKnownFields !== false}
                   onChange={v => onChange({ ...beh, progressiveProfiling: { ...(beh as any).progressiveProfiling, hideKnownFields: v } })} />
                 <ToggleRow label="Pre-preencher campos conhecidos" hint="Mostra o campo com o valor existente preenchido."
@@ -2523,14 +2683,14 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
       ) : (
         <div>
           <Section title="Visitantes" defaultOpen>
-            <Field label="Quem deve ver o formulario">
+            <Field label="Quem deve ver o formulário">
               <select className={sel} value={vis.visitorType} onChange={e => setG('visibility', { visitorType: e.target.value as any })}>
                 <option value="all">Todos os visitantes</option>
                 <option value="new">Somente visitantes novos</option>
                 <option value="returning">Somente visitantes retornantes</option>
               </select>
             </Field>
-            <ToggleRow label="Nao mostrar a inscritos existentes" hint="Oculta para visitantes ja cadastrados."
+            <ToggleRow label="Não mostrar a inscritos existentes" hint="Oculta para visitantes ja cadastrados."
               checked={vis.hideFromSubscribers} onChange={v => setG('visibility', { hideFromSubscribers: v })} />
           </Section>
 
@@ -2539,7 +2699,7 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
               Vale para visitantes que já reconhecemos (cookie, link de e-mail ou WhatsApp, login na loja). Quem é desconhecido não está em segmento nenhum.
             </p>
             <Field label="Regra">
-              <select className={sel} value={aud.mode} onChange={e => setG('audienceTargeting', { mode: e.target.value })}>
+              <select className={sel} value={aud.mode} onChange={e => setG('audienceTargeting', { ...aud, mode: e.target.value })}>
                 <option value="off">Não filtrar por segmento</option>
                 <option value="include">Mostrar somente a quem está em…</option>
                 <option value="exclude">Mostrar a todos, exceto quem está em…</option>
@@ -2556,7 +2716,7 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
                       Nenhum segmento ainda. <a href="/contacts/segments" target="_blank" className="text-zinc-900 underline underline-offset-2 font-medium">Criar segmento</a>.
                     </div>
                   ) : (
-                    <CheckList items={orgSegments} selected={aud.segmentIds} onToggle={id => setG('audienceTargeting', { segmentIds: toggleIn(aud.segmentIds, id) })} />
+                    <CheckList items={orgSegments} selected={aud.segmentIds} onToggle={id => setG('audienceTargeting', { ...aud, segmentIds: toggleIn(aud.segmentIds, id) })} />
                   )}
                 </div>
                 <div>
@@ -2566,7 +2726,7 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
                   ) : orgLists.length === 0 ? (
                     <div className="text-[11px] text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">Nenhuma lista criada ainda.</div>
                   ) : (
-                    <CheckList items={orgLists} selected={aud.listIds} onToggle={id => setG('audienceTargeting', { listIds: toggleIn(aud.listIds, id) })} />
+                    <CheckList items={orgLists} selected={aud.listIds} onToggle={id => setG('audienceTargeting', { ...aud, listIds: toggleIn(aud.listIds, id) })} />
                   )}
                 </div>
                 {aud.segmentIds.length + aud.listIds.length === 0 && (
@@ -2579,7 +2739,7 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
 
           <Section title="Carrinho">
             <p className="text-[11px] text-gray-400 leading-snug -mt-1">
-              Mostra o formulario somente quando o carrinho do visitante atende os criterios. Le <code className="px-1 bg-gray-100 rounded text-[10px]">/cart.js</code> da Shopify.
+              Mostra o formulário somente quando o carrinho do visitante atende os critérios. Le <code className="px-1 bg-gray-100 rounded text-[10px]">/cart.js</code> da Shopify.
             </p>
             <ToggleRow label="Filtrar por valor do carrinho"
               checked={!!(beh.cart && beh.cart.enabled)}
@@ -2587,20 +2747,20 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
             {beh.cart?.enabled && (
               <div className="mt-2 space-y-2">
                 <div className="grid grid-cols-2 gap-2">
-                  <Field label="Valor minimo" hint="Em moeda da loja. 0 = sem minimo.">
+                  <Field label="Valor mínimo" hint="Em moeda da loja. 0 = sem mínimo.">
                     <input type="number" min={0} step={0.01} className={inp}
                       placeholder="0"
                       value={beh.cart?.minTotal ?? ''}
                       onChange={e => setG('cart', { minTotal: e.target.value === '' ? 0 : +e.target.value })} />
                   </Field>
-                  <Field label="Valor maximo" hint="0 = sem maximo.">
+                  <Field label="Valor máximo" hint="0 = sem máximo.">
                     <input type="number" min={0} step={0.01} className={inp}
                       placeholder="0"
                       value={beh.cart?.maxTotal ?? ''}
                       onChange={e => setG('cart', { maxTotal: e.target.value === '' ? 0 : +e.target.value })} />
                   </Field>
                 </div>
-                <Field label="Minimo de itens" hint="Numero minimo de produtos no carrinho. 0 = sem minimo.">
+                <Field label="Mínimo de itens" hint="Número mínimo de produtos no carrinho. 0 = sem mínimo.">
                   <input type="number" min={0} className={inp + ' w-24'}
                     placeholder="0"
                     value={beh.cart?.minItems ?? ''}
@@ -2621,17 +2781,14 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
                     </select>
                   </Field>
                   <Field label="Handles de produto" hint="Um por linha. Ex.: kit-skincare, camiseta-*">
-                    <textarea rows={2} className={inp + ' font-mono text-[11px]'} value={cartHas.handles.join('\n')}
-                      onChange={e => setG('cart', { contains: { ...cartHas, handles: linesOf(e.target.value) } })} />
+                    <LinesTextarea rows={2} className={inp + ' font-mono text-[11px]'} value={cartHas.handles} onChange={v => setG('cart', { contains: { ...cartHas, handles: v } })} />
                   </Field>
                   <div className="grid grid-cols-2 gap-2">
                     <Field label="Tipos de produto">
-                      <textarea rows={2} className={inp + ' font-mono text-[11px]'} value={cartHas.types.join('\n')}
-                        onChange={e => setG('cart', { contains: { ...cartHas, types: linesOf(e.target.value) } })} />
+                      <LinesTextarea rows={2} className={inp + ' font-mono text-[11px]'} value={cartHas.types} onChange={v => setG('cart', { contains: { ...cartHas, types: v } })} />
                     </Field>
                     <Field label="Fornecedores">
-                      <textarea rows={2} className={inp + ' font-mono text-[11px]'} value={cartHas.vendors.join('\n')}
-                        onChange={e => setG('cart', { contains: { ...cartHas, vendors: linesOf(e.target.value) } })} />
+                      <LinesTextarea rows={2} className={inp + ' font-mono text-[11px]'} value={cartHas.vendors} onChange={v => setG('cart', { contains: { ...cartHas, vendors: v } })} />
                     </Field>
                   </div>
                 </div>
@@ -2644,28 +2801,22 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
 
             <ToggleRow label="Exibir somente em certas URLs" checked={urls.includeEnabled} onChange={v => setG('urls', { includeEnabled: v })} />
             {urls.includeEnabled && (
-              <textarea rows={3} className={inp + ' font-mono text-[11px] mt-2'}
-                placeholder="/produtos/*&#10;/promocao"
-                value={urls.includeUrls.join('\n')}
-                onChange={e => setG('urls', { includeUrls: e.target.value.split('\n').map(u => u.trim()).filter(Boolean) })} />
+              <LinesTextarea rows={3} className={inp + ' font-mono text-[11px] mt-2'} placeholder="/produtos/*&#10;/promocao" value={urls.includeUrls} onChange={v => setG('urls', { includeUrls: v })} />
             )}
 
             <div className="pt-3 border-t border-gray-100">
-              <ToggleRow label="Nao exibir em certas URLs" checked={urls.excludeEnabled} onChange={v => setG('urls', { excludeEnabled: v })} />
+              <ToggleRow label="Não exibir em certas URLs" checked={urls.excludeEnabled} onChange={v => setG('urls', { excludeEnabled: v })} />
               {urls.excludeEnabled && (
-                <textarea rows={3} className={inp + ' font-mono text-[11px] mt-2'}
-                  placeholder="/checkout&#10;/admin/*"
-                  value={urls.excludeUrls.join('\n')}
-                  onChange={e => setG('urls', { excludeUrls: e.target.value.split('\n').map(u => u.trim()).filter(Boolean) })} />
+                <LinesTextarea rows={3} className={inp + ' font-mono text-[11px] mt-2'} placeholder="/checkout&#10;/admin/*" value={urls.excludeUrls} onChange={v => setG('urls', { excludeUrls: v })} />
               )}
             </div>
           </Section>
 
-          <Section title="Pagina">
+          <Section title="Página">
             <p className="text-[11px] text-gray-400 leading-snug -mt-1">
               Pelo tipo de página da Shopify e, em páginas de produto ou coleção, pelo que está sendo visto. Precisa do bloco de tema da Worder ativo; sem ele, deduz pela URL.
             </p>
-            <ToggleRow label="Filtrar pelo contexto da página" checked={page.enabled} onChange={v => setG('page', { enabled: v })} />
+            <ToggleRow label="Filtrar pelo contexto da página" checked={page.enabled} onChange={v => setG('page', { ...page, enabled: v })} />
             {page.enabled && (
               <div className="mt-2 space-y-3">
                 <div>
@@ -2674,7 +2825,7 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
                     {PAGE_TEMPLATES.map(t => (
                       <label key={t.key} className="flex items-center gap-2 text-[12px] text-gray-700 cursor-pointer py-0.5">
                         <input type="checkbox" className="rounded border-gray-300" checked={page.templates.includes(t.key)}
-                          onChange={() => setG('page', { templates: toggleIn(page.templates, t.key) })} />
+                          onChange={() => setG('page', { ...page, templates: toggleIn(page.templates, t.key) })} />
                         {t.label}
                       </label>
                     ))}
@@ -2682,121 +2833,61 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
                 </div>
                 <div className="pt-3 border-t border-gray-100 space-y-2">
                   <p className="text-[11px] font-bold text-gray-500 uppercase tracking-[0.08em]">Produto em vista <span className="normal-case font-normal tracking-normal text-gray-400">(basta bater um)</span></p>
-                  <Field label="Handles" hint="Um por linha. Aceita * como coringa."><textarea rows={2} className={inp + ' font-mono text-[11px]'} value={page.productHandles.join('\n')} onChange={e => setG('page', { productHandles: linesOf(e.target.value) })} /></Field>
+                  <Field label="Handles" hint="Um por linha. Aceita * como coringa."><LinesTextarea rows={2} className={inp + ' font-mono text-[11px]'} value={page.productHandles} onChange={v => setG('page', { ...page, productHandles: v })} /></Field>
                   <div className="grid grid-cols-2 gap-2">
-                    <Field label="Tipos"><textarea rows={2} className={inp + ' font-mono text-[11px]'} value={page.productTypes.join('\n')} onChange={e => setG('page', { productTypes: linesOf(e.target.value) })} /></Field>
-                    <Field label="Fornecedores"><textarea rows={2} className={inp + ' font-mono text-[11px]'} value={page.productVendors.join('\n')} onChange={e => setG('page', { productVendors: linesOf(e.target.value) })} /></Field>
+                    <Field label="Tipos"><LinesTextarea rows={2} className={inp + ' font-mono text-[11px]'} value={page.productTypes} onChange={v => setG('page', { ...page, productTypes: v })} /></Field>
+                    <Field label="Fornecedores"><LinesTextarea rows={2} className={inp + ' font-mono text-[11px]'} value={page.productVendors} onChange={v => setG('page', { ...page, productVendors: v })} /></Field>
                   </div>
-                  <Field label="Tags do produto"><textarea rows={2} className={inp + ' font-mono text-[11px]'} value={page.productTags.join('\n')} onChange={e => setG('page', { productTags: linesOf(e.target.value) })} /></Field>
+                  <Field label="Tags do produto"><LinesTextarea rows={2} className={inp + ' font-mono text-[11px]'} value={page.productTags} onChange={v => setG('page', { ...page, productTags: v })} /></Field>
                 </div>
                 <div className="pt-3 border-t border-gray-100">
-                  <Field label="Coleção em vista" hint="Handles, um por linha."><textarea rows={2} className={inp + ' font-mono text-[11px]'} value={page.collectionHandles.join('\n')} onChange={e => setG('page', { collectionHandles: linesOf(e.target.value) })} /></Field>
+                  <Field label="Coleção em vista" hint="Handles, um por linha."><LinesTextarea rows={2} className={inp + ' font-mono text-[11px]'} value={page.collectionHandles} onChange={v => setG('page', { ...page, collectionHandles: v })} /></Field>
                 </div>
               </div>
             )}
           </Section>
 
-          <Section title="Localizacao">
-            <p className="text-[11px] text-gray-400 leading-snug -mt-1">Codigo do pais ISO (BR, US, PT). Um por linha.</p>
+          <Section title="Origem do tráfego">
+            <p className="text-[11px] text-gray-400 leading-snug -mt-1">
+              Classificada uma vez por sessão pelos parâmetros da URL de entrada e pelo site de origem. Vale nas páginas seguintes da mesma visita.
+            </p>
+            <ToggleRow label="Mostrar só para certas origens" checked={traffic.enabled} onChange={v => setG('traffic', { ...traffic, enabled: v })} />
+            {traffic.enabled && (
+              <div className="mt-2 space-y-1">
+                {TRAFFIC_TYPES.map(t => (
+                  <label key={t.key} className="flex items-start gap-2 text-[12px] text-gray-700 cursor-pointer py-1">
+                    <input type="checkbox" className="rounded border-gray-300 mt-0.5" checked={traffic.types.includes(t.key)}
+                      onChange={() => setG('traffic', { ...traffic, types: toggleIn(traffic.types, t.key) })} />
+                    <span><span className="font-medium">{t.label}</span><span className="block text-[11px] text-gray-400 leading-snug">{t.hint}</span></span>
+                  </label>
+                ))}
+                {traffic.types.length === 0 && (
+                  <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mt-1">Marque ao menos uma origem — sem isso o filtro não faz nada.</p>
+                )}
+              </div>
+            )}
+          </Section>
 
-            <ToggleRow label="Exibir em certos paises" checked={loc.includeEnabled} onChange={v => setG('location', { includeEnabled: v })} />
+          <Section title="Localização">
+            <p className="text-[11px] text-gray-400 leading-snug -mt-1">Código do país ISO (BR, US, PT). Um por linha.</p>
+
+            <ToggleRow label="Exibir em certos países" checked={loc.includeEnabled} onChange={v => setG('location', { includeEnabled: v })} />
             {loc.includeEnabled && (
-              <textarea rows={2} className={inp + ' font-mono text-[11px] mt-2 uppercase'}
-                placeholder="BR&#10;PT"
-                value={loc.includeCountries.join('\n')}
-                onChange={e => setG('location', { includeCountries: e.target.value.split('\n').map(c => c.trim().toUpperCase()).filter(Boolean) })} />
+              <LinesTextarea rows={2} className={inp + ' font-mono text-[11px] mt-2'} placeholder="BR&#10;PT" value={loc.includeCountries} transform={c => c.toUpperCase()} onChange={v => setG('location', { includeCountries: v })} />
             )}
 
             <div className="pt-3 border-t border-gray-100">
-              <ToggleRow label="Nao exibir em certos paises" checked={loc.excludeEnabled} onChange={v => setG('location', { excludeEnabled: v })} />
+              <ToggleRow label="Não exibir em certos países" checked={loc.excludeEnabled} onChange={v => setG('location', { excludeEnabled: v })} />
               {loc.excludeEnabled && (
-                <textarea rows={2} className={inp + ' font-mono text-[11px] mt-2 uppercase'}
-                  placeholder="US"
-                  value={loc.excludeCountries.join('\n')}
-                  onChange={e => setG('location', { excludeCountries: e.target.value.split('\n').map(c => c.trim().toUpperCase()).filter(Boolean) })} />
+                <LinesTextarea rows={2} className={inp + ' font-mono text-[11px] mt-2'} placeholder="US" value={loc.excludeCountries} transform={c => c.toUpperCase()} onChange={v => setG('location', { excludeCountries: v })} />
               )}
             </div>
           </Section>
 
-          <Section title="Audiencia">
-            <p className="text-[11px] text-gray-400 leading-snug -mt-1">Tags e listas aplicadas ao contato quando o formulario for enviado.</p>
-            <Field label="Tags (separadas por virgula)" hint="Ex: newsletter, promo. Adicionadas ao contato criado.">
-              <input className={inp} placeholder="newsletter, promo"
-                value={(beh.audience?.tags || []).join(', ')}
-                onChange={e => setG('audience', { tags: e.target.value.split(',').map(t => t.trim()).filter(Boolean) })} />
-            </Field>
-            <Field label="Lista de contatos (opcional)" hint="O contato sera adicionado a esta lista quando o formulario for enviado.">
-              {listsLoaded && orgLists.length > 0 ? (
-                <select className={sel}
-                  value={beh.audience?.listId || ''}
-                  onChange={e => setG('audience', { listId: e.target.value })}>
-                  <option value="">Sem lista</option>
-                  {orgLists.map(l => (
-                    <option key={l.id} value={l.id}>{l.name}</option>
-                  ))}
-                </select>
-              ) : listsLoaded && orgLists.length === 0 ? (
-                <div className="text-[11px] text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
-                  Nenhuma lista criada ainda. <a href="/contacts/lists" target="_blank" className="text-zinc-900 underline underline-offset-2 font-medium">Criar agora</a>.
-                </div>
-              ) : (
-                <input className={inp + ' opacity-60'} placeholder="Carregando..." disabled />
-              )}
-            </Field>
-            <ToggleRow label="Double opt-in" hint="Envia email de confirmacao antes de marcar como inscrito."
-              checked={!!beh.audience?.doubleOptIn}
-              onChange={v => setG('audience', { doubleOptIn: v })} />
 
-            <div className="pt-3 border-t border-gray-100">
-              <ToggleRow label="WhatsApp: confirmar por mensagem" hint="Quem marcar o consentimento de WhatsApp recebe um template pedindo para responder SIM. O opt-in só vale depois da resposta — e a régua no WhatsApp começa daí."
-                checked={!!wa.doubleOptIn}
-                onChange={v => setG('whatsapp', { ...wa, doubleOptIn: v })} />
-              {wa.doubleOptIn && (
-                <div className="mt-2 space-y-2">
-                  <Field label="Template de confirmação" hint="Precisa estar aprovado pela Meta na categoria Utilidade (UTILITY). Um botão de resposta rápida 'Confirmar' torna a resposta mais fácil.">
-                    {!waTemplatesLoaded ? (
-                      <input className={inp + ' opacity-60'} placeholder="Carregando..." disabled />
-                    ) : waTemplates.length === 0 ? (
-                      <div className="text-[11px] text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
-                        Nenhum template aprovado. <a href="/whatsapp/templates" target="_blank" className="text-zinc-900 underline underline-offset-2 font-medium">Criar template</a>.
-                      </div>
-                    ) : (
-                      <select className={sel} value={wa.templateName || ''}
-                        onChange={e => { const t = waTemplates.find(x => x.name === e.target.value); setG('whatsapp', { ...wa, templateName: e.target.value, templateLanguage: t?.language || 'pt_BR', bodyVariables: Array.from({ length: t?.body_variables || 0 }, (_, i) => wa.bodyVariables?.[i] || (i === 0 ? '{{first_name}}' : '')) }) }}>
-                        <option value="">Escolha um template</option>
-                        {waTemplates.map(t => (
-                          <option key={t.name + t.language} value={t.name}>{t.name} · {t.language} · {t.category === 'UTILITY' ? 'Utilidade' : t.category === 'MARKETING' ? 'Marketing' : t.category}</option>
-                        ))}
-                      </select>
-                    )}
-                  </Field>
-                  {waTemplate && waTemplate.category !== 'UTILITY' && (
-                    <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">Este template é de {waTemplate.category === 'MARKETING' ? 'Marketing' : waTemplate.category}. A Meta não permite marketing antes do opt-in, então o pedido não será enviado. Use um template de Utilidade.</p>
-                  )}
-                  {waTemplate?.body_text && (
-                    <p className="text-[11px] text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 whitespace-pre-wrap leading-snug">{waTemplate.body_text}</p>
-                  )}
-                  {waTemplate && waTemplate.body_variables > 0 && (
-                    <div className="space-y-1.5">
-                      <p className="text-[11px] font-bold text-gray-500 uppercase tracking-[0.08em]">Variáveis do corpo <span className="normal-case font-normal tracking-normal text-gray-400">({'{{first_name}}'}, {'{{form_name}}'}, {'{{store_name}}'})</span></p>
-                      {Array.from({ length: waTemplate.body_variables }, (_, i) => (
-                        <div key={i} className="flex items-center gap-2">
-                          <span className="text-[11px] font-mono text-gray-400 w-8">{'{{' + (i + 1) + '}}'}</span>
-                          <input className={inp} value={wa.bodyVariables?.[i] || ''} placeholder={i === 0 ? '{{first_name}}' : ''}
-                            onChange={e => { const next = [...(wa.bodyVariables || [])]; next[i] = e.target.value; setG('whatsapp', { ...wa, bodyVariables: next }) }} />
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <p className="text-[11px] text-gray-400 leading-snug">Valem como confirmação: SIM, CONFIRMAR, QUERO, ACEITO, OK, 1 ou o botão do template. Quem já tinha opt-in não recebe o pedido. Enquanto não responde, nenhuma campanha ou automação de marketing fala com a pessoa.</p>
-                </div>
-              )}
-            </div>
-          </Section>
-
-          <Section title="Parametros UTM">
+          <Section title="Parâmetros UTM">
             <ToggleRow label="Salvar UTMs no perfil do contato ao confirmar"
-              hint="Quando o visitante enviar o formulario, os parametros UTM serao salvos em contacts.utm_data."
+              hint="Quando o visitante enviar o formulário, os parametros UTM serao salvos em contacts.utm_data."
               checked={utm.storeOnConsent} onChange={v => setG('utm', { storeOnConsent: v })} />
 
             <div className="pt-3 border-t border-gray-100">
@@ -2832,26 +2923,6 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
             </div>
           </Section>
 
-          <Section title="Origem do trafego">
-            <p className="text-[11px] text-gray-400 leading-snug -mt-1">
-              Classificada uma vez por sessão pelos parâmetros da URL de entrada e pelo site de origem. Vale nas páginas seguintes da mesma visita.
-            </p>
-            <ToggleRow label="Mostrar só para certas origens" checked={traffic.enabled} onChange={v => setG('traffic', { enabled: v })} />
-            {traffic.enabled && (
-              <div className="mt-2 space-y-1">
-                {TRAFFIC_TYPES.map(t => (
-                  <label key={t.key} className="flex items-start gap-2 text-[12px] text-gray-700 cursor-pointer py-1">
-                    <input type="checkbox" className="rounded border-gray-300 mt-0.5" checked={traffic.types.includes(t.key)}
-                      onChange={() => setG('traffic', { types: toggleIn(traffic.types, t.key) })} />
-                    <span><span className="font-medium">{t.label}</span><span className="block text-[11px] text-gray-400 leading-snug">{t.hint}</span></span>
-                  </label>
-                ))}
-                {traffic.types.length === 0 && (
-                  <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mt-1">Marque ao menos uma origem — sem isso o filtro não faz nada.</p>
-                )}
-              </div>
-            )}
-          </Section>
         </div>
       )}
     </div>
@@ -2875,11 +2946,11 @@ function ThemePanel({ design, onChange, onOpenMedia }: { design: PopupDesign; on
   return (
     <div>
       <Section title="Layout" defaultOpen>
-        <Field label="Tipo de formulario">
+        <Field label="Tipo de formulário">
           <select className={sel} value={design.formType} onChange={e => onChange({ ...design, formType: e.target.value as any })}>
             <option value="popup">Popup</option>
             <option value="flyout">Flyout</option>
-            <option value="fullpage">Pagina inteira</option>
+            <option value="fullpage">Página inteira</option>
             <option value="embed">Embed</option>
             <option value="banner">Banner</option>
           </select>
@@ -2901,7 +2972,7 @@ function ThemePanel({ design, onChange, onOpenMedia }: { design: PopupDesign; on
             <option value="'Open Sans', sans-serif">Open Sans</option>
           </select>
         </Field>
-        <Field label="Animacao">
+        <Field label="Animação">
           <select className={sel} value={s.animation} onChange={e => setS({ animation: e.target.value as any })}>
             <option value="fade">Fade</option>
             <option value="slide-up">Slide up</option>
@@ -2984,7 +3055,7 @@ function ThemePanel({ design, onChange, onOpenMedia }: { design: PopupDesign; on
                 <span className="text-[12px] text-gray-500">Escolher imagem da biblioteca</span>
               </button>
             )}
-            <Field label="Posicao">
+            <Field label="Posição">
               <div className="flex border border-gray-200 rounded-lg overflow-hidden">
                 <button onClick={() => setSi({ position: 'left' })} className={`flex-1 py-2 text-[12px] font-medium transition-colors ${s.sideImage.position === 'left' ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>Esquerda</button>
                 <button onClick={() => setSi({ position: 'right' })} className={`flex-1 py-2 text-[12px] font-medium transition-colors ${s.sideImage.position === 'right' ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>Direita</button>
@@ -2995,8 +3066,8 @@ function ThemePanel({ design, onChange, onOpenMedia }: { design: PopupDesign; on
         )}
       </Section>
 
-      <Section title="Botao fechar">
-        <ToggleRow label="Mostrar botao fechar" checked={s.closeButton.show} onChange={v => setCb({ show: v })} />
+      <Section title="Botão fechar">
+        <ToggleRow label="Mostrar botão fechar" checked={s.closeButton.show} onChange={v => setCb({ show: v })} />
         {s.closeButton.show && (
           <div className="mt-3 space-y-3">
             <Field label="Cor do botão">
@@ -3016,7 +3087,6 @@ function ThemePanel({ design, onChange, onOpenMedia }: { design: PopupDesign; on
 function SortablePopupBlock({ block, isSelected, onSelect, onDelete, onDuplicate, onContentChange }: {
   block: Block; isSelected: boolean; onSelect: () => void; onDelete: () => void; onDuplicate: () => void
   onContentChange: (key: string, value: string) => void
-  onPropChange?: (key: string, value: any) => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: block.id })
   return (
@@ -3219,7 +3289,7 @@ export default function PopupEditorPage() {
   const [dirty, setDirty] = useState(false)
   const [toast, setToast] = useState<{ msg: string; type: 'error' | 'success' } | null>(null)
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [formStatus, setFormStatus] = useState<'draft' | 'published'>('draft')
+  const [formStatus, setFormStatus] = useState<'draft' | 'published' | 'paused'>('draft')
   const [formName, setFormName] = useState('Popup sem título')
   // Tracking pixel IDs live on the crm_forms row (not in design_json) so
   // the public popup script can pull them server-side and fire fbq/gtag
@@ -3357,7 +3427,15 @@ export default function PopupEditorPage() {
             location: { ...defaultDesign.behavior.location!, ...((saved.behavior || {}).location || {}) },
             utm: { ...defaultDesign.behavior.utm!, ...((saved.behavior || {}).utm || {}) },
             clickOutsideClose: { ...defaultDesign.behavior.clickOutsideClose!, ...((saved.behavior || {}).clickOutsideClose || {}) },
-            cart: { ...defaultDesign.behavior.cart!, ...((saved.behavior || {}).cart || {}) },
+            cart: {
+              ...defaultDesign.behavior.cart!,
+              ...((saved.behavior || {}).cart || {}),
+              contains: { ...defaultDesign.behavior.cart!.contains!, ...(((saved.behavior || {}).cart || {}).contains || {}) },
+            },
+            audienceTargeting: { ...defaultDesign.behavior.audienceTargeting!, ...((saved.behavior || {}).audienceTargeting || {}) },
+            page: { ...defaultDesign.behavior.page!, ...((saved.behavior || {}).page || {}) },
+            traffic: { ...defaultDesign.behavior.traffic!, ...((saved.behavior || {}).traffic || {}) },
+            whatsapp: { ...defaultDesign.behavior.whatsapp!, ...((saved.behavior || {}).whatsapp || {}) },
           },
           postSubmit: { ...defaultDesign.postSubmit!, ...(saved.postSubmit || {}) },
           successMessage: saved.successMessage || form.success_message || '',
@@ -3403,7 +3481,7 @@ export default function PopupEditorPage() {
       // not to a broken empty stack.
       setHist(historySeed(JSON.stringify(nextDesign)))
       setDirty(false)
-      if (form.status) setFormStatus(form.status === 'published' ? 'published' : 'draft')
+      if (form.status) setFormStatus(form.status === 'published' ? 'published' : form.status === 'paused' ? 'paused' : 'draft')
       // Hydrate pixel IDs from top-level columns. Empty string is the
       // controlled-input-friendly default; null/undefined from the API
       // would put React in uncontrolled mode and warn.
@@ -3479,7 +3557,8 @@ export default function PopupEditorPage() {
   const handlePublish = useCallback(async () => {
     if (!designLoaded || publishing) return
     const prevStatus = formStatus
-    const newStatus = prevStatus === 'published' ? 'draft' : 'published'
+    // Desativar um popup que já esteve no ar é pausar, não voltar a rascunho.
+    const newStatus: 'draft' | 'published' | 'paused' = prevStatus === 'published' ? 'paused' : 'published'
     setFormStatus(newStatus)
     setPublishing(true)
     try {
@@ -3506,7 +3585,7 @@ export default function PopupEditorPage() {
         showToast(msg, 'error')
         return
       }
-      showToast(newStatus === 'published' ? 'Popup ativado' : 'Popup desativado', 'success')
+      showToast(newStatus === 'published' ? 'Popup ativado' : 'Popup pausado', 'success')
     } catch {
       setFormStatus(prevStatus)
       showToast('Não foi possível atualizar o status — tente novamente', 'error')
@@ -3764,7 +3843,7 @@ export default function PopupEditorPage() {
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Salvar{dirty ? ' •' : ''}
           </button>
           <button onClick={handlePublish} disabled={publishing || !designLoaded} className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[13px] font-semibold transition-colors disabled:opacity-50 ${formStatus === 'published' ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border border-zinc-700' : 'bg-emerald-500 text-white hover:bg-emerald-600'}`}>
-            {publishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Power className="w-4 h-4" />} {formStatus === 'published' ? 'Desativar' : 'Ativar'}
+            {publishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Power className="w-4 h-4" />} {formStatus === 'published' ? 'Pausar' : 'Ativar'}
           </button>
         </div>
       </header>
@@ -3802,7 +3881,7 @@ export default function PopupEditorPage() {
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto">
-                <BlockEditor block={selectedBlock} onChange={updateBlock} onDelete={() => deleteBlock(selectedBlock.id)} onOpenMedia={openMediaLibrary} onApplyToAllInputs={applyStylesToAllInputs} steps={design.steps.map(s => ({ id: s.id, name: s.name }))} />
+                <BlockEditor block={selectedBlock} onChange={updateBlock} onDelete={() => deleteBlock(selectedBlock.id)} onOpenMedia={openMediaLibrary} onApplyToAllInputs={applyStylesToAllInputs} steps={design.steps.map(s => ({ id: s.id, name: s.name }))} dirty={dirty} couponBlocks={[...design.steps, design.successStep].reduce((n, st) => n + (st?.blocks || []).filter(b => b.type === 'coupon').length, 0)} />
               </div>
             </>
           ) : (
@@ -3945,6 +4024,11 @@ export default function PopupEditorPage() {
                 flexDirection: 'column',
                 justifyContent: 'center',
               }} className="relative">
+                {!showSuccess && design.steps.length > 1 && design.styles.progress?.enabled && (
+                  <div title="Barra de progresso (Tema → Layout)" style={{ height: design.styles.progress.height ?? 4, background: design.styles.progress.trackColor || '#E5E7EB', borderRadius: 999, margin: '0 0 16px', overflow: 'hidden' }}>
+                    <div style={{ width: `${Math.round(((activeStepIdx + 1) / design.steps.length) * 100)}%`, height: '100%', background: design.styles.progress.color || '#F97316' }} />
+                  </div>
+                )}
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                   <SortableContext items={activeStep.blocks.map(b => b.id)} strategy={verticalListSortingStrategy}>
                     {/* Outer drop zone — accepts native HTML5 drags from the
@@ -4003,7 +4087,7 @@ export default function PopupEditorPage() {
                               onDelete={() => deleteBlock(block.id)}
                               onDuplicate={() => duplicateBlock(block.id)}
                               onContentChange={(k, v) => updateBlock({ ...block, props: { ...block.props, [k]: v } })}
-                              onPropChange={(k, v) => updateBlock({ ...block, props: { ...block.props, [k]: v } })} />
+ />
                           </div>
                         </div>
                       ))}
@@ -4055,13 +4139,14 @@ export default function PopupEditorPage() {
             onCloneStep={i => {
               const step = design.steps[i]
               if (!step) return
-              const clone: Step = { id: uid(), name: `${step.name} (cópia)`, blocks: JSON.parse(JSON.stringify(step.blocks)) }
+              const clone: Step = { ...step, id: uid(), name: `${step.name} (cópia)`, blocks: JSON.parse(JSON.stringify(step.blocks)) }
               commitDesign(d => { const next = [...d.steps]; next.splice(i + 1, 0, clone); return { ...d, steps: next } })
               setActiveStepIdx(i + 1)
             }}
             onDeleteStep={i => {
               if (design.steps.length <= 1) return
-              commitDesign(d => ({ ...d, steps: d.steps.filter((_, j) => j !== i) }))
+              const gone = design.steps[i]?.id
+              commitDesign(d => stripStepRefs({ ...d, steps: d.steps.filter((_, j) => j !== i) }, gone))
               setActiveStepIdx(Math.max(0, i - 1))
             }}
             onAddStep={addStep}

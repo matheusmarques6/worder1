@@ -110,8 +110,11 @@ export async function pickSenderAccount(admin: SupabaseClient, orgId: string, st
     .limit(10)
   const rows = (data || []) as any[]
   if (!rows.length) return null
+  // A conta da loja do popup, ou uma conta da org sem loja. Nunca o número
+  // de outra loja da mesma org — seria a marca errada falando.
   const own = storeId ? rows.find((r) => r.store_id === storeId) : null
-  return (own || rows.find((r) => !r.store_id) || rows[0]) as SenderAccount
+  const orgLevel = rows.find((r) => !r.store_id)
+  return (own || orgLevel || null) as SenderAccount | null
 }
 
 export interface StartDoubleOptInParams {
@@ -162,35 +165,11 @@ export async function startWhatsAppDoubleOptIn(
 
   const { data: existing } = await admin
     .from('whatsapp_opt_status')
-    .select('id, status')
+    .select('id, status, consent_evidence')
     .eq('organization_id', p.organizationId)
     .eq('phone', phone)
     .maybeSingle()
   if (existing?.status === 'opted_in') return { sent: false, reason: 'already_opted_in' }
-
-  const evidence = {
-    kind: 'popup_double_optin',
-    form_id: p.formId,
-    form_name: p.formName,
-    submission_id: p.submissionId,
-    requested_at: new Date().toISOString(),
-    template: p.config.templateName,
-  }
-  // 'form_optin' é o valor que o CHECK de opt_in_source aceita; o popup
-  // fica identificado na evidência.
-  const { error: upErr } = await admin.from('whatsapp_opt_status').upsert(
-    {
-      organization_id: p.organizationId,
-      contact_id: p.contactId,
-      phone,
-      status: 'pending',
-      opt_in_source: 'form_optin',
-      consent_evidence: evidence,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: 'organization_id,phone' },
-  )
-  if (upErr) console.warn('[WhatsApp DOI] opt_status upsert failed:', upErr.message)
 
   const account = await pickSenderAccount(admin, p.organizationId, p.storeId)
   if (!account) return { sent: false, reason: 'no_account' }
@@ -205,8 +184,10 @@ export async function startWhatsAppDoubleOptIn(
   if (!tpl) return { sent: false, reason: 'template_not_found' }
 
   const category = String(tpl.category || '').toUpperCase() as any
-  // Pendente + MARKETING é exatamente o que a guarda bloqueia: o pedido de
-  // confirmação tem de ser UTILITY. Aqui a regra aparece para o lojista.
+  // O pedido de confirmação vai para quem AINDA não deu opt-in: pela
+  // política da Meta só Utilidade/Autenticação. Marketing não sai daqui,
+  // e a guarda ainda barra quem pediu para parar.
+  if (category === 'MARKETING') return { sent: false, reason: 'blocked_by_category' }
   const gate = await requireOptIn(p.organizationId, phone, category === 'MARKETING' || category === 'UTILITY' || category === 'AUTHENTICATION' ? category : undefined, { sender: 'popup.double_optin' })
   if (!gate.allowed) return { sent: false, reason: 'blocked_by_category' }
 
@@ -230,7 +211,38 @@ export async function startWhatsAppDoubleOptIn(
   }
   try {
     const r = await deps.sendTemplate(account, phone, tpl.name as string, language, components)
-    await admin.from('whatsapp_sends').insert({ ...sendRow, status: 'sent', sent_at: new Date().toISOString(), external_message_id: r.messageId })
+    const now = new Date().toISOString()
+    await admin.from('whatsapp_sends').insert({ ...sendRow, status: 'sent', sent_at: now, external_message_id: r.messageId })
+    // Só depois do pedido sair a pessoa fica pendente — sem pedido enviado
+    // não há o que confirmar, e a linha bloquearia marketing à toa. A
+    // evidência anterior (um opt-out antigo, por exemplo) é preservada.
+    const prevEvidence = (existing?.consent_evidence && typeof existing.consent_evidence === 'object' ? existing.consent_evidence : {}) as Record<string, any>
+    const evidence = {
+      ...prevEvidence,
+      kind: 'popup_double_optin',
+      form_id: p.formId,
+      form_name: p.formName,
+      submission_id: p.submissionId,
+      requested_at: now,
+      request_message_id: r.messageId,
+      template: tpl.name,
+      previous_status: existing?.status || null,
+    }
+    // 'form_optin' é o valor que o CHECK de opt_in_source aceita; o popup
+    // fica identificado na evidência.
+    const { error: upErr } = await admin.from('whatsapp_opt_status').upsert(
+      {
+        organization_id: p.organizationId,
+        contact_id: p.contactId,
+        phone,
+        status: 'pending',
+        opt_in_source: 'form_optin',
+        consent_evidence: evidence,
+        updated_at: now,
+      },
+      { onConflict: 'organization_id,phone' },
+    )
+    if (upErr) console.warn('[WhatsApp DOI] opt_status upsert failed:', upErr.message)
     return { sent: true, messageId: r.messageId }
   } catch (e: any) {
     await admin.from('whatsapp_sends').insert({ ...sendRow, status: 'failed', failed_at: new Date().toISOString(), error_message: String(e?.message || e).slice(0, 500) })
@@ -282,6 +294,15 @@ export async function confirmWhatsAppOptInFromInbound(admin: SupabaseClient, p: 
 
   const via = inboundConfirms(p.message, p.textBody)
   if (!via) return { outcome: 'ignored', reason: 'not_a_confirmation' }
+  // Palavra solta ("ok", "1") só vale perto do pedido — três dias depois,
+  // um "1" pode ser resposta a qualquer outro menu. Botão do template vale
+  // sempre: ele só existe naquela mensagem.
+  if (via === 'keyword') {
+    const requestedAt = Date.parse(String(evidence.requested_at || ''))
+    if (!Number.isFinite(requestedAt) || Date.now() - requestedAt > 72 * 3600 * 1000) {
+      return { outcome: 'ignored', reason: 'not_a_confirmation' }
+    }
+  }
 
   const replyText = p.message.type === 'button' ? p.message.button?.text : p.message.type === 'interactive' ? p.message.interactive?.button_reply?.title : p.textBody
   const { error: upErr } = await admin

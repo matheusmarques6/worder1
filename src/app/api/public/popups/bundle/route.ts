@@ -15,10 +15,13 @@
 import { NextRequest } from 'next/server'
 import { createHash } from 'crypto'
 import { supabaseAdmin } from '@/lib/supabase-admin'
-import { sanitizeDomain } from '@/lib/forms/submit-utils'
+import { sanitizeDomain, isVisualPopupForm } from '@/lib/forms/submit-utils'
 import { buildPopupScript, compactScript } from '@/app/api/public/forms/[id]/script/generator'
 
 export const dynamic = 'force-dynamic'
+
+// Muda a cada deploy: um runtime novo nunca fica preso num 304 antigo.
+const BUILD_ID = process.env.VERCEL_GIT_COMMIT_SHA || process.env.VERCEL_DEPLOYMENT_ID || 'dev'
 
 const JS_HEADERS = {
   'Content-Type': 'application/javascript; charset=utf-8',
@@ -48,14 +51,20 @@ export async function GET(req: NextRequest) {
       .eq('status', 'published')
       .order('created_at', { ascending: true })
 
-    const forms = (rows || []).filter((f: any) => !f.store_id || f.store_id === store.id)
+    // Só popups visuais com etapas: um formulário clássico publicado
+    // (design_json vazio) viraria um popup em branco após 5 s.
+    const forms = (rows || []).filter((f: any) =>
+      (!f.store_id || f.store_id === store.id) &&
+      isVisualPopupForm(f.form_type, f.design_json) &&
+      Array.isArray(f.design_json?.steps) && f.design_json.steps.length > 0,
+    )
 
     // Maior prioridade primeiro: o script dela roda antes e registra a
     // intenção antes dos outros.
     forms.sort((a: any, b: any) => (Number(b.behavior?.priority) || 0) - (Number(a.behavior?.priority) || 0))
 
     const etag = '"' + createHash('sha1')
-      .update(forms.map((f: any) => `${f.id}:${f.updated_at}`).join('|') + '|v2')
+      .update(forms.map((f: any) => `${f.id}:${f.updated_at}`).join('|') + '|v3|' + BUILD_ID)
       .digest('hex').slice(0, 20) + '"'
 
     const cache = { 'Cache-Control': 'public, max-age=60, s-maxage=60, stale-while-revalidate=600', ETag: etag }
@@ -67,7 +76,8 @@ export async function GET(req: NextRequest) {
     if (forms.length === 0) return js('/* worder: nenhum popup publicado */', cache)
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://worder1.vercel.app'
-    const parts = forms.map((f: any) => compactScript(buildPopupScript(f, baseUrl)))
+    // Cada popup isolado: um erro num deles não derruba os outros.
+    const parts = forms.map((f: any) => 'try{' + compactScript(buildPopupScript(f, baseUrl)) + '}catch(e){try{console.warn("[worder popup]",e)}catch(_){}}')
     const body = `/* worder popups · ${forms.length} · ${etag} */\n` + parts.join('\n')
     return js(body, cache)
   } catch (e: any) {

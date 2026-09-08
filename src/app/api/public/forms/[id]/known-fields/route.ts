@@ -109,7 +109,8 @@ export async function GET(
       .from('crm_forms')
       .select('organization_id, behavior')
       .eq('id', formId)
-      .single();
+      .eq('status', 'published')
+      .maybeSingle();
 
     if (!form) {
       return NextResponse.json({ fields: {} }, { headers: CORS });

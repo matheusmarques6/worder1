@@ -52,11 +52,6 @@ export async function GET(
       return NextResponse.json({ error: 'Formulário não encontrado' }, { status: 404 })
     }
 
-    console.log('[Forms] GET', formId, {
-      design_json_keys: form.design_json ? Object.keys(form.design_json) : null,
-      design_json_steps: form.design_json?.steps?.length,
-    })
-
     // Sort fields and events by position
     if (form.fields) {
       form.fields.sort((a: any, b: any) => a.position - b.position)
@@ -202,7 +197,7 @@ export async function PUT(
     // estático; o cron repõe o resto. Falha aqui não derruba o save — o
     // estado vai na resposta para a tela avisar.
     let couponPool: any = null
-    if (form && (design_json !== undefined || status !== undefined)) {
+    if (form && (design_json !== undefined || status !== undefined || store_id !== undefined)) {
       try {
         const { syncPoolFromForm, replenishPool, listPoolStatuses } = await import('@/lib/coupons/pool-service')
         const synced = await syncPoolFromForm(form)
@@ -267,6 +262,14 @@ export async function DELETE(
     const formId = params.id
 
     const admin = getSupabaseAdmin()
+    // Os pools de cupom não têm FK para o popup: sem isto o cron seguiria
+    // criando descontos na Shopify para um popup que não existe mais.
+    try {
+      const { retirePoolsForForm } = await import('@/lib/coupons/pool-service')
+      await retirePoolsForForm(user.organization_id, formId)
+    } catch (e: any) {
+      console.warn('[Forms] retire pools failed (continuing delete):', e?.message)
+    }
     const { error } = await admin
       .from('crm_forms')
       .delete()

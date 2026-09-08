@@ -11,6 +11,46 @@
 export interface DesignStepLike { id?: string; kind?: string; name?: string; blocks?: any[] }
 
 export const STEP_KINDS = ['welcome', 'form', 'quiz', 'lesson', 'reward', 'consent'] as const
+
+const INPUT_TYPES = new Set(['email', 'phone', 'text-input', 'name', 'date', 'dropdown', 'radio', 'checkbox', 'textarea', 'number'])
+
+/** A chave da resposta de um bloco de entrada, pela mesma regra do runtime. */
+export function inputAnswerKey(block: { type?: string; props?: any }): string | null {
+  const t = String(block?.type || '')
+  const p = block?.props || {}
+  if (t === 'dropdown' || t === 'radio' || t === 'checkbox') return choiceAnswerKey(block)
+  if (t === 'email') return 'email'
+  if (t === 'phone') return p.mapTo && p.mapTo !== 'phone' ? String(p.mapTo) : 'phone'
+  if (!INPUT_TYPES.has(t)) return null
+  const mapTo = typeof p.mapTo === 'string' && p.mapTo ? p.mapTo : null
+  if (mapTo === 'custom') return `custom:${String(p.mapToCustom || p.label || '').trim()}`
+  return mapTo || (p.label ? `custom:${String(p.label).trim()}` : null)
+}
+
+/**
+ * Das etapas do caminho, só as que a pessoa de fato respondeu: toda entrada
+ * obrigatória da etapa precisa ter valor. Uma etapa sem entradas
+ * obrigatórias (lição, boas-vindas) conta só por estar no caminho. É o que
+ * impede reivindicar o nível do quiz sem responder o quiz.
+ */
+export function stepsWithAnswers(
+  path: string[],
+  steps: Array<{ id: string; blocks?: Array<{ type?: string; props?: any }> }>,
+  answers: Record<string, unknown>,
+): string[] {
+  const byId = new Map(steps.map((s) => [s.id, s]))
+  const has = (k: string | null) => {
+    if (!k) return true
+    const v = answers?.[k]
+    return v != null && String(v).trim() !== ''
+  }
+  return path.filter((id) => {
+    const st = byId.get(id)
+    if (!st) return false
+    const required = (st.blocks || []).filter((b) => INPUT_TYPES.has(String(b?.type || '')) && b?.props?.required === true)
+    return required.every((b) => has(inputAnswerKey(b)))
+  })
+}
 export type StepKind = (typeof STEP_KINDS)[number]
 
 const CHOICE_TYPES = new Set(['dropdown', 'radio', 'checkbox'])

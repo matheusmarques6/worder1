@@ -405,16 +405,10 @@ export async function POST(
       if (!rlImp.allowed) {
         return corsError('Muitas tentativas. Aguarde e tente novamente.', 429, 'rate_limited')
       }
-      try {
-        const sb = getSupabaseClient()
-        if (sb) {
-          // Bump BOTH impressions_count and views_count. The dashboard
-          // card reads views_count; impressions_count is the legacy
-          // name kept around for old analytics queries.
-          await bumpFormCounters(sb, formId, ['impressions_count', 'views_count'])
-        }
-      } catch {}
-      return corsJson({ ok: true })
+      // Caminho antigo: a impressão hoje vai por /events, que confere se o
+      // popup está publicado e grava a série. Aqui só se reconhece o beacon
+      // — contar aqui de novo dobrava a visualização de qualquer id.
+      return corsJson({ ok: true, deprecated: 'use /events' })
     }
 
     // ---- Rate limit anti-spam ----
@@ -646,6 +640,24 @@ export async function POST(
 
         if (existingContact) {
           contactId = await applyContactUpdate(existingContact)
+        }
+      }
+
+      // Sem e-mail (ou e-mail que não bateu): o telefone identifica a
+      // pessoa. Sem isto cada reenvio só com telefone criava um contato
+      // novo — e, com ele, um cupom único novo.
+      if (!contactId) {
+        const ph = String(contactData.phone || contactData.whatsapp || '').trim()
+        if (ph && /^\+?[0-9]{8,20}$/.test(ph)) {
+          const { data: byPhone } = await supabase
+            .from('contacts')
+            .select(CONTACT_SELECT)
+            .eq('organization_id', form.organization_id)
+            .or(`phone.eq.${ph},whatsapp.eq.${ph}`)
+            .order('created_at', { ascending: true })
+            .limit(1)
+            .maybeSingle()
+          if (byPhone) contactId = await applyContactUpdate(byPhone)
         }
       }
 
@@ -926,14 +938,14 @@ export async function POST(
 
     if (subError) {
       console.error('[Form Submit] Error creating submission:', subError)
-      return corsError(subError.message, 500, 'server_error')
+      return corsError('Não foi possível registrar a inscrição. Tente novamente.', 500, 'server_error')
     }
 
     // 6.1. O evento 'submitted' na série diária. As impressões e os
     // fechamentos chegam pelo beacon do runtime; o envio é gravado aqui,
     // do lado do servidor, porque é o único ponto que sabe que ele
     // aconteceu de verdade.
-    supabase.from('form_events').insert({
+    await supabase.from('form_events').insert({
       organization_id: form.organization_id,
       form_id: formId,
       event_type: 'submitted',
@@ -990,7 +1002,7 @@ export async function POST(
     // a failure here mustn't break the submit response). views_count is
     // also bumped because the impression beacon can drop on slow
     // connections; this guarantees views >= submits.
-    bumpFormCounters(supabase, formId, ['submissions_count', 'views_count']).catch(() => {})
+    await bumpFormCounters(supabase, formId, ['submissions_count', 'views_count']).catch(() => {})
 
     // 7. Processar eventos de ads
     const eventsFired: any[] = []
@@ -1233,6 +1245,12 @@ export async function POST(
         else if (r.reason === 'already_opted_in') {
           whatsappAlreadyOptedIn = true
           await writePhoneChannelConsent(supabase, contactId, 'whatsapp', 'granted', `popup_form:${form.id}`)
+          // A prova acompanha o desfecho: o 'pending' de cima vira 'granted'.
+          const waBlock = consentDecisions.find((d) => d.channel === 'whatsapp')?.block
+          await recordConsent(supabase, {
+            organizationId: form.organization_id, contactId, submissionId: submission.id,
+            source: 'popup_form', sourceRef: form.id, pageUrl, ipAddress: requestIp, userAgent: requestUserAgent, locale: visitorLocale,
+          }, [{ channel: 'whatsapp', action: 'granted', text: waBlock?.text || null, version: waBlock?.version || null }])
         } else {
           console.warn('[Form Submit] whatsapp double opt-in not sent:', r.reason, r.error || '')
         }
@@ -1405,16 +1423,25 @@ export async function POST(
     } | null = null
     // O caminho percorrido (etapas ramificadas) — só ids que existem no
     // design. Decide o tier da recompensa progressiva e fica na submissão.
-    const { sanitizeStepPath, effectiveRewardTier } = await import('@/lib/popups/branching')
-    const stepPath = sanitizeStepPath((body as any)?.step_path, Array.isArray(designJson.steps) ? designJson.steps : [])
+    const { sanitizeStepPath, effectiveRewardTier, stepsWithAnswers } = await import('@/lib/popups/branching')
+    const designSteps = Array.isArray(designJson.steps) ? designJson.steps : []
+    const stepPath = sanitizeStepPath((body as any)?.step_path, designSteps)
+    // Para o nível de recompensa só vale a etapa cujos campos obrigatórios
+    // foram respondidos — mandar o id da etapa do quiz sem responder não
+    // desbloqueia nada.
+    const earnedPath = stepsWithAnswers(stepPath, designSteps, answers || {})
     let rewardTierKey: string | null = null
+    // Tudo que a submissão ganha depois de criada vai num update só, e
+    // esperado: na Vercel o que fica pendente depois da resposta pode
+    // nunca rodar.
+    const submissionPatch: Record<string, any> = {}
 
     try {
       const { readCouponBlock, effectiveDiscount } = await import('@/lib/coupons/pool-service')
       const cp = readCouponBlock(designJson)
       if (cp) {
         // Recompensa progressiva: o último tier cuja etapa foi visitada.
-        const tier = effectiveRewardTier(cp.tiers, stepPath)
+        const tier = effectiveRewardTier(cp.tiers, earnedPath)
         const eff = effectiveDiscount(cp, tier)
         rewardTierKey = eff.tierKey
 
@@ -1455,12 +1482,9 @@ export async function POST(
             const row: any = Array.isArray(data) ? data[0] : data
             if (row?.coupon_code) {
               issuedCoupon = { ...base, code: row.coupon_code, ends_at: row.validity_until || null, source: row.outcome || 'issued' }
-              supabase.from('crm_form_submissions')
-                .update({ coupon_code: row.coupon_code, coupon_kind: eff.kind, grant_id: row.grant_id || null })
-                .eq('id', submission.id)
-                .then(({ error: upErr }) => {
-                  if (upErr && upErr.code !== '42703' && upErr.code !== 'PGRST204') console.warn('[Form Submit] submission coupon update failed:', upErr.message)
-                })
+              submissionPatch.coupon_code = row.coupon_code
+              submissionPatch.coupon_kind = eff.kind
+              submissionPatch.grant_id = row.grant_id || null
             } else if (row?.outcome === 'already_used') {
               console.log('[Form Submit] cupom deste popup já usado por este contato — sem novo código')
             }
@@ -1475,13 +1499,11 @@ export async function POST(
       console.warn('[Form Submit] coupon issuance errored:', e?.message)
     }
 
-    if (stepPath.length || rewardTierKey) {
-      supabase.from('crm_form_submissions')
-        .update({ step_path: stepPath.length ? stepPath : null, reward_tier: rewardTierKey })
-        .eq('id', submission.id)
-        .then(({ error: upErr }) => {
-          if (upErr && upErr.code !== '42703' && upErr.code !== 'PGRST204') console.warn('[Form Submit] step_path update failed:', upErr.message)
-        })
+    if (stepPath.length) submissionPatch.step_path = stepPath
+    if (rewardTierKey) submissionPatch.reward_tier = rewardTierKey
+    if (Object.keys(submissionPatch).length) {
+      const { error: upErr } = await supabase.from('crm_form_submissions').update(submissionPatch).eq('id', submission.id)
+      if (upErr && upErr.code !== '42703' && upErr.code !== 'PGRST204') console.warn('[Form Submit] submission patch failed:', upErr.message)
     }
 
     // 9. Return success with tracking data for client-side pixels

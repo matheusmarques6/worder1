@@ -71,7 +71,7 @@ export async function GET(req: NextRequest) {
     // the original consent timestamp for audit.
     const { data: contact } = await supabaseAdmin
       .from('contacts')
-      .select('id, email, first_name, last_name, phone, email_consent, email_consent_at')
+      .select('id, email, first_name, last_name, phone, email_consent, email_consent_at, status')
       .eq('id', payload.contactId)
       .eq('organization_id', payload.orgId)
       .maybeSingle()
@@ -105,7 +105,8 @@ export async function GET(req: NextRequest) {
         email_consent: true as boolean | string,
         email_consent_at: new Date().toISOString(),
         email_consent_source: `popup_form:${payload.formId}:double_optin`,
-        status: 'qualified',
+        // Só promove lead → qualificado; cliente continua cliente.
+        ...(!contact.status || contact.status === 'lead' || contact.status === 'new' ? { status: 'qualified' } : {}),
       }
       const { error: consentErr } = await supabaseAdmin
         .from('contacts')

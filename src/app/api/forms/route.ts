@@ -59,7 +59,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    console.log(`[Forms] Found ${forms?.length || 0} forms for org ${user.organization_id}, storeId=${storeId || 'none'}`)
 
     // Multi-store isolation. When a storeId is provided, ONLY return
     // popups that belong to that store (or are unbound, store_id IS NULL
@@ -107,14 +106,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Nome é obrigatório' }, { status: 400 })
     }
 
-    console.log('[Forms] POST', {
-      name,
-      form_type,
-      store_id,
-      design_json_keys: design_json ? Object.keys(design_json) : null,
-      design_json_steps: design_json?.steps?.length,
-      design_json_blocks: design_json?.steps?.[0]?.blocks?.length,
-    })
 
     // Gerar slug único
     const baseSlug = name
@@ -197,11 +188,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    console.log('[Forms] POST saved', {
-      id: form.id,
-      design_json_keys: form.design_json ? Object.keys(form.design_json) : null,
-      design_json_steps: form.design_json?.steps?.length,
-    })
 
     // Criar campos padrão — SOMENTE para formulários clássicos (embed
     // sem design visual). Popups visuais (popup/flyout/banner/fullpage)

@@ -120,6 +120,7 @@ interface FormForPool {
   organization_id: string
   store_id: string | null
   name?: string | null
+  status?: string | null
   design_json?: any
 }
 
@@ -154,6 +155,11 @@ export async function syncPoolFromForm(form: FormForPool): Promise<{ pool: Coupo
 
   if (!cfg || cfg.mode !== 'unique' || !form.store_id) {
     return pauseAll(!cfg ? 'sem bloco de cupom' : cfg.mode !== 'unique' ? 'cupom estático' : 'popup sem loja')
+  }
+  // Rascunho ou pausado não gasta descontos na Shopify: o pool fica
+  // pausado e volta a ativo na publicação (o payload abaixo grava 'active').
+  if (form.status && form.status !== 'published') {
+    return pauseAll(`popup ${form.status === 'paused' ? 'pausado' : 'não publicado'}`)
   }
 
   // A loja tem de ser da org do popup — o store_id vem do formulário, que
@@ -194,6 +200,9 @@ export async function syncPoolFromForm(form: FormForPool): Promise<{ pool: Coupo
     if (cur) {
       // Mudou o desconto? Os códigos livres antigos carregam o desconto
       // antigo na Shopify — saem de circulação e o cron cria novos.
+      // Trocou de loja: os códigos livres foram criados na loja antiga —
+      // saem de lá (com o pool antigo em mãos) antes de gravar a nova.
+      if (cur.store_id && cur.store_id !== form.store_id) await voidFreeCodes(cur, 'popup mudou de loja')
       const changed =
         cur.kind !== payload.kind ||
         Number(cur.value) !== Number(payload.value) ||
@@ -294,7 +303,7 @@ export async function listPoolStatuses(organizationId: string, formId: string): 
 export interface ReplenishResult {
   created: number
   usable: number
-  stopped?: 'budget' | 'throttled' | 'error'
+  stopped?: 'budget' | 'throttled' | 'error' | 'locked'
   error?: string
 }
 
@@ -321,6 +330,22 @@ export async function replenishPool(
   const pool = poolRow as CouponPoolRow | null
   if (!pool) return { created: 0, usable: 0, stopped: 'error', error: 'pool não encontrado' }
   if (pool.status === 'paused') return { created: 0, usable: 0 }
+
+  // Trava curta: cron, publicação e o botão manual podem cair no mesmo
+  // pool ao mesmo tempo e cada um criaria um lote inteiro. Quem não pega
+  // a trava desiste; a trava expira sozinha em 60 s.
+  let locked = false
+  try {
+    const cutoff = new Date(Date.now() - 60000).toISOString()
+    const { data: claimed, error: lockErr } = await admin
+      .from('coupon_pools')
+      .update({ replenish_lock_at: new Date().toISOString() })
+      .eq('id', pool.id)
+      .or(`replenish_lock_at.is.null,replenish_lock_at.lt.${cutoff}`)
+      .select('id')
+    if (!lockErr && (!claimed || claimed.length === 0)) return { created: 0, usable: 0, stopped: 'locked' }
+    locked = !lockErr
+  } catch { /* coluna ausente: segue sem trava */ }
 
   const store = await loadStoreForPool(pool)
   if (!store) {
@@ -350,30 +375,45 @@ export async function replenishPool(
       attempt++
       const code = generateCouponCode(pool.code_prefix)
       try {
-        const res = await createUniqueDiscount(store, {
-          code,
-          title: `${pool.name} · ${code}`,
-          kind: pool.kind,
-          value: Number(pool.value) || 0,
-          currency: pool.currency,
-          endsAt,
-          minimumSubtotal: pool.minimum_subtotal,
-          combinesWith: pool.combines_with || undefined,
-          collectionIds: pool.applies_to?.collections || [],
-        })
-        const { error } = await admin.from('coupon_codes').insert({
+        // A linha nasce ANTES do desconto, como 'void' (fora de circulação):
+        // se o processo morrer entre a Shopify e o banco, o cron acha a
+        // linha sem discount_id e limpa; nunca fica um desconto órfão válido.
+        const { data: pending, error: preErr } = await admin.from('coupon_codes').insert({
           pool_id: pool.id,
           organization_id: pool.organization_id,
-          code: res.code,
-          shopify_discount_id: res.discountId,
-          status: 'free',
+          code,
+          shopify_discount_id: null,
+          status: 'void',
           expires_at: endsAt.toISOString(),
-        })
+        }).select('id').single()
+        if (preErr) {
+          if (/duplicate|unique/i.test(preErr.message || '')) continue
+          throw new Error(`coupon_codes insert: ${preErr.message}`)
+        }
+        let res: { code: string; discountId: string } | null = null
+        try {
+          res = await createUniqueDiscount(store, {
+            code,
+            title: `${pool.name} · ${code}`,
+            kind: pool.kind,
+            value: Number(pool.value) || 0,
+            currency: pool.currency,
+            endsAt,
+            minimumSubtotal: pool.minimum_subtotal,
+            combinesWith: pool.combines_with || undefined,
+            collectionIds: pool.applies_to?.collections || [],
+          })
+        } catch (err) {
+          await admin.from('coupon_codes').delete().eq('id', pending.id)
+          throw err
+        }
+        const { error } = await admin.from('coupon_codes')
+          .update({ status: 'free', shopify_discount_id: res.discountId, code: res.code })
+          .eq('id', pending.id)
         if (error) {
-          // O desconto existe na Shopify mas não no banco: apaga lá para
-          // não deixar um código órfão válido.
           await deleteDiscount(store, res.discountId).catch(() => {})
-          throw new Error(`coupon_codes insert: ${error.message}`)
+          await admin.from('coupon_codes').delete().eq('id', pending.id)
+          throw new Error(`coupon_codes update: ${error.message}`)
         }
         created++
         done = true
@@ -388,11 +428,13 @@ export async function replenishPool(
     if (stopped === 'throttled' || stopped === 'error') break
   }
 
-  await admin.from('coupon_pools').update({
+  const done_: Record<string, any> = {
     last_replenished_at: new Date().toISOString(),
     status: stopped === 'error' ? 'error' : 'active',
     last_error: lastError || null,
-  }).eq('id', pool.id).eq('organization_id', pool.organization_id)
+  }
+  if (locked) done_.replenish_lock_at = null
+  await admin.from('coupon_pools').update(done_).eq('id', pool.id).eq('organization_id', pool.organization_id)
 
   const after = await countCodes(pool)
   return { created, usable: after.usable, stopped, error: lastError }
@@ -434,17 +476,47 @@ async function voidFreeCodes(pool: CouponPoolRow, reason: string) {
   console.log(`[coupon-pool] ${rows?.length || 0} códigos anulados no pool ${pool.id}: ${reason}`)
 }
 
-/** Para o cron: pools ativos que estão abaixo do estoque mínimo. */
+/** Popup apagado: pausa os pools e tira de circulação os códigos livres na Shopify. */
+export async function retirePoolsForForm(organizationId: string, formId: string): Promise<number> {
+  const admin = getSupabaseAdmin()
+  const { data: pools } = await admin
+    .from('coupon_pools')
+    .select('*')
+    .eq('organization_id', organizationId)
+    .eq('form_id', formId)
+  let n = 0
+  for (const p of (pools || []) as CouponPoolRow[]) {
+    try { await voidFreeCodes(p, 'popup apagado') } catch (e: any) { console.warn('[CouponPool] retire voidFreeCodes:', e?.message) }
+    await admin.from('coupon_pools').update({ status: 'paused', form_id: null, last_error: 'popup apagado' }).eq('id', p.id)
+    n++
+  }
+  return n
+}
+
+/** Para o cron: pools ativos de popups PUBLICADOS que estão abaixo do estoque mínimo. */
 export async function listPoolsNeedingStock(limit = 20): Promise<CouponPoolRow[]> {
   const admin = getSupabaseAdmin()
   const { data: pools } = await admin
     .from('coupon_pools')
     .select('*')
     .eq('status', 'active')
+    .not('form_id', 'is', null)
     .order('last_replenished_at', { ascending: true, nullsFirst: true })
     .limit(limit * 3)
+  const rows = (pools || []) as CouponPoolRow[]
+  if (!rows.length) return []
+  // Só popup publicado merece estoque; rascunho e pausado ficam parados
+  // (e são pausados de vez para não voltarem à fila).
+  const formIds = [...new Set(rows.map((p) => p.form_id).filter(Boolean))] as string[]
+  const { data: forms } = await admin.from('crm_forms').select('id, status').in('id', formIds)
+  const published = new Set((forms || []).filter((f: any) => f.status === 'published').map((f: any) => f.id))
+  const idle = rows.filter((p) => p.form_id && !published.has(p.form_id))
+  if (idle.length) {
+    await admin.from('coupon_pools').update({ status: 'paused', last_error: 'popup não publicado' }).in('id', idle.map((p) => p.id))
+  }
   const out: CouponPoolRow[] = []
-  for (const p of (pools || []) as CouponPoolRow[]) {
+  for (const p of rows) {
+    if (!p.form_id || !published.has(p.form_id)) continue
     const c = await countCodes(p)
     if (c.usable < p.min_stock) out.push(p)
     if (out.length >= limit) break

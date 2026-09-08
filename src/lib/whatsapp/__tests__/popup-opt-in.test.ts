@@ -110,9 +110,28 @@ describe('pedido de confirmação', () => {
     db.tables.whatsapp_templates = [{ organization_id: ORG, name: 'confirmar_optin', language: 'pt_BR', category: 'UTILITY', status: 'APPROVED', body_variables: 1 }]
     const r = await startWhatsAppDoubleOptIn(fakeClient(), base, { sendTemplate: send })
     expect(r).toEqual({ sent: true, messageId: 'wamid.1' })
-    expect(db.tables.whatsapp_opt_status[0]).toMatchObject({ status: 'pending', phone: PHONE, opt_in_source: 'form_optin', consent_evidence: { form_id: 'form-1', submission_id: 'sub-1' } })
+    expect(db.tables.whatsapp_opt_status[0]).toMatchObject({ status: 'pending', phone: PHONE, opt_in_source: 'form_optin', consent_evidence: { form_id: 'form-1', submission_id: 'sub-1', request_message_id: 'wamid.1' } })
     expect(send).toHaveBeenCalledWith(expect.objectContaining({ id: 'acc-1' }), PHONE, 'confirmar_optin', 'pt_BR', [{ type: 'body', parameters: [{ type: 'text', text: 'Ana' }] }])
     expect(db.tables.whatsapp_sends[0]).toMatchObject({ status: 'sent', external_message_id: 'wamid.1', metadata: { kind: 'popup_double_optin' } })
+    // Pendente: marketing e texto livre esperam; utilidade passa.
+    expect(await requireOptIn(ORG, PHONE, 'MARKETING')).toMatchObject({ allowed: false })
+    expect(await requireOptIn(ORG, PHONE, 'UTILITY')).toMatchObject({ allowed: true })
+    expect(await requireOptIn(ORG, PHONE)).toMatchObject({ allowed: false })
+  })
+
+  it('opt-out antigo: o pedido sai (utilidade) e a evidência anterior é preservada', async () => {
+    db.tables.whatsapp_business_accounts = [{ id: 'acc-1', organization_id: ORG, store_id: 'store-1', phone_number_id: 'pn-1', status: 'active', access_token: 't' }]
+    db.tables.whatsapp_templates = [{ organization_id: ORG, name: 'confirmar_optin', language: 'pt_BR', category: 'UTILITY', body_variables: 0 }]
+    db.tables.whatsapp_opt_status = [{ id: 'o1', organization_id: ORG, phone: PHONE, status: 'opted_out', consent_evidence: { declined_at: '2026-01-01' } }]
+    const r = await startWhatsAppDoubleOptIn(fakeClient(), base, { sendTemplate: send })
+    expect(r.sent).toBe(true)
+    expect(db.tables.whatsapp_opt_status[0]).toMatchObject({ status: 'pending', consent_evidence: { declined_at: '2026-01-01', previous_status: 'opted_out' } })
+  })
+
+  it('só a conta da loja do popup ou uma conta da org sem loja podem enviar', async () => {
+    db.tables.whatsapp_business_accounts = [{ id: 'acc-other', organization_id: ORG, store_id: 'store-2', phone_number_id: 'pn-2', status: 'active', access_token: 't' }]
+    db.tables.whatsapp_templates = [{ organization_id: ORG, name: 'confirmar_optin', language: 'pt_BR', category: 'UTILITY', body_variables: 0 }]
+    expect(await startWhatsAppDoubleOptIn(fakeClient(), base, { sendTemplate: send })).toEqual({ sent: false, reason: 'no_account' })
   })
 
   it('template de marketing não sai: pendente bloqueia marketing na guarda', async () => {
@@ -120,9 +139,8 @@ describe('pedido de confirmação', () => {
     db.tables.whatsapp_templates = [{ organization_id: ORG, name: 'confirmar_optin', language: 'pt_BR', category: 'MARKETING', body_variables: 0 }]
     const r = await startWhatsAppDoubleOptIn(fakeClient(), base, { sendTemplate: send })
     expect(r).toEqual({ sent: false, reason: 'blocked_by_category' })
-    expect(await requireOptIn(ORG, PHONE, 'MARKETING')).toMatchObject({ allowed: false })
-    expect(await requireOptIn(ORG, PHONE, 'UTILITY')).toMatchObject({ allowed: true })
-    expect(await requireOptIn(ORG, PHONE)).toMatchObject({ allowed: false })
+    // Sem pedido enviado, ninguém fica pendente.
+    expect(db.tables.whatsapp_opt_status || []).toHaveLength(0)
   })
 
   it('quem já tinha opt-in não recebe pedido', async () => {
@@ -131,15 +149,15 @@ describe('pedido de confirmação', () => {
     expect(r).toEqual({ sent: false, reason: 'already_opted_in' })
   })
 
-  it('sem conta ativa da org, nada sai e a linha fica pendente', async () => {
+  it('sem conta ativa da org, nada sai e ninguém fica pendente', async () => {
     const r = await startWhatsAppDoubleOptIn(fakeClient(), base, { sendTemplate: send })
     expect(r).toEqual({ sent: false, reason: 'no_account' })
-    expect(db.tables.whatsapp_opt_status[0].status).toBe('pending')
+    expect(db.tables.whatsapp_opt_status || []).toHaveLength(0)
   })
 })
 
 describe('confirmação pela resposta', () => {
-  const pending = () => [{ id: 'o1', organization_id: ORG, phone: PHONE, status: 'pending', contact_id: 'ct-1', consent_evidence: { kind: 'popup_double_optin', form_id: 'form-1', form_name: 'Boas-vindas', submission_id: 'sub-1' } }]
+  const pending = (requestedAt = new Date().toISOString()) => [{ id: 'o1', organization_id: ORG, phone: PHONE, status: 'pending', contact_id: 'ct-1', consent_evidence: { kind: 'popup_double_optin', form_id: 'form-1', form_name: 'Boas-vindas', submission_id: 'sub-1', requested_at: requestedAt } }]
   const params = (over: any = {}) => ({ organizationId: ORG, storeId: 'store-1', phone: PHONE, message: { id: 'wamid.in', type: 'text' }, textBody: 'Sim', ...over })
 
   it('"Sim" vira opted_in, grava consentimento, prova e dispara o gatilho uma vez por popup', async () => {
@@ -179,6 +197,13 @@ describe('confirmação pela resposta', () => {
     expect(r).toEqual({ outcome: 'opted_out' })
     expect(db.tables.whatsapp_opt_status[0]).toMatchObject({ status: 'opted_out', opt_out_reason: 'keyword' })
     expect(dispatched).toHaveLength(0)
+  })
+
+  it('palavra solta três dias depois do pedido não confirma; o botão confirma sempre', async () => {
+    db.tables.whatsapp_opt_status = pending(new Date(Date.now() - 4 * 86400000).toISOString())
+    expect(await confirmWhatsAppOptInFromInbound(fakeClient(), params())).toEqual({ outcome: 'ignored', reason: 'not_a_confirmation' })
+    const r = await confirmWhatsAppOptInFromInbound(fakeClient(), params({ message: { id: 'wamid.b', type: 'button', button: { text: 'Confirmar', payload: 'CONFIRM_OPTIN' } }, textBody: '' }))
+    expect(r).toMatchObject({ outcome: 'confirmed', via: 'button' })
   })
 
   it('o botão do template confirma mesmo sem texto', async () => {

@@ -25,7 +25,11 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   const formId = params.id
   const { searchParams } = new URL(request.url)
   const days = clampDays(searchParams.get('days'))
-  const since = new Date(Date.now() - days * 86400000).toISOString()
+  // Fuso do navegador de quem olha (validado): os dias da série e a janela
+  // dos totais ficam no mesmo calendário.
+  const tzRaw = String(searchParams.get('tz') || '')
+  const tz = /^[A-Za-z_]+(?:\/[A-Za-z0-9_+-]+){0,3}$/.test(tzRaw) && tzRaw.length <= 64 ? tzRaw : 'America/Sao_Paulo'
+  const since = startOfDayInTz(days, tz).toISOString()
 
   const admin = getSupabaseAdmin()
 
@@ -40,11 +44,11 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   if (!form) return NextResponse.json({ error: 'Formulário não encontrado' }, { status: 404 })
 
   const [daily, subs, consents, holdout] = await Promise.all([
-    admin.rpc('popup_daily_stats', { p_organization_id: orgId, p_form_id: formId, p_days: days }),
+    admin.rpc('popup_daily_stats', { p_organization_id: orgId, p_form_id: formId, p_days: days, p_tz: tz }),
     admin.rpc('popup_holdout_report', { p_organization_id: orgId, p_form_id: formId, p_days: days }),
     admin
       .from('crm_form_submissions')
-      .select('id, answers, created_at, user_agent, device, country, coupon_code, coupon_kind, converted_at, conversion_value, contact_id')
+      .select('id, answers, created_at, user_agent, device, country, coupon_code, converted_at, conversion_value')
       .eq('organization_id', orgId)
       .eq('form_id', formId)
       .gte('created_at', since)
@@ -52,12 +56,22 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       .limit(500),
     admin
       .from('consent_records')
-      .select('channel, action')
+      .select('channel, action, submission_id, contact_id')
       .eq('organization_id', orgId)
       .eq('source_ref', formId)
       .gte('occurred_at', since)
-      .limit(5000),
+      .limit(20000),
   ].map((p) => Promise.resolve(p)))
+
+  // Erro de consulta vira erro de verdade — zeros com HTTP 200 parecem
+  // um popup que ninguém viu.
+  const missingMigration = daily.error && (daily.error.code === '42883' || /does not exist/i.test(daily.error.message || ''))
+  for (const [name, r] of [['série', daily], ['inscrições', subs], ['consentimentos', consents], ['grupo de controle', holdout]] as const) {
+    const err = (r as any)?.error
+    if (err && !(name === 'série' && missingMigration) && !(name === 'grupo de controle' && err.code === '42883')) {
+      return NextResponse.json({ error: `Não foi possível carregar ${name}: ${err.message}` }, { status: 500 })
+    }
+  }
 
   // Relatório de hold-out: quem viu × quem foi sorteado para não ver, no
   // mesmo período, com compras na janela após o sorteio. Receita
@@ -74,10 +88,10 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         lift_conversion: convRate(control) > 0 ? convRate(exposed) / convRate(control) - 1 : null,
         incremental_revenue: (perVisitor(exposed) - perVisitor(control)) * Number(exposed.visitors),
         reliable: Number(control.visitors) >= 200 && Number(exposed.visitors) >= 200,
+        min_reliable: 200,
       }
     : null
 
-  const missingMigration = daily.error && (daily.error.code === '42883' || /does not exist/i.test(daily.error.message || ''))
   interface SeriesPoint { date: string; impressions: number; submissions: number; dismissals: number; holdouts: number }
   const series: SeriesPoint[] = (daily.data || []).map((r: any) => ({
     date: r.day,
@@ -105,17 +119,21 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     else byDevice.unknown++
   }
 
-  // Opt-in confirmado = decisões positivas por canal no período. A prova
+  // Opt-in confirmado por canal, e PESSOAS com pelo menos um canal
+  // positivo (para o funil, que nunca pode passar das inscrições). A prova
   // está em consent_records; a taxa é sobre impressões.
-  const consentRows = (consents.data || []) as Array<{ channel: string; action: string }>
+  const consentRows = (consents.data || []) as Array<{ channel: string; action: string; submission_id: string | null; contact_id: string | null }>
   const optIns = { email: 0, whatsapp: 0, sms: 0, denied: 0 }
+  const optedPeople = new Set<string>()
   for (const c of consentRows) {
     if (c.action === 'granted' || c.action === 'confirmed') {
       if (c.channel === 'email') optIns.email++
       else if (c.channel === 'whatsapp') optIns.whatsapp++
       else if (c.channel === 'sms') optIns.sms++
+      optedPeople.add(c.submission_id || c.contact_id || `${c.channel}:${optedPeople.size}`)
     } else if (c.action === 'denied') optIns.denied++
   }
+  const optInPeople = Math.min(optedPeople.size, Math.max(totals.submissions, optedPeople.size))
 
   const converted = submissions.filter((s) => s.converted_at)
   const timeToPurchaseHours = converted
@@ -141,8 +159,9 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       ...totals,
       submit_rate: totals.impressions > 0 ? totals.submissions / totals.impressions : 0,
       dismiss_rate: totals.impressions > 0 ? totals.dismissals / totals.impressions : 0,
-      opt_in_rate: totals.impressions > 0 ? optIns.email / totals.impressions : 0,
+      opt_in_rate: totals.impressions > 0 ? optInPeople / totals.impressions : 0,
       opt_ins: optIns,
+      opt_in_people: optInPeople,
       coupons_issued: submissions.filter((s) => s.coupon_code).length,
       // Totais de vida (não do período): o motor de atribuição recalcula.
       attributed_revenue: Number(form.attributed_revenue) || 0,
@@ -158,6 +177,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     devices: byDevice,
     holdout: {
       configured: holdoutRows.length > 0 && !!control,
+      min_visitors: 30,
       rows: holdoutRows,
       incremental,
     },
@@ -172,6 +192,22 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       conversion_value: s.conversion_value,
     })),
   })
+}
+
+// Meia-noite de N-1 dias atrás no fuso pedido, em UTC.
+function startOfDayInTz(days: number, tz: string): Date {
+  try {
+    const now = new Date()
+    const parts = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now)
+    const get = (t: string) => Number(parts.find((p) => p.type === t)?.value)
+    const localMidnightUtc = Date.UTC(get('year'), get('month') - 1, get('day'))
+    // Diferença entre o "agora" local e o UTC diz o offset do fuso.
+    const localNow = new Date(now.toLocaleString('en-US', { timeZone: tz })).getTime()
+    const offset = localNow - now.getTime()
+    return new Date(localMidnightUtc - offset - (days - 1) * 86400000)
+  } catch {
+    return new Date(Date.now() - days * 86400000)
+  }
 }
 
 function guessDevice(ua: string | null | undefined): 'mobile' | 'tablet' | 'desktop' | null {

@@ -202,9 +202,14 @@ window.__wfReg[FID]={priority:PRIORITY,state:"pending"};
 function regState(s){try{window.__wfReg[FID].state=s}catch(e){}}
 function higherPending(){
   var reg=window.__wfReg||{};
+  // Só "pending" (gates ainda decidindo) segura os outros. "armed" é um
+  // gatilho esperando o visitante (exit, scroll, manual) — pode nunca vir.
   for(var k in reg){if(k!==FID&&reg[k]&&reg[k].state==="pending"&&reg[k].priority>PRIORITY)return k}
   return null;
 }
+var ELIG;
+var _prevFocus=null,_keyHandler=null;
+function focusables(){try{var pp=$("wf-pop-"+FID);if(!pp)return[];return Array.prototype.filter.call(pp.querySelectorAll('button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])'),function(el){return !el.disabled&&el.offsetParent!==null&&el.getAttribute("aria-hidden")!=="true"&&el.getAttribute("name")!=="_wf_hp"})}catch(e){return[]}}
 var submitted=false;// R3: suppression cookie must not be clobbered by close() after subscribe
 var dismissSent=false;// R6: at most one dismissal beacon per pageview
 var _cleanupSize=null;
@@ -219,7 +224,7 @@ function dlog(){if(!DBG)return;try{
   var args=["[WorderPopup]","["+FID.slice(0,8)+"]"].concat(Array.prototype.slice.call(arguments));
   console.log.apply(console,args);
 }catch(e){}}
-function blockedBy(reason){dlog("BLOCKED:",reason);try{if(window.__wfReg&&window.__wfReg[FID])window.__wfReg[FID].state="blocked"}catch(e){}}
+function blockedBy(reason){dlog("BLOCKED:",reason);try{ELIG="blocked"}catch(e){}try{if(window.__wfReg&&window.__wfReg[FID])window.__wfReg[FID].state="blocked"}catch(e){}}
 dlog("script start",{ design: !!D, behavior: B });
 function gc(n){var m=document.cookie.match("(^|;)\\\\s*"+n+"=([^;]*)");return m?m[2]:null}
 function sc(n,v,d){var e=new Date();e.setDate(e.getDate()+d);document.cookie=n+"="+v+";path=/;expires="+e.toUTCString()+";SameSite=Lax"}
@@ -385,7 +390,7 @@ if(urls.excludeEnabled&&urls.excludeUrls&&urls.excludeUrls.length>0){
 // Legacy targeting.pageUrls still supported for old popups
 var tgt=B.targeting||{};
 if(tgt.pages==="specific"&&tgt.pageUrls&&tgt.pageUrls.length>0){
-  if(!tgt.pageUrls.some(function(p){return pagePath.indexOf(p)>=0}))return;
+  if(!tgt.pageUrls.some(function(p){return pagePath.indexOf(p)>=0})){blockedBy("legacy page filter");return}
 }
 // Contexto da página (B.page): tipo de template e, em produto/coleção, o
 // que está sendo visto. Vem do bloco de tema (window.__worder.template /
@@ -443,8 +448,10 @@ function classifyTraffic(){
   var refHost="";try{if(ref)refHost=new URL(ref).hostname.toLowerCase()}catch(e){}
   var internal=refHost&&(refHost===location.hostname.toLowerCase());
   var hasUtm=!!(med||src);
-  if(qs.get("gclid")||qs.get("gbraid")||qs.get("wbraid")||qs.get("fbclid")||qs.get("ttclid")||qs.get("msclkid"))return"paid";
   if(/cpc|ppc|paid|display|retarget|cpm|banner|ads?$/.test(med))return"paid";
+  if(qs.get("gclid")||qs.get("gbraid")||qs.get("wbraid")||qs.get("ttclid")||qs.get("msclkid"))return"paid";
+  // fbclid vem em qualquer clique saído do Instagram/Facebook, pago ou não.
+  if(qs.get("fbclid")&&!med)return"social";
   if(/^e?mail|newsletter/.test(med)||/mail|newsletter|klaviyo|mailchimp|rd ?station/.test(src))return"email";
   if(/whatsapp|sms|messag|zap/.test(med)||/whatsapp|sms|zap/.test(src))return"messaging";
   if(/social|instagram|facebook|tiktok|youtube|pinterest|twitter|linkedin/.test(med)||/instagram|facebook|tiktok|youtube|pinterest|twitter|linkedin|^ig$|^fb$/.test(src))return"social";
@@ -481,8 +488,9 @@ function runLocationGate(cb){
   function check(cc){
     cc=(cc||"").toUpperCase();
     if(!cc){cb(true);return}
-    if(locCfg.includeEnabled&&locCfg.includeCountries.length>0&&locCfg.includeCountries.indexOf(cc)<0){cb(false);return}
-    if(locCfg.excludeEnabled&&locCfg.excludeCountries.length>0&&locCfg.excludeCountries.indexOf(cc)>=0){cb(false);return}
+    var inc=locCfg.includeCountries||[],exc=locCfg.excludeCountries||[];
+    if(locCfg.includeEnabled&&inc.length>0&&inc.indexOf(cc)<0){cb(false);return}
+    if(locCfg.excludeEnabled&&exc.length>0&&exc.indexOf(cc)>=0){cb(false);return}
     cb(true);
   }
   if(cached){check(cached);return}
@@ -499,8 +507,10 @@ function getUtms(){
   var out={};
   ["utm_source","utm_medium","utm_campaign","utm_term","utm_content"].forEach(function(k){
     var v=qs.get(k);
-    if(v){out[k]=v;localStorage.setItem("_wf_"+k,v)}
-    else{var stored=localStorage.getItem("_wf_"+k);if(stored)out[k]=stored}
+    try{
+      if(v){out[k]=v;localStorage.setItem("_wf_"+k,v)}
+      else{var stored=localStorage.getItem("_wf_"+k);if(stored)out[k]=stored}
+    }catch(e){if(v)out[k]=v}
   });
   return out;
 }
@@ -528,8 +538,8 @@ var pvCount=incPv();
 var sched=B.scheduling||{};
 if(sched.enabled){
   var now=Date.now();
-  if(sched.startDate&&now<new Date(sched.startDate).getTime())return;
-  if(sched.endDate&&now>new Date(sched.endDate).getTime())return;
+  if(sched.startDate&&now<new Date(sched.startDate).getTime()){blockedBy("scheduled: not started");return}
+  if(sched.endDate&&now>new Date(sched.endDate).getTime()){blockedBy("scheduled: ended");return}
 }
 var st=D.styles||{};
 var steps=D.steps||[];
@@ -686,7 +696,7 @@ function renderBlock(b){
       // R7: data-url only when the URL passes the scheme whitelist.
       var bu2=act==="url"?safeUrl(p.url):"";
       var nextAttr=(act==="next-step"&&p.nextStepId&&stepIndexById(p.nextStepId)>=0)?' data-next="'+esc(p.nextStepId)+'"':"";
-      var btn='<button id="'+btnId+'" type="'+(act==="submit"?"submit":"button")+'" data-action="'+esc(act)+'"'+nextAttr+(bu2?' data-url="'+esc(bu2)+'"':"")+' style="box-sizing:border-box!important;width:'+(p.fullWidth?"100%":"auto")+'!important;padding:'+nv(p.paddingV,14)+'px '+nv(p.paddingH,28)+'px!important;background:'+sv(p.bgColor,"#F97316")+'!important;color:'+sv(p.textColor,"#fff")+'!important;font-size:'+nv(p.fontSize,15)+'px!important;font-weight:'+btnFw+'!important;font-family:'+btnFam+'!important;letter-spacing:'+btnLs+'!important;line-height:1.2!important;text-align:center!important;text-transform:none!important;border-radius:'+nv(p.borderRadius,8)+'px!important;'+btnBorder+'!important;cursor:pointer!important;margin:0!important;display:'+(p.fullWidth?"block":"inline-block")+'!important;transition:background 0.2s">'+esc(p.text||"OK")+'</button>';
+      var btn='<button id="'+btnId+'" type="'+(act==="submit"?"submit":"button")+'" data-action="'+esc(act)+'"'+nextAttr+(bu2?' data-url="'+esc(bu2)+'"':"")+' style="box-sizing:border-box!important;width:'+(p.fullWidth?"100%":"auto")+'!important;padding:'+nv(p.paddingV,14)+'px '+nv(p.paddingH,28)+'px!important;background:'+sv(p.bgColor,"#F97316")+';color:'+sv(p.textColor,"#fff")+'!important;font-size:'+nv(p.fontSize,15)+'px!important;font-weight:'+btnFw+'!important;font-family:'+btnFam+'!important;letter-spacing:'+btnLs+'!important;line-height:1.2!important;text-align:center!important;text-transform:none!important;border-radius:'+nv(p.borderRadius,8)+'px!important;'+btnBorder+'!important;cursor:pointer!important;margin:0!important;display:'+(p.fullWidth?"block":"inline-block")+'!important;transition:background 0.2s">'+esc(p.text||"OK")+'</button>';
       // R10: honor p.align via wrapper when not fullWidth (editor default center).
       h='<div style="'+blockStyleStr(p)+(p.fullWidth?"":"text-align:"+sv(p.align,"center")+";")+'">'+hoverCss+btn+'</div>';
       break;
@@ -698,7 +708,7 @@ function renderBlock(b){
       var dyn=window.__wfDynCoupon&&window.__wfDynCoupon[FID];
       if(dyn&&dyn.code)couponCode=dyn.code;
       var boxCss=blockStyleStr(p,true)+'padding:12px 16px;border:2px '+sv(p.borderStyle,"dashed")+' '+sv(p.borderColor,"#F97316")+';border-radius:'+nv(p.borderRadius,8)+'px;text-align:center;background:'+sv(p.bgColor,"#FFF7ED");
-      if(dyn&&dyn.show_code===false){
+      if(dyn&&dyn.show_code===false&&dyn.auto_apply!==false&&window.Shopify){
         // Aplicado sozinho no checkout: mostrar o código só confunde.
         h='<div style="'+boxCss+'"><p style="font-size:'+Math.round(nv(p.fontSize,20)*0.8)+'px;font-weight:bold;color:'+sv(p.codeColor,"#F97316")+';margin:0">'+esc(p.appliedText||"Desconto aplicado no seu carrinho")+'</p></div>';
       } else {
@@ -723,10 +733,10 @@ function renderBlock(b){
           function tick(){
             var now=Date.now();var diff=Math.max(0,end-now);
             var d=Math.floor(diff/86400000);var hh=Math.floor((diff%86400000)/3600000);var mm=Math.floor((diff%3600000)/60000);var ss=Math.floor((diff%60000)/1000);
-            var ed=document.getElementById(cdId+"_d");if(ed)ed.textContent=String(d).padStart(2,"0");
-            var eh=document.getElementById(cdId+"_h");if(eh)eh.textContent=String(hh).padStart(2,"0");
-            var em=document.getElementById(cdId+"_m");if(em)em.textContent=String(mm).padStart(2,"0");
-            var es=document.getElementById(cdId+"_s");if(es)es.textContent=String(ss).padStart(2,"0");
+            var ed=$(cdId+"_d");if(ed)ed.textContent=String(d).padStart(2,"0");
+            var eh=$(cdId+"_h");if(eh)eh.textContent=String(hh).padStart(2,"0");
+            var em=$(cdId+"_m");if(em)em.textContent=String(mm).padStart(2,"0");
+            var es=$(cdId+"_s");if(es)es.textContent=String(ss).padStart(2,"0");
             if(diff>0)setTimeout(tick,1000);
           }
           tick();
@@ -755,11 +765,22 @@ function sendDismiss(){
 // Fonts só quando o popup aparece: injetar o <link> em toda página, mesmo
 // sem popup, custava LCP em cada visita da loja.
 function ensureFonts(){
-  if($("wf-fonts-link"))return;
+  // Só as famílias que o design usa — o link antigo baixava cinco de uma vez.
+  var G={"Inter":"Inter:wght@400;500;600;700;800","Montserrat":"Montserrat:wght@400;500;600;700;800","Poppins":"Poppins:wght@400;500;600;700;800","Roboto":"Roboto:wght@400;500;700","Open Sans":"Open+Sans:wght@400;500;600;700"};
+  var used={};
+  function fam(v){if(!v)return;var f=String(v).split(",")[0].replace(/['"]/g,"").trim();if(G[f])used[f]=true}
+  fam(st.fontFamily||"Inter, sans-serif");
+  try{JSON.stringify(D,function(k,v){if(k==="fontFamily")fam(v);return v})}catch(e){}
+  var q=[];for(var f in used)q.push("family="+G[f]);
+  if(!q.length)return;
+  var key=q.join("|").replace(/[^A-Za-z]/g,"");
+  if(document.querySelector('link[data-wf-fonts="'+key+'"]'))return;
+  var lid=document.getElementById("wf-fonts-link")?"wf-fonts-"+key.slice(0,40):"wf-fonts-link";
+  if(!document.getElementById("wf-fonts-pre")){var pc=document.createElement("link");pc.id="wf-fonts-pre";pc.rel="preconnect";pc.href="https://fonts.gstatic.com";pc.crossOrigin="anonymous";document.head.appendChild(pc)}
   var fl=document.createElement("link");
-  fl.id="wf-fonts-link";
+  fl.id=lid;fl.setAttribute("data-wf-fonts",key);
   fl.rel="stylesheet";
-  fl.href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Montserrat:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700;800&family=Roboto:wght@400;500;700&family=Open+Sans:wght@400;500;600;700&display=swap";
+  fl.href="https://fonts.googleapis.com/css2?"+q.join("&")+"&display=swap";
   document.head.appendChild(fl);
 }
 // R1: merchant-configurable error copy → server 400 error string → neutral
@@ -891,16 +912,27 @@ function show(){
     if(si.position==="left")pop.insertBefore(sideEl,content);else pop.appendChild(sideEl);
     sideEl.style.display=hasSideAt(mob())?"block":"none";
   }
-  if(isEmbed&&embedHost){
+  if(isEmbed){
+    if(!embedHost){shown=false;regState("blocked");blockedBy("embed container [data-worder-form] missing");return}
     embedHost.innerHTML="";
     mountRoot(embedHost).appendChild(pop);
-  } else if(isEmbed){
-    ov.style.cssText="position:fixed;inset:0;z-index:999999;display:flex;align-items:center;justify-content:center;background:"+ovBgStr+";animation:wfFade .3s ease";
-    ov.appendChild(pop);
-    mountRoot(document.body).appendChild(ov);
   } else {
+    pop.setAttribute("role","dialog");pop.setAttribute("aria-modal","true");pop.setAttribute("aria-label",FNAME||"Popup");
     ov.appendChild(pop);
     mountRoot(document.body).appendChild(ov);
+    // Teclado: ESC fecha, Tab circula dentro do popup, e o foco volta para
+    // onde estava quando fechar.
+    _prevFocus=document.activeElement;
+    _keyHandler=function(e){
+      if(e.key==="Escape"){e.preventDefault();close(true);return}
+      if(e.key!=="Tab")return;
+      var fs=focusables();if(!fs.length)return;
+      var first=fs[0],last=fs[fs.length-1],cur=(ROOT&&ROOT.activeElement)||document.activeElement;
+      if(e.shiftKey&&cur===first){e.preventDefault();last.focus()}
+      else if(!e.shiftKey&&cur===last){e.preventDefault();first.focus()}
+    };
+    document.addEventListener("keydown",_keyHandler);
+    setTimeout(function(){var fs=focusables();var target=null;for(var i=0;i<fs.length;i++){if(/^(INPUT|SELECT|TEXTAREA)$/.test(fs[i].tagName)){target=fs[i];break}}(target||fs[0])&&(target||fs[0]).focus()},50);
   }
   // Impressão → /events: persiste na série diária E bate os contadores.
   // (O antigo {_track:'impression'} no submit só batia contador.)
@@ -908,7 +940,8 @@ function show(){
   wfEmit("popupView",{formType:formType});
   // novalidate: our validator replaces browser-native bubbles (R9), so
   // visitors never see the browser's locale-specific messages.
-  function renderForm(html){
+  var progressMax=0;
+  function renderForm(html,forward){
     // Honeypot: an off-screen field real users never see or tab to, but
     // naive bots auto-fill. Harvested like any input; the submit handler
     // lifts it out of answers into payload._hp and the server silently
@@ -921,13 +954,17 @@ function show(){
     var prog="";
     var pg=st.progress||{};
     if(pg.enabled&&steps.length>1){
-      var pct=Math.round(((curStep+1)/steps.length)*100);
+      // Pela trilha percorrida, nunca encolhe ao voltar e só fecha em 100
+      // na última etapa do caminho.
+      var isLast=curStep>=steps.length-1||(steps[curStep]&&steps[curStep].id&&stepPath.length>=steps.length);
+      var pct=isLast?100:Math.max(progressMax,Math.min(95,Math.round((stepPath.length/steps.length)*100)));
+      progressMax=pct;
       prog='<div class="wf-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+pct+'" style="height:'+nv(pg.height,4)+'px;background:'+sv(pg.trackColor,"#E5E7EB")+';border-radius:999px;margin:0 0 16px;overflow:hidden"><div style="width:'+pct+'%;height:100%;background:'+sv(pg.color,"#F97316")+';transition:width .3s ease"></div></div>';
     }
     content.innerHTML='<form id="wf-form-'+FID+'" novalidate style="margin:auto 0;width:100%">'+hp+prog+html+'</form>';
     bindForm();
-    wfEmit("stepView",{step:curStep,stepId:sid||null,steps:steps.length,path:stepPath.slice()});
-    if(curStep>0)beacon("step",{step:curStep});
+    wfEmit("stepView",{step:curStep,stepId:sid||null,kind:(steps[curStep]&&steps[curStep].kind)||"form",steps:steps.length,path:stepPath.slice()});
+    if(forward&&curStep>0)beacon("step",{step:curStep});
   }
   // Para onde ir depois desta etapa: opção escolhida com ramificação →
   // botão com etapa fixa → sequência.
@@ -1006,6 +1043,9 @@ function show(){
   // replace instead of appending "João,João"); same-name values within ONE
   // pass (checkbox groups) aggregate comma-separated.
   function harvest(f){
+    // Campo desmarcado nesta etapa não pode sobreviver de uma visita
+    // anterior: apaga o que pertence a este formulário e lê de novo.
+    f.querySelectorAll("[name]").forEach(function(el){var k=el.getAttribute("name");if(k&&k!=="_wf_hp")delete allData[k]});
     var fd=new FormData(f);
     var seen={};
     fd.forEach(function(v,k){
@@ -1026,22 +1066,30 @@ function show(){
     dlog("button click action="+act);
     if(act==="next-step"){
       e.preventDefault();
+      if(submitted)return;
       var frm=btn.closest("form")||$("wf-form-"+FID);
+      if(!frm)return;
       // R2: validate the CURRENT step before advancing, then harvest it.
-      if(frm&&!validateStep(frm)){dlog("next-step blocked by validation");return}
-      if(frm)harvest(frm);
+      if(!validateStep(frm)){dlog("next-step blocked by validation");return}
+      harvest(frm);
       var nxt=nextStepFor(frm,btn);
       dlog("next-step →",nxt);
-      if(nxt>=0){curStep=nxt;renderForm(renderStep(curStep))}
+      if(nxt>=0){curStep=nxt;renderForm(renderStep(curStep),true)}
+      else if(nxt===-2){
+        // Última etapa sem destino: o botão "próxima" envia.
+        if(frm.requestSubmit)frm.requestSubmit();else{var sb=frm.querySelector('button[type="submit"]');if(sb)sb.click();else frm.dispatchEvent(new Event("submit",{bubbles:true,cancelable:true}))}
+      }
     }
     if(act==="prev-step"){
       e.preventDefault();
+      if(submitted)return;
       var pf=btn.closest("form")||$("wf-form-"+FID);
-      if(pf)harvest(pf);
+      if(!pf)return;
+      harvest(pf);
       // Volta pela trilha percorrida, não pela sequência: quem pulou uma
       // etapa não cai nela ao voltar.
-      if(stepPath.length>=2){stepPath.pop();var back=stepIndexById(stepPath[stepPath.length-1]);if(back<0)back=Math.max(0,curStep-1);stepPath.pop();curStep=back;renderForm(renderStep(curStep))}
-      else if(curStep>0){curStep--;renderForm(renderStep(curStep))}
+      if(stepPath.length>=2){stepPath.pop();var back=stepIndexById(stepPath[stepPath.length-1]);if(back<0)back=Math.max(0,curStep-1);stepPath.pop();curStep=back;renderForm(renderStep(curStep),false)}
+      else if(curStep>0){curStep--;renderForm(renderStep(curStep),false)}
     }
     if(act==="close"){e.preventDefault();close(true)}
     if(act==="url"&&btn.dataset.url){e.preventDefault();var uu=safeUrl(btn.dataset.url);if(uu)window.open(uu,"_blank","noopener")}
@@ -1212,34 +1260,48 @@ function show(){
     var act=postSubmit.action||"show-success";
     // R7: redirect target must pass the scheme whitelist, else the action drops.
     var redirectUrl=safeUrl((res&&res.redirect_url)||postSubmit.redirectUrl||"");
+    // Inscrição e cupom valem para QUALQUER ação pós-envio: quem redireciona
+    // para o carrinho é justamente quem mais precisa do auto-apply.
+    wfEmit("signup",{
+      email:allData.email||null,phone:allData.phone||null,
+      submissionId:res&&res.submission_id||null,contactId:res&&res.contact_id||null,
+      consent:res&&res.consent||null,doubleOptIn:!!(res&&res.double_optin_sent),whatsappOptIn:!!(res&&res.whatsapp_optin_sent)
+    });
+    var willAutoApply=false;
+    if(res&&res.coupon&&res.coupon.code){
+      window.__wfDynCoupon=window.__wfDynCoupon||{};
+      window.__wfDynCoupon[FID]=res.coupon;
+      willAutoApply=res.coupon.auto_apply!==false&&!!window.Shopify;
+      // Auto-apply: a rota /discount/CODE da Shopify grava o cupom na
+      // sessão do carrinho e o checkout já nasce com ele. O cookie vem no
+      // próprio 302 — não precisa seguir o redirect nem baixar a página.
+      if(willAutoApply&&!(act==="redirect"&&redirectUrl)){
+        try{
+          var du="/discount/"+encodeURIComponent(res.coupon.code)+"?redirect="+encodeURIComponent(location.pathname||"/");
+          fetch(du,{credentials:"same-origin",redirect:"manual",cache:"no-store"}).catch(function(){});
+        }catch(e){}
+      }
+      try{localStorage.setItem("_worder_coupon",JSON.stringify({code:res.coupon.code,kind:res.coupon.kind||null,ends_at:res.coupon.ends_at||null}))}catch(e){}
+      beacon("reward",{kind:res.coupon.kind||null});
+      wfEmit("rewardClaimed",{code:res.coupon.code,kind:res.coupon.kind||null,value:res.coupon.value!=null?res.coupon.value:null,endsAt:res.coupon.ends_at||null,autoApplied:willAutoApply});
+    }
     if(act==="redirect"&&redirectUrl){
+      if(willAutoApply){
+        // Mesma loja: a própria Shopify aplica e redireciona. Fora dela,
+        // aplica pelo fetch e só então navega.
+        var samePath=redirectUrl.charAt(0)==="/"?redirectUrl:null;
+        try{var ru=new URL(redirectUrl,location.href);if(ru.origin===location.origin)samePath=ru.pathname+ru.search+ru.hash}catch(e){}
+        if(samePath){window.location.href="/discount/"+encodeURIComponent(res.coupon.code)+"?redirect="+encodeURIComponent(samePath);return}
+        try{fetch("/discount/"+encodeURIComponent(res.coupon.code)+"?redirect=%2F",{credentials:"same-origin",redirect:"manual",cache:"no-store"}).catch(function(){}).then(function(){window.location.href=redirectUrl})}catch(e){window.location.href=redirectUrl}
+        setTimeout(function(){window.location.href=redirectUrl},1500);
+        return;
+      }
       window.location.href=redirectUrl;
       return;
     }
     if(act==="close"){
       close(false);
       return;
-    }
-    wfEmit("signup",{
-      email:allData.email||null,phone:allData.phone||null,
-      submissionId:res&&res.submission_id||null,contactId:res&&res.contact_id||null,
-      consent:res&&res.consent||null,doubleOptIn:!!(res&&res.double_optin_sent)
-    });
-    if(res&&res.coupon&&res.coupon.code){
-      window.__wfDynCoupon=window.__wfDynCoupon||{};
-      window.__wfDynCoupon[FID]=res.coupon;
-      // Auto-apply: a rota /discount/CODE da Shopify grava o cupom na
-      // sessão do carrinho e o checkout já nasce com ele. Um fetch
-      // same-origin com credenciais basta — sem navegar, sem piscar.
-      if(res.coupon.auto_apply!==false&&window.Shopify){
-        try{
-          var du="/discount/"+encodeURIComponent(res.coupon.code)+"?redirect="+encodeURIComponent(location.pathname||"/");
-          fetch(du,{credentials:"same-origin",redirect:"follow",cache:"no-store"}).catch(function(){});
-        }catch(e){}
-      }
-      try{localStorage.setItem("_worder_coupon",JSON.stringify({code:res.coupon.code,kind:res.coupon.kind||null,ends_at:res.coupon.ends_at||null}))}catch(e){}
-      beacon("reward",{kind:res.coupon.kind||null});
-      wfEmit("rewardClaimed",{code:res.coupon.code,kind:res.coupon.kind||null,value:res.coupon.value!=null?res.coupon.value:null,endsAt:res.coupon.ends_at||null,autoApplied:res.coupon.auto_apply!==false&&!!window.Shopify});
     }
     // R10: success content carries the same vertical-centering wrapper.
     content.innerHTML='<div id="wf-succ-'+FID+'" style="margin:auto 0;width:100%">'+renderStep(-1)+'</div>';
@@ -1274,6 +1336,8 @@ function close(byUser){
   }
   unmountRoot();
   regState("done");
+  if(_keyHandler){document.removeEventListener("keydown",_keyHandler);_keyHandler=null}
+  if(_prevFocus&&_prevFocus.focus){try{_prevFocus.focus()}catch(e){}_prevFocus=null}
   if(window.__wfOpenPopup===FID)window.__wfOpenPopup=null;
   if(_cleanupSize){_cleanupSize();_cleanupSize=null}
   if(byUser&&!submitted)sendDismiss();
@@ -1284,8 +1348,14 @@ function close(byUser){
 // Expose custom trigger API (always available)
 window._worderOnsite=window._worderOnsite||[];
 var _origPush=window._worderOnsite.push;
+// openForm só abre depois dos gates (e nunca para quem caiu no controle):
+// pedido antes da decisão fica na fila; bloqueado, é descartado.
+if(ELIG===undefined)ELIG="pending";var pendingOpen=false;
 function processCmd(cmd){
-  if(Array.isArray(cmd)&&cmd[0]==="openForm"&&cmd[1]===FID){show()}
+  if(!(Array.isArray(cmd)&&cmd[0]==="openForm"&&cmd[1]===FID))return;
+  if(ELIG==="ok"){show()}
+  else if(ELIG==="pending"){pendingOpen=true;dlog("openForm queued until gates decide")}
+  else dlog("openForm ignored — popup not eligible on this page");
 }
 for(var _i=0;_i<window._worderOnsite.length;_i++){processCmd(window._worderOnsite[_i])}
 window._worderOnsite.push=function(cmd){_origPush.call(window._worderOnsite,cmd);processCmd(cmd);return window._worderOnsite.length};
@@ -1380,7 +1450,9 @@ function runSubscriberGate(cb){
   // O mesmo id que a submissão grava — não só o cookie, que o Safari apaga.
   var vid=getVisitorId();
   if(!vid){if(audOn&&audCfg.mode==="include"){blockedBy("audience gate — no visitor id");cb(false);return}cb(true);return}
-  var ckCache="_wf_paw_"+FID;
+  var cfgSig=vid+"|"+(vis.hideFromSubscribers?1:0)+"|"+JSON.stringify(audCfg),hh=0;
+  for(var ci=0;ci<cfgSig.length;ci++){hh=(hh*31+cfgSig.charCodeAt(ci))>>>0}
+  var ckCache="_wf_paw_"+FID+"_"+hh.toString(36);
   try{
     var raw=localStorage.getItem(ckCache);
     if(raw){
@@ -1420,6 +1492,8 @@ runCartGate(function(cartOk){
     return;
   }
   wfEmit("campaignMatched",{holdout:false});
+  ELIG="ok";
+  if(pendingOpen){pendingOpen=false;dlog("openForm was queued — showing");show();return}
   // S10: embedded forms render immediately — no triggers, no frequency.
   if(isEmbed){dlog("embed form type — rendering immediately");show();return}
   if(!anyEnabled&&!useCustomTrigger){
@@ -1429,8 +1503,12 @@ runCartGate(function(cartOk){
   }
   if(!anyEnabled&&useCustomTrigger){
     dlog("custom trigger only — waiting for openForm");
+    regState("armed");
     return;
   }
+  // Tempo é determinístico (vai disparar): continua "pending" para os de
+  // menor prioridade esperarem. Exit/scroll/páginas podem nunca vir.
+  if(!useTime)regState("armed");
 
   var satisfied={exit:false,time:false,scroll:false,pv:false};
   function tryShow(which){

@@ -24,7 +24,15 @@ import { POPUP_TEMPLATES, TEMPLATE_CATEGORIES, type PopupTemplate, type PopupFor
 
 // ── Tipos ────────────────────────────────────────────────
 
-type FormStatus = 'draft' | 'published' | 'archived'
+type FormStatus = 'draft' | 'published' | 'paused' | 'archived'
+
+// Rótulo e cor de cada status — a mesma tabela que o analytics usa.
+const FORM_STATUS_META: Record<FormStatus, { label: string; cls: string; dot: string }> = {
+  published: { label: 'Ativo', cls: 'bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500' },
+  paused: { label: 'Pausado', cls: 'bg-amber-50 text-amber-700', dot: 'bg-amber-500' },
+  draft: { label: 'Rascunho', cls: 'bg-gray-100 text-gray-600', dot: 'bg-gray-400' },
+  archived: { label: 'Arquivado', cls: 'bg-gray-100 text-gray-500', dot: 'bg-gray-300' },
+}
 
 interface FormRow {
   id: string
@@ -67,10 +75,14 @@ const typeMeta: Record<string, { label: string; icon: React.ComponentType<any> }
   banner: { label: 'Faixa', icon: Megaphone },
 }
 
-const statusMeta: Record<FormStatus, { label: string; cls: string; dot: string }> = {
-  published: { label: 'Ativo', cls: 'bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500' },
-  draft: { label: 'Rascunho', cls: 'bg-gray-100 text-gray-600', dot: 'bg-gray-400' },
-  archived: { label: 'Arquivado', cls: 'bg-gray-100 text-gray-500', dot: 'bg-gray-300' },
+const statusMeta = FORM_STATUS_META
+
+// "Últimos 30 dias" com as datas de verdade, para ninguém adivinhar a janela.
+function periodCaption(days: number): string {
+  const end = new Date()
+  const start = new Date(end.getTime() - (days - 1) * 86400000)
+  const f = (d: Date) => d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
+  return `${f(start)} – ${f(end)}`
 }
 
 const templateIcon: Record<string, React.ComponentType<any>> = {
@@ -119,7 +131,6 @@ export default function SiteFormsPage() {
     try {
       const params = new URLSearchParams()
       if (currentStore?.id) params.set('storeId', currentStore.id)
-      params.set('_t', String(Date.now()))
       const statsParams = new URLSearchParams(params)
       statsParams.set('days', String(days))
       const [listRes, statsRes] = await Promise.all([
@@ -139,13 +150,21 @@ export default function SiteFormsPage() {
         for (const s of d.stats || []) map[s.form_id] = s
         setStats(map)
         setMissingMigration(d.missing_migration || null)
+      } else {
+        // Zeros mudos pareceriam números reais.
+        setStats({})
+        setMissingMigration(null)
+        toast.error('Não foi possível carregar as métricas', await statsRes.text().catch(() => ''))
       }
     } catch (e: any) {
       toast.error('Não foi possível carregar os formulários', e?.message)
     } finally {
       setLoading(false)
     }
-  }, [currentStore?.id, hasHydrated, days, toast])
+    // O provedor de toast recria as funções a cada aviso; colocá-lo nas
+    // dependências fazia a lista recarregar a cada toast (e em loop num erro).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStore?.id, hasHydrated, days])
 
   useEffect(() => { load() }, [load])
 
@@ -211,7 +230,7 @@ export default function SiteFormsPage() {
   }
 
   const toggleStatus = async (f: FormRow) => {
-    const next: FormStatus = f.status === 'published' ? 'draft' : 'published'
+    const next: FormStatus = f.status === 'published' ? 'paused' : 'published'
     setBusyId(f.id)
     try {
       const res = await fetch(`/api/forms/${f.id}`, {
@@ -221,11 +240,11 @@ export default function SiteFormsPage() {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        toast.error(next === 'published' ? 'Não foi possível ativar' : 'Não foi possível desativar', data.error || '')
+        toast.error(next === 'published' ? 'Não foi possível ativar' : 'Não foi possível pausar', data.error || '')
         return
       }
       setForms((prev) => prev.map((x) => (x.id === f.id ? { ...x, status: next } : x)))
-      toast.success(next === 'published' ? 'Popup ativado' : 'Popup desativado')
+      toast.success(next === 'published' ? 'Popup ativado' : 'Popup pausado', next === 'published' ? undefined : 'Ele some da loja em até um minuto e volta quando você ativar.')
     } finally {
       setBusyId(null)
     }
@@ -304,12 +323,15 @@ export default function SiteFormsPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <select value={days} onChange={(e) => setDays(Number(e.target.value))}
-            className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-700 focus:outline-none" aria-label="Período">
-            <option value={7}>Últimos 7 dias</option>
-            <option value={30}>Últimos 30 dias</option>
-            <option value={90}>Últimos 90 dias</option>
-          </select>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-gray-400 tabular-nums hidden sm:inline">{periodCaption(days)}</span>
+            <select value={days} onChange={(e) => setDays(Number(e.target.value))}
+              className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-700 focus:outline-none" aria-label="Período">
+              <option value={7}>Últimos 7 dias</option>
+              <option value={30}>Últimos 30 dias</option>
+              <option value={90}>Últimos 90 dias</option>
+            </select>
+          </div>
           <button onClick={() => setShowCreate(true)}
             className="flex items-center gap-2 px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-xl transition-colors shadow-sm">
             <Plus size={16} weight="bold" />
@@ -322,7 +344,7 @@ export default function SiteFormsPage() {
         <div className="flex items-center gap-2 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3">
           <WarningCircle size={16} className="text-amber-600 flex-shrink-0" weight="fill" />
           <span className="text-xs text-amber-700">
-            As métricas por dia ainda não estão disponíveis neste ambiente (migration <code className="font-mono">{missingMigration}</code> pendente).
+            As métricas de popup ainda não estão disponíveis neste ambiente (migration <code className="font-mono">{missingMigration}</code> pendente).
           </span>
         </div>
       )}
@@ -334,7 +356,7 @@ export default function SiteFormsPage() {
           { label: `Visualizações · ${days}d`, value: int(kpis.impressions), hint: 'impressões de popup' },
           { label: `Inscrições · ${days}d`, value: int(kpis.submissions), hint: 'envios de formulário' },
           { label: 'Taxa de envio', value: pct(kpis.submitRate), hint: 'inscrições ÷ visualizações' },
-          { label: 'Receita atribuída', value: formatCurrency(kpis.revenue), hint: 'pedidos após inscrição' },
+          { label: 'Receita atribuída · total', value: formatCurrency(kpis.revenue, currentStore?.currency), hint: 'desde a criação, pedidos após inscrição' },
         ].map((k) => (
           <div key={k.label} className="bg-white border border-gray-200 rounded-xl p-5">
             <p className="text-xs text-gray-500 font-medium">{k.label}</p>
@@ -358,7 +380,7 @@ export default function SiteFormsPage() {
           ))}
         </div>
         <div className="flex gap-1">
-          {([['all', 'Qualquer status'], ['published', 'Ativos'], ['draft', 'Rascunhos']] as const).map(([s, l]) => (
+          {([['all', 'Qualquer status'], ['published', 'Ativos'], ['paused', 'Pausados'], ['draft', 'Rascunhos']] as const).map(([s, l]) => (
             <FilterChip key={s} active={statusFilter === s} onClick={() => setStatusFilter(s)} muted>{l}</FilterChip>
           ))}
         </div>
@@ -384,7 +406,7 @@ export default function SiteFormsPage() {
                 <th className="p-4 pb-3 text-right">Visualizações</th>
                 <th className="p-4 pb-3 text-right">Inscrições</th>
                 <th className="p-4 pb-3 text-right">Taxa</th>
-                <th className="p-4 pb-3 text-right">Receita atribuída</th>
+                <th className="p-4 pb-3 text-right">Receita atribuída <span className="font-normal text-gray-400">· total</span></th>
                 <th className="p-4 pb-3 text-right">Ações</th>
               </tr>
             </thead>
@@ -428,7 +450,7 @@ export default function SiteFormsPage() {
                     <td className="p-4 text-right tabular-nums">
                       {s.attributed_revenue > 0 ? (
                         <div>
-                          <p className="text-sm text-gray-800 font-medium">{formatCurrency(s.attributed_revenue)}</p>
+                          <p className="text-sm text-gray-800 font-medium">{formatCurrency(s.attributed_revenue, currentStore?.currency)}</p>
                           <p className="text-[11px] text-gray-400">{int(s.attributed_orders)} pedido{s.attributed_orders === 1 ? '' : 's'}{s.driven_orders > 0 ? ` · ${int(s.driven_orders)} com cupom` : ''}</p>
                         </div>
                       ) : (
@@ -436,10 +458,10 @@ export default function SiteFormsPage() {
                       )}
                     </td>
                     <td className="p-4">
-                      <div className="flex items-center gap-1 justify-end opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                      <div className="flex items-center gap-1 justify-end md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100 transition-opacity">
                         <IconBtn title="Editar" onClick={() => router.push(editorPath(f))}><PencilSimple size={14} /></IconBtn>
                         <IconBtn title="Analytics" onClick={() => router.push(`/forms/${f.id}/analytics`)}><ChartLineUp size={14} /></IconBtn>
-                        <IconBtn title={f.status === 'published' ? 'Desativar' : 'Ativar'} onClick={() => toggleStatus(f)} disabled={busy}><Power size={14} /></IconBtn>
+                        <IconBtn title={f.status === 'published' ? 'Pausar' : 'Ativar'} onClick={() => toggleStatus(f)} disabled={busy}><Power size={14} /></IconBtn>
                         <IconBtn title="Duplicar" onClick={() => duplicate(f)} disabled={busy}><Copy size={14} /></IconBtn>
                         <IconBtn title="Excluir" onClick={() => remove(f)} disabled={busy} danger><Trash size={14} /></IconBtn>
                       </div>
@@ -473,18 +495,21 @@ export default function SiteFormsPage() {
 
       {/* Criar */}
       {showCreate && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center pt-[6vh] overflow-y-auto" onClick={() => setShowCreate(false)}>
-          <div onClick={(e) => e.stopPropagation()} className="bg-white border border-gray-200 rounded-2xl w-full max-w-4xl mx-4 mb-8 overflow-hidden shadow-2xl">
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center pt-[6vh] overflow-y-auto" onClick={() => setShowCreate(false)}
+          onKeyDown={(e) => { if (e.key === 'Escape') setShowCreate(false) }}>
+          <div role="dialog" aria-modal="true" aria-labelledby="new-popup-title" onClick={(e) => e.stopPropagation()}
+            ref={(el) => { if (el && !el.contains(document.activeElement)) el.querySelector<HTMLElement>('button[data-first]')?.focus() }}
+            className="bg-white border border-gray-200 rounded-2xl w-full max-w-4xl mx-4 mb-8 overflow-hidden shadow-2xl">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
               <div>
-                <h2 className="text-lg font-bold text-gray-900">Novo popup</h2>
+                <h2 id="new-popup-title" className="text-lg font-bold text-gray-900">Novo popup</h2>
                 <p className="text-xs text-gray-500 mt-0.5">Cada modelo abre pronto no editor — texto, campos, consentimento e cupom já no lugar.</p>
               </div>
               <button onClick={() => setShowCreate(false)} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500" aria-label="Fechar"><X size={18} /></button>
             </div>
             <div className="px-6 pt-4 pb-2 border-b border-gray-100 flex gap-1 overflow-x-auto">
-              {TEMPLATE_CATEGORIES.map((c) => (
-                <FilterChip key={c.id} active={templateCategory === c.id} onClick={() => setTemplateCategory(c.id)}>{c.label}</FilterChip>
+              {TEMPLATE_CATEGORIES.map((c, i) => (
+                <FilterChip key={c.id} active={templateCategory === c.id} onClick={() => setTemplateCategory(c.id)} first={i === 0}>{c.label}</FilterChip>
               ))}
             </div>
             <div className="p-6 max-h-[60vh] overflow-y-auto">
@@ -513,10 +538,10 @@ export default function SiteFormsPage() {
   )
 }
 
-function FilterChip({ active, onClick, children, muted }: { active: boolean; onClick: () => void; children: React.ReactNode; muted?: boolean }) {
+function FilterChip({ active, onClick, children, muted, first }: { active: boolean; onClick: () => void; children: React.ReactNode; muted?: boolean; first?: boolean }) {
   const on = muted ? 'bg-gray-200 text-gray-900' : 'bg-brand-500 text-white'
   return (
-    <button onClick={onClick} className={`px-3 py-1.5 text-xs rounded-lg transition-colors whitespace-nowrap ${active ? on : 'bg-gray-50 text-gray-500 hover:text-gray-700'}`}>
+    <button onClick={onClick} {...(first ? { 'data-first': '' } : {})} className={`px-3 py-1.5 text-xs rounded-lg transition-colors whitespace-nowrap ${active ? on : 'bg-gray-50 text-gray-500 hover:text-gray-700'}`}>
       {children}
     </button>
   )
