@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent, DragOverlay, type DragStartEvent } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import { TRAFFIC_TYPES, PAGE_TEMPLATES } from '@/lib/popups/targeting'
 import {
   ArrowLeft, Save, Loader2, Monitor, Smartphone, Plus, Trash2, X, Undo2, Redo2, Copy,
   ChevronDown, ChevronRight, GripVertical, Users, CalendarDays, Target, Power,
@@ -109,7 +110,25 @@ interface PopupDesign {
       minTotal?: number
       maxTotal?: number
       minItems?: number
+      // Pelo conteúdo: só quando o carrinho tem (any) ou não tem (none)
+      // algum dos produtos — por handle, tipo ou fornecedor.
+      contains?: { enabled: boolean; match: 'any' | 'none'; handles: string[]; types: string[]; vendors: string[] }
     }
+    // Quem vê, pelo que sabemos da pessoa: só quem está (ou exceto quem
+    // está) em segmentos e listas. Decidido no servidor, nunca no navegador.
+    audienceTargeting?: { mode: 'off' | 'include' | 'exclude'; segmentIds: string[]; listIds: string[] }
+    // Contexto da página: template da Shopify e o produto/coleção em vista.
+    page?: {
+      enabled: boolean
+      templates: string[]
+      productHandles: string[]
+      productTypes: string[]
+      productVendors: string[]
+      productTags: string[]
+      collectionHandles: string[]
+    }
+    // Origem do tráfego da sessão (direto, busca, anúncio, social...).
+    traffic?: { enabled: boolean; types: string[] }
     progressiveProfiling?: {
       enabled: boolean
       hideKnownFields: boolean
@@ -354,6 +373,20 @@ function ToggleRow({ label, checked, onChange, hint }: { label: string; checked:
         className={`relative w-9 h-5 rounded-full flex-shrink-0 transition-colors ${checked ? 'bg-zinc-900' : 'bg-gray-200'}`}>
         <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
       </button>
+    </div>
+  )
+}
+
+// Lista de caixas de seleção com rolagem, para segmentos e listas.
+function CheckList({ items, selected, onToggle }: { items: Array<{ id: string; name: string }>; selected: string[]; onToggle: (id: string) => void }) {
+  return (
+    <div className="max-h-44 overflow-y-auto rounded-lg border border-gray-200 divide-y divide-gray-100">
+      {items.map(it => (
+        <label key={it.id} className="flex items-center gap-2 px-2.5 py-1.5 text-[12px] text-gray-700 cursor-pointer hover:bg-gray-50">
+          <input type="checkbox" className="rounded border-gray-300" checked={selected.includes(it.id)} onChange={() => onToggle(it.id)} />
+          <span className="truncate">{it.name}</span>
+        </label>
+      ))}
     </div>
   )
 }
@@ -2160,9 +2193,28 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
     return () => { cancelled = true }
   }, [])
 
+  // Segmentos da org, para o gate de audiência. Só nome e id.
+  const [orgSegments, setOrgSegments] = useState<Array<{ id: string; name: string; segment_type?: string }>>([])
+  const [segmentsLoaded, setSegmentsLoaded] = useState(false)
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/segments?active_only=true')
+      .then(r => r.ok ? r.json() : { segments: [] })
+      .then(d => { if (!cancelled) setOrgSegments((d?.segments || []).map((s: any) => ({ id: s.id, name: s.name, segment_type: s.segment_type }))) })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setSegmentsLoaded(true) })
+    return () => { cancelled = true }
+  }, [])
+
   const d: any = beh.display || {}
   const freq = beh.frequency
   const vis = beh.visibility
+  const aud = beh.audienceTargeting || { mode: 'off' as const, segmentIds: [], listIds: [] }
+  const page = beh.page || { enabled: false, templates: [], productHandles: [], productTypes: [], productVendors: [], productTags: [], collectionHandles: [] }
+  const traffic = beh.traffic || { enabled: false, types: [] }
+  const cartHas = beh.cart?.contains || { enabled: false, match: 'any' as const, handles: [], types: [], vendors: [] }
+  const linesOf = (v: string) => v.split('\n').map(x => x.trim()).filter(Boolean)
+  const toggleIn = (list: string[], key: string) => list.includes(key) ? list.filter(k => k !== key) : [...list, key]
   const urls = beh.urls || { includeEnabled: false, includeUrls: [], excludeEnabled: false, excludeUrls: [] }
   const loc = beh.location || { includeEnabled: false, includeCountries: [], excludeEnabled: false, excludeCountries: [] }
   const utm = beh.utm || { storeOnConsent: false, filterEnabled: false, filters: [] }
@@ -2464,6 +2516,49 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
               checked={vis.hideFromSubscribers} onChange={v => setG('visibility', { hideFromSubscribers: v })} />
           </Section>
 
+          <Section title="Segmentos e listas">
+            <p className="text-[11px] text-gray-400 leading-snug -mt-1">
+              Vale para visitantes que já reconhecemos (cookie, link de e-mail ou WhatsApp, login na loja). Quem é desconhecido não está em segmento nenhum.
+            </p>
+            <Field label="Regra">
+              <select className={sel} value={aud.mode} onChange={e => setG('audienceTargeting', { mode: e.target.value })}>
+                <option value="off">Não filtrar por segmento</option>
+                <option value="include">Mostrar somente a quem está em…</option>
+                <option value="exclude">Mostrar a todos, exceto quem está em…</option>
+              </select>
+            </Field>
+            {aud.mode !== 'off' && (
+              <div className="space-y-3">
+                <div>
+                  <p className="text-[11px] font-bold text-gray-500 uppercase tracking-[0.08em] mb-1.5">Segmentos</p>
+                  {!segmentsLoaded ? (
+                    <p className="text-[11px] text-gray-400">Carregando…</p>
+                  ) : orgSegments.length === 0 ? (
+                    <div className="text-[11px] text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
+                      Nenhum segmento ainda. <a href="/contacts/segments" target="_blank" className="text-zinc-900 underline underline-offset-2 font-medium">Criar segmento</a>.
+                    </div>
+                  ) : (
+                    <CheckList items={orgSegments} selected={aud.segmentIds} onToggle={id => setG('audienceTargeting', { segmentIds: toggleIn(aud.segmentIds, id) })} />
+                  )}
+                </div>
+                <div>
+                  <p className="text-[11px] font-bold text-gray-500 uppercase tracking-[0.08em] mb-1.5">Listas</p>
+                  {!listsLoaded ? (
+                    <p className="text-[11px] text-gray-400">Carregando…</p>
+                  ) : orgLists.length === 0 ? (
+                    <div className="text-[11px] text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">Nenhuma lista criada ainda.</div>
+                  ) : (
+                    <CheckList items={orgLists} selected={aud.listIds} onToggle={id => setG('audienceTargeting', { listIds: toggleIn(aud.listIds, id) })} />
+                  )}
+                </div>
+                {aud.segmentIds.length + aud.listIds.length === 0 && (
+                  <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">Escolha ao menos um segmento ou lista — sem isso a regra não faz nada.</p>
+                )}
+                <p className="text-[11px] text-gray-400 leading-snug">Segmentos dinâmicos são reavaliados a cada 15 minutos; listas valem na hora.</p>
+              </div>
+            )}
+          </Section>
+
           <Section title="Carrinho">
             <p className="text-[11px] text-gray-400 leading-snug -mt-1">
               Mostra o formulario somente quando o carrinho do visitante atende os criterios. Le <code className="px-1 bg-gray-100 rounded text-[10px]">/cart.js</code> da Shopify.
@@ -2495,6 +2590,35 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
                 </Field>
               </div>
             )}
+            <div className="pt-3 border-t border-gray-100">
+              <ToggleRow label="Filtrar pelo que está no carrinho" hint="Por handle do produto, tipo ou fornecedor. Aceita * como coringa."
+                checked={!!cartHas.enabled}
+                onChange={v => setG('cart', { contains: { ...cartHas, enabled: v } })} />
+              {cartHas.enabled && (
+                <div className="mt-2 space-y-2">
+                  <Field label="Mostrar quando o carrinho">
+                    <select className={sel} value={cartHas.match} onChange={e => setG('cart', { contains: { ...cartHas, match: e.target.value } })}>
+                      <option value="any">tem algum destes produtos</option>
+                      <option value="none">não tem nenhum destes produtos</option>
+                    </select>
+                  </Field>
+                  <Field label="Handles de produto" hint="Um por linha. Ex.: kit-skincare, camiseta-*">
+                    <textarea rows={2} className={inp + ' font-mono text-[11px]'} value={cartHas.handles.join('\n')}
+                      onChange={e => setG('cart', { contains: { ...cartHas, handles: linesOf(e.target.value) } })} />
+                  </Field>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Field label="Tipos de produto">
+                      <textarea rows={2} className={inp + ' font-mono text-[11px]'} value={cartHas.types.join('\n')}
+                        onChange={e => setG('cart', { contains: { ...cartHas, types: linesOf(e.target.value) } })} />
+                    </Field>
+                    <Field label="Fornecedores">
+                      <textarea rows={2} className={inp + ' font-mono text-[11px]'} value={cartHas.vendors.join('\n')}
+                        onChange={e => setG('cart', { contains: { ...cartHas, vendors: linesOf(e.target.value) } })} />
+                    </Field>
+                  </div>
+                </div>
+              )}
+            </div>
           </Section>
 
           <Section title="URLs">
@@ -2517,6 +2641,41 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
                   onChange={e => setG('urls', { excludeUrls: e.target.value.split('\n').map(u => u.trim()).filter(Boolean) })} />
               )}
             </div>
+          </Section>
+
+          <Section title="Pagina">
+            <p className="text-[11px] text-gray-400 leading-snug -mt-1">
+              Pelo tipo de página da Shopify e, em páginas de produto ou coleção, pelo que está sendo visto. Precisa do bloco de tema da Worder ativo; sem ele, deduz pela URL.
+            </p>
+            <ToggleRow label="Filtrar pelo contexto da página" checked={page.enabled} onChange={v => setG('page', { enabled: v })} />
+            {page.enabled && (
+              <div className="mt-2 space-y-3">
+                <div>
+                  <p className="text-[11px] font-bold text-gray-500 uppercase tracking-[0.08em] mb-1.5">Tipos de página <span className="normal-case font-normal tracking-normal text-gray-400">(nenhum = todos)</span></p>
+                  <div className="grid grid-cols-2 gap-x-2 gap-y-1">
+                    {PAGE_TEMPLATES.map(t => (
+                      <label key={t.key} className="flex items-center gap-2 text-[12px] text-gray-700 cursor-pointer py-0.5">
+                        <input type="checkbox" className="rounded border-gray-300" checked={page.templates.includes(t.key)}
+                          onChange={() => setG('page', { templates: toggleIn(page.templates, t.key) })} />
+                        {t.label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div className="pt-3 border-t border-gray-100 space-y-2">
+                  <p className="text-[11px] font-bold text-gray-500 uppercase tracking-[0.08em]">Produto em vista <span className="normal-case font-normal tracking-normal text-gray-400">(basta bater um)</span></p>
+                  <Field label="Handles" hint="Um por linha. Aceita * como coringa."><textarea rows={2} className={inp + ' font-mono text-[11px]'} value={page.productHandles.join('\n')} onChange={e => setG('page', { productHandles: linesOf(e.target.value) })} /></Field>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Field label="Tipos"><textarea rows={2} className={inp + ' font-mono text-[11px]'} value={page.productTypes.join('\n')} onChange={e => setG('page', { productTypes: linesOf(e.target.value) })} /></Field>
+                    <Field label="Fornecedores"><textarea rows={2} className={inp + ' font-mono text-[11px]'} value={page.productVendors.join('\n')} onChange={e => setG('page', { productVendors: linesOf(e.target.value) })} /></Field>
+                  </div>
+                  <Field label="Tags do produto"><textarea rows={2} className={inp + ' font-mono text-[11px]'} value={page.productTags.join('\n')} onChange={e => setG('page', { productTags: linesOf(e.target.value) })} /></Field>
+                </div>
+                <div className="pt-3 border-t border-gray-100">
+                  <Field label="Coleção em vista" hint="Handles, um por linha."><textarea rows={2} className={inp + ' font-mono text-[11px]'} value={page.collectionHandles.join('\n')} onChange={e => setG('page', { collectionHandles: linesOf(e.target.value) })} /></Field>
+                </div>
+              </div>
+            )}
           </Section>
 
           <Section title="Localizacao">
@@ -2607,6 +2766,27 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
                 </div>
               )}
             </div>
+          </Section>
+
+          <Section title="Origem do trafego">
+            <p className="text-[11px] text-gray-400 leading-snug -mt-1">
+              Classificada uma vez por sessão pelos parâmetros da URL de entrada e pelo site de origem. Vale nas páginas seguintes da mesma visita.
+            </p>
+            <ToggleRow label="Mostrar só para certas origens" checked={traffic.enabled} onChange={v => setG('traffic', { enabled: v })} />
+            {traffic.enabled && (
+              <div className="mt-2 space-y-1">
+                {TRAFFIC_TYPES.map(t => (
+                  <label key={t.key} className="flex items-start gap-2 text-[12px] text-gray-700 cursor-pointer py-1">
+                    <input type="checkbox" className="rounded border-gray-300 mt-0.5" checked={traffic.types.includes(t.key)}
+                      onChange={() => setG('traffic', { types: toggleIn(traffic.types, t.key) })} />
+                    <span><span className="font-medium">{t.label}</span><span className="block text-[11px] text-gray-400 leading-snug">{t.hint}</span></span>
+                  </label>
+                ))}
+                {traffic.types.length === 0 && (
+                  <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mt-1">Marque ao menos uma origem — sem isso o filtro não faz nada.</p>
+                )}
+              </div>
+            )}
           </Section>
         </div>
       )}

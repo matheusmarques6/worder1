@@ -24,6 +24,7 @@ import {
   type ConsentRecordInput,
 } from '@/lib/forms/consent'
 import { isValidEmail } from '@/lib/email/validation'
+import { trafficTypeOrNull, pageKindOrNull } from '@/lib/popups/targeting'
 
 export const dynamic = 'force-dynamic'
 
@@ -897,6 +898,10 @@ export async function POST(
       page_url: pageUrl,
       country: visitorCountry,
       device: visitorDevice,
+      // Origem da sessão e tipo de página, como o runtime classificou.
+      // Vocabulário fechado: fora dele vira nulo, não texto livre.
+      traffic_type: trafficTypeOrNull((body as any)?.traffic_type),
+      page_kind: pageKindOrNull((body as any)?.page_kind),
     }
     let { data: submission, error: subError } = await supabase
       .from('crm_form_submissions')

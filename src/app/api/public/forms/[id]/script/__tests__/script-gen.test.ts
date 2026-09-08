@@ -112,7 +112,7 @@ describe('buildPopupScript (generated string)', () => {
   })
 
   it('R6: impressions go through the /events beacon — never the submit _track path', () => {
-    expect(js).toContain('beacon("impression",{bucket:"exposed"})')
+    expect(js).toContain('beacon("impression",{bucket:"exposed",traffic:TRAFFIC,page:PAGE.kind})')
     expect(js).not.toContain('_track:"impression"')
   })
 
@@ -207,6 +207,16 @@ describe('buildPopupScript (generated string)', () => {
 
   it('embeds skip suppression cookies on close', () => {
     expect(js).toContain('if(isEmbed)return')
+  })
+
+  it('targeting gates are in the runtime: page context, traffic type, cart contents, audience', () => {
+    expect(js).toContain('var pageCfg=B.page||{}')
+    expect(js).toContain('window.__worder')
+    expect(js).toContain('var trafficCfg=B.traffic||{}')
+    expect(js).toContain('sessionStorage.setItem(key,t)')
+    expect(js).toContain('var cartHas=cartCfg.contains||{}')
+    expect(js).toContain('var audCfg=B.audienceTargeting||{}')
+    expect(js).toContain('audience gate — no visitor id')
   })
 
   it('serializes the design and form id', () => {

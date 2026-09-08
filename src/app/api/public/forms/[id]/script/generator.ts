@@ -387,6 +387,88 @@ var tgt=B.targeting||{};
 if(tgt.pages==="specific"&&tgt.pageUrls&&tgt.pageUrls.length>0){
   if(!tgt.pageUrls.some(function(p){return pagePath.indexOf(p)>=0}))return;
 }
+// Contexto da página (B.page): tipo de template e, em produto/coleção, o
+// que está sendo visto. Vem do bloco de tema (window.__worder.template /
+// product / collection); sem ele, deduz pelo caminho da Shopify.
+function lc(v){return String(v==null?"":v).toLowerCase().trim()}
+function lcList(a){return(a||[]).map(lc).filter(Boolean)}
+function anyMatch(list,value){var v=lc(value);if(!v)return false;return list.some(function(p){return p===v||matchUrl(p,v)})}
+function pageContext(){
+  var w=window.__worder||{};
+  var tpl=lc(w.template);
+  if(!tpl){
+    if(pagePath==="/"||pagePath==="")tpl="index";
+    else if(pagePath.indexOf("/products/")>=0)tpl="product";
+    else if(pagePath.indexOf("/collections")>=0)tpl=(/\\/collections\\/?$/.test(pagePath))?"list-collections":"collection";
+    else if(pagePath.indexOf("/cart")===0)tpl="cart";
+    else if(pagePath.indexOf("/search")===0)tpl="search";
+    else if(pagePath.indexOf("/blogs/")>=0)tpl=(pagePath.split("/").filter(Boolean).length>=3)?"article":"blog";
+    else if(pagePath.indexOf("/pages/")>=0)tpl="page";
+    else tpl="other";
+  }
+  var kind=tpl.split(".")[0];
+  if(["index","product","collection","list-collections","cart","search","blog","article","page"].indexOf(kind)<0)kind="other";
+  var product=w.product||null;
+  if(!product&&kind==="product"){var mh=pagePath.match(/\\/products\\/([^\\/?#]+)/);if(mh)product={handle:decodeURIComponent(mh[1])}}
+  var collection=w.collection||null;
+  if(!collection&&kind==="collection"){var mc=pagePath.match(/\\/collections\\/([^\\/?#]+)/);if(mc)collection={handle:decodeURIComponent(mc[1])}}
+  return{kind:kind,product:product,collection:collection};
+}
+var pageCfg=B.page||{};
+var PAGE=pageContext();
+if(pageCfg.enabled){
+  var tpls=lcList(pageCfg.templates);
+  if(tpls.length&&tpls.indexOf(PAGE.kind)<0){blockedBy("page gate — template "+PAGE.kind+" not in "+JSON.stringify(tpls));return}
+  var pH=lcList(pageCfg.productHandles),pT=lcList(pageCfg.productTypes),pV=lcList(pageCfg.productVendors),pG=lcList(pageCfg.productTags);
+  if(pH.length||pT.length||pV.length||pG.length){
+    var pr=PAGE.product;
+    if(!pr){blockedBy("page gate — product filter but no product on page");return}
+    var prTags=Array.isArray(pr.tags)?pr.tags:String(pr.tags||"").split(",");
+    var okP=(pH.length&&anyMatch(pH,pr.handle))||(pT.length&&anyMatch(pT,pr.type))||(pV.length&&anyMatch(pV,pr.vendor))||
+            (pG.length&&prTags.some(function(t){return anyMatch(pG,t)}));
+    if(!okP){blockedBy("page gate — product does not match filters");return}
+  }
+  var cH=lcList(pageCfg.collectionHandles);
+  if(cH.length){
+    if(!PAGE.collection||!anyMatch(cH,PAGE.collection.handle)){blockedBy("page gate — collection does not match");return}
+  }
+}
+// Origem do tráfego (B.traffic): classificada uma vez por sessão a partir
+// dos parâmetros da URL de entrada e do referrer, e guardada na sessão para
+// valer nas navegações internas (onde o referrer vira a própria loja).
+function classifyTraffic(){
+  var qs=new URLSearchParams(location.search);
+  var med=lc(qs.get("utm_medium")),src=lc(qs.get("utm_source"));
+  var ref="";try{ref=document.referrer||""}catch(e){}
+  var refHost="";try{if(ref)refHost=new URL(ref).hostname.toLowerCase()}catch(e){}
+  var internal=refHost&&(refHost===location.hostname.toLowerCase());
+  var hasUtm=!!(med||src);
+  if(qs.get("gclid")||qs.get("gbraid")||qs.get("wbraid")||qs.get("fbclid")||qs.get("ttclid")||qs.get("msclkid"))return"paid";
+  if(/cpc|ppc|paid|display|retarget|cpm|banner|ads?$/.test(med))return"paid";
+  if(/^e?mail|newsletter/.test(med)||/mail|newsletter|klaviyo|mailchimp|rd ?station/.test(src))return"email";
+  if(/whatsapp|sms|messag|zap/.test(med)||/whatsapp|sms|zap/.test(src))return"messaging";
+  if(/social|instagram|facebook|tiktok|youtube|pinterest|twitter|linkedin/.test(med)||/instagram|facebook|tiktok|youtube|pinterest|twitter|linkedin|^ig$|^fb$/.test(src))return"social";
+  if(hasUtm)return"referral";
+  if(!ref||internal)return null;
+  if(/(^|\\.)(google|bing|yahoo|duckduckgo|yandex|baidu|ecosia|ask)\\./.test(refHost))return"organic";
+  if(/(^|\\.)(facebook|instagram|tiktok|youtube|pinterest|twitter|x|t|linkedin|reddit|threads|snapchat)\\.(com|co|net|org)$/.test(refHost)||/^(l|lm|m|www)\\.(facebook|instagram)\\.com$/.test(refHost))return"social";
+  return"referral";
+}
+function trafficType(){
+  var key="_wf_traffic",stored=null;
+  try{stored=sessionStorage.getItem(key)}catch(e){}
+  var t=classifyTraffic();
+  if(t){try{sessionStorage.setItem(key,t)}catch(e){}return t}
+  if(stored)return stored;
+  t="direct";
+  try{sessionStorage.setItem(key,t)}catch(e){}
+  return t;
+}
+var trafficCfg=B.traffic||{};
+var TRAFFIC=trafficType();
+if(trafficCfg.enabled&&trafficCfg.types&&trafficCfg.types.length){
+  if(trafficCfg.types.indexOf(TRAFFIC)<0){blockedBy("traffic gate — "+TRAFFIC+" not in "+JSON.stringify(trafficCfg.types));return}
+}
 // Location gate — país resolvido pela NOSSA borda (/api/public/geo), nunca
 // por um terceiro que receberia o IP do visitante. Cache de sessão; falha
 // aberta.
@@ -822,7 +904,7 @@ function show(){
   }
   // Impressão → /events: persiste na série diária E bate os contadores.
   // (O antigo {_track:'impression'} no submit só batia contador.)
-  beacon("impression",{bucket:"exposed"});
+  beacon("impression",{bucket:"exposed",traffic:TRAFFIC,page:PAGE.kind});
   wfEmit("popupView",{formType:formType});
   // novalidate: our validator replaces browser-native bubbles (R9), so
   // visitors never see the browser's locale-specific messages.
@@ -1027,6 +1109,7 @@ function show(){
       if(sid)payload.session_id=sid;
       try{payload.page_url=location.href}catch(e){}
       if(stepPath.length)payload.step_path=stepPath.slice(0,30);
+      payload.traffic_type=TRAFFIC;payload.page_kind=PAGE.kind;
       fetch(BU+"/api/public/forms/"+FID+"/submit",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})
       .then(function(r){return r.json().catch(function(){return{}}).then(function(j){return{ok:r.ok,status:r.status,body:j}})})
       .then(function(out){
@@ -1221,18 +1304,33 @@ var delaySec=disp.delay!=null?disp.delay:(disp.delaySeconds!=null?disp.delaySeco
 
 // Cart-value gate — async, fails open.
 var cartCfg=B.cart||{};
+var cartHas=cartCfg.contains||{};
+var chH=lcList(cartHas.handles),chT=lcList(cartHas.types),chV=lcList(cartHas.vendors);
+var cartHasOn=!!cartHas.enabled&&(chH.length||chT.length||chV.length);
+function cartItemMatches(it){
+  return(chH.length&&anyMatch(chH,it.handle))||(chT.length&&anyMatch(chT,it.product_type))||(chV.length&&anyMatch(chV,it.vendor));
+}
 function runCartGate(cb){
   var minP=Number(cartCfg.minTotal||0);
   var maxP=Number(cartCfg.maxTotal||0);
   var minI=Number(cartCfg.minItems||0);
-  if(!cartCfg.enabled||(minP<=0&&maxP<=0&&minI<=0)){cb(true);return}
+  var wantsTotals=!!cartCfg.enabled&&(minP>0||maxP>0||minI>0);
+  if(!wantsTotals&&!cartHasOn){cb(true);return}
   try{
     fetch("/cart.js",{credentials:"same-origin"}).then(function(r){return r.json()}).then(function(c){
       var total=Number(c.total_price||0)/100;
       var items=Number(c.item_count||0);
-      if(minP>0&&total<minP){cb(false);return}
-      if(maxP>0&&total>maxP){cb(false);return}
-      if(minI>0&&items<minI){cb(false);return}
+      if(wantsTotals){
+        if(minP>0&&total<minP){cb(false);return}
+        if(maxP>0&&total>maxP){cb(false);return}
+        if(minI>0&&items<minI){cb(false);return}
+      }
+      if(cartHasOn){
+        // "any": só mostra se o carrinho tem um dos produtos; "none": só se
+        // não tem nenhum (ex.: oferecer o item que falta no kit).
+        var hit=(c.items||[]).some(cartItemMatches);
+        if(cartHas.match==="none"?hit:!hit){cb(false);return}
+      }
       cb(true);
     }).catch(function(){cb(true)});
   }catch(e){cb(true)}
@@ -1271,13 +1369,17 @@ function holdoutBucket(){
   return b;
 }
 
-// Async subscriber gate — server check, 10-minute cache, fails open.
+// Gate do servidor — inscritos e audiência (segmentos/listas). Uma ida só,
+// cache de 10 minutos, falha aberta. Segmento "somente quem está" sem
+// visitante identificado é a exceção: desconhecido não está em segmento.
+var audCfg=B.audienceTargeting||{};
+var audOn=(audCfg.mode==="include"||audCfg.mode==="exclude")&&(((audCfg.segmentIds||[]).length+(audCfg.listIds||[]).length)>0);
 function runSubscriberGate(cb){
   if(DBG){dlog("subscriber gate bypassed (debug mode)");cb(true);return}
-  if(!vis.hideFromSubscribers){cb(true);return}
+  if(!vis.hideFromSubscribers&&!audOn){cb(true);return}
   // O mesmo id que a submissão grava — não só o cookie, que o Safari apaga.
   var vid=getVisitorId();
-  if(!vid){cb(true);return}
+  if(!vid){if(audOn&&audCfg.mode==="include"){blockedBy("audience gate — no visitor id");cb(false);return}cb(true);return}
   var ckCache="_wf_paw_"+FID;
   try{
     var raw=localStorage.getItem(ckCache);
@@ -1294,7 +1396,7 @@ function runSubscriberGate(cb){
   fetch(url).then(function(r){return r.json()}).then(function(j){
     var allowed=j&&j.allowed!==false;
     try{localStorage.setItem(ckCache,JSON.stringify({t:Date.now(),a:allowed}))}catch(e){}
-    if(!allowed)blockedBy("subscriber gate — server says "+(j&&j.reason||"not allowed"));
+    if(!allowed)blockedBy("server gate — "+(j&&j.reason||"not allowed"));
     cb(allowed);
   }).catch(function(){cb(true)});
 }

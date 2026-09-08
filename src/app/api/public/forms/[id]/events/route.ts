@@ -28,6 +28,7 @@ import { NextRequest } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
 import { corsJson, corsError, corsPreflight } from '@/lib/forms/public-cors';
+import { trafficTypeOrNull, pageKindOrNull } from '@/lib/popups/targeting';
 
 export const dynamic = 'force-dynamic';
 
@@ -115,6 +116,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
             user_agent: userAgent,
             ip_address: ip,
             referrer: shortText(body.referrer, 2048),
+            traffic: trafficTypeOrNull(body.traffic),
+            page: pageKindOrNull(body.page),
           },
           occurred_at: occurredAt,
         });

@@ -102,6 +102,9 @@ beforeEach(() => {
   document.head.innerHTML = ''
   localStorage.clear()
   sessionStorage.clear()
+  window.history.replaceState({}, '', '/')
+  Object.defineProperty(document, 'referrer', { value: '', configurable: true })
+  delete (window as any).__worder
   document.cookie.split(';').forEach((c) => {
     const n = c.split('=')[0].trim()
     if (n) document.cookie = `${n}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`
@@ -412,5 +415,155 @@ describe('runtime no DOM', () => {
     const id = run(design(), behavior({ location: { includeEnabled: true, includeCountries: ['BR', 'PT'] } }))
     await vi.runAllTimersAsync()
     expect(ov(id)).not.toBeNull()
+  })
+})
+
+describe('targeting: página, tráfego, carrinho e audiência', () => {
+  // Cada run() abaixo é uma pageview nova: o mutex de um popup por vez e o
+  // registro de prioridade vivem em window e barrariam o segundo popup.
+  function freshPage() {
+    for (const k of Object.keys(window)) if (k.startsWith('__wf')) delete (window as any)[k]
+  }
+  function withFetch(handler: (url: string) => Response | null) {
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => handler(String(url)) || fetchMock(url, init)))
+  }
+
+  it('tráfego: sem referrer é direto e a impressão e o envio carregam origem e tipo de página', async () => {
+    const id = run(design(), behavior({ traffic: { enabled: true, types: ['direct'] } }))
+    vi.advanceTimersByTime(1000)
+    expect(ov(id)).not.toBeNull()
+    const imp = eventsFor(id).find((e) => e.type === 'impression')!
+    expect(imp.traffic).toBe('direct')
+    expect(imp.page).toBe('index')
+    formEl(id)!.querySelector<HTMLInputElement>('input[name="email"]')!.value = 'q@example.com'
+    formEl(id)!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await vi.runAllTimersAsync()
+    const submit = calls.find((c) => c.url === `${BU}/api/public/forms/${id}/submit`)!
+    expect(submit.body.traffic_type).toBe('direct')
+    expect(submit.body.page_kind).toBe('index')
+  })
+
+  it('tráfego: utm_medium=cpc é pago, fica na sessão e bloqueia quem só quer orgânico', () => {
+    window.history.replaceState({}, '', '/?utm_medium=cpc&utm_source=google')
+    const a = run(design(), behavior({ traffic: { enabled: true, types: ['organic'] } }))
+    vi.advanceTimersByTime(1000)
+    expect(ov(a)).toBeNull()
+    expect(sessionStorage.getItem('_wf_traffic')).toBe('paid')
+    // Navegação interna: sem UTM, referrer é a própria loja — vale o da sessão.
+    window.history.replaceState({}, '', '/products/x')
+    Object.defineProperty(document, 'referrer', { value: 'http://localhost/?utm_medium=cpc', configurable: true })
+    freshPage()
+    const b = run(design(), behavior({ traffic: { enabled: true, types: ['paid'] } }))
+    vi.advanceTimersByTime(1000)
+    expect(ov(b)).not.toBeNull()
+  })
+
+  it('tráfego: referrer de buscador é orgânico, de rede social é social, gclid é pago', () => {
+    Object.defineProperty(document, 'referrer', { value: 'https://www.google.com/', configurable: true })
+    const a = run(design(), behavior({ traffic: { enabled: true, types: ['organic'] } }))
+    vi.advanceTimersByTime(1000)
+    expect(ov(a)).not.toBeNull()
+    sessionStorage.clear()
+    Object.defineProperty(document, 'referrer', { value: 'https://l.instagram.com/', configurable: true })
+    freshPage()
+    const b = run(design(), behavior({ traffic: { enabled: true, types: ['organic'] } }))
+    vi.advanceTimersByTime(1000)
+    expect(ov(b)).toBeNull()
+    expect(sessionStorage.getItem('_wf_traffic')).toBe('social')
+    sessionStorage.clear()
+    window.history.replaceState({}, '', '/?gclid=abc')
+    freshPage()
+    run(design(), behavior({ traffic: { enabled: true, types: ['paid'] } }))
+    expect(sessionStorage.getItem('_wf_traffic')).toBe('paid')
+  })
+
+  it('página: usa o contexto do bloco de tema e filtra por produto em vista', () => {
+    ;(window as any).__worder = { template: 'product.custom', product: { handle: 'kit-skincare', type: 'Skincare', vendor: 'Acme', tags: ['promo', 'novo'] } }
+    const ok = run(design(), behavior({ page: { enabled: true, templates: ['product'], productHandles: ['kit-*'] } }))
+    vi.advanceTimersByTime(1000)
+    expect(ov(ok)).not.toBeNull()
+    expect(eventsFor(ok).find((e) => e.type === 'impression')!.page).toBe('product')
+    freshPage()
+    const byTag = run(design(), behavior({ page: { enabled: true, productTags: ['NOVO'] } }))
+    vi.advanceTimersByTime(1000)
+    expect(ov(byTag)).not.toBeNull()
+    freshPage()
+    const wrongType = run(design(), behavior({ page: { enabled: true, productTypes: ['Roupas'] } }))
+    vi.advanceTimersByTime(1000)
+    expect(ov(wrongType)).toBeNull()
+    freshPage()
+    const wrongTemplate = run(design(), behavior({ page: { enabled: true, templates: ['cart', 'index'] } }))
+    vi.advanceTimersByTime(1000)
+    expect(ov(wrongTemplate)).toBeNull()
+  })
+
+  it('página: sem o bloco de tema deduz pela URL; filtro de produto sem produto bloqueia', () => {
+    window.history.replaceState({}, '', '/collections/verao')
+    const col = run(design(), behavior({ page: { enabled: true, templates: ['collection'], collectionHandles: ['verao'] } }))
+    vi.advanceTimersByTime(1000)
+    expect(ov(col)).not.toBeNull()
+    freshPage()
+    const needsProduct = run(design(), behavior({ page: { enabled: true, productHandles: ['kit-*'] } }))
+    vi.advanceTimersByTime(1000)
+    expect(ov(needsProduct)).toBeNull()
+    window.history.replaceState({}, '', '/products/kit-noite')
+    freshPage()
+    const prod = run(design(), behavior({ page: { enabled: true, productHandles: ['kit-*'] } }))
+    vi.advanceTimersByTime(1000)
+    expect(ov(prod)).not.toBeNull()
+  })
+
+  it('carrinho: filtra pelo conteúdo via /cart.js — "tem algum" e "não tem nenhum"', async () => {
+    withFetch((url) => url.endsWith('/cart.js')
+      ? new Response(JSON.stringify({ total_price: 15000, item_count: 2, items: [{ handle: 'camiseta-basica', product_type: 'Roupas', vendor: 'Acme' }, { handle: 'meia', product_type: 'Acessórios', vendor: 'Outro' }] }))
+      : null)
+    const has = run(design(), behavior({ cart: { enabled: false, contains: { enabled: true, match: 'any', handles: ['camiseta-*'] } } }))
+    await vi.runAllTimersAsync()
+    expect(ov(has)).not.toBeNull()
+    freshPage()
+    const none = run(design(), behavior({ cart: { contains: { enabled: true, match: 'none', vendors: ['acme'] } } }))
+    await vi.runAllTimersAsync()
+    expect(ov(none)).toBeNull()
+    freshPage()
+    const missing = run(design(), behavior({ cart: { contains: { enabled: true, match: 'any', types: ['Skincare'] } } }))
+    await vi.runAllTimersAsync()
+    expect(ov(missing)).toBeNull()
+    // Valor mínimo continua valendo junto com o conteúdo.
+    freshPage()
+    const tooCheap = run(design(), behavior({ cart: { enabled: true, minTotal: 500, contains: { enabled: true, match: 'any', handles: ['camiseta-basica'] } } }))
+    await vi.runAllTimersAsync()
+    expect(ov(tooCheap)).toBeNull()
+  })
+
+  it('audiência: consulta o servidor com o id do visitante e respeita a resposta', async () => {
+    const seen: string[] = []
+    withFetch((url) => {
+      if (!url.includes('/preview-allowed')) return null
+      seen.push(url)
+      return new Response(JSON.stringify({ allowed: false, reason: 'not_in_audience' }))
+    })
+    const cfg = { audienceTargeting: { mode: 'include', segmentIds: ['11111111-1111-4111-8111-111111111111'], listIds: [] } }
+    const a = run(design(), behavior(cfg))
+    await vi.runAllTimersAsync()
+    expect(ov(a)).toBeNull()
+    expect(seen[0]).toContain('vid=visitor-abc')
+    // A resposta fica em cache por popup: segunda carga não volta ao servidor.
+    freshPage()
+    const again = run(design(), behavior(cfg), a)
+    await vi.runAllTimersAsync()
+    expect(ov(again)).toBeNull()
+    expect(seen).toHaveLength(1)
+  })
+
+  it('audiência: "somente quem está" sem id de visitante não mostra; "exceto" mostra', async () => {
+    document.cookie = '__worder_id=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/'
+    const inc = run(design(), behavior({ audienceTargeting: { mode: 'include', segmentIds: ['11111111-1111-4111-8111-111111111111'] } }))
+    await vi.runAllTimersAsync()
+    expect(ov(inc)).toBeNull()
+    expect(calls.some((c) => c.url.includes('/preview-allowed'))).toBe(false)
+    freshPage()
+    const exc = run(design(), behavior({ audienceTargeting: { mode: 'exclude', segmentIds: ['11111111-1111-4111-8111-111111111111'] } }))
+    await vi.runAllTimersAsync()
+    expect(ov(exc)).not.toBeNull()
   })
 })
