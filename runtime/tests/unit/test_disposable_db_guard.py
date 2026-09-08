@@ -1,5 +1,5 @@
 import os
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 import pytest
 
@@ -90,6 +90,8 @@ def test_missing_env_never_connects(missing):
     [
         ("postgresql://postgres:postgres@db.example.test:55322/postgres", {}),
         (DSN, {"PGSERVICE": "production"}),
+        (DSN, {"PGHOSTADDR": "10.0.0.1"}),
+        (DSN, {"PGSERVICEFILE": "untrusted.conf"}),
     ],
 )
 def test_dsn_from_env_rejects_unproven_target_without_connecting(dsn, ambient):
@@ -154,7 +156,10 @@ def test_dsn_from_env_returns_only_after_valid_proof_and_closes():
         assert database.dsn_from_env() == DSN
 
         c.assert_called_once_with(DSN, connect_timeout=3, options="-c statement_timeout=3000")
-        assert conn.execute.call_count == 2
+        assert conn.execute.call_args_list == [
+            call("select system_identifier::text from pg_control_system()"),
+            call("select token from testing.disposable_identity"),
+        ]
         c.return_value.__exit__.assert_called_once()
 
 

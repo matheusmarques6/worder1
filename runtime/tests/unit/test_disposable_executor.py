@@ -2,7 +2,10 @@ import copy
 import io
 import json
 import os
+import re
+import tomllib
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -573,8 +576,8 @@ def test_gate_serialization_has_no_process_output_or_dsn(tmp_path):
     executor = ex.Executor(REPO, tmp_path, runner=runner)
     executor.command("git", "rev-parse", "HEAD")
 
-    saved = json.loads((tmp_path / "gates.json").read_text())
-    event = json.loads((tmp_path / "events.jsonl").read_text())
+    saved = json.loads((tmp_path / "gates.json").read_text(encoding="utf-8"))
+    event = json.loads((tmp_path / "events.jsonl").read_text(encoding="utf-8"))
     assert len(saved["commands"]) == len(saved["exitCodes"]) == 1
     assert set(saved) == {
         "commit",
@@ -592,7 +595,9 @@ def test_gate_serialization_has_no_process_output_or_dsn(tmp_path):
         "sqlstates": ["23505"],
         "migrations": ["20250701", "20260812000001"],
     }
-    evidence = (tmp_path / "gates.json").read_text() + (tmp_path / "events.jsonl").read_text()
+    evidence = (tmp_path / "gates.json").read_text("utf-8") + (
+        tmp_path / "events.jsonl"
+    ).read_text("utf-8")
     assert ex.DSN not in evidence
     assert "stdout" not in evidence and "stderr" not in evidence
 
@@ -709,7 +714,7 @@ def test_config_and_files_reject_unapproved_inputs_and_changed_migrations(tmp_pa
     ex.write_json(run / "manifest.json", rows)
 
     executor.config(False)
-    assert ex.tomllib.loads((run / "supabase/config.toml").read_text())["db"]["migrations"][
+    assert ex.tomllib.loads((run / "supabase/config.toml").read_text("utf-8"))["db"]["migrations"][
         "enabled"
     ] is False
     assert executor.files() == rows
@@ -1053,7 +1058,7 @@ def test_replay_proves_reset_sentinel_history_before_ready(monkeypatch, tmp_path
                 "replaying",
                 "reset",
             )
-            assert ex.tomllib.loads((run / "supabase/config.toml").read_text())[
+            assert ex.tomllib.loads((run / "supabase/config.toml").read_text("utf-8"))[
                 "db"
             ]["migrations"]["enabled"] is True
             stdout = ""
@@ -2004,7 +2009,7 @@ def test_lifecycle_dispatches_valid_actions_under_exclusive_lock(
 
     def operation(*args):
         calls.append(args)
-        assert (executor.run.parent / ".executor.lock").read_text() == str(os.getpid())
+        assert (executor.run.parent / ".executor.lock").read_text("utf-8") == str(os.getpid())
         executor.gate["state"] = next_state
 
     monkeypatch.setattr(executor, method, operation)
@@ -2017,11 +2022,11 @@ def test_lifecycle_dispatches_valid_actions_under_exclusive_lock(
 def test_existing_lock_is_never_removed_or_used(tmp_path):
     executor = lifecycle_run(tmp_path)
     lock = executor.run.parent / ".executor.lock"
-    lock.write_text("another-owner")
+    lock.write_text("another-owner", encoding="utf-8")
     executor.runner = lambda *_a, **_k: pytest.fail("unexpected process")
     with pytest.raises(FileExistsError):
         executor.execute("Test")
-    assert lock.read_text() == "another-owner"
+    assert lock.read_text("utf-8") == "another-owner"
 
 
 @pytest.mark.parametrize("code", [0, 17, 124, 130])
@@ -2074,7 +2079,7 @@ def test_lock_release_failure_preserves_nonzero_result(
         with pytest.raises(OSError) as failure:
             executor.execute("Test")
         assert failure.value is release_error
-    assert lock.read_text() == str(os.getpid())
+    assert lock.read_text("utf-8") == str(os.getpid())
 
 
 def test_lock_release_failure_preserves_propagating_exception(tmp_path, monkeypatch):
@@ -2092,7 +2097,7 @@ def test_lock_release_failure_preserves_propagating_exception(tmp_path, monkeypa
     monkeypatch.setattr(Path, "unlink", unlink)
     with pytest.raises(ValueError, match="invalid transition"):
         executor.execute("Test")
-    assert lock.read_text() == str(os.getpid())
+    assert lock.read_text("utf-8") == str(os.getpid())
 
 
 def test_persisted_gate_is_read_only_after_lock_acquisition(tmp_path, monkeypatch):
@@ -2104,7 +2109,7 @@ def test_persisted_gate_is_read_only_after_lock_acquisition(tmp_path, monkeypatc
 
     def read_json(path):
         if path == executor.run / "gates.json":
-            assert (executor.run.parent / ".executor.lock").read_text() == str(os.getpid())
+            assert (executor.run.parent / ".executor.lock").read_text("utf-8") == str(os.getpid())
             reads.append(path)
         return original_read(path)
 
@@ -2280,7 +2285,7 @@ def test_suite_sanitizes_before_deciding_exit_code(tmp_path, monkeypatch, code, 
         assert getattr(failure.value, "code", 2) == expected
     else:
         assert executor.suite(["-m", "db and not rls"], "db") == 1
-    text = (executor.run / "artifacts/db.xml").read_text()
+    text = (executor.run / "artifacts/db.xml").read_text("utf-8")
     assert "secret" not in text and "raw" not in text
 
 
@@ -2289,13 +2294,15 @@ def test_suite_sanitizes_even_when_pytest_raises(tmp_path, monkeypatch):
     executor.identity = valid_identity()
 
     def interrupted(arguments, stage):
-        Path(arguments[-1].removeprefix("--junitxml=")).write_text("<broken>secret")
+        Path(arguments[-1].removeprefix("--junitxml=")).write_text(
+            "<broken>secret", encoding="utf-8",
+        )
         raise KeyboardInterrupt()
 
     monkeypatch.setattr(executor, "pytest_command", interrupted)
     with pytest.raises(KeyboardInterrupt):
         executor.suite([], "db")
-    assert "secret" not in (executor.run / "artifacts/db.xml").read_text()
+    assert "secret" not in (executor.run / "artifacts/db.xml").read_text("utf-8")
 
 
 @pytest.mark.parametrize("failure,expected_stages", [
@@ -2327,12 +2334,12 @@ def test_full_suites_are_serial_and_stop_at_first_failure(
         if stage != "collect-rls":
             assert argv[6] == {"db": "db and not rls", "rls": "rls", "pipeline": "pipeline"}[stage]
             if stage == "rls":
-                assert "secret" not in (executor.run / "artifacts/db.xml").read_text()
+                assert "secret" not in (executor.run / "artifacts/db.xml").read_text("utf-8")
             path = Path(argv[-1].removeprefix("--junitxml="))
             cases = '<testcase name="one"><system-out>secret</system-out></testcase>'
             if stage == "rls" and failure == "mismatch":
                 cases *= 2
-            path.write_text("<testsuite>" + cases + "</testsuite>")
+            path.write_text("<testsuite>" + cases + "</testsuite>", encoding="utf-8")
             stdout = ""
         else:
             assert argv[6:] == ["-m", "rls", "-q"]
@@ -2372,15 +2379,15 @@ def test_source_allows_only_exact_full_or_immutable_focal_prefix(tmp_path, monke
     folder = executor.repo / "supabase/migrations"
     folder.mkdir(parents=True)
     first = folder / "20260812000001_a.sql"
-    first.write_text("select 1;")
+    first.write_text("select 1;", encoding="utf-8")
     approved = ex.inventory(folder)
     monkeypatch.setattr(executor, "files", lambda: approved)
     assert executor.source(False) == approved
-    (folder / "20260812000002_b.sql").write_text("select 2;")
+    (folder / "20260812000002_b.sql").write_text("select 2;", encoding="utf-8")
     assert executor.source(True) == approved
     with pytest.raises(ValueError):
         executor.source(False)
-    first.write_text("select 3;")
+    first.write_text("select 3;", encoding="utf-8")
     with pytest.raises(ValueError):
         executor.source(True)
 
@@ -2475,3 +2482,562 @@ def test_main_transports_json_and_exact_result(monkeypatch):
     monkeypatch.setattr(ex, "Executor", ExecutorDouble)
     assert ex.main() == 23
     assert observed == [(REPO, run), ("Test", selected, None)]
+
+
+class FakeCursor:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def fetchone(self):
+        return self.rows[0] if self.rows else None
+
+    def fetchall(self):
+        return self.rows
+
+
+class FakeConnection:
+    def __init__(self, cli):
+        self.cli = cli
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.cli.closed_connections += 1
+        return False
+
+    def execute(self, sql):
+        if sql == "select system_identifier::text from pg_control_system()":
+            return FakeCursor([(self.cli.loopback_sid or self.cli.sid,)])
+        if sql == "select token from testing.disposable_identity":
+            return FakeCursor([(self.cli.sentinel,)] if self.cli.sentinel else [])
+        pytest.fail(f"unexpected connection SQL: {sql}")
+
+
+class FakeCLI:
+    """Only external boundaries are fake; manifests, guards and lifecycle remain real."""
+
+    def __init__(self, repo, run):
+        self.repo, self.run = repo, run
+        self.started = False
+        self.sid = "1234567890123456789"
+        self.loopback_sid = None
+        self.sentinel = None
+        self.applied = []
+        self.calls, self.pytest_calls = [], []
+        self.connections = self.closed_connections = 0
+        self.fail = None
+        self.empty_rls = False
+        self.commit = "e" * 40
+        self.dirty = ""
+        self.container = container_record()
+        _, self.preflight = preflight_double()
+
+    def connect(self, dsn, **kwargs):
+        assert self.started
+        assert dsn == "postgresql://postgres:postgres@127.0.0.1:55322/postgres"
+        assert kwargs == {"connect_timeout": 3, "options": "-c statement_timeout=3000"}
+        self.connections += 1
+        return FakeConnection(self)
+
+    def __call__(self, argv, *, cwd, env, input=None, timeout=600):
+        self.calls.append(argv.copy())
+        if cwd != self.repo or timeout not in (30, 600):
+            pytest.fail("runner cwd or timeout escaped the bounded contract")
+        if any(key in env for key in ("PGHOSTADDR", "PGSERVICE", "PYTEST_ADDOPTS", "API_KEY")):
+            pytest.fail("ambient routing or credentials reached a child")
+        output, code = "", 0
+        if argv == ["git", "rev-parse", "HEAD"]:
+            output = self.commit
+        elif argv == [
+            "git", "status", "--porcelain=v1", "--untracked-files=all", "--",
+            "runtime", "scripts/test-disposable-db.ps1", "supabase/config.toml",
+            "supabase/migrations",
+        ]:
+            output = self.dirty
+        elif argv == ["supabase", "--version"] or argv[-1] == "--help" or argv[:3] == [
+            "docker", "context", "inspect",
+        ]:
+            try:
+                return self.preflight(argv)
+            except KeyError:
+                pytest.fail(f"unexpected preflight argv: {argv}")
+        elif argv == [
+            "docker", "ps", "-a", "--no-trunc", "--filter",
+            "label=com.supabase.cli.project=" + PROJECT, "--format", "{{.ID}}",
+        ]:
+            output = self.container["Id"] if self.started else ""
+        elif argv == ["docker", "volume", "ls", "--format", "{{.Name}}"]:
+            output = "pre-existing\n" + ("supabase_db_" + PROJECT if self.started else "")
+        elif argv == [
+            "supabase", "start", "-x",
+            "realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,"
+            "studio,edge-runtime,logflare,vector,supavisor", "--workdir", str(self.run),
+        ]:
+            config = tomllib.loads((self.run / "supabase/config.toml").read_text("utf-8"))
+            assert config["db"]["migrations"]["enabled"] is False
+            assert config["db"]["seed"]["enabled"] is False
+            assert not (self.run / "supabase/seed.sql").exists()
+            self.started = True
+        elif argv in (
+            ["docker", "inspect", "supabase_db_" + PROJECT],
+            ["docker", "inspect", "a" * 64],
+        ):
+            assert self.started
+            output = json.dumps([self.container])
+        elif argv == [
+            "docker", "exec", "-i", "a" * 64, "psql", "-X", "-v", "ON_ERROR_STOP=1",
+            "-U", "postgres", "-d", "postgres", "-At",
+        ]:
+            assert self.started
+            sql = input.strip()
+            if sql == "select system_identifier::text from pg_control_system()":
+                output = self.sid
+            elif sql == (
+                "select version from supabase_migrations.schema_migrations order by version"
+            ):
+                output = "\n".join(self.applied)
+            else:
+                token = re.search(r"values \('([0-9a-f]{64})'\)", sql)
+                if not token or "create table testing.disposable_identity" not in sql:
+                    pytest.fail("unexpected psql input")
+                assert "revoke all on schema testing" in sql
+                assert "revoke all on testing.disposable_identity" in sql
+                self.sentinel = token[1]
+        elif argv in (
+            ["supabase", "db", "reset", "--local", "--no-seed", "--workdir", str(self.run)],
+            ["supabase", "migration", "up", "--local", "--workdir", str(self.run)],
+        ):
+            assert self.started
+            config = tomllib.loads((self.run / "supabase/config.toml").read_text("utf-8"))
+            assert config["db"]["migrations"]["enabled"] is True
+            if self.fail == "migration-up" and argv[1] == "migration":
+                code = 18
+            else:
+                # Model CLI filename order independently of the executor's inventory parser.
+                self.applied = [
+                    file.name.split("_", 1)[0]
+                    for file in sorted((self.run / "supabase/migrations").iterdir())
+                ]
+                if argv[1] == "db":
+                    self.sentinel = None
+        elif argv == ["supabase", "stop", "--no-backup", "--workdir", str(self.run)]:
+            assert self.started
+            self.started = False
+        elif argv[:5] == ["uv", "run", "--directory", str(self.repo / "runtime"), "pytest"]:
+            assert self.started
+            assert env["SUPABASE_DB_URL"] == (
+                "postgresql://postgres:postgres@127.0.0.1:55322/postgres"
+            )
+            assert env["WORDER_TEST_DB_SYSTEM_IDENTIFIER"] == self.sid
+            assert env["WORDER_TEST_DB_SENTINEL"] == self.sentinel
+            if argv[5:] == ["--collect-only", "-m", "rls", "-q"]:
+                name = "collect-rls"
+                output = "" if self.empty_rls else "tests/db/test_case.py::test_one\n"
+            else:
+                report = Path(argv[-1].removeprefix("--junitxml="))
+                if report.parent != self.run / "artifacts":
+                    pytest.fail("report escaped the run")
+                name = report.stem
+                report.write_text(
+                    '<testsuite><testcase name="test_one" classname="tests.db.test_case">'
+                    '<system-out>postgresql://redact-me ' + self.sentinel + '</system-out>'
+                    '</testcase></testsuite>', encoding="utf-8",
+                )
+            self.pytest_calls.append(name)
+            code = 17 if self.fail == name else 0
+        else:
+            pytest.fail(f"unexpected subprocess argv: {argv}")
+        return ex.subprocess.CompletedProcess(argv, code, output, "")
+
+
+def fake_environment(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    migrations = repo / "supabase/migrations"
+    migrations.mkdir(parents=True)
+    (repo / "supabase/config.toml").write_text(
+        (REPO / "supabase/config.toml").read_text("utf-8"), encoding="utf-8",
+    )
+    (migrations / "20260621_phase0_foundations.sql").write_bytes(b"select 1;\n")
+    (migrations / "20260812000001_a.sql").write_bytes(b"select 2;\n")
+    test_file = repo / "runtime/tests/db/test_case.py"
+    test_file.parent.mkdir(parents=True)
+    test_file.write_text("def test_one():\n    assert True\n", encoding="utf-8")
+    run = repo / ".superpowers/sdd/auditoria-ia-disposable" / ("a" * 32)
+    cli = FakeCLI(repo, run)
+    for name in ("PGHOSTADDR", "PGSERVICE", "PGSERVICEFILE"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(ex, "free_ports", lambda: None)
+    monkeypatch.setattr(ex.psycopg, "connect", cli.connect)
+    monkeypatch.setattr(ex.subprocess, "Popen", lambda *_a, **_k: pytest.fail("real process"))
+    monkeypatch.setattr(ex.socket, "socket", lambda *_a, **_k: pytest.fail("real socket"))
+    return ex.Executor(repo, run, runner=cli), cli
+
+
+def test_real_legacy_migration_keeps_its_eight_digit_version():
+    rows = ex.inventory(REPO / "supabase/migrations")
+    assert rows[0]["filename"] == "20260621_phase0_foundations.sql"
+    assert rows[0]["version"] == "20260621"
+    assert rows[1]["version"] == "20260812000001"
+
+
+def test_prepare_replay_full_test_and_stop_with_fake_cli(tmp_path, monkeypatch):
+    executor, cli = fake_environment(tmp_path, monkeypatch)
+    monkeypatch.setenv("PYTEST_ADDOPTS", "--pdb")
+    monkeypatch.setenv("API_KEY", "must-not-reach-child")
+    before = dict(os.environ)
+    assert executor.execute("Prepare") == 0
+    assert executor.gate["state"] == "prepared" and cli.started
+    prepared = json.loads((executor.run / "identity.json").read_text("utf-8"))
+    assert prepared == {
+        "projectId": PROJECT, "containerId": "a" * 64, "imageId": "sha256:" + "b" * 64,
+        "volumeName": "supabase_db_" + PROJECT, "port": 55322,
+        "systemIdentifier": "1234567890123456789", "sentinel": None,
+    }
+    assert json.loads((executor.run / "manifest.json").read_text("utf-8")) == [
+        {"filename": "20260621_phase0_foundations.sql", "version": "20260621",
+         "sha256": "4A45092CCF992EA92250053A80B931B787924BA61648F420555511B84F10AB6C"},
+        {"filename": "20260812000001_a.sql", "version": "20260812000001",
+         "sha256": "AC4396CDEE0295DB27F816DC31134189999D0071663E618F4957BC23EDB584D7"},
+    ]
+    assert executor.execute("Replay") == 0
+    assert executor.gate["state"] == "ready" and cli.started
+    assert cli.applied == ["20260621", "20260812000001"]
+    ready = json.loads((executor.run / "identity.json").read_text("utf-8"))
+    assert ready | {"sentinel": None} == prepared
+    assert re.fullmatch(r"[0-9a-f]{64}", ready["sentinel"])
+    assert executor.execute("Test") == 0
+    assert cli.pytest_calls == ["collect-rls", "db", "rls", "pipeline"]
+    assert executor.gate["collectedRls"] == 1
+    assert executor.gate["scope"] == "full" and executor.gate["state"] == "stopped"
+    assert executor.gate["commit"] == "e" * 40 and executor.gate["failure"] is None
+    assert executor.gate["commands"] == cli.calls
+    assert executor.gate["exitCodes"] == [0] * len(cli.calls)
+    assert not cli.started and dict(os.environ) == before
+    assert cli.connections == cli.closed_connections and cli.connections > 0
+    for name in ("db", "rls", "pipeline"):
+        report = (executor.run / "artifacts" / (name + ".xml")).read_text("utf-8")
+        assert "postgresql://" not in report and ready["sentinel"] not in report
+    operations = [c for c in cli.calls if c[0] == "supabase" and "--workdir" in c]
+    assert operations == [
+        ["supabase", "start", "-x",
+         "realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,"
+         "studio,edge-runtime,logflare,vector,supavisor", "--workdir", str(executor.run)],
+        ["supabase", "db", "reset", "--local", "--no-seed", "--workdir", str(executor.run)],
+        ["supabase", "stop", "--no-backup", "--workdir", str(executor.run)],
+    ]
+    count = len(cli.calls)
+    assert executor.execute("Stop") == 0
+    assert len(cli.calls) == count
+
+
+@pytest.mark.parametrize("failure,expected,stages", [
+    ("collect-rls", 17, ["collect-rls"]),
+    ("empty-rls", 2, ["collect-rls"]),
+    ("db", 17, ["collect-rls", "db"]),
+    ("rls", 17, ["collect-rls", "db", "rls"]),
+    ("pipeline", 17, ["collect-rls", "db", "rls", "pipeline"]),
+])
+def test_integrated_failure_stops_before_the_next_suite(
+    tmp_path, monkeypatch, failure, expected, stages,
+):
+    executor, cli = fake_environment(tmp_path, monkeypatch)
+    assert executor.execute("Prepare") == executor.execute("Replay") == 0
+    cli.fail, cli.empty_rls = failure, failure == "empty-rls"
+    assert executor.execute("Test") == expected
+    assert cli.pytest_calls == stages
+    gate = json.loads((executor.run / "gates.json").read_text("utf-8"))
+    assert gate["state"] == "stopped" and not cli.started
+    assert gate["stage"] == "stop"
+    assert gate["failure"] == {
+        "stage": "collect-rls" if cli.empty_rls else failure,
+        "kind": "ValueError" if cli.empty_rls else "CommandFailure", "exitCode": expected,
+    }
+
+
+def test_integrated_upgrade_noop_suffix_and_failure_preserve_approved_manifest(
+    tmp_path, monkeypatch,
+):
+    executor, cli = fake_environment(tmp_path, monkeypatch)
+    assert executor.execute("Prepare", through="20260812000001") == 0
+    assert executor.execute("Replay") == 0
+    identity = (executor.run / "identity.json").read_bytes()
+    assert executor.execute("Upgrade", through="20260812000001") == 0
+    assert not any(
+        c[:3] == ["supabase", "migration", "up"] and "--help" not in c for c in cli.calls
+    )
+    source = executor.repo / "supabase/migrations"
+    (source / "20260812000002_b.sql").write_bytes(b"select 3;\n")
+    assert executor.execute("Upgrade", through="20260812000002") == 0
+    assert (executor.run / "identity.json").read_bytes() == identity
+    assert cli.applied == ["20260621", "20260812000001", "20260812000002"]
+    approved = (executor.run / "manifest.json").read_bytes()
+    assert json.loads(approved)[-1] == {
+        "filename": "20260812000002_b.sql", "version": "20260812000002",
+        "sha256": "8B8A0860D9B183EFE119246B8D010F32B1030C93FA12275792B5847FD4FE929F",
+    }
+    (source / "20260812000003_c.sql").write_bytes(b"select 4;\n")
+    cli.fail = "migration-up"
+    assert executor.execute("Upgrade", through="20260812000003") == 18
+    assert (executor.run / "manifest.json").read_bytes() == approved
+    prospective = json.loads((executor.run / "manifest.prospective.json").read_text("utf-8"))
+    assert prospective[:-1] == json.loads(approved)
+    assert prospective[-1]["filename"] == "20260812000003_c.sql"
+    assert (executor.run / "identity.json").read_bytes() == identity
+    assert executor.gate["failure"] == {
+        "stage": "migration-up", "kind": "CommandFailure", "exitCode": 18,
+    }
+    assert executor.gate["state"] == "stopped" and not cli.started
+    assert sum(c[:3] == ["supabase", "db", "reset"] and "--help" not in c for c in cli.calls) == 1
+
+
+@pytest.mark.parametrize("changed", ["manifest", "dirty"])
+def test_new_checkout_cannot_certify_unapproved_inputs(tmp_path, monkeypatch, changed):
+    executor, cli = fake_environment(tmp_path, monkeypatch)
+    assert executor.execute("Prepare") == executor.execute("Replay") == 0
+    if changed == "manifest":
+        (executor.repo / "supabase/migrations/20260812000002_b.sql").write_bytes(b"select 3;\n")
+    else:
+        cli.dirty = " M runtime/tests/db/test_case.py"
+    cli.commit = "f" * 40
+    assert executor.execute("Test") == 2
+    assert cli.pytest_calls == []
+    assert executor.gate["commit"] == "e" * 40
+    assert executor.gate["state"] == "stopped" and not cli.started
+
+
+def test_integrated_focal_accepts_immutable_prefix_and_literal_targets(tmp_path, monkeypatch):
+    executor, cli = fake_environment(tmp_path, monkeypatch)
+    assert executor.execute("Prepare") == executor.execute("Replay") == 0
+    (executor.repo / "supabase/migrations/20260812000002_b.sql").write_bytes(b"select 3;\n")
+    cli.dirty = " M runtime/tests/db/test_case.py"
+    selected = ["tests/db/test_case.py::test_one", "tests/db/test_case.py::test_two[a-1]"]
+    assert executor.execute("Test", selected) == 0
+    assert cli.pytest_calls == ["focal"]
+    assert executor.gate["scope"] == "focal" and executor.gate["collectedRls"] == 0
+    assert executor.gate["state"] == "stopped" and not cli.started
+    assert [c for c in cli.calls if c[0] == "uv"] == [[
+        "uv", "run", "--directory", str(executor.repo / "runtime"), "pytest", *selected, "-q",
+        "--junitxml=" + str(executor.run / "artifacts/focal.xml"),
+    ]]
+
+
+def test_integrated_ambient_hostaddr_blocks_replay_before_reset_or_connection(
+    tmp_path, monkeypatch,
+):
+    executor, cli = fake_environment(tmp_path, monkeypatch)
+    assert executor.execute("Prepare") == 0
+    connected = cli.connections
+    monkeypatch.setenv("PGHOSTADDR", "10.0.0.1")
+    assert executor.execute("Replay") == 2
+    assert cli.connections == connected
+    assert not any(c[0] == "supabase" and "--workdir" in c and c[1] != "start" for c in cli.calls)
+    assert executor.gate["failure"]["stage"] == "replay-preflight"
+    assert executor.gate["state"] == "failed" and cli.started
+    assert os.environ["PGHOSTADDR"] == "10.0.0.1"
+
+
+def test_integrated_copy_hash_change_prevents_pytest(tmp_path, monkeypatch):
+    executor, cli = fake_environment(tmp_path, monkeypatch)
+    assert executor.execute("Prepare") == executor.execute("Replay") == 0
+    (executor.run / "supabase/migrations/20260812000001_a.sql").write_bytes(b"select 99;\n")
+    assert executor.execute("Test") == 2
+    assert cli.pytest_calls == [] and executor.gate["state"] == "stopped"
+    assert not cli.started
+
+
+@pytest.mark.parametrize("changed", ["sid", "container"])
+def test_integrated_stop_refuses_changed_identity(tmp_path, monkeypatch, changed):
+    executor, cli = fake_environment(tmp_path, monkeypatch)
+    assert executor.execute("Prepare") == executor.execute("Replay") == 0
+    if changed == "sid":
+        cli.sid = "9999999999999999999"
+    else:
+        cli.container["Id"] = "f" * 64
+    assert executor.execute("Stop") == 2
+    assert not any(c[:2] == ["supabase", "stop"] and "--help" not in c for c in cli.calls)
+    assert executor.gate["state"] == "failed" and cli.started
+
+
+def test_integrated_unproven_prepare_records_ids_without_cleanup(tmp_path, monkeypatch):
+    executor, cli = fake_environment(tmp_path, monkeypatch)
+    cli.loopback_sid = "9999999999999999999"
+    assert executor.execute("Prepare") == 2
+    assert executor.gate["state"] == "unproven" and cli.started
+    assert json.loads((executor.run / "unproven.json").read_text("utf-8")) == {
+        "projectId": PROJECT, "containerIds": ["a" * 64],
+    }
+    assert not (executor.run / "identity.json").exists()
+    assert not any(c[:2] == ["supabase", "stop"] and "--help" not in c for c in cli.calls)
+    calls = len(cli.calls)
+    with pytest.raises(ValueError, match="invalid transition"):
+        executor.execute("Stop")
+    assert len(cli.calls) == calls
+
+
+@pytest.mark.parametrize("platform,interrupted,group_missing", [
+    ("nt", False, False), ("nt", True, False),
+    ("posix", False, False), ("posix", True, False), ("posix", False, True),
+])
+def test_run_process_timeout_and_interrupt_kill_tree_drain_and_reap(
+    monkeypatch, platform, interrupted, group_missing,
+):
+    events = []
+    initial_error = KeyboardInterrupt() if interrupted else ex.subprocess.TimeoutExpired("uv", 1)
+
+    class Process:
+        pid = 31337
+
+        def communicate(self, *, input=None, timeout=None):
+            events.append(("communicate", input, timeout))
+            if len(events) == 1:
+                raise initial_error
+            return "drained", "diagnostic"
+
+        def kill(self):
+            events.append(("kill",))
+
+        def wait(self):
+            events.append(("wait",))
+
+    def taskkill(argv, **kwargs):
+        assert argv == ["taskkill.exe", "/PID", "31337", "/T", "/F"]
+        assert kwargs == {"capture_output": True, "check": False, "timeout": 30, "shell": False}
+        events.append(("tree",))
+        return ex.subprocess.CompletedProcess(argv, 0, "", "")
+
+    def killpg(pid, signal):
+        assert (pid, signal) == (31337, ex.signal.SIGKILL)
+        events.append(("tree",))
+        if group_missing:
+            raise ProcessLookupError()
+
+    popen = MagicMock(return_value=Process())
+    monkeypatch.setattr(ex, "os", SimpleNamespace(name=platform, killpg=killpg))
+    monkeypatch.setattr(ex, "signal", SimpleNamespace(SIGKILL=9))
+    monkeypatch.setattr(ex.shutil, "which", lambda _: "tool.exe")
+    monkeypatch.setattr(ex.subprocess, "Popen", popen)
+    monkeypatch.setattr(ex.subprocess, "run", taskkill)
+    monkeypatch.setattr(ex.subprocess, "CREATE_NEW_PROCESS_GROUP", 512, raising=False)
+    result = ex.run_process(["uv", "run", "pytest"], cwd=REPO, env={}, input="sql", timeout=1)
+    assert (result.returncode, result.stdout, result.stderr) == (
+        130 if interrupted else 124, "drained", "diagnostic",
+    )
+    assert events == [
+        ("communicate", "sql", 1), ("tree",), ("kill",),
+        ("communicate", None, None), ("wait",),
+    ]
+    assert popen.call_args.args == (["tool.exe", "run", "pytest"],)
+    assert popen.call_args.kwargs["shell"] is False
+    assert popen.call_args.kwargs["start_new_session"] is (platform == "posix")
+    assert popen.call_args.kwargs["creationflags"] == (512 if platform == "nt" else 0)
+
+
+@pytest.mark.parametrize("bad", [
+    [],
+    [{"filename": "bad.sql", "sha256": "A" * 64, "version": "20260621"}],
+    [{"filename": "20260812000001_a.sql", "sha256": "A" * 64, "version": "20260812000002"}],
+    [{"filename": "20260812000001_a.sql", "sha256": "a" * 64, "version": "20260812000001"}],
+    [{"filename": "20260812000001_a.sql", "version": "20260812000001"}],
+    [
+        {"filename": "20260812000001_a.sql", "sha256": "A" * 64, "version": "20260812000001"},
+        {"filename": "20260812000001_b.sql", "sha256": "B" * 64, "version": "20260812000001"},
+    ],
+    [
+        {"filename": "20260812000002_b.sql", "sha256": "B" * 64, "version": "20260812000002"},
+        {"filename": "20260812000001_a.sql", "sha256": "A" * 64, "version": "20260812000001"},
+    ],
+    [
+        {"filename": "20260621_legacy.sql", "sha256": "A" * 64, "version": "20260621"},
+        {"filename": "20260621000001_a.sql", "sha256": "B" * 64, "version": "20260621000001"},
+    ],
+])
+def test_manifest_shape_refuses_malformed_or_ambiguous_history(bad):
+    with pytest.raises(ValueError):
+        ex.manifest_shape(bad)
+
+
+def test_launcher_transports_two_targets_and_preserves_native_exit_code(tmp_path):
+    # The only real process boundary in this module; the DB backend is never imported.
+    runtime = tmp_path / "a\u00e7\u00e3o \u6f22 runtime"
+    support = runtime / "tests/support"
+    support.mkdir(parents=True)
+    (runtime / "tests/__init__.py").write_text("", encoding="utf-8")
+    (support / "__init__.py").write_text("", encoding="utf-8")
+    (support / "disposable_executor.py").write_text(
+        "import json, os, sys\n"
+        "assert sys.flags.utf8_mode == 1\n"
+        "request = json.loads(sys.stdin.read())\n"
+        "assert request == {\n"
+        "    'Action': 'Test',\n"
+        "    'RunDirectory': os.environ['LAUNCH_RUNTIME'],\n"
+        "    'MigrationThrough': None,\n"
+        "    'TestTargets': ['tests/db/first.py::test_one',\n"
+        "                    'tests/db/second.py::test_a\\u00e7\\u00e3o'],\n"
+        "}\n"
+        "raise SystemExit(23)\n", encoding="utf-8",
+    )
+    command = r"""
+$ErrorActionPreference = 'Stop'
+$PSNativeCommandUseErrorActionPreference = $true
+if ($PSVersionTable.PSVersion.Major -lt 7) { throw 'PowerShell 7 is required' }
+$tokens = $null
+$errors = $null
+$ast = [Management.Automation.Language.Parser]::ParseFile(
+    $env:LAUNCH_SCRIPT, [ref]$tokens, [ref]$errors)
+if ($errors.Count) { throw 'parse failed' }
+$unsafe = $ast.FindAll({ param($node)
+    ($node -is [Management.Automation.Language.CommandAst] -and
+        $node.GetCommandName() -in @('Invoke-Expression', 'iex')) -or
+    ($node -is [Management.Automation.Language.StringConstantExpressionAst] -and
+        $node.Value -like '*--linked*') -or
+    ($node -is [Management.Automation.Language.CommandParameterAst] -and
+        $node.ParameterName -eq 'linked')
+}, $true)
+if ($unsafe.Count) { throw 'unsafe command or linked argument' }
+$dispatch = @($ast.FindAll({ param($node)
+    $node -is [Management.Automation.Language.SwitchStatementAst]
+}, $false))
+if ($dispatch.Count -ne 1) { throw 'expected one Action switch' }
+$selector = $dispatch[0].Condition.Find({ param($node)
+    $node -is [Management.Automation.Language.VariableExpressionAst]
+}, $true)
+if ($selector.VariablePath.UserPath -ne 'Action') { throw 'wrong dispatch selector' }
+if (($dispatch[0].Clauses | ForEach-Object { $_.Item1.Value }) -join ',' -ne
+    'Prepare,Replay,Upgrade,Test,Stop') { throw 'missing action branch' }
+foreach ($clause in $dispatch[0].Clauses) {
+    $calls = @($clause.Item2.FindAll({ param($node)
+        $node -is [Management.Automation.Language.CommandAst]
+    }, $true))
+    if ($calls.Count -ne 1 -or $calls[0].GetCommandName() -ne 'Invoke-Executor' -or
+        $calls[0].CommandElements.Count -ne 2 -or
+        $calls[0].CommandElements[1].Value -ne $clause.Item1.Value) {
+        throw 'action dispatched to the wrong backend request'
+    }
+}
+$definition = $ast.Find({ param($node)
+    $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -eq 'Invoke-Executor'
+}, $false)
+if ($null -eq $definition) { throw 'missing transport function' }
+. ([scriptblock]::Create($definition.Extent.Text))
+$runtimeRoot = $env:LAUNCH_RUNTIME
+$pythonPath = $env:LAUNCH_PYTHON
+$RunDirectory = $env:LAUNCH_RUNTIME
+$TestTargets = @('tests/db/first.py::test_one', ('tests/db/second.py::test_a' +
+    [char]0x00e7 + [char]0x00e3 + 'o'))
+$MigrationThrough = $null
+Invoke-Executor 'Test'
+"""
+    env = dict(
+        os.environ, LAUNCH_SCRIPT=str(REPO / "scripts/test-disposable-db.ps1"),
+        LAUNCH_RUNTIME=str(runtime), LAUNCH_PYTHON=ex.sys.executable, PYTHONUTF8="0",
+    )
+    for name in ("PYTHONPATH", "PYTHONHOME", "PYTHONIOENCODING"):
+        env.pop(name, None)
+    result = ex.subprocess.run(
+        ["pwsh", "-NoProfile", "-NonInteractive", "-Command", command],
+        env=env, capture_output=True, text=True, encoding="utf-8", timeout=30,
+        check=False, shell=False,
+    )
+    assert result.returncode == 23, result.stderr
