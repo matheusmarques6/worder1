@@ -32,7 +32,7 @@ function Invoke-Executor([string]$SelectedAction) {
     Push-Location -LiteralPath $runtimeRoot
     try {
         $OutputEncoding = [Text.UTF8Encoding]::new($false)
-        $request | & $pythonPath -m tests.support.disposable_executor
+        $request | & $pythonPath -X utf8 -m tests.support.disposable_executor
         $result = $LASTEXITCODE
     } finally {
         $OutputEncoding = $previousEncoding

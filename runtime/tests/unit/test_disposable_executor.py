@@ -616,6 +616,40 @@ def test_command_records_oserror_and_nonchecking_failures(tmp_path):
     assert executor.gate["exitCodes"] == [127, 9]
 
 
+@pytest.mark.parametrize("destination", ["save", "events"])
+@pytest.mark.parametrize("code,check", [(17, True), (124, False), (130, False), (0, False)])
+def test_command_evidence_failure_preserves_nonzero_process_result(
+    tmp_path, monkeypatch, destination, code, check
+):
+    executor = ex.Executor(
+        REPO, tmp_path,
+        runner=lambda argv, **kw: ex.subprocess.CompletedProcess(argv, code, "raw", "raw"),
+    )
+    evidence_error = OSError("evidence unavailable")
+
+    def fail_save():
+        raise evidence_error
+
+    original_open = Path.open
+
+    def open_file(path, *args, **kwargs):
+        if path == tmp_path / "events.jsonl":
+            raise evidence_error
+        return original_open(path, *args, **kwargs)
+
+    if destination == "save":
+        monkeypatch.setattr(executor, "save", fail_save)
+    else:
+        monkeypatch.setattr(Path, "open", open_file)
+    with pytest.raises(ex.CommandFailure if code else OSError) as failure:
+        executor.command("tool", check=check)
+    if code:
+        assert failure.value.code == code
+    else:
+        assert failure.value is evidence_error
+    assert executor.gate["exitCodes"] == [code]
+
+
 def test_local_and_psql_build_only_fixed_commands(tmp_path):
     calls = []
 
@@ -1990,6 +2024,95 @@ def test_existing_lock_is_never_removed_or_used(tmp_path):
     assert lock.read_text() == "another-owner"
 
 
+@pytest.mark.parametrize("code", [0, 17, 124, 130])
+@pytest.mark.parametrize("release_step", ["no_links", "unlink"])
+def test_lock_release_failure_preserves_nonzero_result(
+    tmp_path, monkeypatch, code, release_step
+):
+    executor = lifecycle_run(tmp_path)
+    lock = executor.run.parent / ".executor.lock"
+    monkeypatch.setattr(executor, "preflight", lambda: None)
+    monkeypatch.setattr(executor, "source", lambda focal: [])
+    monkeypatch.setattr(executor, "clean_commit", lambda commit: None)
+    release_error = OSError("release refused")
+
+    def action(values):
+        executor.gate["stage"] = "db"
+        if code:
+            raise ex.CommandFailure(code)
+
+    def stop():
+        executor.gate["state"] = "stopped"
+        # Arm the release error after the action, leaving setup guards intact.
+        if release_step == "no_links":
+            original_no_links = ex.no_links
+
+            def no_links(path):
+                if path == lock:
+                    raise release_error
+                return original_no_links(path)
+
+            monkeypatch.setattr(ex, "no_links", no_links)
+        else:
+            original_unlink = Path.unlink
+
+            def unlink(path, *args, **kwargs):
+                if path == lock:
+                    raise release_error
+                return original_unlink(path, *args, **kwargs)
+
+            monkeypatch.setattr(Path, "unlink", unlink)
+
+    monkeypatch.setattr(executor, "test", action)
+    monkeypatch.setattr(executor, "stop", stop)
+    if code:
+        assert executor.execute("Test") == code
+        assert executor.gate["failure"] == {
+            "stage": "db", "kind": "CommandFailure", "exitCode": code,
+        }
+    else:
+        with pytest.raises(OSError) as failure:
+            executor.execute("Test")
+        assert failure.value is release_error
+    assert lock.read_text() == str(os.getpid())
+
+
+def test_lock_release_failure_preserves_propagating_exception(tmp_path, monkeypatch):
+    executor = lifecycle_run(tmp_path)
+    executor.gate["state"] = "stopped"
+    executor.save()
+    lock = executor.run.parent / ".executor.lock"
+    original_unlink = Path.unlink
+
+    def unlink(path, *args, **kwargs):
+        if path == lock:
+            raise OSError("release refused")
+        return original_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", unlink)
+    with pytest.raises(ValueError, match="invalid transition"):
+        executor.execute("Test")
+    assert lock.read_text() == str(os.getpid())
+
+
+def test_persisted_gate_is_read_only_after_lock_acquisition(tmp_path, monkeypatch):
+    executor = lifecycle_run(tmp_path)
+    executor.gate["state"] = "stopped"
+    executor.save()
+    original_read = ex.read_json
+    reads = []
+
+    def read_json(path):
+        if path == executor.run / "gates.json":
+            assert (executor.run.parent / ".executor.lock").read_text() == str(os.getpid())
+            reads.append(path)
+        return original_read(path)
+
+    monkeypatch.setattr(ex, "read_json", read_json)
+    assert executor.execute("Stop") == 0
+    assert reads == [executor.run / "gates.json"]
+
+
 def test_lock_write_failure_releases_only_owned_lock(tmp_path, monkeypatch):
     executor = lifecycle_run(tmp_path)
     lock = executor.run.parent / ".executor.lock"
@@ -2096,6 +2219,42 @@ def test_sanitize_report_removes_raw_content_including_invalid_xml(tmp_path, pay
     assert all(secret not in sanitized for secret in ("secret", "postgresql://", sentinel))
 
 
+def test_sanitize_report_missing_file_writes_safe_error_report(tmp_path):
+    path = tmp_path / "missing.xml"
+    with pytest.raises(ValueError, match="missing or invalid"):
+        ex.sanitize_report(path, "c" * 64)
+    root = ex.ET.parse(path).getroot()
+    suite = root.find("testsuite")
+    assert suite.attrib == {
+        "name": "disposable", "tests": "0", "skipped": "0", "failures": "0", "errors": "1",
+    }
+    assert list(suite) == []
+
+
+def test_sanitize_report_keeps_only_allowlisted_case_attributes_and_outcomes(tmp_path):
+    path = tmp_path / "raw.xml"
+    path.write_text(
+        '<testsuite hostname="private"><properties><property name="secret"/></properties>'
+        '<testcase name="one" classname="Case" file="tests/db/test_case.py" line="9" '
+        'time="0.25" secret="private"><properties><property value="private"/></properties>'
+        '<failure message="private">private</failure><system-out>private</system-out>'
+        '<system-err>private</system-err></testcase></testsuite>', encoding="utf-8",
+    )
+    assert ex.sanitize_report(path, "c" * 64) == {
+        "tests": 1, "skipped": 0, "failures": 1, "errors": 0,
+    }
+    root = ex.ET.parse(path).getroot()
+    case = root.find("testsuite/testcase")
+    assert case.attrib == {
+        "name": "one", "classname": "Case", "file": "tests/db/test_case.py",
+        "line": "9", "time": "0.25",
+    }
+    assert [node.tag for node in root.iter()] == ["testsuites", "testsuite", "testcase", "failure"]
+    assert case[0].attrib == {"message": "details omitted from disposable evidence"}
+    assert case[0].text is None
+    assert "private" not in path.read_text(encoding="utf-8")
+
+
 @pytest.mark.parametrize("code,report,expected", [
     (17, "<broken>secret", 17), (0, "<broken>secret", 2),
     (0, "<testsuite/>", 2),
@@ -2160,7 +2319,8 @@ def test_full_suites_are_serial_and_stop_at_first_failure(
     def runner(argv, **kwargs):
         stage = executor.gate["stage"]
         stages.append(stage)
-        assert events[-4:] == [("source", False), ("clean", "d" * 40), "proof", "history"]
+        assert events == [("source", False), ("clean", "d" * 40), "proof", "history"]
+        events.clear()
         assert argv[:6] == ["uv", "run", "--directory", str(executor.repo / "runtime"),
                             "pytest", "--collect-only" if stage == "collect-rls" else "-m"]
         assert kwargs["env"]["WORDER_TEST_DB_SENTINEL"] == "c" * 64

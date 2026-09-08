@@ -623,7 +623,6 @@ class Executor:
             result = subprocess.CompletedProcess(argv, 127, "", "")
         self.gate["commands"].append(argv)
         self.gate["exitCodes"].append(result.returncode)
-        self.save()
         output = (result.stdout or "") + "\n" + (result.stderr or "")
         event = {
             "stage": self.gate["stage"],
@@ -638,9 +637,15 @@ class Executor:
             ),
         }
         event_path = self.run / "events.jsonl"
-        no_links(event_path)
-        with event_path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(event) + "\n")
+        try:
+            self.save()
+            no_links(event_path)
+            with event_path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(event) + "\n")
+        except (Exception, KeyboardInterrupt):
+            if result.returncode:
+                raise CommandFailure(result.returncode) from None
+            raise
         if check and result.returncode:
             raise CommandFailure(result.returncode)
         return result
@@ -1048,6 +1053,7 @@ class Executor:
         lock = root / ".executor.lock"
         no_links(lock)
         handle = lock.open("x", encoding="utf-8")
+        code, primary_error = 0, False
         try:
             with handle:
                 handle.write(str(os.getpid()))
@@ -1064,7 +1070,6 @@ class Executor:
                 require(self.gate["state"] in allowed[action], "invalid transition")
                 if action == "Stop" and self.gate["state"] == "stopped":
                     return 0
-            code = 0
             self.identity = None
             try:
                 self.save()
@@ -1125,9 +1130,16 @@ class Executor:
                     if not code:
                         raise
             return code
+        except BaseException:
+            primary_error = True
+            raise
         finally:
-            no_links(lock)
-            lock.unlink()
+            try:
+                no_links(lock)
+                lock.unlink()
+            except (Exception, KeyboardInterrupt):
+                if not code and not primary_error:
+                    raise
 
 
 def main():
