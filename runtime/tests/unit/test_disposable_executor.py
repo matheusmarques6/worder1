@@ -1458,3 +1458,316 @@ def test_prepare_rejects_owned_nonce_before_volume_inventory_or_start(
         call[:2] == ["supabase", "start"] and call[-1:] != ["--help"]
         for call in calls
     )
+
+
+def test_upgrade_failure_never_promotes_manifest(monkeypatch, tmp_path):
+    first = {
+        "filename": "20260812000001_a.sql",
+        "version": "20260812000001",
+        "sha256": "A" * 64,
+    }
+    second = {
+        "filename": "20260812000002_b.sql",
+        "version": "20260812000002",
+        "sha256": "B" * 64,
+    }
+    run = executor_run(tmp_path)
+    ex.write_json(run / "manifest.json", [first])
+    executor = ex.Executor(REPO, run)
+    executor.gate.update(commit="d" * 40, state="ready")
+    executor.identity = valid_identity()
+    monkeypatch.setattr(executor, "proof", lambda: None)
+    monkeypatch.setattr(
+        executor,
+        "files",
+        lambda expected=None: [first] if expected is None else expected,
+    )
+    monkeypatch.setattr(executor, "history", lambda rows: None)
+    monkeypatch.setattr(ex, "inventory", lambda *args: [first, second])
+    monkeypatch.setattr(ex.shutil, "copyfile", lambda *args: None)
+
+    def fail(*arguments):
+        assert arguments == ("migration", "up", "--local")
+        raise ex.CommandFailure(17)
+
+    monkeypatch.setattr(executor, "local", fail)
+
+    with pytest.raises(ex.CommandFailure) as result:
+        executor.upgrade("20260812000002")
+
+    assert result.value.code == 17
+    assert ex.read_json(run / "manifest.json") == [first]
+    assert ex.read_json(run / "manifest.prospective.json") == [first, second]
+    persisted = ex.read_json(run / "gates.json")
+    assert (persisted["state"], persisted["stage"]) == (
+        "upgrading",
+        "migration-up",
+    )
+
+
+@pytest.mark.parametrize(
+    ("state", "identity"),
+    [
+        ("prepared", valid_identity()),
+        ("ready", None),
+        ("ready", valid_identity() | {"sentinel": None}),
+        ("ready", valid_identity() | {"sentinel": "short"}),
+    ],
+)
+def test_upgrade_requires_ready_state_and_valid_sentinel_without_external_work(
+    tmp_path, state, identity
+):
+    run = executor_run(tmp_path)
+    executor = ex.Executor(
+        REPO,
+        run,
+        runner=lambda *_args, **_kwargs: pytest.fail("unexpected CLI"),
+    )
+    executor.gate["state"] = state
+    executor.identity = identity
+
+    with pytest.raises(ValueError):
+        executor.upgrade()
+
+    assert executor.gate["state"] == state
+
+
+def test_upgrade_rejects_limit_before_applied_history_before_source_inventory(
+    monkeypatch, tmp_path
+):
+    old = [
+        {
+            "filename": "20260812000002_b.sql",
+            "version": "20260812000002",
+            "sha256": "B" * 64,
+        }
+    ]
+    run = executor_run(tmp_path)
+    executor = ex.Executor(REPO, run)
+    executor.gate.update(commit="d" * 40, state="ready")
+    executor.identity = valid_identity()
+    events = []
+    monkeypatch.setattr(executor, "files", lambda: events.append("files") or old)
+    monkeypatch.setattr(executor, "proof", lambda: events.append("proof"))
+    monkeypatch.setattr(
+        executor, "history", lambda rows: events.append(("history", rows))
+    )
+    monkeypatch.setattr(
+        ex,
+        "inventory",
+        lambda *_args: pytest.fail("source inventory considered before limit refusal"),
+    )
+
+    with pytest.raises(ValueError, match="precedes applied history"):
+        executor.upgrade("20260812000001")
+
+    assert events == ["files", "proof", ("history", old)]
+    assert not (run / "manifest.prospective.json").exists()
+
+
+@pytest.mark.parametrize("mutation", ["edit", "remove", "rename", "reorder", "backfill"])
+def test_upgrade_rejects_any_changed_applied_prefix_before_copy(
+    monkeypatch, tmp_path, mutation
+):
+    first = {
+        "filename": "20260812000001_a.sql",
+        "version": "20260812000001",
+        "sha256": "A" * 64,
+    }
+    third = {
+        "filename": "20260812000003_c.sql",
+        "version": "20260812000003",
+        "sha256": "C" * 64,
+    }
+    backfill = {
+        "filename": "20260812000002_b.sql",
+        "version": "20260812000002",
+        "sha256": "B" * 64,
+    }
+    changed = {
+        "edit": [first | {"sha256": "D" * 64}, third],
+        "remove": [first],
+        "rename": [first | {"filename": "20260812000001_renamed.sql"}, third],
+        "reorder": [third, first],
+        "backfill": [first, backfill, third],
+    }[mutation]
+    old = [first, third]
+    run = executor_run(tmp_path)
+    ex.write_json(run / "manifest.json", old)
+    executor = ex.Executor(REPO, run)
+    executor.gate.update(commit="d" * 40, state="ready")
+    executor.identity = valid_identity()
+    monkeypatch.setattr(executor, "files", lambda: old)
+    monkeypatch.setattr(executor, "proof", lambda: None)
+    monkeypatch.setattr(executor, "history", lambda rows: None)
+    monkeypatch.setattr(ex, "inventory", lambda *_args: changed)
+    monkeypatch.setattr(
+        ex.shutil,
+        "copyfile",
+        lambda *_args: pytest.fail("changed prefix copied"),
+    )
+
+    with pytest.raises(ValueError):
+        executor.upgrade()
+
+    assert ex.read_json(run / "manifest.json") == old
+    assert not (run / "manifest.prospective.json").exists()
+
+
+def test_upgrade_copies_only_suffix_and_promotes_after_verification(
+    monkeypatch, tmp_path
+):
+    first = {
+        "filename": "20260812000001_a.sql",
+        "version": "20260812000001",
+        "sha256": "A" * 64,
+    }
+    second = {
+        "filename": "20260812000002_b.sql",
+        "version": "20260812000002",
+        "sha256": "B" * 64,
+    }
+    old, new = [first], [first, second]
+    run = executor_run(tmp_path)
+    ex.write_json(run / "manifest.json", old)
+    executor = ex.Executor(REPO, run)
+    executor.gate.update(commit="d" * 40, state="ready")
+    executor.identity = valid_identity()
+    events = []
+
+    def files(expected=None):
+        events.append(("files", expected))
+        assert ex.read_json(run / "manifest.json") == old
+        return old if expected is None else expected
+
+    def proof():
+        events.append("proof")
+        assert ex.read_json(run / "manifest.json") == old
+
+    def history(rows):
+        events.append(("history", rows))
+        assert ex.read_json(run / "manifest.json") == old
+
+    def copyfile(source, destination):
+        events.append(("copy", Path(source), Path(destination)))
+        assert ex.read_json(run / "manifest.prospective.json") == new
+        assert ex.read_json(run / "manifest.json") == old
+
+    def local(*arguments):
+        events.append(("local", arguments))
+        assert arguments == ("migration", "up", "--local")
+        assert ex.read_json(run / "manifest.json") == old
+
+    monkeypatch.setattr(executor, "files", files)
+    monkeypatch.setattr(executor, "proof", proof)
+    monkeypatch.setattr(executor, "history", history)
+    monkeypatch.setattr(ex, "inventory", lambda *_args: new)
+    monkeypatch.setattr(ex.shutil, "copyfile", copyfile)
+    monkeypatch.setattr(executor, "local", local)
+
+    executor.upgrade("20260812000002")
+
+    assert events == [
+        ("files", None),
+        "proof",
+        ("history", old),
+        (
+            "copy",
+            REPO / "supabase/migrations" / second["filename"],
+            run / "supabase/migrations" / second["filename"],
+        ),
+        ("files", new),
+        "proof",
+        ("history", old),
+        ("local", ("migration", "up", "--local")),
+        "proof",
+        ("files", new),
+        ("history", new),
+    ]
+    assert ex.read_json(run / "manifest.json") == new
+    assert executor.gate["state"] == "ready"
+
+
+def test_upgrade_never_overwrites_existing_suffix_destination(monkeypatch, tmp_path):
+    first = {
+        "filename": "20260812000001_a.sql",
+        "version": "20260812000001",
+        "sha256": "A" * 64,
+    }
+    second = {
+        "filename": "20260812000002_b.sql",
+        "version": "20260812000002",
+        "sha256": "B" * 64,
+    }
+    run = executor_run(tmp_path)
+    destination = run / "supabase/migrations" / second["filename"]
+    destination.parent.mkdir()
+    destination.write_text("do not replace\n", encoding="ascii")
+    ex.write_json(run / "manifest.json", [first])
+    executor = ex.Executor(REPO, run)
+    executor.gate.update(commit="d" * 40, state="ready")
+    executor.identity = valid_identity()
+    monkeypatch.setattr(
+        executor, "files", lambda expected=None: [first] if expected is None else expected
+    )
+    monkeypatch.setattr(executor, "proof", lambda: None)
+    monkeypatch.setattr(executor, "history", lambda rows: None)
+    monkeypatch.setattr(ex, "inventory", lambda *_args: [first, second])
+    monkeypatch.setattr(
+        ex.shutil, "copyfile", lambda *_args: pytest.fail("destination overwritten")
+    )
+
+    with pytest.raises(ValueError, match="already exists"):
+        executor.upgrade()
+
+    assert destination.read_text(encoding="ascii") == "do not replace\n"
+    assert ex.read_json(run / "manifest.json") == [first]
+
+
+def test_upgrade_noop_reproves_and_stays_ready_without_migration(
+    monkeypatch, tmp_path
+):
+    old = [
+        {
+            "filename": "20260812000001_a.sql",
+            "version": "20260812000001",
+            "sha256": "A" * 64,
+        }
+    ]
+    run = executor_run(tmp_path)
+    ex.write_json(run / "manifest.json", old)
+    executor = ex.Executor(REPO, run)
+    executor.gate.update(commit="d" * 40, state="ready")
+    executor.identity = valid_identity()
+    events = []
+    monkeypatch.setattr(
+        executor,
+        "files",
+        lambda expected=None: events.append(("files", expected))
+        or (old if expected is None else expected),
+    )
+    monkeypatch.setattr(executor, "proof", lambda: events.append("proof"))
+    monkeypatch.setattr(
+        executor, "history", lambda rows: events.append(("history", rows))
+    )
+    monkeypatch.setattr(ex, "inventory", lambda *_args: old)
+    monkeypatch.setattr(
+        ex.shutil, "copyfile", lambda *_args: pytest.fail("noop copied a migration")
+    )
+    monkeypatch.setattr(
+        executor, "local", lambda *_args: pytest.fail("noop ran migration CLI")
+    )
+
+    executor.upgrade("20260812000001")
+
+    assert events == [
+        ("files", None),
+        "proof",
+        ("history", old),
+        "proof",
+        ("files", old),
+        ("history", old),
+    ]
+    assert ex.read_json(run / "manifest.prospective.json") == old
+    assert ex.read_json(run / "manifest.json") == old
+    assert executor.gate["state"] == "ready"

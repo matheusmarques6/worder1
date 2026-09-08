@@ -824,3 +824,45 @@ class Executor:
         )
         self.gate["state"] = "ready"
         self.save()
+
+    def upgrade(self, through=None) -> None:
+        require(self.gate["state"] == "ready", "Upgrade requires ready state")
+        require(
+            isinstance(self.identity, dict) and self.identity.get("sentinel") is not None,
+            "Upgrade requires ready identity",
+        )
+        identity_shape(self.identity, self.project)
+        self.gate.update(state="upgrading", stage="upgrade-preflight")
+        old = self.files()
+        self.proof()
+        self.history(old)
+        if through:
+            require(
+                through >= old[-1]["version"],
+                "migration limit precedes applied history",
+            )
+        new = prospective(
+            old, inventory(self.repo / "supabase/migrations", through)
+        )
+        write_json(self.run / "manifest.prospective.json", new)
+        if new != old:
+            for row in new[len(old) :]:
+                destination = self.run / "supabase/migrations" / row["filename"]
+                no_links(destination)
+                require(not destination.exists(), "new migration already exists")
+                shutil.copyfile(
+                    self.repo / "supabase/migrations" / row["filename"], destination
+                )
+            self.files(new)
+            self.proof()
+            self.history(old)
+            self.gate["stage"] = "migration-up"
+            self.save()
+            self.local("migration", "up", "--local")
+        self.gate["stage"] = "upgrade-verification"
+        self.proof()
+        self.files(new)
+        self.history(new)
+        write_json(self.run / "manifest.json", new)
+        self.gate["state"] = "ready"
+        self.save()
