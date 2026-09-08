@@ -15,7 +15,11 @@ from pathlib import Path
 
 import psycopg
 
-from tests.support.disposable_db import assert_database_identity, read_system_identifier
+from tests.support.disposable_db import (
+    assert_database_identity,
+    read_system_identifier,
+    validate_dsn,
+)
 
 EXCLUDED = (
     "realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,"
@@ -315,13 +319,14 @@ def run_process(argv, *, cwd, env, input=None, timeout=600):
         code = process.returncode
     except (subprocess.TimeoutExpired, KeyboardInterrupt) as error:
         if os.name == "nt":
-            subprocess.run(
-                ["taskkill.exe", "/PID", str(process.pid), "/T", "/F"],
-                capture_output=True,
-                check=False,
-                timeout=30,
-                shell=False,
-            )
+            with contextlib.suppress(OSError, subprocess.TimeoutExpired):
+                subprocess.run(
+                    ["taskkill.exe", "/PID", str(process.pid), "/T", "/F"],
+                    capture_output=True,
+                    check=False,
+                    timeout=30,
+                    shell=False,
+                )
         else:
             with contextlib.suppress(ProcessLookupError):
                 os.killpg(process.pid, signal.SIGKILL)
@@ -667,6 +672,7 @@ class Executor:
             "sentinel proof unavailable",
         )
         self.physical()
+        validate_dsn(DSN)
         with psycopg.connect(
             DSN, connect_timeout=3, options="-c statement_timeout=3000"
         ) as conn:

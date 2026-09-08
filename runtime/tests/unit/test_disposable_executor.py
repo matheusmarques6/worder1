@@ -349,6 +349,66 @@ def test_run_process_normalizes_signal_return_code(monkeypatch):
     assert ex.run_process(["tool"], cwd=REPO, env={}).returncode == 137
 
 
+@pytest.mark.skipif(os.name != "nt", reason="Windows taskkill fallback")
+@pytest.mark.parametrize(
+    ("initial_error", "helper_error", "expected_code"),
+    [
+        (ex.subprocess.TimeoutExpired("tool", 1), OSError("taskkill missing"), 124),
+        (
+            KeyboardInterrupt(),
+            ex.subprocess.TimeoutExpired("taskkill", 30),
+            130,
+        ),
+    ],
+)
+def test_run_process_reaps_after_windows_taskkill_failure(
+    monkeypatch, initial_error, helper_error, expected_code
+):
+    events = []
+
+    class Process:
+        pid = 321
+
+        def communicate(self, *, input=None, timeout=None):
+            events.append(("communicate", input, timeout))
+            if len(events) == 1:
+                raise initial_error
+            return "after", "cleanup"
+
+        def kill(self):
+            events.append(("kill",))
+
+        def wait(self):
+            events.append(("wait",))
+
+    def taskkill(argv, **kwargs):
+        events.append(("taskkill", argv, kwargs))
+        raise helper_error
+
+    monkeypatch.setattr(ex.shutil, "which", lambda _: "C:/bin/tool.exe")
+    monkeypatch.setattr(ex.subprocess, "Popen", lambda *_args, **_kwargs: Process())
+    monkeypatch.setattr(ex.subprocess, "run", taskkill)
+
+    result = ex.run_process(["tool"], cwd=REPO, env={}, input="sql", timeout=1)
+
+    assert (result.returncode, result.stdout, result.stderr) == (
+        expected_code,
+        "after",
+        "cleanup",
+    )
+    assert events == [
+        ("communicate", "sql", 1),
+        (
+            "taskkill",
+            ["taskkill.exe", "/PID", "321", "/T", "/F"],
+            {"capture_output": True, "check": False, "timeout": 30, "shell": False},
+        ),
+        ("kill",),
+        ("communicate", None, None),
+        ("wait",),
+    ]
+
+
 def test_child_env_is_allowlisted_and_does_not_mutate_parent(monkeypatch):
     parent = {
         "Path": "bin",
@@ -674,6 +734,68 @@ def test_physical_rejects_invalid_inventory_and_loopback_mismatch(tmp_path, monk
     monkeypatch.setattr(ex, "read_system_identifier", lambda dsn: "654321")
     with pytest.raises(ValueError, match="loopback identity mismatch"):
         executor.physical()
+
+
+def test_physical_refuses_ambient_libpq_routing_without_connecting(tmp_path, monkeypatch):
+    run = executor_run(tmp_path)
+    ex.write_json(run / "volumes-before.json", [])
+
+    def runner(argv, **kwargs):
+        stdout = (
+            json.dumps([container_record()])
+            if argv[:2] == ["docker", "inspect"]
+            else "123456\n"
+        )
+        return ex.subprocess.CompletedProcess(argv, 0, stdout, "")
+
+    connections = []
+    monkeypatch.setenv("PGHOSTADDR", "203.0.113.10")
+    monkeypatch.setattr(ex.psycopg, "connect", lambda *args, **kwargs: connections.append(args))
+
+    with pytest.raises(ValueError, match="ambient libpq routing"):
+        ex.Executor(REPO, run, runner=runner).physical()
+
+    assert connections == []
+    assert os.environ["PGHOSTADDR"] == "203.0.113.10"
+
+
+def test_proof_refuses_ambient_libpq_routing_before_its_connection(tmp_path, monkeypatch):
+    run = executor_run(tmp_path)
+    ex.write_json(run / "volumes-before.json", [])
+
+    def runner(argv, **kwargs):
+        stdout = (
+            json.dumps([container_record()])
+            if argv[:2] == ["docker", "inspect"]
+            else "123456\n"
+        )
+        return ex.subprocess.CompletedProcess(argv, 0, stdout, "")
+
+    class Context:
+        def __enter__(self):
+            return object()
+
+        def __exit__(self, *exc):
+            return None
+
+    connections = []
+
+    def connect(*args, **kwargs):
+        connections.append((args, kwargs))
+        return Context()
+
+    executor = ex.Executor(REPO, run, runner=runner)
+    executor.identity = valid_identity()
+    monkeypatch.setenv("PGHOSTADDR", "203.0.113.10")
+    monkeypatch.setattr(ex, "read_system_identifier", lambda dsn: "123456")
+    monkeypatch.setattr(ex.psycopg, "connect", connect)
+    monkeypatch.setattr(ex, "assert_database_identity", lambda *args, **kwargs: None)
+
+    with pytest.raises(ValueError, match="ambient libpq routing"):
+        executor.proof()
+
+    assert connections == []
+    assert os.environ["PGHOSTADDR"] == "203.0.113.10"
 
 
 def test_proof_uses_bounded_psycopg_context_and_identity_assertion(tmp_path, monkeypatch):
