@@ -138,6 +138,12 @@ export async function PUT(
     // pick a store before publishing; single-store orgs get it
     // auto-filled with their only active store.
     if (status === 'published') {
+      // Variante de experimento não é publicada: entra na loja pelo popup
+      // principal, na fatia que o experimento dá a ela.
+      const { data: abRow } = await admin.from('crm_forms').select('ab_parent_id').eq('id', formId).eq('organization_id', user.organization_id).maybeSingle()
+      if (abRow?.ab_parent_id) {
+        return NextResponse.json({ error: 'Esta é uma variante de experimento. Ative o experimento no popup principal.' }, { status: 400 })
+      }
       const { data: current } = await admin
         .from('crm_forms')
         .select('store_id, form_type, design_json')

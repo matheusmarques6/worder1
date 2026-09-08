@@ -17,6 +17,7 @@ import { createHash } from 'crypto'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { sanitizeDomain, isVisualPopupForm } from '@/lib/forms/submit-utils'
 import { buildPopupScript, compactScript } from '@/app/api/public/forms/[id]/script/generator'
+import { attachExperiments } from '@/lib/popups/experiment-service'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,7 +47,7 @@ export async function GET(req: NextRequest) {
 
     const { data: rows } = await supabaseAdmin
       .from('crm_forms')
-      .select('id, name, status, design_json, behavior, form_type, success_message, redirect_url, store_id, updated_at')
+      .select('id, name, status, design_json, behavior, form_type, success_message, redirect_url, store_id, updated_at, ab_parent_id')
       .eq('organization_id', store.organization_id)
       .eq('status', 'published')
       .order('created_at', { ascending: true })
@@ -55,16 +56,20 @@ export async function GET(req: NextRequest) {
     // (design_json vazio) viraria um popup em branco após 5 s.
     const forms = (rows || []).filter((f: any) =>
       (!f.store_id || f.store_id === store.id) &&
+      !f.ab_parent_id &&
       isVisualPopupForm(f.form_type, f.design_json) &&
       Array.isArray(f.design_json?.steps) && f.design_json.steps.length > 0,
     )
+    // Experimentos em andamento: o script do pai leva as variantes.
+    const experiments = await attachExperiments(supabaseAdmin, forms)
+    for (const f of forms as any[]) f.experiment = experiments.get(f.id) || null
 
     // Maior prioridade primeiro: o script dela roda antes e registra a
     // intenção antes dos outros.
     forms.sort((a: any, b: any) => (Number(b.behavior?.priority) || 0) - (Number(a.behavior?.priority) || 0))
 
     const etag = '"' + createHash('sha1')
-      .update(forms.map((f: any) => `${f.id}:${f.updated_at}`).join('|') + '|v3|' + BUILD_ID)
+      .update(forms.map((f: any) => `${f.id}:${f.updated_at}:${f.experiment ? f.experiment.id + ':' + JSON.stringify(f.experiment.split) + ':' + JSON.stringify(f.experiment.bandit || null) : ''}`).join('|') + '|v4|' + BUILD_ID)
       .digest('hex').slice(0, 20) + '"'
 
     const cache = { 'Cache-Control': 'public, max-age=60, s-maxage=60, stale-while-revalidate=600', ETag: etag }

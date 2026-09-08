@@ -410,6 +410,199 @@ function ToggleRow({ label, checked, onChange, hint }: { label: string; checked:
   )
 }
 
+// ── Experimento A/B ──────────────────────────────────────────────────────────
+// O popup é a variante A. Cada variante extra é uma cópia editável; o
+// experimento sorteia por visitante e o cron declara a vencedora.
+type ExperimentBundle = {
+  parent: { id: string; name: string; status: string }
+  experiment: null | {
+    id: string; status: 'draft' | 'running' | 'ended'; mode: 'split' | 'bandit'; kpi: 'submit' | 'optin' | 'revenue'
+    split: Record<string, number>; min_sample: number; max_days: number; confidence: number; auto_apply_winner: boolean; bandit_min_views: number
+    started_at: string | null; ended_at: string | null; winner_variant_id: string | null; end_reason: string | null; stats: any
+  }
+  variants: Array<{ id: string; label: string; name: string; is_control: boolean; status: string }>
+  split: Record<string, number>
+  stats: Array<{ variantId: string; impressions: number; submissions: number; optins: number; orders: number; revenue: number }>
+  evaluation: null | {
+    kpi: string; leaderId: string | null; winnerId: string | null; ready: boolean; reason: string
+    comparisons: Array<{ variantId: string; n: number; k: number; rate: number; lift: number | null; p: number | null; significant: boolean; enoughSample: boolean }>
+  }
+}
+const KPI_LABEL: Record<string, string> = { submit: 'Inscrições', optin: 'Opt-in de e-mail', revenue: 'Pedidos' }
+const END_REASON: Record<string, string> = { manual: 'encerrado manualmente', manual_apply: 'vencedora aplicada manualmente', auto_winner: 'vencedora aplicada automaticamente', auto_control_wins: 'a versão principal venceu', max_days: 'prazo esgotado sem vencedora' }
+
+function ExperimentDrawer({ formId, formName, formStatus, dirty, onClose, onOpenVariant }: { formId: string; formName: string; formStatus: string; dirty: boolean; onClose: () => void; onOpenVariant: (id: string) => void }) {
+  const [data, setData] = useState<ExperimentBundle | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+  const [split, setSplit] = useState<Record<string, number>>({})
+  const load = useCallback(async () => {
+    try {
+      const r = await fetch(`/api/forms/${formId}/experiment`, { cache: 'no-store' })
+      const d = await r.json()
+      if (!r.ok) throw new Error(d.error || 'erro')
+      setData(d); setSplit(d.split || {}); setError(null)
+    } catch (e: any) { setError(e?.message || 'Não foi possível carregar o experimento') }
+  }, [formId])
+  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey); return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+  const act = async (action: string, extra: Record<string, any> = {}) => {
+    setBusy(action)
+    try {
+      const r = await fetch(`/api/forms/${formId}/experiment`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...extra }) })
+      const d = await r.json()
+      if (!r.ok) throw new Error(d.error || 'erro')
+      setData(d); setSplit(d.split || {}); setError(null)
+    } catch (e: any) { setError(e?.message || 'Não foi possível atualizar') }
+    finally { setBusy(null) }
+  }
+  const exp = data?.experiment || null
+  const running = exp?.status === 'running'
+  const ended = exp?.status === 'ended'
+  const variants = data?.variants || []
+  const splitTotal = Object.values(split).reduce((a, b) => a + (Number(b) || 0), 0)
+  const cmp = (id: string) => data?.evaluation?.comparisons.find(c => c.variantId === id)
+  const st = (id: string) => data?.stats.find(x => x.variantId === id)
+  const fmtP = (p: number | null) => p == null ? '—' : p < 0.001 ? '<0,001' : p.toFixed(3).replace('.', ',')
+  const pct1 = (v: number) => `${(v * 100).toFixed(1).replace('.', ',')}%`
+  const winnerName = exp?.winner_variant_id ? (variants.find(v => v.id === exp.winner_variant_id)?.label || '?') : null
+  return (
+    <div className="fixed inset-0 z-[70] flex justify-end" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/30" />
+      <div role="dialog" aria-modal="true" aria-label="Experimento A/B" onClick={e => e.stopPropagation()} className="relative h-full w-full max-w-[520px] bg-white shadow-2xl flex flex-col">
+        <div className="flex items-start justify-between px-5 py-4 border-b border-gray-200">
+          <div>
+            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-[0.08em]">Experimento A/B</p>
+            <h2 className="text-[15px] font-semibold text-gray-900 mt-0.5 truncate max-w-[380px]">{formName}</h2>
+            <p className="text-[11px] text-gray-500 mt-0.5">
+              {!exp ? 'Sem experimento. Crie uma variante para começar.' : running ? `Em andamento desde ${exp.started_at ? new Date(exp.started_at).toLocaleDateString('pt-BR') : 'hoje'} · KPI ${KPI_LABEL[exp.kpi]}` : ended ? `Encerrado · ${END_REASON[exp.end_reason || ''] || exp.end_reason}${winnerName ? ` · vencedora ${winnerName}` : ''}` : 'Rascunho — configure e inicie.'}
+            </p>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500" aria-label="Fechar"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+          {error && <p className="text-[12px] text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
+          {formStatus !== 'published' && <p className="text-[12px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">O popup não está ativo: o experimento só recebe visitantes quando o popup principal estiver no ar.</p>}
+          {dirty && <p className="text-[12px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">Há alterações não salvas neste popup. Salve antes de criar variantes — a cópia parte do que está salvo.</p>}
+
+          {/* Variantes */}
+          <section>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[11px] font-bold text-gray-500 uppercase tracking-[0.08em]">Variantes</p>
+              {!running && variants.length < 4 && (
+                <button onClick={() => act('create_variant')} disabled={!!busy} className="text-[12px] font-semibold text-zinc-900 underline underline-offset-2 disabled:opacity-50">{busy === 'create_variant' ? 'Criando…' : '+ Criar variante'}</button>
+              )}
+            </div>
+            <div className="rounded-lg border border-gray-200 divide-y divide-gray-100">
+              {variants.map(v => {
+                const c = cmp(v.id); const s = st(v.id)
+                const isWinner = exp?.winner_variant_id === v.id || (data?.evaluation?.winnerId === v.id)
+                const isLeader = !isWinner && data?.evaluation?.leaderId === v.id && (s?.impressions || 0) > 0
+                return (
+                  <div key={v.id} className="px-3 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className={`w-6 h-6 rounded-md flex items-center justify-center text-[11px] font-bold ${v.is_control ? 'bg-gray-900 text-white' : 'bg-violet-100 text-violet-800'}`}>{v.label}</span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[12px] font-medium text-gray-800 truncate">{v.is_control ? 'Este popup (controle)' : v.name}</p>
+                        {(exp && exp.status !== 'draft') && (
+                          <p className="text-[11px] text-gray-500 tabular-nums">
+                            {(s?.impressions || 0).toLocaleString('pt-BR')} vis. · {(c?.k ?? s?.submissions ?? 0).toLocaleString('pt-BR')} {KPI_LABEL[exp.kpi]?.toLowerCase()} · {pct1(c?.rate || 0)}
+                            {!v.is_control && c?.lift != null && <span className={c.lift >= 0 ? 'text-emerald-700' : 'text-red-700'}> · {c.lift >= 0 ? '+' : ''}{(c.lift * 100).toFixed(0)}%</span>}
+                            {!v.is_control && c && <span className="text-gray-400"> · p {fmtP(c.p)}{c.significant ? ' · significativo' : ''}</span>}
+                          </p>
+                        )}
+                      </div>
+                      {isWinner && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 uppercase tracking-wide">vencedora</span>}
+                      {isLeader && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 uppercase tracking-wide">líder</span>}
+                      {!running && (
+                        <div className="w-16">
+                          <div className="relative"><input type="number" min={0} max={100} value={split[v.id] ?? 0} onChange={e => setSplit({ ...split, [v.id]: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} onBlur={() => act('update', { patch: { split } })} className={inp + ' pr-6 text-right text-[12px] py-1'} aria-label={`Fatia da variante ${v.label}`} /><span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">%</span></div>
+                        </div>
+                      )}
+                      {running && <span className="text-[11px] text-gray-500 tabular-nums w-10 text-right">{split[v.id] ?? 0}%</span>}
+                      {!v.is_control && <button onClick={() => onOpenVariant(v.id)} className="p-1.5 rounded hover:bg-gray-100 text-gray-500" title="Editar variante"><Pencil className="w-3.5 h-3.5" /></button>}
+                      {!v.is_control && !running && <button onClick={() => act('remove_variant', { variant_id: v.id })} disabled={!!busy} className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-600" title="Remover variante"><Trash2 className="w-3.5 h-3.5" /></button>}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            {!running && variants.length > 1 && splitTotal !== 100 && <p className="text-[11px] text-amber-700 mt-1.5">As fatias somam {splitTotal}%; ao salvar são normalizadas para 100%.</p>}
+          </section>
+
+          {exp && variants.length > 1 && (
+            <section className="space-y-3">
+              <p className="text-[11px] font-bold text-gray-500 uppercase tracking-[0.08em]">Regras</p>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="O que decide">
+                  <select className={sel} value={exp.kpi} disabled={running} onChange={e => act('update', { patch: { kpi: e.target.value } })}>
+                    <option value="submit">Inscrições ÷ visualizações</option>
+                    <option value="optin">Opt-in de e-mail ÷ visualizações</option>
+                    <option value="revenue">Pedidos ÷ visualizações</option>
+                  </select>
+                </Field>
+                <Field label="Confiança">
+                  <select className={sel} value={String(exp.confidence)} disabled={running} onChange={e => act('update', { patch: { confidence: Number(e.target.value) } })}>
+                    <option value="0.9">90%</option>
+                    <option value="0.95">95%</option>
+                    <option value="0.99">99%</option>
+                  </select>
+                </Field>
+                <Field label="Amostra mínima" hint="Visualizações por variante antes de decidir.">
+                  <input type="number" min={20} className={inp} defaultValue={exp.min_sample} disabled={running} onBlur={e => act('update', { patch: { min_sample: Number(e.target.value) } })} />
+                </Field>
+                <Field label="Prazo máximo" hint="Dias. Sem vencedora até lá, encerra.">
+                  <input type="number" min={1} max={180} className={inp} defaultValue={exp.max_days} disabled={running} onBlur={e => act('update', { patch: { max_days: Number(e.target.value) } })} />
+                </Field>
+              </div>
+              <ToggleRow label="Aplicar a vencedora sozinho" hint="Quando o teste bater a confiança com a amostra mínima, o design vencedor vira o do popup e o experimento encerra."
+                checked={!!exp.auto_apply_winner} onChange={v => !running && act('update', { patch: { auto_apply_winner: v } })} />
+              <Field label="Modo" hint={exp.mode === 'bandit' ? `Bandit: depois de ${exp.bandit_min_views.toLocaleString('pt-BR')} visualizações por variante, a divisão passa a favorecer quem converte mais em cada contexto (página, origem, dispositivo). Sem vencedora automática.` : 'Divisão fixa com teste de significância e vencedora.'}>
+                <select className={sel} value={exp.mode} disabled={running} onChange={e => act('update', { patch: { mode: e.target.value } })}>
+                  <option value="split">Teste A/B (divisão fixa)</option>
+                  <option value="bandit">Otimização contínua (bandit)</option>
+                </select>
+              </Field>
+              {exp.mode === 'bandit' && (
+                <Field label="Visualizações mínimas por variante para o bandit assumir">
+                  <input type="number" min={100} className={inp} defaultValue={exp.bandit_min_views} disabled={running} onBlur={e => act('update', { patch: { bandit_min_views: Number(e.target.value) } })} />
+                </Field>
+              )}
+            </section>
+          )}
+
+          {data?.evaluation && exp && exp.status !== 'draft' && (
+            <section className="rounded-lg border border-gray-200 p-3 text-[12px] text-gray-700 space-y-1">
+              <p className="font-semibold text-gray-900">Leitura</p>
+              {data.evaluation.reason === 'no_data' && <p>Ainda sem visualizações.</p>}
+              {data.evaluation.reason === 'sample_too_small' && <p>Amostra ainda pequena: cada variante precisa de {exp.min_sample.toLocaleString('pt-BR')} visualizações. {data.evaluation.leaderId && <>Por enquanto a variante {variants.find(v => v.id === data.evaluation!.leaderId)?.label} lidera — sem valor estatístico ainda.</>}</p>}
+              {data.evaluation.reason === 'not_significant' && <p>Diferença dentro do ruído: nenhuma variante bate a outra com {Math.round(exp.confidence * 100)}% de confiança. O teste segue até o prazo.</p>}
+              {data.evaluation.reason === 'winner' && <p className="text-emerald-800">A variante {variants.find(v => v.id === data.evaluation!.winnerId)?.label} vence a versão principal com {Math.round(exp.confidence * 100)}% de confiança.</p>}
+              {data.evaluation.reason === 'control_wins' && <p className="text-emerald-800">A versão principal venceu: nenhuma variante a supera.</p>}
+              {running && exp.mode === 'bandit' && exp.stats?.bandit && <p className="text-gray-500">Bandit {exp.stats.bandit.eligible ? 'ativo: a divisão já segue as conversões por contexto.' : 'ainda observando — a divisão fixa vale até a amostra mínima.'}</p>}
+            </section>
+          )}
+        </div>
+        <div className="px-5 py-3 border-t border-gray-200 flex items-center justify-between gap-2">
+          <p className="text-[11px] text-gray-400">As variantes compartilham gatilhos, segmentação e cupom do popup principal.</p>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {running && data?.evaluation?.winnerId && !exp?.auto_apply_winner && (
+              <button onClick={() => act('apply_winner', { variant_id: data.evaluation!.winnerId })} disabled={!!busy} className="px-3 py-1.5 text-[12px] font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50">Aplicar vencedora</button>
+            )}
+            {running && <button onClick={() => act('stop')} disabled={!!busy} className="px-3 py-1.5 text-[12px] font-semibold rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50">Encerrar</button>}
+            {!running && variants.length > 1 && (
+              <button onClick={() => act('start', { patch: { split } })} disabled={!!busy} className="px-3 py-1.5 text-[12px] font-semibold rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50">{busy === 'start' ? 'Iniciando…' : ended ? 'Rodar de novo' : 'Iniciar experimento'}</button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // Lista de caixas de seleção com rolagem, para segmentos e listas.
 function CheckList({ items, selected, onToggle }: { items: Array<{ id: string; name: string }>; selected: string[]; onToggle: (id: string) => void }) {
   return (
@@ -3290,6 +3483,9 @@ export default function PopupEditorPage() {
   const [toast, setToast] = useState<{ msg: string; type: 'error' | 'success' } | null>(null)
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [formStatus, setFormStatus] = useState<'draft' | 'published' | 'paused'>('draft')
+  // Variante de experimento: edita o design, mas quem vai ao ar é o pai.
+  const [abParent, setAbParent] = useState<{ id: string; name: string; label: string } | null>(null)
+  const [showExperiment, setShowExperiment] = useState(false)
   const [formName, setFormName] = useState('Popup sem título')
   // Tracking pixel IDs live on the crm_forms row (not in design_json) so
   // the public popup script can pull them server-side and fire fbq/gtag
@@ -3482,6 +3678,11 @@ export default function PopupEditorPage() {
       setHist(historySeed(JSON.stringify(nextDesign)))
       setDirty(false)
       if (form.status) setFormStatus(form.status === 'published' ? 'published' : form.status === 'paused' ? 'paused' : 'draft')
+      if (form.ab_parent_id) {
+        let parentName = ''
+        try { const pr = await fetch(`/api/forms/${form.ab_parent_id}`); const pd = await pr.json(); parentName = pd?.form?.name || pd?.name || '' } catch {}
+        setAbParent({ id: form.ab_parent_id, name: parentName, label: form.ab_variant || 'B' })
+      } else setAbParent(null)
       // Hydrate pixel IDs from top-level columns. Empty string is the
       // controlled-input-friendly default; null/undefined from the API
       // would put React in uncontrolled mode and warn.
@@ -3839,14 +4040,30 @@ export default function PopupEditorPage() {
           <button onClick={() => setShowPreview(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-zinc-300 hover:text-white hover:bg-zinc-700 rounded-lg transition-colors">
             <Eye className="w-4 h-4" /> Preview
           </button>
+          {!abParent && (
+            <button onClick={() => setShowExperiment(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-zinc-300 hover:text-white hover:bg-zinc-700 rounded-lg transition-colors" title="Teste A/B">
+              <span className="font-mono text-[11px] font-bold tracking-wider">A/B</span> Experimento
+            </button>
+          )}
           <button onClick={handleSave} disabled={saving || !designLoaded} className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-white bg-zinc-700 hover:bg-zinc-600 rounded-lg transition-colors disabled:opacity-50">
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Salvar{dirty ? ' •' : ''}
           </button>
-          <button onClick={handlePublish} disabled={publishing || !designLoaded} className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[13px] font-semibold transition-colors disabled:opacity-50 ${formStatus === 'published' ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border border-zinc-700' : 'bg-emerald-500 text-white hover:bg-emerald-600'}`}>
-            {publishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Power className="w-4 h-4" />} {formStatus === 'published' ? 'Pausar' : 'Ativar'}
-          </button>
+          {!abParent && (
+            <button onClick={handlePublish} disabled={publishing || !designLoaded} className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[13px] font-semibold transition-colors disabled:opacity-50 ${formStatus === 'published' ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border border-zinc-700' : 'bg-emerald-500 text-white hover:bg-emerald-600'}`}>
+              {publishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Power className="w-4 h-4" />} {formStatus === 'published' ? 'Pausar' : 'Ativar'}
+            </button>
+          )}
         </div>
       </header>
+      {abParent && (
+        <div className="flex items-center justify-between gap-3 px-4 py-2 bg-violet-50 border-b border-violet-200 text-[12px] text-violet-900">
+          <span>Você está editando a <strong>variante {abParent.label}</strong> de <strong>{abParent.name || 'um popup'}</strong>. Ela só aparece na loja pela fatia do experimento — as regras de exibição e o cupom são os do popup principal.</span>
+          <button onClick={() => router.push(`/popup-editor/${abParent.id}`)} className="flex-shrink-0 font-semibold underline underline-offset-2 hover:text-violet-700">Voltar ao popup principal</button>
+        </div>
+      )}
+      {showExperiment && !abParent && (
+        <ExperimentDrawer formId={formId} formName={formName} formStatus={formStatus} dirty={dirty} onClose={() => setShowExperiment(false)} onOpenVariant={id => router.push(`/popup-editor/${id}`)} />
+      )}
 
       <div className="flex flex-1 overflow-hidden">
         {/* Left sidebar — all controls (Klaviyo-style hub + drill-down panels) */}

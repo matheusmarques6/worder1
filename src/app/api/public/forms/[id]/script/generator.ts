@@ -129,6 +129,14 @@ export interface PopupFormRecord {
   success_message?: string | null
   design_json?: any
   behavior?: any
+  /** Experimento em andamento: sorteio por visitante entre o pai e as variantes. */
+  experiment?: {
+    id: string
+    mode: 'split' | 'bandit'
+    split: Record<string, number>
+    variants: Array<{ id: string; design: any }>
+    bandit?: Record<string, Record<string, number>>
+  } | null
 }
 
 /**
@@ -163,7 +171,7 @@ export function buildPopupScript(form: PopupFormRecord, baseUrl: string): string
 
   return `(function(){
 "use strict";
-var FID=${JSON.stringify(String(form.id))},FNAME=${JSON.stringify(String(form.name || ''))},BU=${JSON.stringify(baseUrl)},D=${JSON.stringify(design)},B=${JSON.stringify(beh)};
+var FID=${JSON.stringify(String(form.id))},FNAME=${JSON.stringify(String(form.name || ''))},BU=${JSON.stringify(baseUrl)},D=${JSON.stringify(design)},B=${JSON.stringify(beh)},EXP=${JSON.stringify(form.experiment || null)},VARIANT_ID=${JSON.stringify(String(form.id))};
 // Guard against double injection (Theme App Embed + ScriptTag loader).
 if(window["__wf_ran_"+FID])return;
 window["__wf_ran_"+FID]=true;
@@ -241,7 +249,7 @@ function scx(n,v,d){sc(n,v,d);lsSet(n,v,d)}
 // rewardClaimed, submitError. O detail sempre carrega formId e formName.
 function wfEmit(n,d){
   try{
-    var det={formId:FID,formName:FNAME};
+    var det={formId:FID,formName:FNAME,variantId:VARIANT_ID};
     if(d)for(var k in d)det[k]=d[k];
     window.dispatchEvent(new CustomEvent("worder:"+n,{detail:det}));
   }catch(e){}
@@ -275,6 +283,7 @@ function beacon(type,extra){
   var body={type:type};
   var vid=getVisitorId();if(vid)body.visitor_id=vid;
   var sid=getSessionId();if(sid)body.session_id=sid;
+  if(EXP)body.variant_id=VARIANT_ID;
   try{body.url=location.href;if(document.referrer)body.referrer=document.referrer}catch(e){}
   if(extra)for(var k in extra)if(extra[k]!=null)body[k]=extra[k];
   var payload=JSON.stringify(body);
@@ -540,6 +549,28 @@ if(sched.enabled){
   var now=Date.now();
   if(sched.startDate&&now<new Date(sched.startDate).getTime()){blockedBy("scheduled: not started");return}
   if(sched.endDate&&now>new Date(sched.endDate).getTime()){blockedBy("scheduled: ended");return}
+}
+// Experimento A/B: uma variante por visitante, sorteada pelo hash do id
+// e pegajosa por 30 dias. No modo bandit os pesos vêm por contexto
+// (página × origem × dispositivo) quando o cron já os calculou; senão o
+// split fixo. A variante troca só o DESIGN — regras de exibição são as do
+// popup principal.
+if(EXP&&EXP.variants&&EXP.variants.length){
+  var abKey="ab_"+EXP.id,chosenV=lsGet(abKey);
+  var wts=EXP.split||{};
+  if(EXP.mode==="bandit"&&EXP.bandit){var cw=EXP.bandit[PAGE.kind+"|"+TRAFFIC+"|"+(mob()?"mobile":"desktop")];if(cw)wts=cw}
+  if(!chosenV||!(chosenV in wts)){
+    var vid0=getVisitorId();
+    if(!vid0){try{vid0=sessionStorage.getItem("_wf_anon")||"";if(!vid0){vid0="anon-"+Math.random().toString(36).slice(2);sessionStorage.setItem("_wf_anon",vid0)}}catch(e){vid0="anon"}}
+    var hs=vid0+"|"+EXP.id,hv=0;for(var hi=0;hi<hs.length;hi++){hv=(hv*31+hs.charCodeAt(hi))>>>0}
+    var frac=(hv%10000)/10000,vids=[],tot=0;for(var wk in wts){vids.push(wk);tot+=Math.max(0,Number(wts[wk])||0)}
+    chosenV=vids.length?vids[vids.length-1]:FID;
+    if(tot>0){var acc=0;for(var vj=0;vj<vids.length;vj++){acc+=Math.max(0,Number(wts[vids[vj]])||0);if(frac*tot<acc){chosenV=vids[vj];break}}}
+    lsSet(abKey,chosenV,30);
+  }
+  VARIANT_ID=chosenV;
+  for(var vi=0;vi<EXP.variants.length;vi++){if(EXP.variants[vi].id===chosenV&&EXP.variants[vi].design&&EXP.variants[vi].design.steps){D=EXP.variants[vi].design;break}}
+  dlog("experiment variant",VARIANT_ID);
 }
 var st=D.styles||{};
 var steps=D.steps||[];
@@ -1158,6 +1189,7 @@ function show(){
       try{payload.page_url=location.href}catch(e){}
       if(stepPath.length)payload.step_path=stepPath.slice(0,30);
       payload.traffic_type=TRAFFIC;payload.page_kind=PAGE.kind;
+      if(EXP)payload.variant_id=VARIANT_ID;
       fetch(BU+"/api/public/forms/"+FID+"/submit",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})
       .then(function(r){return r.json().catch(function(){return{}}).then(function(j){return{ok:r.ok,status:r.status,body:j}})})
       .then(function(out){

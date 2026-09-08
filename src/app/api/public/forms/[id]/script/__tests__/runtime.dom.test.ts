@@ -567,3 +567,49 @@ describe('targeting: página, tráfego, carrinho e audiência', () => {
     expect(ov(exc)).not.toBeNull()
   })
 })
+
+describe('experimento A/B no runtime', () => {
+  const B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+  function variantDesign() {
+    return design({ steps: [{ blocks: [
+      { id: 'tb', type: 'text', props: { content: 'Versão B' } },
+      { id: 'b1', type: 'email', props: { placeholder: 'email', required: true } },
+      { id: 'b2', type: 'button', props: { text: 'Enviar', action: 'submit' } },
+    ] }] })
+  }
+  function runExp(split: Record<string, number>, id = nextId()) {
+    const form = { id, name: 'Teste', design_json: design(), behavior: behavior(), experiment: { id: 'exp-1', mode: 'split' as const, split, variants: [{ id: B, design: variantDesign() }] } }
+    new Function(buildPopupScript(form, BU))()
+    return id
+  }
+
+  it('100% para B: renderiza o design da variante, marca eventos e envio com variant_id, e fica pegajoso', async () => {
+    const id = nextId()
+    runExp({ [id]: 0, [B]: 100 }, id)
+    vi.advanceTimersByTime(1000)
+    expect(formEl(id)!.textContent).toContain('Versão B')
+    expect(eventsFor(id).find((e) => e.type === 'impression')!.variant_id).toBe(B)
+    expect(JSON.parse(localStorage.getItem('_wfls_ab_exp-1')!).v).toBe(B)
+    formEl(id)!.querySelector<HTMLInputElement>('input[name="email"]')!.value = 'q@example.com'
+    formEl(id)!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await vi.runAllTimersAsync()
+    const submit = calls.find((c) => c.url === `${BU}/api/public/forms/${id}/submit`)!
+    expect(submit.body.variant_id).toBe(B)
+  })
+
+  it('100% para A: design do popup principal e variant_id do próprio popup', () => {
+    const id = nextId()
+    runExp({ [id]: 100, [B]: 0 }, id)
+    vi.advanceTimersByTime(1000)
+    expect(formEl(id)!.textContent).not.toContain('Versão B')
+    expect(eventsFor(id).find((e) => e.type === 'impression')!.variant_id).toBe(id)
+  })
+
+  it('a escolha guardada vence o sorteio (visitante não troca de variante)', () => {
+    const id = nextId()
+    localStorage.setItem('_wfls_ab_exp-1', JSON.stringify({ v: B, e: Date.now() + 86400000 }))
+    runExp({ [id]: 100, [B]: 0 }, id)
+    vi.advanceTimersByTime(1000)
+    expect(formEl(id)!.textContent).toContain('Versão B')
+  })
+})

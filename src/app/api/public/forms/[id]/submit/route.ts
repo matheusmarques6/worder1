@@ -492,7 +492,28 @@ export async function POST(
       })
     }
 
-    const designJson = form.design_json || {}
+    const parentDesignJson = form.design_json || {}
+    // Experimento A/B: a inscrição pode vir de uma variante. Os blocos,
+    // etapas, consentimentos e tags são os da variante; o cupom e os níveis
+    // são sempre do popup principal (o estoque de códigos é dele).
+    let variantId: string | null = null
+    let designJson: any = parentDesignJson
+    {
+      const raw = String((body as any)?.variant_id || '')
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw) && raw !== formId) {
+        const { data: variant } = await supabase
+          .from('crm_forms')
+          .select('id, design_json')
+          .eq('id', raw)
+          .eq('organization_id', form.organization_id)
+          .eq('ab_parent_id', formId)
+          .maybeSingle()
+        if (variant?.id) {
+          variantId = variant.id
+          if (variant.design_json && Array.isArray(variant.design_json.steps)) designJson = variant.design_json
+        }
+      }
+    }
     const isVisualForm = isVisualPopupForm(form.form_type, designJson)
 
     // 2. Validar campos obrigatórios (APENAS formulários clássicos).
@@ -922,6 +943,7 @@ export async function POST(
       // Vocabulário fechado: fora dele vira nulo, não texto livre.
       traffic_type: trafficTypeOrNull((body as any)?.traffic_type),
       page_kind: pageKindOrNull((body as any)?.page_kind),
+      variant_id: variantId,
     }
     let { data: submission, error: subError } = await supabase
       .from('crm_form_submissions')
@@ -1438,7 +1460,7 @@ export async function POST(
 
     try {
       const { readCouponBlock, effectiveDiscount } = await import('@/lib/coupons/pool-service')
-      const cp = readCouponBlock(designJson)
+      const cp = readCouponBlock(parentDesignJson)
       if (cp) {
         // Recompensa progressiva: o último tier cuja etapa foi visitada.
         const tier = effectiveRewardTier(cp.tiers, earnedPath)

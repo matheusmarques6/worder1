@@ -282,6 +282,9 @@ export default function FormAnalyticsPage() {
         </div>
       </div>
 
+      {/* Experimento A/B */}
+      <ExperimentSection formId={formId} money={money} />
+
       {/* Últimas inscrições */}
       <div className="bg-white rounded-xl border border-gray-200">
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
@@ -319,6 +322,85 @@ export default function FormAnalyticsPage() {
             })}
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+const KPI_LABEL: Record<string, string> = { submit: 'inscrições', optin: 'opt-ins', revenue: 'pedidos' }
+
+function ExperimentSection({ formId, money }: { formId: string; money: (v: number) => string }) {
+  const [data, setData] = useState<any>(null)
+  useEffect(() => {
+    let cancelled = false
+    fetch(`/api/forms/${formId}/experiment`, { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (!cancelled) setData(d) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [formId])
+  const exp = data?.experiment
+  if (!exp || exp.status === 'draft') return null
+  const variants: any[] = data.variants || []
+  const cmp = (id: string) => (data.evaluation?.comparisons || []).find((c: any) => c.variantId === id)
+  const st = (id: string) => (data.stats || []).find((x: any) => x.variantId === id)
+  const label = (id: string | null) => variants.find((v) => v.id === id)?.label || '?'
+  const reason: Record<string, string> = {
+    no_data: 'Ainda sem visualizações.',
+    sample_too_small: `Amostra pequena: cada variante precisa de ${Number(exp.min_sample).toLocaleString('pt-BR')} visualizações antes de decidir.`,
+    not_significant: `Diferença dentro do ruído com ${Math.round(exp.confidence * 100)}% de confiança.`,
+    winner: `A variante ${label(data.evaluation?.winnerId)} venceu com ${Math.round(exp.confidence * 100)}% de confiança.`,
+    control_wins: 'A versão principal venceu.',
+  }
+  return (
+    <div className="bg-white rounded-xl border border-gray-200">
+      <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-900">Experimento A/B</h3>
+          <p className="text-xs text-gray-500 mt-0.5">
+            {exp.status === 'running' ? `Em andamento · decide por ${KPI_LABEL[exp.kpi]} ÷ visualizações` : `Encerrado${exp.winner_variant_id ? ` · vencedora ${label(exp.winner_variant_id)}` : ''}`}
+            {data.evaluation ? ` · ${reason[data.evaluation.reason] || ''}` : ''}
+          </p>
+        </div>
+        <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${exp.status === 'running' ? 'bg-violet-50 text-violet-700' : 'bg-gray-100 text-gray-600'}`}>{exp.status === 'running' ? 'rodando' : 'encerrado'}</span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[640px]">
+          <thead>
+            <tr className="text-left text-xs text-gray-500 font-medium border-b border-gray-100">
+              <th className="px-5 py-2">Variante</th>
+              <th className="px-3 py-2 text-right">Fatia</th>
+              <th className="px-3 py-2 text-right">Visualizações</th>
+              <th className="px-3 py-2 text-right">{KPI_LABEL[exp.kpi]}</th>
+              <th className="px-3 py-2 text-right">Taxa</th>
+              <th className="px-3 py-2 text-right">Lift</th>
+              <th className="px-3 py-2 text-right">p</th>
+              <th className="px-5 py-2 text-right">Receita</th>
+            </tr>
+          </thead>
+          <tbody>
+            {variants.map((v) => {
+              const c = cmp(v.id); const s = st(v.id)
+              const isWinner = exp.winner_variant_id === v.id || data.evaluation?.winnerId === v.id
+              return (
+                <tr key={v.id} className="border-b border-gray-50 text-sm">
+                  <td className="px-5 py-2.5">
+                    <span className={`inline-flex w-6 h-6 rounded-md items-center justify-center text-[11px] font-bold mr-2 ${v.is_control ? 'bg-gray-900 text-white' : 'bg-violet-100 text-violet-800'}`}>{v.label}</span>
+                    <span className="text-gray-800">{v.is_control ? 'Principal' : v.name}</span>
+                    {isWinner && <span className="ml-2 text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 uppercase tracking-wide">vencedora</span>}
+                  </td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-gray-600">{data.split?.[v.id] ?? 0}%</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums">{int(s?.impressions || 0)}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums">{int(c?.k ?? 0)}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums font-medium">{pct(c?.rate || 0)}</td>
+                  <td className={`px-3 py-2.5 text-right tabular-nums ${c?.lift == null ? 'text-gray-400' : c.lift >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>{c?.lift == null ? '—' : `${c.lift >= 0 ? '+' : ''}${(c.lift * 100).toFixed(0)}%`}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-gray-500">{c?.p == null ? '—' : c.p < 0.001 ? '<0,001' : c.p.toFixed(3).replace('.', ',')}{c?.significant ? ' ✓' : ''}</td>
+                  <td className="px-5 py-2.5 text-right tabular-nums">{money(s?.revenue || 0)}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   )

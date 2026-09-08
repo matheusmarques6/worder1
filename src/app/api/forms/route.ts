@@ -46,6 +46,8 @@ export async function GET(request: NextRequest) {
       .from('crm_forms')
       .select(baseSelect)
       .eq('organization_id', user.organization_id)
+      // Variantes de A/B vivem dentro do popup principal, não na lista.
+      .is('ab_parent_id', null)
       .order('created_at', { ascending: false })
 
     if (status) {
