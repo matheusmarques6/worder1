@@ -1,11 +1,8 @@
 # CI do runtime Python (fork do motor — ver runtime/FORK.md).
 # Path filters: só roda quando runtime/ ou as migrations canônicas mudam (D2).
 #
-# Jobs bloqueantes: lint, boundaries, tests-unit (inclui os fitness tests AST).
-# tests-db roda o stack local do Supabase e a suíte `db`/`rls`; está como
-# INFORMATIVO (continue-on-error) até a suíte ser adaptada ao schema do Worder
-# na Etapa 2 — flip rastreado em core/STATUS-agentes-por-evento.md.
-
+# Gates bloqueantes: lint, boundaries, tests-unit e tests-db (DB/RLS/pipeline).
+# O banco de testes precisa de identidade descartável comprovada.
 name: runtime
 
 on:

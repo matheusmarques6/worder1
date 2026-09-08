@@ -11,6 +11,9 @@
 
 ## Fase 0 — CI verde (CONCLUÍDA em 28/08)
 
+Revalidado na Onda 0: comportamento de data em America/Sao_Paulo e ignores confirmados;
+guardas diretas presentes. Prova dinâmica de RLS vinculada ao gate descartável W0-T3.
+
 Não estava na fila original: apareceu ao verificar a pipeline antes de começar. O
 workflow `runtime` falhou em **15 de 15** execuções — nunca esteve verde, e os números
 de suíte registrados no STATUS sempre vieram de execução local. Sem isto, "acompanhar o
@@ -5976,11 +5979,17 @@ você decidir se entram na fila.
   (`src/tests/reports-utils.test.ts`) está CERTO e falha localmente; passa no CI só porque o runner é
   UTC. O fuso dos usuários do produto é o mesmo da máquina de dev. *(descoberto na Fase 0)*
 
+  Revalidado na Onda 0: comportamento de data em America/Sao_Paulo e ignores confirmados;
+  guardas diretas presentes. Prova dinâmica de RLS vinculada ao gate descartável W0-T3.
+
 - [ ] **`pnpm test` não roda sem `pnpm approve-builds` (esbuild, unrs-resolver).**
   O deps-check do pnpm aborta antes do script e a suíte Node não executa. Bloqueou o reviewer de 28/08,
   que fez só revisão estática dos itens 2–4. Contorno usado aqui: chamar `node_modules/.bin/vitest`
   direto. Aprovar os builds muda política local de execução — decisão do dono da máquina, não minha.
   *(descoberto no review do item 1)*
+
+  Política explícita adicionada em `package.json`; a execução oficial segue condicionada ao
+  ambiente aprovar os dois builds nativos.
 
 - [ ] **Depois de um takeover humano o agente volta amnésico (org migrada).**
   A fala do atendente vai para `whatsapp_cloud_messages` e para o espelho do inbox, mas
