@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import shutil
 import signal
 import socket
@@ -784,4 +785,42 @@ class Executor:
             self.run / "identity.json", identity_shape(self.identity, self.project)
         )
         self.gate["state"] = "prepared"
+        self.save()
+
+    def replay(self) -> None:
+        require(self.gate["state"] == "prepared", "Replay requires prepared state")
+        require(
+            isinstance(self.identity, dict) and self.identity.get("sentinel") is None,
+            "Replay requires prepared identity",
+        )
+        identity_shape(self.identity, self.project)
+        self.gate.update(state="replaying", stage="replay-preflight")
+        approved = self.files()
+        self.physical()
+        self.config(True)
+        self.gate["stage"] = "reset"
+        self.save()
+        self.local("db", "reset", "--local", "--no-seed")
+        self.gate["stage"] = "replay-identity"
+        self.physical()
+        require(self.files() == approved, "migration set changed after reset")
+        sentinel = secrets.token_hex(32)
+        require(re.fullmatch(TOKEN_RE, sentinel), "invalid sentinel")
+        sql = (
+            "begin;\ncreate schema if not exists testing;\n"
+            "create table testing.disposable_identity(token text primary key);\n"
+            "revoke all on schema testing from public, anon, authenticated, service_role, "
+            "worker_role, sender_role;\n"
+            "revoke all on testing.disposable_identity from public, anon, authenticated, "
+            "service_role, worker_role, sender_role;\n"
+            f"insert into testing.disposable_identity(token) values ('{sentinel}');\ncommit;"
+        )
+        self.psql(self.identity["containerId"], sql)
+        self.identity["sentinel"] = sentinel
+        self.proof()
+        self.history(approved)
+        write_json(
+            self.run / "identity.json", identity_shape(self.identity, self.project)
+        )
+        self.gate["state"] = "ready"
         self.save()

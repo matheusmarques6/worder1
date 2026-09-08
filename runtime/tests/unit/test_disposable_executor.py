@@ -860,8 +860,227 @@ def test_history_requires_exact_versions(tmp_path):
     expected = [{"version": "20250701"}, {"version": "20260812000001"}]
 
     executor.history(expected)
-    with pytest.raises(ValueError, match="migration history mismatch"):
-        executor.history(expected[:1])
+    for output in (
+        "",
+        "20250701",
+        "20250701\n20260812000001\n20260812000002",
+        "20250701\n20250701\n20260812000001",
+    ):
+        executor.psql = lambda *_args, value=output: value
+        with pytest.raises(ValueError, match="migration history mismatch"):
+            executor.history(expected)
+
+
+def test_replay_requires_prepared_without_calling_external_tools(tmp_path):
+    executor = ex.Executor(
+        REPO,
+        tmp_path,
+        runner=lambda *_args, **_kwargs: pytest.fail("unexpected CLI"),
+    )
+    executor.gate["state"] = "ready"
+
+    with pytest.raises(ValueError, match="requires prepared"):
+        executor.replay()
+
+
+@pytest.mark.parametrize("identity", [None, valid_identity()])
+def test_replay_requires_prepared_identity_without_calling_external_tools(
+    tmp_path, identity
+):
+    executor = ex.Executor(
+        REPO,
+        tmp_path,
+        runner=lambda *_args, **_kwargs: pytest.fail("unexpected CLI"),
+    )
+    executor.gate.update(commit="d" * 40, state="prepared")
+    executor.identity = identity
+
+    with pytest.raises(ValueError, match="requires prepared identity"):
+        executor.replay()
+
+
+def test_replay_does_not_reset_if_physical_proof_fails(monkeypatch, tmp_path):
+    run = executor_run(tmp_path)
+    executor = ex.Executor(
+        REPO,
+        run,
+        runner=lambda *_args, **_kwargs: pytest.fail("unexpected CLI"),
+    )
+    executor.gate.update(commit="d" * 40, state="prepared")
+    executor.identity = valid_identity()
+    executor.identity["sentinel"] = None
+    monkeypatch.setattr(executor, "files", lambda: [])
+
+    def fail():
+        raise ValueError("loopback identity mismatch")
+
+    monkeypatch.setattr(executor, "physical", fail)
+
+    with pytest.raises(ValueError, match="identity mismatch"):
+        executor.replay()
+
+    assert executor.gate["commands"] == []
+
+
+def test_replay_rejects_changed_files_after_reset_before_sentinel(monkeypatch, tmp_path):
+    run = executor_run(tmp_path)
+    executor = ex.Executor(REPO, run)
+    executor.gate.update(commit="d" * 40, state="prepared")
+    executor.identity = valid_identity()
+    executor.identity["sentinel"] = None
+    approved = [{"version": "20260812000001"}]
+    observed = iter((approved, [{"version": "20260812000002"}]))
+    calls = []
+
+    def runner(argv, **kwargs):
+        calls.append(argv)
+        if argv == ["supabase", "--version"]:
+            stdout = "2.111.0\n"
+        elif argv[:3] == ["supabase", "db", "reset"]:
+            stdout = ""
+        else:
+            pytest.fail(f"unexpected CLI: {argv}")
+        return ex.subprocess.CompletedProcess(argv, 0, stdout, "")
+
+    monkeypatch.setattr(executor, "files", lambda: next(observed))
+    monkeypatch.setattr(executor, "physical", lambda: None)
+    executor.runner = runner
+
+    with pytest.raises(ValueError, match="migration set changed after reset"):
+        executor.replay()
+
+    assert calls == [
+        ["supabase", "--version"],
+        [
+            "supabase",
+            "db",
+            "reset",
+            "--local",
+            "--no-seed",
+            "--workdir",
+            str(run),
+        ],
+    ]
+
+
+def test_replay_proves_reset_sentinel_history_before_ready(monkeypatch, tmp_path):
+    run = executor_run(tmp_path)
+    executor = ex.Executor(REPO, run)
+    executor.gate.update(commit="d" * 40, state="prepared")
+    executor.identity = valid_identity()
+    executor.identity["sentinel"] = None
+    approved = [
+        {
+            "filename": "20260812000001_one.sql",
+            "version": "20260812000001",
+            "sha256": "A" * 64,
+        }
+    ]
+    ex.write_json(run / "identity.json", executor.identity)
+    executor.save()
+    events = []
+    calls = []
+
+    def files():
+        events.append("files")
+        return approved
+
+    def physical():
+        events.append("physical")
+        return executor.identity | {"sentinel": None}
+
+    def proof():
+        events.append("proof")
+        assert ex.read_json(run / "identity.json")["sentinel"] is None
+        assert ex.read_json(run / "gates.json")["state"] == "replaying"
+
+    def history(expected):
+        events.append("history")
+        assert expected == approved
+        assert ex.read_json(run / "identity.json")["sentinel"] is None
+        assert ex.read_json(run / "gates.json")["state"] == "replaying"
+
+    def runner(argv, **kwargs):
+        calls.append((argv, kwargs))
+        if argv == ["supabase", "--version"]:
+            stdout = "2.111.0\n"
+        elif argv[:3] == ["supabase", "db", "reset"]:
+            events.append("reset")
+            persisted = ex.read_json(run / "gates.json")
+            assert (persisted["state"], persisted["stage"]) == (
+                "replaying",
+                "reset",
+            )
+            assert ex.tomllib.loads((run / "supabase/config.toml").read_text())[
+                "db"
+            ]["migrations"]["enabled"] is True
+            stdout = ""
+        elif argv[:2] == ["docker", "exec"]:
+            events.append("sentinel")
+            assert ex.read_json(run / "identity.json")["sentinel"] is None
+            stdout = ""
+        else:
+            pytest.fail(f"unexpected CLI: {argv}")
+        return ex.subprocess.CompletedProcess(argv, 0, stdout, "")
+
+    monkeypatch.setattr(executor, "files", files)
+    monkeypatch.setattr(executor, "physical", physical)
+    monkeypatch.setattr(executor, "proof", proof)
+    monkeypatch.setattr(executor, "history", history)
+    executor.runner = runner
+
+    executor.replay()
+
+    sentinel = executor.identity["sentinel"]
+    assert ex.re.fullmatch(ex.TOKEN_RE, sentinel)
+    assert events == [
+        "files",
+        "physical",
+        "reset",
+        "physical",
+        "files",
+        "sentinel",
+        "proof",
+        "history",
+    ]
+    assert [call[0] for call in calls] == [
+        ["supabase", "--version"],
+        [
+            "supabase",
+            "db",
+            "reset",
+            "--local",
+            "--no-seed",
+            "--workdir",
+            str(run),
+        ],
+        [
+            "docker",
+            "exec",
+            "-i",
+            "a" * 64,
+            "psql",
+            "-X",
+            "-v",
+            "ON_ERROR_STOP=1",
+            "-U",
+            "postgres",
+            "-d",
+            "postgres",
+            "-At",
+        ],
+    ]
+    assert calls[2][1]["input"] == (
+        "begin;\ncreate schema if not exists testing;\n"
+        "create table testing.disposable_identity(token text primary key);\n"
+        "revoke all on schema testing from public, anon, authenticated, service_role, "
+        "worker_role, sender_role;\n"
+        "revoke all on testing.disposable_identity from public, anon, authenticated, "
+        "service_role, worker_role, sender_role;\n"
+        f"insert into testing.disposable_identity(token) values ('{sentinel}');\ncommit;\n"
+    )
+    assert ex.read_json(run / "identity.json") == executor.identity
+    assert ex.read_json(run / "gates.json")["state"] == "ready"
 
 
 def preflight_double(overrides=None):
