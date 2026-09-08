@@ -338,6 +338,67 @@ describe('runtime no DOM', () => {
     expect(localStorage.getItem(`_wfls_bk_${id}`)).toBeNull()
   })
 
+  it('ramificação: a opção escolhida decide a próxima etapa, voltar segue a trilha, e o caminho vai no submit', async () => {
+    const d = design({
+      steps: [
+        { id: 'st-a', name: 'A', blocks: [
+          { id: 'q', type: 'radio', props: { label: 'Pele', mapTo: 'custom', mapToCustom: 'pele', options: ['Oleosa', 'Seca'], branches: { Oleosa: 'st-c', Seca: 'st-b' } } },
+          { id: 'n', type: 'button', props: { text: 'Próxima', action: 'next-step' } },
+        ] },
+        { id: 'st-b', name: 'B', blocks: [{ id: 'tb', type: 'text', props: { content: 'Etapa B' } }, { id: 'nb', type: 'button', props: { text: 'Próxima', action: 'next-step' } }] },
+        { id: 'st-c', name: 'C', blocks: [
+          { id: 'tc', type: 'text', props: { content: 'Etapa C' } },
+          { id: 'back', type: 'button', props: { text: 'Voltar', action: 'prev-step' } },
+          { id: 'e', type: 'email', props: { required: true } },
+          { id: 's', type: 'button', props: { text: 'Enviar', action: 'submit' } },
+        ] },
+      ],
+      styles: { width: 480, closeButton: { show: true }, progress: { enabled: true } },
+    })
+    const views = listen('stepView')
+    const id = run(d)
+    vi.advanceTimersByTime(1000)
+    const root0 = root(id)!
+    // Barra de progresso na primeira etapa: 1 de 3.
+    expect(root0.querySelector('.wf-progress')!.getAttribute('aria-valuenow')).toBe('33')
+    // Escolhe "Oleosa" → pula a etapa B e cai na C.
+    const radio = formEl(id)!.querySelector<HTMLInputElement>('input[value="Oleosa"]')!
+    radio.checked = true
+    formEl(id)!.querySelector<HTMLElement>('[data-action="next-step"]')!.click()
+    expect(formEl(id)!.textContent).toContain('Etapa C')
+    expect(views.map((v) => v.stepId)).toEqual(['st-a', 'st-c'])
+    expect(root(id)!.querySelector('.wf-progress')!.getAttribute('aria-valuenow')).toBe('100')
+    // Voltar vai para A (a trilha), não para B (a sequência).
+    formEl(id)!.querySelector<HTMLElement>('[data-action="prev-step"]')!.click()
+    expect(formEl(id)!.querySelector('input[value="Oleosa"]')).not.toBeNull()
+    // De novo para C e envia.
+    formEl(id)!.querySelector<HTMLInputElement>('input[value="Oleosa"]')!.checked = true
+    formEl(id)!.querySelector<HTMLElement>('[data-action="next-step"]')!.click()
+    formEl(id)!.querySelector<HTMLInputElement>('input[name="email"]')!.value = 'q@example.com'
+    formEl(id)!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await vi.runAllTimersAsync()
+    const submit = calls.find((c) => c.url === `${BU}/api/public/forms/${id}/submit`)!
+    // O caminho é a trilha que levou ao envio: voltar desfaz o passo, não acumula histórico.
+    expect(submit.body.step_path).toEqual(['st-a', 'st-c'])
+    expect(submit.body.answers['custom:pele']).toBe('Oleosa')
+    // Etapas intermediárias mandam o beacon 'step'.
+    expect(eventsFor(id).filter((e) => e.type === 'step').map((e) => e.step)).toEqual([2, 2])
+  })
+
+  it('ramificação: o botão pode apontar para uma etapa fixa', () => {
+    const d = design({
+      steps: [
+        { id: 'st-a', name: 'A', blocks: [{ id: 'n', type: 'button', props: { text: 'Pular', action: 'next-step', nextStepId: 'st-c' } }] },
+        { id: 'st-b', name: 'B', blocks: [{ id: 'tb', type: 'text', props: { content: 'Etapa B' } }] },
+        { id: 'st-c', name: 'C', blocks: [{ id: 'tc', type: 'text', props: { content: 'Etapa C' } }] },
+      ],
+    })
+    const id = run(d)
+    vi.advanceTimersByTime(1000)
+    formEl(id)!.querySelector<HTMLElement>('[data-action="next-step"]')!.click()
+    expect(formEl(id)!.textContent).toContain('Etapa C')
+  })
+
   it('gate de país usa /api/public/geo e bloqueia fora da lista', async () => {
     const id = run(design(), behavior({ location: { includeEnabled: true, includeCountries: ['US'] } }))
     await vi.runAllTimersAsync()

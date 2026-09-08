@@ -21,12 +21,14 @@ import {
   type CouponKind,
 } from './shopify-discounts'
 import { ShopifyThrottledError } from '@/lib/shopify/graphql-client'
+import { readRewardTiers, type RewardTier } from '@/lib/popups/branching'
 
 export interface CouponPoolRow {
   id: string
   organization_id: string
   store_id: string
   form_id: string | null
+  tier_key: string
   name: string
   kind: CouponKind
   value: number
@@ -67,6 +69,20 @@ export interface CouponBlockConfig {
   autoApply: boolean
   showCode: boolean
   collectionIds: string[]
+  /** Recompensa progressiva: tiers desbloqueados por etapa (Fase 2). */
+  tiers: RewardTier[]
+}
+
+/** O desconto efetivo de um tier (ou da base, quando tier é nulo). */
+export function effectiveDiscount(cfg: CouponBlockConfig, tier: RewardTier | null) {
+  if (!tier) return { kind: cfg.kind, value: cfg.value, staticCode: cfg.staticCode, codePrefix: cfg.codePrefix, tierKey: 'base' }
+  return {
+    kind: tier.kind,
+    value: tier.value,
+    staticCode: tier.staticCode || cfg.staticCode,
+    codePrefix: tier.codePrefix || cfg.codePrefix,
+    tierKey: tier.id,
+  }
 }
 
 /** Lê o bloco de cupom do design (o primeiro, em qualquer etapa). */
@@ -95,6 +111,7 @@ export function readCouponBlock(designJson: any): CouponBlockConfig | null {
     autoApply: p.autoApply !== false,
     showCode: p.showCode !== false,
     collectionIds: Array.isArray(p.collectionIds) ? p.collectionIds.filter((x: any) => typeof x === 'string' && x.startsWith('gid://')) : [],
+    tiers: readRewardTiers(p),
   }
 }
 
@@ -107,26 +124,36 @@ interface FormForPool {
 }
 
 /**
- * Faz o pool refletir o bloco de cupom do popup. Sem bloco (ou bloco
- * estático) o pool existente fica pausado — nunca apagado: os códigos já
- * entregues continuam válidos na Shopify e no ledger.
+ * Faz os pools refletirem o bloco de cupom do popup: um para a base
+ * ('base') e um por tier de recompensa progressiva — cada tier é um
+ * desconto diferente na Shopify, logo um estoque diferente. Sem bloco (ou
+ * bloco estático) os pools existentes ficam pausados — nunca apagados: os
+ * códigos já entregues continuam válidos na Shopify e no ledger.
+ *
+ * Devolve o pool da base (o que o submit usa quando nenhum tier casa).
  */
-export async function syncPoolFromForm(form: FormForPool): Promise<{ pool: CouponPoolRow | null; reason?: string }> {
+export async function syncPoolFromForm(form: FormForPool): Promise<{ pool: CouponPoolRow | null; pools: CouponPoolRow[]; reason?: string }> {
   const admin = getSupabaseAdmin()
   const cfg = readCouponBlock(form.design_json)
 
-  const { data: existing } = await admin
+  const { data: existingRows } = await admin
     .from('coupon_pools')
     .select('*')
     .eq('organization_id', form.organization_id)
     .eq('form_id', form.id)
-    .maybeSingle()
+  const existing = (existingRows || []) as CouponPoolRow[]
+
+  const pauseAll = async (reason: string) => {
+    const active = existing.filter((p) => p.status === 'active')
+    if (active.length) {
+      await admin.from('coupon_pools').update({ status: 'paused' })
+        .in('id', active.map((p) => p.id)).eq('organization_id', form.organization_id)
+    }
+    return { pool: null, pools: [], reason }
+  }
 
   if (!cfg || cfg.mode !== 'unique' || !form.store_id) {
-    if (existing && existing.status === 'active') {
-      await admin.from('coupon_pools').update({ status: 'paused' }).eq('id', existing.id).eq('organization_id', form.organization_id)
-    }
-    return { pool: null, reason: !cfg ? 'sem bloco de cupom' : cfg.mode !== 'unique' ? 'cupom estático' : 'popup sem loja' }
+    return pauseAll(!cfg ? 'sem bloco de cupom' : cfg.mode !== 'unique' ? 'cupom estático' : 'popup sem loja')
   }
 
   // A loja tem de ser da org do popup — o store_id vem do formulário, que
@@ -137,49 +164,68 @@ export async function syncPoolFromForm(form: FormForPool): Promise<{ pool: Coupo
     .eq('id', form.store_id)
     .eq('organization_id', form.organization_id)
     .maybeSingle()
-  if (!store) return { pool: null, reason: 'loja não pertence à organização' }
+  if (!store) return { pool: null, pools: [], reason: 'loja não pertence à organização' }
 
-  const payload = {
-    organization_id: form.organization_id,
-    store_id: form.store_id,
-    form_id: form.id,
-    name: `Popup · ${form.name || form.id}`,
-    kind: cfg.kind,
-    value: cfg.value,
-    currency: store.currency || 'BRL',
-    code_prefix: cfg.codePrefix,
-    validity_days: cfg.validityDays,
-    minimum_subtotal: cfg.minimumSubtotal,
-    applies_to: cfg.collectionIds.length ? { collections: cfg.collectionIds } : {},
-    combines_with: cfg.combinesWith,
-    status: 'active' as const,
-    last_error: null,
+  const wanted: Array<{ tierKey: string; label: string; kind: CouponKind; value: number; codePrefix: string }> = [
+    { tierKey: 'base', label: '', kind: cfg.kind, value: cfg.value, codePrefix: cfg.codePrefix },
+    ...cfg.tiers.map((t) => ({ tierKey: t.id, label: t.label, kind: t.kind, value: t.value, codePrefix: t.codePrefix || cfg.codePrefix })),
+  ]
+
+  const out: CouponPoolRow[] = []
+  for (const w of wanted) {
+    const payload = {
+      organization_id: form.organization_id,
+      store_id: form.store_id,
+      form_id: form.id,
+      tier_key: w.tierKey,
+      name: `Popup · ${form.name || form.id}${w.label ? ` · ${w.label}` : ''}`,
+      kind: w.kind,
+      value: w.value,
+      currency: store.currency || 'BRL',
+      code_prefix: w.codePrefix,
+      validity_days: cfg.validityDays,
+      minimum_subtotal: cfg.minimumSubtotal,
+      applies_to: cfg.collectionIds.length ? { collections: cfg.collectionIds } : {},
+      combines_with: cfg.combinesWith,
+      status: 'active' as const,
+      last_error: null,
+    }
+    const cur = existing.find((p) => (p.tier_key || 'base') === w.tierKey)
+    if (cur) {
+      // Mudou o desconto? Os códigos livres antigos carregam o desconto
+      // antigo na Shopify — saem de circulação e o cron cria novos.
+      const changed =
+        cur.kind !== payload.kind ||
+        Number(cur.value) !== Number(payload.value) ||
+        Number(cur.minimum_subtotal || 0) !== Number(payload.minimum_subtotal || 0) ||
+        JSON.stringify(cur.combines_with || {}) !== JSON.stringify(payload.combines_with) ||
+        JSON.stringify(cur.applies_to || {}) !== JSON.stringify(payload.applies_to)
+      const { data: updated, error } = await admin
+        .from('coupon_pools')
+        .update(payload)
+        .eq('id', cur.id)
+        .eq('organization_id', form.organization_id)
+        .select('*')
+        .single()
+      if (error) throw new Error(`coupon_pools update: ${error.message}`)
+      if (changed) await voidFreeCodes(updated as CouponPoolRow, 'desconto do popup mudou')
+      out.push(updated as CouponPoolRow)
+    } else {
+      const { data: created, error } = await admin.from('coupon_pools').insert(payload).select('*').single()
+      if (error) throw new Error(`coupon_pools insert: ${error.message}`)
+      out.push(created as CouponPoolRow)
+    }
   }
 
-  if (existing) {
-    // Mudou o desconto? Os códigos livres antigos carregam o desconto
-    // antigo na Shopify — saem de circulação e o cron cria novos.
-    const changed =
-      existing.kind !== payload.kind ||
-      Number(existing.value) !== Number(payload.value) ||
-      Number(existing.minimum_subtotal || 0) !== Number(payload.minimum_subtotal || 0) ||
-      JSON.stringify(existing.combines_with || {}) !== JSON.stringify(payload.combines_with) ||
-      JSON.stringify(existing.applies_to || {}) !== JSON.stringify(payload.applies_to)
-    const { data: updated, error } = await admin
-      .from('coupon_pools')
-      .update(payload)
-      .eq('id', existing.id)
-      .eq('organization_id', form.organization_id)
-      .select('*')
-      .single()
-    if (error) throw new Error(`coupon_pools update: ${error.message}`)
-    if (changed) await voidFreeCodes(updated as CouponPoolRow, 'desconto do popup mudou')
-    return { pool: updated as CouponPoolRow }
+  // Tiers que saíram do bloco: pausa (os códigos entregues seguem válidos).
+  const keep = new Set(wanted.map((w) => w.tierKey))
+  const stale = existing.filter((p) => !keep.has(p.tier_key || 'base') && p.status === 'active')
+  if (stale.length) {
+    await admin.from('coupon_pools').update({ status: 'paused' })
+      .in('id', stale.map((p) => p.id)).eq('organization_id', form.organization_id)
   }
 
-  const { data: created, error } = await admin.from('coupon_pools').insert(payload).select('*').single()
-  if (error) throw new Error(`coupon_pools insert: ${error.message}`)
-  return { pool: created as CouponPoolRow }
+  return { pool: out.find((p) => (p.tier_key || 'base') === 'base') || null, pools: out }
 }
 
 async function loadStoreForPool(pool: CouponPoolRow) {
@@ -214,17 +260,35 @@ async function countCodes(pool: CouponPoolRow) {
   }
 }
 
-export async function getPoolStatus(organizationId: string, formId: string): Promise<PoolStatus> {
+export async function getPoolStatus(organizationId: string, formId: string, tierKey = 'base'): Promise<PoolStatus> {
   const admin = getSupabaseAdmin()
   const { data: pool } = await admin
     .from('coupon_pools')
     .select('*')
     .eq('organization_id', organizationId)
     .eq('form_id', formId)
+    .eq('tier_key', tierKey)
     .maybeSingle()
   if (!pool) return { pool: null, free: 0, usable: 0, reserved: 0, consumed: 0, expired: 0, needs_replenish: false }
   const c = await countCodes(pool as CouponPoolRow)
   return { pool: pool as CouponPoolRow, ...c, needs_replenish: pool.status === 'active' && c.usable < pool.min_stock }
+}
+
+/** Todos os pools do popup (base + tiers), com estoque. */
+export async function listPoolStatuses(organizationId: string, formId: string): Promise<PoolStatus[]> {
+  const admin = getSupabaseAdmin()
+  const { data: pools } = await admin
+    .from('coupon_pools')
+    .select('*')
+    .eq('organization_id', organizationId)
+    .eq('form_id', formId)
+    .order('created_at', { ascending: true })
+  const out: PoolStatus[] = []
+  for (const p of (pools || []) as CouponPoolRow[]) {
+    const c = await countCodes(p)
+    out.push({ pool: p, ...c, needs_replenish: p.status === 'active' && c.usable < p.min_stock })
+  }
+  return out
 }
 
 export interface ReplenishResult {

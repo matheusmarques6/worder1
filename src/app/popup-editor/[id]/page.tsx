@@ -24,7 +24,14 @@ import {
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface Block { id: string; type: string; props: Record<string, any> }
-interface Step { id: string; name: string; blocks: Block[] }
+// kind: o papel da etapa no fluxo (boas-vindas, formulário, quiz, lição,
+// recompensa, consentimento). Informativo para o editor e o relatório; o
+// runtime segue a ramificação, não o tipo.
+interface Step { id: string; name: string; blocks: Block[]; kind?: 'welcome' | 'form' | 'quiz' | 'lesson' | 'reward' | 'consent' }
+
+const STEP_KIND_LABELS: Record<NonNullable<Step['kind']>, string> = {
+  welcome: 'Boas-vindas', form: 'Formulário', quiz: 'Quiz', lesson: 'Lição', reward: 'Recompensa', consent: 'Consentimento',
+}
 interface PopupDesign {
   formType: 'popup' | 'flyout' | 'fullpage' | 'embed' | 'banner'
   steps: Step[]
@@ -38,6 +45,8 @@ interface PopupDesign {
     closeButton: { show: boolean; color: string; size: number }
     sideImage: { enabled: boolean; src: string; position: 'left' | 'right'; width: number }
     animation: 'fade' | 'slide-up' | 'none'
+    // Barra de progresso entre etapas (só aparece com 2+ etapas).
+    progress?: { enabled: boolean; color?: string; trackColor?: string; height?: number }
   }
   behavior: {
     display: {
@@ -963,9 +972,75 @@ const BorderStyleControl = ({ p, up, def = 'solid' }: { p: any; up: (k: string, 
   ]} />
 )
 
-// Estoque de códigos únicos do popup. Lê /api/forms/:id/coupon-pool; o
-// botão sincroniza o pool com o bloco e cria um lote agora, sem esperar o
-// cron. O popup precisa estar salvo com o bloco em modo único.
+// Recompensa progressiva: o desconto cresce conforme a pessoa avança
+// (10% ao entrar o e-mail, 15% depois do quiz). Cada tier é desbloqueado
+// por uma etapa; vale o último tier cuja etapa foi visitada. Em modo
+// único, cada tier tem o próprio estoque de códigos.
+function RewardTiersEditor({ p, up, steps }: { p: any; up: (k: string, v: any) => void; steps: Array<{ id: string; name: string }> }) {
+  const tiers: any[] = Array.isArray(p.tiers) ? p.tiers : []
+  const setTier = (i: number, patch: Record<string, any>) => up('tiers', tiers.map((t, j) => (j === i ? { ...t, ...patch } : t)))
+  const unique = p.mode === 'unique' || p.mode === 'dynamic'
+  return (
+    <div className="pt-3 border-t border-gray-100 space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] font-bold text-gray-500 uppercase tracking-[0.08em]">Recompensa progressiva</p>
+        <button type="button"
+          onClick={() => up('tiers', [...tiers, { id: 't' + Math.random().toString(36).slice(2, 8), label: `Nível ${tiers.length + 2}`, afterStepId: steps[Math.min(1, steps.length - 1)]?.id || '', discountType: p.discountType || 'percentage', discountValue: (Number(p.discountValue) || 10) + 5, code: '' }])}
+          className="text-[11px] font-semibold text-zinc-900 underline underline-offset-2">
+          Adicionar nível
+        </button>
+      </div>
+      {tiers.length === 0 ? (
+        <p className="text-[11px] text-gray-400 leading-snug">Sem níveis: todo inscrito recebe o desconto acima. Adicione um nível para dar mais a quem completa uma etapa (quiz, lição).</p>
+      ) : (
+        <p className="text-[11px] text-gray-400 leading-snug">Vale o último nível cuja etapa a pessoa visitou. A base é o desconto acima.</p>
+      )}
+      {tiers.map((t, i) => (
+        <div key={t.id || i} className="rounded-lg border border-gray-200 p-2.5 space-y-2">
+          <div className="flex items-center gap-2">
+            <input className={inp + ' flex-1'} value={t.label || ''} onChange={e => setTier(i, { label: e.target.value })} placeholder="Nome do nível" />
+            <button type="button" onClick={() => up('tiers', tiers.filter((_, j) => j !== i))} className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded" title="Remover">
+              <Trash2 className="w-3 h-3" />
+            </button>
+          </div>
+          <LabeledField label="Desbloqueia ao concluir">
+            <select className={sel} value={t.afterStepId || ''} onChange={e => setTier(i, { afterStepId: e.target.value })}>
+              <option value="">Escolha a etapa</option>
+              {steps.map((s, j) => <option key={s.id} value={s.id}>{j + 1}. {s.name}</option>)}
+            </select>
+          </LabeledField>
+          <div className="grid grid-cols-2 gap-2">
+            <LabeledField label="Tipo">
+              <select className={inp} value={t.discountType || 'percentage'} onChange={e => setTier(i, { discountType: e.target.value })}>
+                <option value="percentage">Percentual (%)</option>
+                <option value="fixed_amount">Valor fixo</option>
+                <option value="free_shipping">Frete grátis</option>
+              </select>
+            </LabeledField>
+            {t.discountType !== 'free_shipping' && (
+              <LabeledField label={t.discountType === 'fixed_amount' ? 'Valor' : 'Desconto (%)'}>
+                <input type="number" min={0} step="0.01" className={inp} value={t.discountValue ?? 0} onChange={e => setTier(i, { discountValue: +e.target.value })} />
+              </LabeledField>
+            )}
+          </div>
+          <LabeledField label={unique ? 'Código reserva deste nível' : 'Código deste nível'} hint={unique ? 'Se o estoque do nível acabar.' : 'Crie na Shopify com este código.'}>
+            <input className={inp + ' font-mono tracking-wider uppercase'} value={t.code || ''} onChange={e => setTier(i, { code: e.target.value.toUpperCase() })} placeholder="QUIZ15" />
+          </LabeledField>
+          {unique && (
+            <LabeledField label="Prefixo dos códigos" hint="Vazio = o mesmo da base.">
+              <input className={inp + ' font-mono uppercase'} value={t.codePrefix || ''} onChange={e => setTier(i, { codePrefix: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12) })} placeholder={(p.codePrefix || 'POPUP')} />
+            </LabeledField>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// Estoque de códigos únicos do popup — a base e um por nível de recompensa.
+// Lê /api/forms/:id/coupon-pool; o botão sincroniza os pools com o bloco e
+// cria um lote agora, sem esperar o cron. O popup precisa estar salvo com
+// o bloco em modo único.
 function CouponPoolPanel() {
   const params = useParams()
   const formId = String(params?.id || '')
@@ -993,7 +1068,6 @@ function CouponPoolPanel() {
     }
   }
   const d = state.data
-  const stock = d?.stock
   return (
     <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2">
       <div className="flex items-center justify-between">
@@ -1005,21 +1079,28 @@ function CouponPoolPanel() {
       </div>
       {state.loading ? (
         <p className="text-[11px] text-gray-400">Carregando…</p>
-      ) : !d?.pool ? (
+      ) : !d?.pools?.length ? (
         <p className="text-[11px] text-gray-500 leading-snug">Nenhum pool ainda. Salve o popup com o cupom em modo único (e uma loja vinculada) — o pool é criado no save e os primeiros códigos ao publicar.</p>
       ) : (
-        <>
-          <div className="grid grid-cols-3 gap-2 text-center">
-            <div><p className="text-[15px] font-semibold text-gray-900 tabular-nums">{stock.usable}</p><p className="text-[10px] text-gray-500">prontos</p></div>
-            <div><p className="text-[15px] font-semibold text-gray-900 tabular-nums">{stock.reserved}</p><p className="text-[10px] text-gray-500">entregues</p></div>
-            <div><p className="text-[15px] font-semibold text-gray-900 tabular-nums">{stock.consumed}</p><p className="text-[10px] text-gray-500">usados</p></div>
-          </div>
-          <p className="text-[11px] text-gray-500 leading-snug">
-            {d.pool.status === 'error' ? `Última reposição falhou: ${d.pool.last_error || 'erro'}` :
-              d.pool.status === 'paused' ? 'Pool pausado — o cupom deste popup não está em modo único.' :
-                d.needs_replenish ? `Abaixo do mínimo (${d.pool.min_stock}). O cron repõe a cada 2 minutos.` : 'Estoque em dia. O cron repõe sozinho.'}
-          </p>
-        </>
+        <div className="space-y-2">
+          {d.pools.map((pool: any) => (
+            <div key={pool.id} className={pool.status === 'paused' ? 'opacity-50' : ''}>
+              {d.pools.length > 1 && (
+                <p className="text-[10px] font-semibold text-gray-600 mb-1">{pool.tier_key === 'base' ? 'Base' : (pool.name.split(' · ').pop() || pool.tier_key)} · {pool.kind === 'free_shipping' ? 'frete grátis' : pool.kind === 'fixed' ? `R$ ${pool.value}` : `${pool.value}%`}</p>
+              )}
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div><p className="text-[15px] font-semibold text-gray-900 tabular-nums">{pool.stock.usable}</p><p className="text-[10px] text-gray-500">prontos</p></div>
+                <div><p className="text-[15px] font-semibold text-gray-900 tabular-nums">{pool.stock.reserved}</p><p className="text-[10px] text-gray-500">entregues</p></div>
+                <div><p className="text-[15px] font-semibold text-gray-900 tabular-nums">{pool.stock.consumed}</p><p className="text-[10px] text-gray-500">usados</p></div>
+              </div>
+              <p className="text-[11px] text-gray-500 leading-snug mt-1">
+                {pool.status === 'error' ? `Última reposição falhou: ${pool.last_error || 'erro'}` :
+                  pool.status === 'paused' ? 'Pausado — não está mais no bloco.' :
+                    pool.needs_replenish ? `Abaixo do mínimo (${pool.min_stock}). O cron repõe a cada 2 minutos.` : 'Estoque em dia. O cron repõe sozinho.'}
+              </p>
+            </div>
+          ))}
+        </div>
       )}
       {state.error && <p className="text-[11px] text-red-600">{state.error}</p>}
     </div>
@@ -1027,7 +1108,7 @@ function CouponPoolPanel() {
 }
 
 // ── Block Props Editor (Klaviyo-style per-block panels) ──────────────────────
-function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInputs }: { block: Block; onChange: (b: Block) => void; onDelete: () => void; onOpenMedia?: (cb: (url: string) => void) => void; onApplyToAllInputs?: (b: Block) => void }) {
+function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInputs, steps = [] }: { block: Block; onChange: (b: Block) => void; onDelete: () => void; onOpenMedia?: (cb: (url: string) => void) => void; onApplyToAllInputs?: (b: Block) => void; steps?: Array<{ id: string; name: string }> }) {
   const up = (key: string, val: any) => onChange(mergeBlockProps(block, { [key]: val }))
   // Multi-key updates MUST go through a single onChange — two `up()` calls in
   // a row both spread the same stale block.props and the 2nd reverts the 1st.
@@ -1359,10 +1440,19 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
             <Segmented value={p.action || 'submit'} onChange={v => up('action', v)} options={[
               { value: 'submit', label: 'Enviar' },
               { value: 'next-step', label: 'Próxima' },
+              { value: 'prev-step', label: 'Voltar' },
               { value: 'url', label: 'URL' },
               { value: 'close', label: 'Fechar' },
             ]} />
           </LabeledField>
+          {p.action === 'next-step' && steps.length > 1 && (
+            <LabeledField label="Ir para" hint="A opção escolhida num bloco de escolha com ramificação vence este destino.">
+              <select className={sel} value={p.nextStepId || ''} onChange={e => up('nextStepId', e.target.value || undefined)}>
+                <option value="">Próxima na sequência</option>
+                {steps.map((s, i) => <option key={s.id} value={s.id}>{i + 1}. {s.name}</option>)}
+              </select>
+            </LabeledField>
+          )}
           {p.action === 'url' && (
             <LabeledField label="URL de destino" hint="Abre em nova aba.">
               <div className="flex items-center border border-gray-200 rounded-lg focus-within:border-zinc-900 focus-within:ring-1 focus-within:ring-zinc-900/10">
@@ -1581,6 +1671,35 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
                 <Plus className="w-3.5 h-3.5" /> Adicionar opção
               </button>
             </div>
+            {/* Quiz: cada opção pode levar a uma etapa e marcar o contato com tags. */}
+            {(p.options || []).length > 0 && (
+              <div className="pt-3 space-y-2">
+                <p className="text-[11px] font-bold text-gray-500 uppercase tracking-[0.08em]">Por opção</p>
+                <p className="text-[11px] text-gray-400 leading-snug">Para onde a resposta leva e que tags ela grava no contato (viram segmento).</p>
+                {(p.options || []).map((opt: string, i: number) => {
+                  const branches: Record<string, string> = p.branches || {}
+                  const tagsBy: Record<string, string> = p.tagsByOption || {}
+                  return (
+                    <div key={i} className="rounded-lg border border-gray-200 p-2 space-y-1.5">
+                      <p className="text-[11px] font-medium text-gray-700 truncate">{opt || `Opção ${i + 1}`}</p>
+                      {steps.length > 1 && (
+                        <select className={sel} value={branches[opt] || ''}
+                          onChange={e => {
+                            const next = { ...branches }
+                            if (e.target.value) next[opt] = e.target.value; else delete next[opt]
+                            up('branches', next)
+                          }}>
+                          <option value="">Segue a sequência</option>
+                          {steps.map((s, j) => <option key={s.id} value={s.id}>→ {j + 1}. {s.name}</option>)}
+                        </select>
+                      )}
+                      <input className={inp} value={tagsBy[opt] || ''} placeholder="tags, separadas por vírgula"
+                        onChange={e => up('tagsByOption', { ...tagsBy, [opt]: e.target.value })} />
+                    </div>
+                  )
+                })}
+              </div>
+            )}
             {block.type === 'radio' && (
               <LabeledField label="Direção">
                 <Segmented value={p.layout || 'vertical'} onChange={v => up('layout', v)} options={[
@@ -1733,6 +1852,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
                 <LabeledField label="Código reserva" hint="Usado se o estoque de códigos únicos acabar. Fica registrado quando acontece.">
                   <input className={inp + ' font-mono tracking-wider uppercase'} value={p.code || ''} onChange={e => up('code', e.target.value.toUpperCase())} placeholder="BEMVINDO10" />
                 </LabeledField>
+                <RewardTiersEditor p={p} up={up} steps={steps} />
                 <CouponPoolPanel />
               </>
             ) : (
@@ -1755,6 +1875,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
                   )}
                 </div>
                 <Toggle label="Aplicar no carrinho automaticamente" hint="O checkout já abre com o desconto." checked={p.autoApply !== false} onChange={v => up('autoApply', v)} />
+                <RewardTiersEditor p={p} up={up} steps={steps} />
               </>
             )}
             <LabeledField label="Descrição">
@@ -2544,6 +2665,21 @@ function ThemePanel({ design, onChange, onOpenMedia }: { design: PopupDesign; on
           </select>
         </Field>
 
+        {design.steps.length > 1 && (
+          <div className="rounded-lg border border-gray-200 p-2.5 space-y-2">
+            <ToggleRow label="Barra de progresso" hint="Mostra em que etapa a pessoa está. Só aparece com duas ou mais etapas."
+              checked={!!s.progress?.enabled}
+              onChange={v => setS({ progress: { ...(s.progress || {}), enabled: v } })} />
+            {s.progress?.enabled && (
+              <div className="grid grid-cols-2 gap-2">
+                <PanelColorField label="Cor" value={s.progress?.color || '#F97316'} onChange={v => setS({ progress: { ...(s.progress || { enabled: true }), color: v } })} />
+                <PanelColorField label="Trilho" value={s.progress?.trackColor || '#E5E7EB'} onChange={v => setS({ progress: { ...(s.progress || { enabled: true }), trackColor: v } })} />
+                <Field label="Altura"><div className="relative"><input type="number" min={2} max={16} className={inp + ' pr-8'} value={s.progress?.height ?? 4} onChange={e => setS({ progress: { ...(s.progress || { enabled: true }), height: Math.min(16, Math.max(2, +e.target.value || 4)) } })} /><span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-400">px</span></div></Field>
+              </div>
+            )}
+          </div>
+        )}
+
         <div>
           <p className="text-[12px] font-medium text-gray-700 mb-2">Padding interno</p>
           <div className="grid grid-cols-3 gap-1.5 max-w-[220px] mx-auto">
@@ -2680,7 +2816,7 @@ import { ColorPicker } from '@/components/email-builder/ui/ColorPicker'
 import { useStoreStore } from '@/stores'
 
 // ── Step Bar (Omnisend-style, centered, editable step names) ──────────────────
-function StepBar({ steps, activeIdx, showSuccess, onSelectStep, onSelectSuccess, onRenameStep, onCloneStep, onDeleteStep, onAddStep }: {
+function StepBar({ steps, activeIdx, showSuccess, onSelectStep, onSelectSuccess, onRenameStep, onCloneStep, onDeleteStep, onAddStep, onSetStepKind }: {
   steps: Step[]
   activeIdx: number
   showSuccess: boolean
@@ -2690,6 +2826,7 @@ function StepBar({ steps, activeIdx, showSuccess, onSelectStep, onSelectSuccess,
   onCloneStep: (i: number) => void
   onDeleteStep: (i: number) => void
   onAddStep: () => void
+  onSetStepKind?: (i: number, kind: Step['kind']) => void
 }) {
   const [editingIdx, setEditingIdx] = useState<number | null>(null)
   const [draft, setDraft] = useState('')
@@ -2737,9 +2874,12 @@ function StepBar({ steps, activeIdx, showSuccess, onSelectStep, onSelectSuccess,
                   <button
                     onClick={() => onSelectStep(i)}
                     onDoubleClick={() => startEdit(i, step.name)}
-                    title="Duplo clique para renomear"
+                    title={`${step.kind ? STEP_KIND_LABELS[step.kind] + ' · ' : ''}Duplo clique para renomear`}
                     className={`px-2 py-1.5 text-[12px] font-medium whitespace-nowrap transition-colors ${isActive ? 'text-white' : 'text-gray-600'}`}>
                     {step.name}
+                    {step.kind && step.kind !== 'form' && (
+                      <span className={`ml-1.5 text-[9px] font-semibold uppercase tracking-wide ${isActive ? 'text-white/60' : 'text-gray-400'}`}>{STEP_KIND_LABELS[step.kind]}</span>
+                    )}
                   </button>
                 )}
                 {isActive && !isEditing && (
@@ -2759,6 +2899,18 @@ function StepBar({ steps, activeIdx, showSuccess, onSelectStep, onSelectSuccess,
                           className="flex items-center gap-2 w-full px-3 py-2 text-[12px] text-gray-700 hover:bg-gray-50 transition-colors">
                           <Copy className="w-3.5 h-3.5 text-gray-400" /> Duplicar etapa
                         </button>
+                        {onSetStepKind && (
+                          <div className="px-3 py-2 border-t border-gray-100">
+                            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Tipo da etapa</p>
+                            <select className="w-full text-[12px] border border-gray-200 rounded-md px-2 py-1 bg-white text-gray-700"
+                              value={step.kind || 'form'}
+                              onChange={e => onSetStepKind(i, e.target.value as Step['kind'])}>
+                              {(Object.keys(STEP_KIND_LABELS) as Array<NonNullable<Step['kind']>>).map(k => (
+                                <option key={k} value={k}>{STEP_KIND_LABELS[k]}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
                         {steps.length > 1 && (
                           <>
                             <div className="h-px bg-gray-100 my-1" />
@@ -3406,7 +3558,7 @@ export default function PopupEditorPage() {
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto">
-                <BlockEditor block={selectedBlock} onChange={updateBlock} onDelete={() => deleteBlock(selectedBlock.id)} onOpenMedia={openMediaLibrary} onApplyToAllInputs={applyStylesToAllInputs} />
+                <BlockEditor block={selectedBlock} onChange={updateBlock} onDelete={() => deleteBlock(selectedBlock.id)} onOpenMedia={openMediaLibrary} onApplyToAllInputs={applyStylesToAllInputs} steps={design.steps.map(s => ({ id: s.id, name: s.name }))} />
               </div>
             </>
           ) : (
@@ -3669,6 +3821,7 @@ export default function PopupEditorPage() {
               setActiveStepIdx(Math.max(0, i - 1))
             }}
             onAddStep={addStep}
+            onSetStepKind={(i, kind) => commitDesign(d => ({ ...d, steps: d.steps.map((s, j) => j === i ? { ...s, kind } : s) }))}
           />
         </main>
 

@@ -457,6 +457,18 @@ var successMsg=D.successMessage||${JSON.stringify(String(form.success_message ||
 var postSubmit=D.postSubmit||{action:"show-success",redirectUrl:"",closeDelay:4};
 var curStep=0;
 var allData={};
+// Ramificação: o caminho percorrido (ids das etapas) vai no submit e decide
+// o tier da recompensa; a próxima etapa vem da opção escolhida (bloco de
+// escolha com props.branches), do botão (props.nextStepId) ou da sequência.
+var stepPath=[];
+function stepIndexById(id){if(!id)return -1;for(var i=0;i<steps.length;i++){if(steps[i]&&steps[i].id===id)return i}return -1}
+function branchAttr(p){
+  var br=p&&p.branches;
+  if(!br||typeof br!=="object")return"";
+  var clean={};var any=false;
+  for(var k in br){if(typeof br[k]==="string"&&stepIndexById(br[k])>=0){clean[k]=br[k];any=true}}
+  return any?' data-wfbranch="'+esc(JSON.stringify(clean))+'"':"";
+}
 // Progressive profiling — known-fields contract is now per-field BOOLEANS
 // ({fields:{email:true,...}}) used only for HIDING already-known fields.
 // Prefill-by-email is discontinued.
@@ -552,7 +564,7 @@ function renderBlock(b){
       var opts=(p.options||[]).map(function(o){return'<option value="'+esc(o)+'">'+esc(o)+'</option>'}).join("");
       var ddLabel=(p.showLabel!==false&&p.label)?'<label style="display:block;font-size:13px;font-weight:500;color:#374151;margin-bottom:4px;font-family:'+ff+'">'+esc(p.label)+'</label>':"";
       // R9: no hardcoded PT placeholder — empty option label when absent.
-      h='<div style="'+blockStyleStr(p,true)+'">'+ddLabel+'<select name="'+esc(ddName)+'"'+(p.required?' required':'')+vaStr(p)+' style="width:100%;padding:12px 16px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;background:#fff;box-sizing:border-box;font-family:'+ff+'"><option value="">'+esc(p.placeholder||"")+'</option>'+opts+'</select></div>';
+      h='<div style="'+blockStyleStr(p,true)+'"'+branchAttr(p)+'>'+ddLabel+'<select name="'+esc(ddName)+'"'+(p.required?' required':'')+vaStr(p)+' style="width:100%;padding:12px 16px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;background:#fff;box-sizing:border-box;font-family:'+ff+'"><option value="">'+esc(p.placeholder||"")+'</option>'+opts+'</select></div>';
       break;
     }
     case"radio":{
@@ -561,7 +573,7 @@ function renderBlock(b){
       var rLabel=(p.showLabel!==false&&p.label)?'<label style="display:block;font-size:13px;font-weight:500;color:#374151;margin-bottom:6px;font-family:'+rff+'">'+esc(p.label)+'</label>':"";
       var ri=(p.options||[]).map(function(o){return'<label style="display:'+(p.layout==="horizontal"?"inline-flex":"flex")+';align-items:center;gap:8px;margin:0 12px 8px 0;font-size:14px;cursor:pointer;font-family:'+rff+'"><input type="radio" name="'+esc(rName)+'" value="'+esc(o)+'"'+(p.required?" required":"")+' style="margin:0;accent-color:#F97316" />'+esc(o)+'</label>'}).join("");
       // R9: required radio group — container marker consumed by validateStep.
-      h='<div style="'+blockStyleStr(p,true)+'">'+rLabel+'<div'+(p.required?' data-wfreq="1"'+vaStr(p):'')+'>'+ri+'</div></div>';
+      h='<div style="'+blockStyleStr(p,true)+'"'+branchAttr(p)+'>'+rLabel+'<div'+(p.required?' data-wfreq="1"'+vaStr(p):'')+'>'+ri+'</div></div>';
       break;
     }
     case"checkbox":{
@@ -570,7 +582,7 @@ function renderBlock(b){
       var cbLabel=(p.showLabel!==false&&p.label)?'<label style="display:block;font-size:13px;font-weight:500;color:#374151;margin-bottom:6px;font-family:'+cbff+'">'+esc(p.label)+'</label>':"";
       var ci=(p.options||[]).map(function(o){return'<label style="display:flex;align-items:center;gap:8px;margin:0 0 8px;font-size:14px;cursor:pointer;font-family:'+cbff+'"><input type="checkbox" name="'+esc(cbName)+'" value="'+esc(o)+'" style="margin:0;accent-color:#F97316" />'+esc(o)+'</label>'}).join("");
       // R9: required checkbox group = at least one checked of that name.
-      h='<div style="'+blockStyleStr(p,true)+'">'+cbLabel+'<div'+(p.required?' data-wfreq="1"'+vaStr(p):'')+'>'+ci+'</div></div>';
+      h='<div style="'+blockStyleStr(p,true)+'"'+branchAttr(p)+'>'+cbLabel+'<div'+(p.required?' data-wfreq="1"'+vaStr(p):'')+'>'+ci+'</div></div>';
       break;
     }
     case"legal-consent":{
@@ -591,7 +603,8 @@ function renderBlock(b){
       var btnFw=sv(p.btnFontWeight,"700");
       // R7: data-url only when the URL passes the scheme whitelist.
       var bu2=act==="url"?safeUrl(p.url):"";
-      var btn='<button id="'+btnId+'" type="'+(act==="submit"?"submit":"button")+'" data-action="'+esc(act)+'"'+(bu2?' data-url="'+esc(bu2)+'"':"")+' style="box-sizing:border-box!important;width:'+(p.fullWidth?"100%":"auto")+'!important;padding:'+nv(p.paddingV,14)+'px '+nv(p.paddingH,28)+'px!important;background:'+sv(p.bgColor,"#F97316")+'!important;color:'+sv(p.textColor,"#fff")+'!important;font-size:'+nv(p.fontSize,15)+'px!important;font-weight:'+btnFw+'!important;font-family:'+btnFam+'!important;letter-spacing:'+btnLs+'!important;line-height:1.2!important;text-align:center!important;text-transform:none!important;border-radius:'+nv(p.borderRadius,8)+'px!important;'+btnBorder+'!important;cursor:pointer!important;margin:0!important;display:'+(p.fullWidth?"block":"inline-block")+'!important;transition:background 0.2s">'+esc(p.text||"OK")+'</button>';
+      var nextAttr=(act==="next-step"&&p.nextStepId&&stepIndexById(p.nextStepId)>=0)?' data-next="'+esc(p.nextStepId)+'"':"";
+      var btn='<button id="'+btnId+'" type="'+(act==="submit"?"submit":"button")+'" data-action="'+esc(act)+'"'+nextAttr+(bu2?' data-url="'+esc(bu2)+'"':"")+' style="box-sizing:border-box!important;width:'+(p.fullWidth?"100%":"auto")+'!important;padding:'+nv(p.paddingV,14)+'px '+nv(p.paddingH,28)+'px!important;background:'+sv(p.bgColor,"#F97316")+'!important;color:'+sv(p.textColor,"#fff")+'!important;font-size:'+nv(p.fontSize,15)+'px!important;font-weight:'+btnFw+'!important;font-family:'+btnFam+'!important;letter-spacing:'+btnLs+'!important;line-height:1.2!important;text-align:center!important;text-transform:none!important;border-radius:'+nv(p.borderRadius,8)+'px!important;'+btnBorder+'!important;cursor:pointer!important;margin:0!important;display:'+(p.fullWidth?"block":"inline-block")+'!important;transition:background 0.2s">'+esc(p.text||"OK")+'</button>';
       // R10: honor p.align via wrapper when not fullWidth (editor default center).
       h='<div style="'+blockStyleStr(p)+(p.fullWidth?"":"text-align:"+sv(p.align,"center")+";")+'">'+hoverCss+btn+'</div>';
       break;
@@ -820,10 +833,36 @@ function show(){
     // drops any submission that carries a value. autocomplete=off +
     // tabindex=-1 + aria-hidden keep humans and screen readers away.
     var hp='<div aria-hidden="true" style="position:absolute!important;left:-9999px!important;top:auto!important;width:1px!important;height:1px!important;overflow:hidden!important"><label>Deixe este campo em branco<input type="text" name="_wf_hp" tabindex="-1" autocomplete="off" value="" /></label></div>';
-    content.innerHTML='<form id="wf-form-'+FID+'" novalidate style="margin:auto 0;width:100%">'+hp+html+'</form>';
+    var sid=steps[curStep]&&steps[curStep].id;
+    if(sid&&stepPath[stepPath.length-1]!==sid)stepPath.push(sid);
+    // Barra de progresso (styles.progress): posição pela ordem das etapas.
+    var prog="";
+    var pg=st.progress||{};
+    if(pg.enabled&&steps.length>1){
+      var pct=Math.round(((curStep+1)/steps.length)*100);
+      prog='<div class="wf-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+pct+'" style="height:'+nv(pg.height,4)+'px;background:'+sv(pg.trackColor,"#E5E7EB")+';border-radius:999px;margin:0 0 16px;overflow:hidden"><div style="width:'+pct+'%;height:100%;background:'+sv(pg.color,"#F97316")+';transition:width .3s ease"></div></div>';
+    }
+    content.innerHTML='<form id="wf-form-'+FID+'" novalidate style="margin:auto 0;width:100%">'+hp+prog+html+'</form>';
     bindForm();
-    wfEmit("stepView",{step:curStep,steps:steps.length});
+    wfEmit("stepView",{step:curStep,stepId:sid||null,steps:steps.length,path:stepPath.slice()});
     if(curStep>0)beacon("step",{step:curStep});
+  }
+  // Para onde ir depois desta etapa: opção escolhida com ramificação →
+  // botão com etapa fixa → sequência.
+  function nextStepFor(frm,btn){
+    var target=-1;
+    var holders=frm?frm.querySelectorAll("[data-wfbranch]"):[];
+    for(var i=0;i<holders.length&&target<0;i++){
+      var map=null;try{map=JSON.parse(holders[i].getAttribute("data-wfbranch")||"{}")}catch(e){map=null}
+      if(!map)continue;
+      var chosen=[];
+      holders[i].querySelectorAll("select").forEach(function(s){if(s.value)chosen.push(s.value)});
+      holders[i].querySelectorAll("input[type=radio],input[type=checkbox]").forEach(function(c){if(c.checked)chosen.push(c.value)});
+      for(var j=0;j<chosen.length;j++){var idx=stepIndexById(map[chosen[j]]);if(idx>=0){target=idx;break}}
+    }
+    if(target<0&&btn&&btn.getAttribute("data-next"))target=stepIndexById(btn.getAttribute("data-next"));
+    if(target<0)target=curStep<steps.length-1?curStep+1:-2;
+    return target;
   }
   // R9: shared validator for submit AND next-step. Paints borders with the
   // block's errorColor and shows the block's requiredMsg/errorMsg when
@@ -909,7 +948,18 @@ function show(){
       // R2: validate the CURRENT step before advancing, then harvest it.
       if(frm&&!validateStep(frm)){dlog("next-step blocked by validation");return}
       if(frm)harvest(frm);
-      if(curStep<steps.length-1){curStep++;renderForm(renderStep(curStep))}
+      var nxt=nextStepFor(frm,btn);
+      dlog("next-step →",nxt);
+      if(nxt>=0){curStep=nxt;renderForm(renderStep(curStep))}
+    }
+    if(act==="prev-step"){
+      e.preventDefault();
+      var pf=btn.closest("form")||$("wf-form-"+FID);
+      if(pf)harvest(pf);
+      // Volta pela trilha percorrida, não pela sequência: quem pulou uma
+      // etapa não cai nela ao voltar.
+      if(stepPath.length>=2){stepPath.pop();var back=stepIndexById(stepPath[stepPath.length-1]);if(back<0)back=Math.max(0,curStep-1);stepPath.pop();curStep=back;renderForm(renderStep(curStep))}
+      else if(curStep>0){curStep--;renderForm(renderStep(curStep))}
     }
     if(act==="close"){e.preventDefault();close(true)}
     if(act==="url"&&btn.dataset.url){e.preventDefault();var uu=safeUrl(btn.dataset.url);if(uu)window.open(uu,"_blank","noopener")}
@@ -976,6 +1026,7 @@ function show(){
       var sid=getSessionId();
       if(sid)payload.session_id=sid;
       try{payload.page_url=location.href}catch(e){}
+      if(stepPath.length)payload.step_path=stepPath.slice(0,30);
       fetch(BU+"/api/public/forms/"+FID+"/submit",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})
       .then(function(r){return r.json().catch(function(){return{}}).then(function(j){return{ok:r.ok,status:r.status,body:j}})})
       .then(function(out){

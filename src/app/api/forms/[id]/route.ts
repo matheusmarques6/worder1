@@ -204,18 +204,24 @@ export async function PUT(
     let couponPool: any = null
     if (form && (design_json !== undefined || status !== undefined)) {
       try {
-        const { syncPoolFromForm, replenishPool, getPoolStatus } = await import('@/lib/coupons/pool-service')
+        const { syncPoolFromForm, replenishPool, listPoolStatuses } = await import('@/lib/coupons/pool-service')
         const synced = await syncPoolFromForm(form)
-        if (synced.pool && form.status === 'published') {
-          await replenishPool(synced.pool.id, user.organization_id, { maxCreate: 10, timeBudgetMs: 8000 })
+        if (synced.pools.length && form.status === 'published') {
+          // Base e tiers: um lote pequeno em cada, dentro do mesmo orçamento.
+          const budget = Math.max(2000, Math.floor(8000 / synced.pools.length))
+          for (const p of synced.pools) {
+            await replenishPool(p.id, user.organization_id, { maxCreate: 10, timeBudgetMs: budget })
+          }
         }
-        const st = await getPoolStatus(user.organization_id, form.id)
+        const statuses = await listPoolStatuses(user.organization_id, form.id)
+        const active = statuses.filter((s) => s.pool?.status === 'active')
         couponPool = {
-          active: !!st.pool && st.pool.status === 'active',
-          status: st.pool?.status || null,
-          usable: st.usable,
-          last_error: st.pool?.last_error || null,
+          active: active.length > 0,
+          status: active.length ? (active.some((s) => s.pool?.status === 'error') ? 'error' : 'active') : (statuses[0]?.pool?.status || null),
+          usable: active.reduce((n, s) => n + s.usable, 0),
+          last_error: active.find((s) => s.pool?.last_error)?.pool?.last_error || null,
           reason: synced.reason || null,
+          pools: statuses.map((s) => ({ tier_key: s.pool?.tier_key || 'base', status: s.pool?.status, usable: s.usable })),
         }
       } catch (e: any) {
         console.warn('[Forms] coupon pool sync failed (non-blocking):', e?.message)

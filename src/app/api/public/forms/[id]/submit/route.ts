@@ -1076,7 +1076,11 @@ export async function POST(
     // an explicit opt-out must not land them in the audience.
     if (contactId && !marketingConsentDenied) {
       try {
-        const audienceTags: string[] = Array.isArray(audienceCfg.tags) ? audienceCfg.tags.filter(Boolean) : (Array.isArray(form.tags) ? form.tags : [])
+        // Tags do popup + tags das opções escolhidas no quiz (derivadas das
+        // respostas contra o design — o cliente não manda tag nenhuma).
+        const baseTags: string[] = Array.isArray(audienceCfg.tags) ? audienceCfg.tags.filter(Boolean) : (Array.isArray(form.tags) ? form.tags : [])
+        const { tagsFromAnswers } = await import('@/lib/popups/branching')
+        const audienceTags: string[] = Array.from(new Set([...baseTags, ...tagsFromAnswers(designBlocks, answers)]))
         const audienceListId: string | null = audienceCfg.listId || form.list_id || null
 
         if (audienceTags.length > 0) {
@@ -1347,12 +1351,23 @@ export async function POST(
     // volta ao popup ("receita por código") mesmo sem código único.
     let issuedCoupon: {
       code: string; kind: string; value: number; ends_at: string | null
-      auto_apply: boolean; show_code: boolean; source: string
+      auto_apply: boolean; show_code: boolean; source: string; tier: string
     } | null = null
+    // O caminho percorrido (etapas ramificadas) — só ids que existem no
+    // design. Decide o tier da recompensa progressiva e fica na submissão.
+    const { sanitizeStepPath, effectiveRewardTier } = await import('@/lib/popups/branching')
+    const stepPath = sanitizeStepPath((body as any)?.step_path, Array.isArray(designJson.steps) ? designJson.steps : [])
+    let rewardTierKey: string | null = null
+
     try {
-      const { readCouponBlock } = await import('@/lib/coupons/pool-service')
+      const { readCouponBlock, effectiveDiscount } = await import('@/lib/coupons/pool-service')
       const cp = readCouponBlock(designJson)
       if (cp) {
+        // Recompensa progressiva: o último tier cuja etapa foi visitada.
+        const tier = effectiveRewardTier(cp.tiers, stepPath)
+        const eff = effectiveDiscount(cp, tier)
+        rewardTierKey = eff.tierKey
+
         let poolId: string | null = null
         if (cp.mode === 'unique' && form.store_id) {
           const { data: pool } = await supabase
@@ -1360,12 +1375,13 @@ export async function POST(
             .select('id')
             .eq('organization_id', form.organization_id)
             .eq('form_id', formId)
+            .eq('tier_key', eff.tierKey)
             .eq('status', 'active')
             .maybeSingle()
           poolId = pool?.id || null
-          if (!poolId) console.warn('[Form Submit] popup em modo único sem pool ativo — caindo no código estático', { formId })
+          if (!poolId) console.warn('[Form Submit] popup em modo único sem pool ativo — caindo no código estático', { formId, tier: eff.tierKey })
         }
-        const base = { kind: cp.kind, value: cp.value, auto_apply: cp.autoApply, show_code: cp.showCode }
+        const base = { kind: eff.kind, value: eff.value, auto_apply: cp.autoApply, show_code: cp.showCode, tier: eff.tierKey }
 
         if (contactId) {
           const { data, error } = await supabase.rpc('issue_popup_incentive', {
@@ -1374,22 +1390,23 @@ export async function POST(
             p_contact_id: contactId,
             p_form_id: formId,
             p_submission_id: submission.id,
-            p_kind: cp.kind,
-            p_value: cp.value,
+            p_kind: eff.kind,
+            p_value: eff.value,
             p_validity_days: cp.validityDays,
             p_pool_id: poolId,
-            p_static_code: cp.staticCode,
+            p_static_code: eff.staticCode,
+            p_tier_key: eff.tierKey,
           })
           if (error) {
             console.error('[Form Submit] issue_popup_incentive failed:', error.message)
             // Sem ledger não há código único; o estático ainda vale.
-            if (cp.staticCode) issuedCoupon = { ...base, code: cp.staticCode, ends_at: null, source: 'static_ledger_error' }
+            if (eff.staticCode) issuedCoupon = { ...base, code: eff.staticCode, ends_at: null, source: 'static_ledger_error' }
           } else {
             const row: any = Array.isArray(data) ? data[0] : data
             if (row?.coupon_code) {
               issuedCoupon = { ...base, code: row.coupon_code, ends_at: row.validity_until || null, source: row.outcome || 'issued' }
               supabase.from('crm_form_submissions')
-                .update({ coupon_code: row.coupon_code, coupon_kind: cp.kind, grant_id: row.grant_id || null })
+                .update({ coupon_code: row.coupon_code, coupon_kind: eff.kind, grant_id: row.grant_id || null })
                 .eq('id', submission.id)
                 .then(({ error: upErr }) => {
                   if (upErr && upErr.code !== '42703' && upErr.code !== 'PGRST204') console.warn('[Form Submit] submission coupon update failed:', upErr.message)
@@ -1398,14 +1415,23 @@ export async function POST(
               console.log('[Form Submit] cupom deste popup já usado por este contato — sem novo código')
             }
           }
-        } else if (cp.staticCode) {
+        } else if (eff.staticCode) {
           // Sem e-mail nem telefone não há contato, logo não há grant. O
           // código estático aparece mesmo assim — o popup prometeu.
-          issuedCoupon = { ...base, code: cp.staticCode, ends_at: null, source: 'static_no_contact' }
+          issuedCoupon = { ...base, code: eff.staticCode, ends_at: null, source: 'static_no_contact' }
         }
       }
     } catch (e: any) {
       console.warn('[Form Submit] coupon issuance errored:', e?.message)
+    }
+
+    if (stepPath.length || rewardTierKey) {
+      supabase.from('crm_form_submissions')
+        .update({ step_path: stepPath.length ? stepPath : null, reward_tier: rewardTierKey })
+        .eq('id', submission.id)
+        .then(({ error: upErr }) => {
+          if (upErr && upErr.code !== '42703' && upErr.code !== 'PGRST204') console.warn('[Form Submit] step_path update failed:', upErr.message)
+        })
     }
 
     // 9. Return success with tracking data for client-side pixels
