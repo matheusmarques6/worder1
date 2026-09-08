@@ -613,3 +613,68 @@ describe('experimento A/B no runtime', () => {
     expect(formEl(id)!.textContent).toContain('Versão B')
   })
 })
+
+describe('smart triggering: propensão e segunda chance', () => {
+  function freshPage() {
+    for (const k of Object.keys(window)) if (k.startsWith('__wf')) delete (window as any)[k]
+  }
+  function closeByUser(id: string) {
+    root(id)!.querySelector<HTMLElement>('[data-action="close"]')?.click()
+  }
+
+  it('a impressão e o envio carregam o score de propensão', async () => {
+    const id = run(design(), behavior())
+    vi.advanceTimersByTime(1000)
+    const imp = eventsFor(id).find((e) => e.type === 'impression')!
+    expect(typeof imp.propensity).toBe('number')
+    expect(imp.retrigger).toBe(false)
+    formEl(id)!.querySelector<HTMLInputElement>('input[name="email"]')!.value = 'q@example.com'
+    formEl(id)!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await vi.runAllTimersAsync()
+    const submit = calls.find((c) => c.url === `${BU}/api/public/forms/${id}/submit`)!
+    expect(typeof submit.body.propensity_score).toBe('number')
+  })
+
+  it('quem fechou volta a ver uma vez na sessão quando a intenção passa do limiar — nunca antes do delay mínimo', () => {
+    const id = nextId()
+    // Pesos só de permanência e páginas, para o teste controlar o score.
+    const beh = behavior({ smartTrigger: { enabled: true, threshold: 50, minDelaySec: 10, weights: { scroll: 0, dwell: 60, pages: 40, products: 0, cart: 0, returning: 0, traffic: 0 } } })
+    run(design(), beh, id)
+    vi.advanceTimersByTime(1000)
+    expect(ov(id)).not.toBeNull()
+    closeByUser(id)
+    expect(ov(id)).toBeNull()
+    expect(sessionStorage.getItem(`_wf_sd_${id}`)).not.toBeNull()
+    // Nova página da mesma sessão: a frequência bloquearia; a segunda chance vigia.
+    freshPage()
+    document.body.innerHTML = ''
+    run(design(), beh, id)
+    vi.advanceTimersByTime(5000)
+    expect(ov(id)).toBeNull() // antes do delay mínimo, mesmo com score
+    // 2 páginas (40·2/5=16) + permanência: aos 60 s na sessão o score passa de 50.
+    vi.advanceTimersByTime(80000)
+    expect(ov(id)).not.toBeNull()
+    const imps = eventsFor(id).filter((e) => e.type === 'impression')
+    expect(imps[imps.length - 1].retrigger).toBe(true)
+    expect(sessionStorage.getItem(`_wf_rt_${id}`)).toBe('1')
+    // Fechou de novo: acabou a segunda chance nesta sessão.
+    closeByUser(id)
+    freshPage()
+    document.body.innerHTML = ''
+    run(design(), beh, id)
+    vi.advanceTimersByTime(200000)
+    expect(ov(id)).toBeNull()
+  })
+
+  it('sem a opção ligada, quem fechou não vê de novo', () => {
+    const id = nextId()
+    run(design(), behavior(), id)
+    vi.advanceTimersByTime(1000)
+    closeByUser(id)
+    freshPage()
+    document.body.innerHTML = ''
+    run(design(), behavior(), id)
+    vi.advanceTimersByTime(200000)
+    expect(ov(id)).toBeNull()
+  })
+})

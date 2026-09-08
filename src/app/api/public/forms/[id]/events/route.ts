@@ -122,6 +122,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
             referrer: shortText(body.referrer, 2048),
             traffic: trafficTypeOrNull(body.traffic),
             page: pageKindOrNull(body.page),
+            // Smart Triggering: o score no momento da exibição (calibração
+            // futura) e se foi a segunda chance na sessão.
+            propensity: Number.isFinite(Number(body.propensity)) ? Math.max(0, Math.min(100, Math.round(Number(body.propensity)))) : null,
+            retrigger: body.retrigger === true,
           },
           occurred_at: occurredAt,
         });

@@ -112,7 +112,7 @@ describe('buildPopupScript (generated string)', () => {
   })
 
   it('R6: impressions go through the /events beacon — never the submit _track path', () => {
-    expect(js).toContain('beacon("impression",{bucket:"exposed",traffic:TRAFFIC,page:PAGE.kind})')
+    expect(js).toContain('beacon("impression",{bucket:"exposed",traffic:TRAFFIC,page:PAGE.kind,propensity:propensity(),retrigger:RETRIG})')
     expect(js).not.toContain('_track:"impression"')
   })
 

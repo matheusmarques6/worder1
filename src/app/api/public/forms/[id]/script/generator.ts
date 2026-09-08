@@ -243,6 +243,12 @@ function lsSet(n,v,d){try{localStorage.setItem("_wfls_"+n,JSON.stringify({v:v,e:
 function lsGet(n){try{var r=localStorage.getItem("_wfls_"+n);if(!r)return null;var j=JSON.parse(r);if(j&&j.e&&Date.now()<j.e)return j.v;localStorage.removeItem("_wfls_"+n);return null}catch(e){return null}}
 function gcx(n){return gc(n)||lsGet(n)}
 function scx(n,v,d){sc(n,v,d);lsSet(n,v,d)}
+function sessGet(k){try{return JSON.parse(sessionStorage.getItem(k)||"null")}catch(e){return null}}
+function sessSet(k,v){try{sessionStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+// Smart Triggering: segunda chance na sessão para quem fechou o popup e
+// depois mostrou intenção (rolagem, permanência, páginas, carrinho).
+var stCfg=B.smartTrigger||{};
+var RETRIG=false;
 // Eventos para o script da loja (GTM, pixels próprios, testes):
 //   window.addEventListener("worder:signup", function(e){ e.detail... })
 // Nomes: campaignMatched, popupView, stepView, popupClose, signup,
@@ -381,7 +387,14 @@ var formType=D.formType||"popup";
 var isEmbed=formType==="embed";
 // Frequency gate (skipped for custom trigger and for embeds — S10: embedded
 // forms are page content, never frequency-suppressed).
-if(!DBG&&!isEmbed&&gcx(ck)&&!useCustomTrigger){blockedBy("frequency flag "+ck+" present — wait "+SHOW_AFTER_DAYS+" days or open ?wf_debug=1");return}
+var dismissedAt=Number(sessGet("_wf_sd_"+FID)||0);
+var canRetrig=!!stCfg.enabled&&!isEmbed&&dismissedAt>0&&!sessGet("_wf_rt_"+FID)&&!gcx("_wf_sub");
+if(!DBG&&!isEmbed&&gcx(ck)&&!useCustomTrigger){
+  // Fechou nesta sessão: em vez de sumir pelo prazo da frequência, o popup
+  // fica de olho na intenção e volta UMA vez, nunca antes do delay mínimo.
+  if(canRetrig){RETRIG=true;dlog("frequency flag present — smart re-trigger will watch intent")}
+  else{blockedBy("frequency flag "+ck+" present — wait "+SHOW_AFTER_DAYS+" days or open ?wf_debug=1");return}
+}
 // URL include/exclude (wildcard: *)
 function matchUrl(pattern,url){
   if(!pattern)return false;
@@ -484,6 +497,32 @@ var trafficCfg=B.traffic||{};
 var TRAFFIC=trafficType();
 if(trafficCfg.enabled&&trafficCfg.types&&trafficCfg.types.length){
   if(trafficCfg.types.indexOf(TRAFFIC)<0){blockedBy("traffic gate — "+TRAFFIC+" not in "+JSON.stringify(trafficCfg.types));return}
+}
+// Propensão (0–100): sinais da sessão que alimentam o Smart Triggering e as
+// Smart Offers. Pesos padrão somam 100; o lojista (ou uma calibração
+// futura) pode sobrescrever em behavior.smartTrigger.weights.
+var PW=stCfg.weights||{};
+function pw(k,d){var v=Number(PW[k]);return isFinite(v)?v:d}
+var propS={scroll:0,dwellStart:Date.now()};
+var sessP=sessGet("_wf_prop")||{dwell:0,products:0,pages:0,cartItems:0,cartAt:0};
+if(!window.__wf_prop_bumped){window.__wf_prop_bumped=true;sessP.pages=(sessP.pages||0)+1;if(PAGE.kind==="product")sessP.products=(sessP.products||0)+1;sessSet("_wf_prop",sessP)}
+function onPropScroll(){try{var max=document.body.scrollHeight-window.innerHeight;if(max>0){var pp=Math.round(window.scrollY/max*100);if(pp>propS.scroll)propS.scroll=Math.min(100,pp)}}catch(e){}}
+window.addEventListener("scroll",onPropScroll,{passive:true});
+window.addEventListener("pagehide",function(){sessP.dwell=(sessP.dwell||0)+(Date.now()-propS.dwellStart)/1000;propS.dwellStart=Date.now();sessSet("_wf_prop",sessP)});
+if(stCfg.enabled&&window.Shopify&&!(sessP.cartAt&&Date.now()-sessP.cartAt<300000)){
+  try{fetch("/cart.js",{credentials:"same-origin"}).then(function(r){return r.json()}).then(function(c){sessP.cartItems=Number(c&&c.item_count||0);sessP.cartAt=Date.now();sessSet("_wf_prop",sessP)}).catch(function(){})}catch(e){}
+}
+function propensity(){
+  var dwell=(sessP.dwell||0)+(Date.now()-propS.dwellStart)/1000;
+  var sc=0;
+  sc+=Math.min(1,propS.scroll/100)*pw("scroll",20);
+  sc+=Math.min(1,dwell/120)*pw("dwell",20);
+  sc+=Math.min(1,(sessP.pages||0)/5)*pw("pages",15);
+  sc+=Math.min(1,(sessP.products||0)/3)*pw("products",15);
+  if((sessP.cartItems||0)>0)sc+=pw("cart",15);
+  if(isReturning)sc+=pw("returning",10);
+  if(TRAFFIC==="paid"||TRAFFIC==="email"||TRAFFIC==="messaging")sc+=pw("traffic",5);
+  return Math.max(0,Math.min(100,Math.round(sc)));
 }
 // Location gate — país resolvido pela NOSSA borda (/api/public/geo), nunca
 // por um terceiro que receberia o IP do visitante. Cache de sessão; falha
@@ -791,6 +830,7 @@ function renderStep(stepIdx){
 function sendDismiss(){
   if(dismissSent)return;
   dismissSent=true;
+  sessSet("_wf_sd_"+FID,Date.now());
   beacon("dismissed",{step:curStep});
 }
 // Fonts só quando o popup aparece: injetar o <link> em toda página, mesmo
@@ -967,7 +1007,7 @@ function show(){
   }
   // Impressão → /events: persiste na série diária E bate os contadores.
   // (O antigo {_track:'impression'} no submit só batia contador.)
-  beacon("impression",{bucket:"exposed",traffic:TRAFFIC,page:PAGE.kind});
+  beacon("impression",{bucket:"exposed",traffic:TRAFFIC,page:PAGE.kind,propensity:propensity(),retrigger:RETRIG});
   wfEmit("popupView",{formType:formType});
   // novalidate: our validator replaces browser-native bubbles (R9), so
   // visitors never see the browser's locale-specific messages.
@@ -1190,6 +1230,7 @@ function show(){
       if(stepPath.length)payload.step_path=stepPath.slice(0,30);
       payload.traffic_type=TRAFFIC;payload.page_kind=PAGE.kind;
       if(EXP)payload.variant_id=VARIANT_ID;
+      payload.propensity_score=propensity();
       fetch(BU+"/api/public/forms/"+FID+"/submit",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})
       .then(function(r){return r.json().catch(function(){return{}}).then(function(j){return{ok:r.ok,status:r.status,body:j}})})
       .then(function(out){
@@ -1422,6 +1463,7 @@ function runCartGate(cb){
     fetch("/cart.js",{credentials:"same-origin"}).then(function(r){return r.json()}).then(function(c){
       var total=Number(c.total_price||0)/100;
       var items=Number(c.item_count||0);
+      try{sessP.cartItems=items;sessP.cartAt=Date.now();sessSet("_wf_prop",sessP)}catch(e){}
       if(wantsTotals){
         if(minP>0&&total<minP){cb(false);return}
         if(maxP>0&&total>maxP){cb(false);return}
@@ -1528,6 +1570,24 @@ runCartGate(function(cartOk){
   if(pendingOpen){pendingOpen=false;dlog("openForm was queued — showing");show();return}
   // S10: embedded forms render immediately — no triggers, no frequency.
   if(isEmbed){dlog("embed form type — rendering immediately");show();return}
+  if(RETRIG){
+    // Segunda chance: sem gatilhos normais. Olha a intenção a cada segundo
+    // e só volta quando o score passa do limiar — e nunca antes do delay
+    // mínimo, contado do carregamento da página e do fechamento.
+    var thr=Math.max(0,Math.min(100,nv(stCfg.threshold,60)));
+    var minDelay=Math.max(5,nv(stCfg.minDelaySec,20))*1000;
+    var t0=Date.now();
+    regState("armed");
+    dlog("smart re-trigger armed: threshold "+thr+", min delay "+minDelay+"ms");
+    var rtTimer=setInterval(function(){
+      if(shown){clearInterval(rtTimer);return}
+      if(Date.now()-t0<minDelay)return;
+      if(Date.now()-dismissedAt<minDelay)return;
+      var sc=propensity();
+      if(sc>=thr){clearInterval(rtTimer);sessSet("_wf_rt_"+FID,1);dlog("smart re-trigger fired, score "+sc);show()}
+    },1000);
+    return;
+  }
   if(!anyEnabled&&!useCustomTrigger){
     dlog("no triggers configured, default 5s delay");
     setTimeout(function(){dlog("default 5s elapsed, showing");show();},5000);

@@ -944,6 +944,7 @@ export async function POST(
       traffic_type: trafficTypeOrNull((body as any)?.traffic_type),
       page_kind: pageKindOrNull((body as any)?.page_kind),
       variant_id: variantId,
+      propensity_score: Number.isFinite(Number((body as any)?.propensity_score)) ? Math.max(0, Math.min(100, Math.round(Number((body as any).propensity_score)))) : null,
     }
     let { data: submission, error: subError } = await supabase
       .from('crm_form_submissions')

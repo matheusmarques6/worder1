@@ -145,6 +145,10 @@ interface PopupDesign {
     // Quando dois popups são elegíveis na mesma página, o de maior número
     // aparece; o outro espera a próxima visita. 0 = normal.
     priority?: number
+    // Segunda chance na sessão para quem fechou e depois mostrou intenção
+    // (rolagem, permanência, páginas, produtos, carrinho). Uma vez por
+    // sessão, nunca antes do delay mínimo.
+    smartTrigger?: { enabled: boolean; threshold: number; minDelaySec: number }
   }
   postSubmit?: {
     action: 'close' | 'redirect' | 'show-success'
@@ -356,6 +360,7 @@ const defaultDesign: PopupDesign = {
     cart: { enabled: false, minTotal: 0, maxTotal: 0, minItems: 0, contains: { enabled: false, match: 'any', handles: [], types: [], vendors: [] } },
     experiment: { holdoutPercent: 0 },
     priority: 0,
+    smartTrigger: { enabled: false, threshold: 60, minDelaySec: 20 },
     audienceTargeting: { mode: 'off', segmentIds: [], listIds: [] },
     page: { enabled: false, templates: [], productHandles: [], productTypes: [], productVendors: [], productTags: [], collectionHandles: [] },
     traffic: { enabled: false, types: [] },
@@ -2498,6 +2503,7 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
   const aud = beh.audienceTargeting || { mode: 'off' as const, segmentIds: [], listIds: [] }
   const page = beh.page || { enabled: false, templates: [], productHandles: [], productTypes: [], productVendors: [], productTags: [], collectionHandles: [] }
   const traffic = beh.traffic || { enabled: false, types: [] }
+  const smart = beh.smartTrigger || { enabled: false, threshold: 60, minDelaySec: 20 }
   const cartHas = beh.cart?.contains || { enabled: false, match: 'any' as const, handles: [], types: [], vendors: [] }
   const toggleIn = (list: string[], key: string) => list.includes(key) ? list.filter(k => k !== key) : [...list, key]
   const urls = beh.urls || { includeEnabled: false, includeUrls: [], excludeEnabled: false, excludeUrls: [] }
@@ -2735,9 +2741,25 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
             </div>
 
             <div className="pt-3 border-t border-gray-100">
-              <ToggleRow label="Exibir somente se TODAS as condicoes forem atendidas"
-                hint={d.matchAll ? 'Modo AND: todas as condicoes ativas precisam ser satisfeitas.' : 'Modo OR: qualquer condicao ativa dispara o popup.'}
+              <ToggleRow label="Exibir somente se TODAS as condições forem atendidas"
+                hint={d.matchAll ? 'Modo AND: todas as condições ativas precisam ser satisfeitas.' : 'Modo OR: qualquer condição ativa dispara o popup.'}
                 checked={!!d.matchAll} onChange={v => setG('display', { matchAll: v })} />
+            </div>
+
+            <div className="pt-3 border-t border-gray-100">
+              <ToggleRow label="Segunda chance por intenção" hint="Quem fechou o popup e depois mostra intenção de compra (rola bastante, fica na página, vê produtos, põe no carrinho) vê de novo — uma vez por sessão."
+                checked={!!smart.enabled} onChange={v => setG('smartTrigger', { ...smart, enabled: v })} />
+              {smart.enabled && (
+                <div className="mt-2 space-y-2">
+                  <Field label={`Intenção mínima · ${smart.threshold ?? 60}`} hint="Score de 0 a 100 somando rolagem, permanência, páginas vistas, produtos vistos, carrinho, visitante retornante e origem paga. 40 = cedo, 60 = equilibrado, 80 = só quem está quase comprando.">
+                    <input type="range" min={20} max={95} step={5} value={smart.threshold ?? 60} onChange={e => setG('smartTrigger', { ...smart, threshold: +e.target.value })} className="w-full accent-zinc-900" aria-label="Intenção mínima" />
+                    <div className="flex justify-between text-[10px] text-gray-400 -mt-1"><span>cedo</span><span>equilibrado</span><span>só quase comprando</span></div>
+                  </Field>
+                  <Field label="Nunca antes de" hint="Segundos desde o carregamento da página e desde o fechamento. Evita o popup voltando na cara de quem acabou de fechar.">
+                    <div className="relative w-28"><input type="number" min={5} max={300} className={inp + ' pr-8'} value={smart.minDelaySec ?? 20} onChange={e => setG('smartTrigger', { ...smart, minDelaySec: Math.max(5, Math.min(300, +e.target.value || 20)) })} /><span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-400">s</span></div>
+                  </Field>
+                </div>
+              )}
             </div>
           </Section>
 
@@ -3629,6 +3651,7 @@ export default function PopupEditorPage() {
               contains: { ...defaultDesign.behavior.cart!.contains!, ...(((saved.behavior || {}).cart || {}).contains || {}) },
             },
             audienceTargeting: { ...defaultDesign.behavior.audienceTargeting!, ...((saved.behavior || {}).audienceTargeting || {}) },
+            smartTrigger: { ...defaultDesign.behavior.smartTrigger!, ...((saved.behavior || {}).smartTrigger || {}) },
             page: { ...defaultDesign.behavior.page!, ...((saved.behavior || {}).page || {}) },
             traffic: { ...defaultDesign.behavior.traffic!, ...((saved.behavior || {}).traffic || {}) },
             whatsapp: { ...defaultDesign.behavior.whatsapp!, ...((saved.behavior || {}).whatsapp || {}) },
