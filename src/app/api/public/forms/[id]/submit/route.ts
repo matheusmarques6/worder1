@@ -25,6 +25,7 @@ import {
 } from '@/lib/forms/consent'
 import { isValidEmail } from '@/lib/email/validation'
 import { trafficTypeOrNull, pageKindOrNull } from '@/lib/popups/targeting'
+import { readWhatsAppOptInConfig, startWhatsAppDoubleOptIn } from '@/lib/whatsapp/popup-opt-in'
 
 export const dynamic = 'force-dynamic'
 
@@ -738,8 +739,15 @@ export async function POST(
     // pune. Só existe decisão quando há bloco cobrindo o canal E um
     // telefone para receber a mensagem.
     const contactPhone = contactData.phone || contactData.whatsapp || null
+    // WhatsApp com confirmação: a caixa marcada NÃO vale consentimento — só
+    // a resposta ao template. O pedido sai depois da submissão (8.4c), com
+    // o id dela na evidência.
+    const whatsappOptIn = readWhatsAppOptInConfig(popupBehavior)
+    const whatsappDoubleOptIn = !!(whatsappDecision?.checked && contactPhone && whatsappOptIn.doubleOptIn)
+    let whatsappOptInSent = false
+    let whatsappAlreadyOptedIn = false
     if (contactId && contactPhone) {
-      if (whatsappDecision) {
+      if (whatsappDecision && !whatsappDoubleOptIn) {
         await writePhoneChannelConsent(
           supabase, contactId, 'whatsapp',
           whatsappDecision.checked ? 'granted' : 'denied', `popup_form:${form.id}`,
@@ -952,7 +960,8 @@ export async function POST(
         if ((d.channel === 'whatsapp' || d.channel === 'sms') && !contactPhone) continue
         const action = !d.checked
           ? 'denied'
-          : d.channel === 'email' && doubleOptInEnabled ? 'pending' : 'granted'
+          : d.channel === 'email' && doubleOptInEnabled ? 'pending'
+          : d.channel === 'whatsapp' && whatsappDoubleOptIn ? 'pending' : 'granted'
         proofs.push({ channel: d.channel, action, text: d.block.text || null, version: d.block.version })
       }
       // Opt-in único de e-mail sem bloco: a prova registra que não houve
@@ -1193,6 +1202,42 @@ export async function POST(
         }
       } catch (e: any) {
         console.warn('[Form Submit] doubleOptIn block failed:', e?.message)
+      }
+    }
+
+    // 8.4c. Confirmação de WhatsApp. Linha 'pending' em whatsapp_opt_status
+    // (que já bloqueia marketing na guarda de envio) e um template UTILITY
+    // aprovado pedindo o "sim". Quem já tinha opt-in não recebe pedido: o
+    // consentimento do bloco vale na hora. Falha de envio não derruba a
+    // inscrição — fica no whatsapp_sends com o erro.
+    if (contactId && contactPhone && whatsappDoubleOptIn) {
+      try {
+        let storeName: string | null = null
+        if ((form as any).store_id) {
+          const { data: st } = await supabase.from('shopify_stores').select('name').eq('id', (form as any).store_id).maybeSingle()
+          storeName = (st as any)?.name || null
+        }
+        const r = await startWhatsAppDoubleOptIn(supabase, {
+          organizationId: form.organization_id,
+          storeId: (form as any).store_id || null,
+          contactId,
+          phone: contactPhone,
+          formId: form.id,
+          formName: form.name || null,
+          submissionId: submission.id,
+          firstName: contactData.first_name || null,
+          storeName,
+          config: whatsappOptIn,
+        })
+        if (r.sent) whatsappOptInSent = true
+        else if (r.reason === 'already_opted_in') {
+          whatsappAlreadyOptedIn = true
+          await writePhoneChannelConsent(supabase, contactId, 'whatsapp', 'granted', `popup_form:${form.id}`)
+        } else {
+          console.warn('[Form Submit] whatsapp double opt-in not sent:', r.reason, r.error || '')
+        }
+      } catch (e: any) {
+        console.warn('[Form Submit] whatsapp double opt-in failed:', e?.message)
       }
     }
 
@@ -1455,13 +1500,18 @@ export async function POST(
       // True when a double-opt-in confirmation email was just dispatched.
       // The popup script can swap the success copy to "check your inbox".
       double_optin_sent: doubleOptInSent,
+      // Pedido de confirmação no WhatsApp saiu? O runtime mostra "responda
+      // SIM no WhatsApp" quando o lojista quiser.
+      whatsapp_optin_sent: whatsappOptInSent,
       // O que ficou decidido por canal — o runtime expõe no evento
       // worder:signup para o script da loja.
       consent: {
         email: !contactData.email ? null
           : marketingConsentDenied ? 'denied'
           : doubleOptInEnabled ? 'pending' : 'granted',
-        whatsapp: !contactPhone || !whatsappDecision ? null : (whatsappDecision.checked ? 'granted' : 'denied'),
+        whatsapp: !contactPhone || !whatsappDecision ? null
+          : !whatsappDecision.checked ? 'denied'
+          : whatsappDoubleOptIn && !whatsappAlreadyOptedIn ? 'pending' : 'granted',
         sms: !contactPhone || !smsDecision ? null : (smsDecision.checked ? 'granted' : 'denied'),
       },
       // Client-side tracking data

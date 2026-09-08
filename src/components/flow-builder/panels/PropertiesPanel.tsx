@@ -570,12 +570,13 @@ export function PropertiesPanel({ organizationId, automationId, storeId }: { org
             {/* já lê trigger_config.form_id — faltava a UI gravar.     */}
             {/* ============================== */}
             {(selectedNode.data.nodeType === 'trigger_popup_subscribed' ||
+              selectedNode.data.nodeType === 'trigger_whatsapp_optin' ||
               selectedNode.data.nodeType === 'trigger_form_submitted') && (
               <FormTriggerConfig
                 config={selectedNode.data.config || {}}
                 onUpdate={handleUpdate}
                 storeId={storeId}
-                popupOnly={selectedNode.data.nodeType === 'trigger_popup_subscribed'}
+                popupOnly={selectedNode.data.nodeType !== 'trigger_form_submitted'}
               />
             )}
 
@@ -627,6 +628,7 @@ export function PropertiesPanel({ organizationId, automationId, storeId }: { org
                   {selectedNode.data.nodeType === 'trigger_cancelled_order' && 'Dispara quando um pedido e cancelado.'}
                   {selectedNode.data.nodeType === 'trigger_form_submitted' && 'Dispara quando um formulario e enviado.'}
                   {selectedNode.data.nodeType === 'trigger_popup_subscribed' && 'Dispara quando alguem se inscreve em um popup. Ideal para welcome flows: enviar email de boas-vindas, aplicar tag, conceder cupom.'}
+                  {selectedNode.data.nodeType === 'trigger_whatsapp_optin' && 'Dispara quando a pessoa responde "SIM" (ou toca no botao) ao pedido de confirmacao de WhatsApp enviado por um popup. So aqui o contato tem opt-in de WhatsApp — e o ponto certo para a regua de boas-vindas no WhatsApp.'}
                   {selectedNode.data.nodeType === 'trigger_custom_event' && 'Dispara quando um evento personalizado e recebido via API.'}
                   {selectedNode.data.nodeType === 'trigger_active_on_site' && 'Dispara quando um contato identificado fica ativo no site (1x por sessao de 30 min).'}
                 </p>
@@ -3320,6 +3322,11 @@ const TRIGGER_FILTER_FIELDS: Record<string, Array<{ value: string; label: string
   trigger_popup_subscribed: [
     { value: 'form_name', label: 'Nome do Popup' },
     { value: 'form_id', label: 'ID do Popup' },
+  ],
+  trigger_whatsapp_optin: [
+    { value: 'form_name', label: 'Nome do Popup' },
+    { value: 'form_id', label: 'ID do Popup' },
+    { value: 'confirmed_via', label: 'Confirmou por (button/keyword)' },
   ],
   trigger_signup: [
     { value: 'source', label: 'Origem' },

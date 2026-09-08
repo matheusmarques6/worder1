@@ -315,6 +315,10 @@ export function getVariablesByTriggerType(triggerType: string): VariableCategory
       eventVariables = SIGNUP_VARIABLES;
       eventLabel = 'Inscrito via Popup';
       break;
+    case 'trigger_whatsapp_optin':
+      eventVariables = SIGNUP_VARIABLES;
+      eventLabel = 'Confirmou WhatsApp via Popup';
+      break;
     case 'trigger_custom_event':
       eventVariables = WEBHOOK_VARIABLES;
       eventLabel = 'Evento Custom';

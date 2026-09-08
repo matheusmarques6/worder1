@@ -124,6 +124,8 @@ function getNodeSummary(nodeType: string, config: Record<string, any>): string |
     // sem isso o lojista só descobre abrindo o painel de config.
     case 'trigger_popup_subscribed':
       return config?.form_id ? `Popup: ${config.form_name || config.form_id}` : 'Qualquer popup';
+    case 'trigger_whatsapp_optin':
+      return config?.form_id ? `Popup: ${config.form_name || config.form_id}` : 'Qualquer popup';
     case 'trigger_form_submitted':
       return config?.form_id ? `Formulário: ${config.form_name || config.form_id}` : 'Qualquer formulário';
     case 'trigger_segment':
@@ -181,6 +183,7 @@ const nodeTypeIconFallback: Record<string, LucideIcon> = {
   trigger_fulfilled_order: Truck, trigger_cancelled_order: XCircle,
   trigger_viewed_product: Eye, trigger_added_to_cart: PlusCircle,
   trigger_signup: UserPlus, trigger_form_submitted: FileText, trigger_popup_subscribed: FileText,
+  trigger_whatsapp_optin: MessageCircle,
   trigger_segment: Users, trigger_tag: Tag, trigger_date: Calendar,
   trigger_custom_event: Zap, trigger_webhook: Webhook,
   trigger_deal_created: Briefcase, trigger_deal_stage: ArrowRight,

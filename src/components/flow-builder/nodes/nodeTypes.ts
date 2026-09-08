@@ -309,6 +309,14 @@ export const triggerTypes: NodeTypeDefinition[] = [
     color: '#10b981',
   },
   {
+    type: 'trigger_whatsapp_optin',
+    label: 'Confirmou WhatsApp via Popup',
+    description: 'Dispara quando a pessoa confirma o opt-in de WhatsApp pedido por um popup — a régua no WhatsApp começa aqui',
+    icon: MessageSquare,
+    category: 'trigger',
+    color: '#10b981',
+  },
+  {
     type: 'trigger_custom_event',
     label: 'Evento Customizado',
     description: 'Dispara em evento personalizado',
@@ -701,6 +709,7 @@ export const nodeTypes: Record<string, any> = {
   trigger_signup: TriggerNode,
   trigger_form_submitted: TriggerNode,
   trigger_popup_subscribed: TriggerNode,
+  trigger_whatsapp_optin: TriggerNode,
   trigger_tag: TriggerNode,
   trigger_segment: TriggerNode,
   // Triggers - Especiais

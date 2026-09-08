@@ -129,6 +129,9 @@ interface PopupDesign {
     }
     // Origem do tráfego da sessão (direto, busca, anúncio, social...).
     traffic?: { enabled: boolean; types: string[] }
+    // WhatsApp com confirmação: a caixa marcada só vira opt-in quando a
+    // pessoa responde ao template (UTILITY, aprovado pela Meta).
+    whatsapp?: { doubleOptIn: boolean; templateName: string; templateLanguage: string; bodyVariables: string[] }
     progressiveProfiling?: {
       enabled: boolean
       hideKnownFields: boolean
@@ -2206,9 +2209,24 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
     return () => { cancelled = true }
   }, [])
 
+  // Templates aprovados de WhatsApp, para o pedido de confirmação.
+  const [waTemplates, setWaTemplates] = useState<Array<{ name: string; language: string; category: string; body_text: string | null; body_variables: number; buttons: any }>>([])
+  const [waTemplatesLoaded, setWaTemplatesLoaded] = useState(false)
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/whatsapp/templates?status=APPROVED')
+      .then(r => r.ok ? r.json() : { templates: [] })
+      .then(d => { if (!cancelled) setWaTemplates((d?.templates || []).map((t: any) => ({ name: t.name, language: t.language || 'pt_BR', category: String(t.category || '').toUpperCase(), body_text: t.body_text || null, body_variables: Number(t.body_variables || 0), buttons: t.buttons }))) })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setWaTemplatesLoaded(true) })
+    return () => { cancelled = true }
+  }, [])
+
   const d: any = beh.display || {}
   const freq = beh.frequency
   const vis = beh.visibility
+  const wa = beh.whatsapp || { doubleOptIn: false, templateName: '', templateLanguage: 'pt_BR', bodyVariables: [] }
+  const waTemplate = waTemplates.find(t => t.name === wa.templateName) || null
   const aud = beh.audienceTargeting || { mode: 'off' as const, segmentIds: [], listIds: [] }
   const page = beh.page || { enabled: false, templates: [], productHandles: [], productTypes: [], productVendors: [], productTags: [], collectionHandles: [] }
   const traffic = beh.traffic || { enabled: false, types: [] }
@@ -2728,6 +2746,52 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
             <ToggleRow label="Double opt-in" hint="Envia email de confirmacao antes de marcar como inscrito."
               checked={!!beh.audience?.doubleOptIn}
               onChange={v => setG('audience', { doubleOptIn: v })} />
+
+            <div className="pt-3 border-t border-gray-100">
+              <ToggleRow label="WhatsApp: confirmar por mensagem" hint="Quem marcar o consentimento de WhatsApp recebe um template pedindo para responder SIM. O opt-in só vale depois da resposta — e a régua no WhatsApp começa daí."
+                checked={!!wa.doubleOptIn}
+                onChange={v => setG('whatsapp', { ...wa, doubleOptIn: v })} />
+              {wa.doubleOptIn && (
+                <div className="mt-2 space-y-2">
+                  <Field label="Template de confirmação" hint="Precisa estar aprovado pela Meta na categoria Utilidade (UTILITY). Um botão de resposta rápida 'Confirmar' torna a resposta mais fácil.">
+                    {!waTemplatesLoaded ? (
+                      <input className={inp + ' opacity-60'} placeholder="Carregando..." disabled />
+                    ) : waTemplates.length === 0 ? (
+                      <div className="text-[11px] text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
+                        Nenhum template aprovado. <a href="/whatsapp/templates" target="_blank" className="text-zinc-900 underline underline-offset-2 font-medium">Criar template</a>.
+                      </div>
+                    ) : (
+                      <select className={sel} value={wa.templateName || ''}
+                        onChange={e => { const t = waTemplates.find(x => x.name === e.target.value); setG('whatsapp', { ...wa, templateName: e.target.value, templateLanguage: t?.language || 'pt_BR', bodyVariables: Array.from({ length: t?.body_variables || 0 }, (_, i) => wa.bodyVariables?.[i] || (i === 0 ? '{{first_name}}' : '')) }) }}>
+                        <option value="">Escolha um template</option>
+                        {waTemplates.map(t => (
+                          <option key={t.name + t.language} value={t.name}>{t.name} · {t.language} · {t.category === 'UTILITY' ? 'Utilidade' : t.category === 'MARKETING' ? 'Marketing' : t.category}</option>
+                        ))}
+                      </select>
+                    )}
+                  </Field>
+                  {waTemplate && waTemplate.category !== 'UTILITY' && (
+                    <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">Este template é de {waTemplate.category === 'MARKETING' ? 'Marketing' : waTemplate.category}. A Meta não permite marketing antes do opt-in, então o pedido não será enviado. Use um template de Utilidade.</p>
+                  )}
+                  {waTemplate?.body_text && (
+                    <p className="text-[11px] text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 whitespace-pre-wrap leading-snug">{waTemplate.body_text}</p>
+                  )}
+                  {waTemplate && waTemplate.body_variables > 0 && (
+                    <div className="space-y-1.5">
+                      <p className="text-[11px] font-bold text-gray-500 uppercase tracking-[0.08em]">Variáveis do corpo <span className="normal-case font-normal tracking-normal text-gray-400">({'{{first_name}}'}, {'{{form_name}}'}, {'{{store_name}}'})</span></p>
+                      {Array.from({ length: waTemplate.body_variables }, (_, i) => (
+                        <div key={i} className="flex items-center gap-2">
+                          <span className="text-[11px] font-mono text-gray-400 w-8">{'{{' + (i + 1) + '}}'}</span>
+                          <input className={inp} value={wa.bodyVariables?.[i] || ''} placeholder={i === 0 ? '{{first_name}}' : ''}
+                            onChange={e => { const next = [...(wa.bodyVariables || [])]; next[i] = e.target.value; setG('whatsapp', { ...wa, bodyVariables: next }) }} />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-[11px] text-gray-400 leading-snug">Valem como confirmação: SIM, CONFIRMAR, QUERO, ACEITO, OK, 1 ou o botão do template. Quem já tinha opt-in não recebe o pedido. Enquanto não responde, nenhuma campanha ou automação de marketing fala com a pessoa.</p>
+                </div>
+              )}
+            </div>
           </Section>
 
           <Section title="Parametros UTM">

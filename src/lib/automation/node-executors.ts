@@ -152,6 +152,13 @@ const triggerExecutors: Record<string, NodeExecutor> = {
       return { status: 'success', output: context.trigger?.data || {} };
     },
   },
+  trigger_whatsapp_optin: {
+    // Disparado pelo webhook quando a pessoa confirma o opt-in de WhatsApp
+    // pedido por um popup — o ponto certo para a régua no WhatsApp começar.
+    async execute({ context }) {
+      return { status: 'success', output: context.trigger?.data || {} };
+    },
+  },
   trigger_custom_event: {
     async execute({ context }) {
       return { status: 'success', output: context.trigger?.data || {} };
