@@ -2,6 +2,7 @@ import copy
 import json
 import os
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -863,12 +864,33 @@ def test_history_requires_exact_versions(tmp_path):
         executor.history(expected[:1])
 
 
-def test_preflight_rejects_wrong_cli_before_start(tmp_path):
+def preflight_double(overrides=None):
     calls = []
+    outputs = {
+        ("supabase", "--version"): "2.111.0\n",
+        ("supabase", "start", "--help"): "--exclude --workdir",
+        ("supabase", "db", "reset", "--help"): "--local --no-seed --workdir",
+        ("supabase", "migration", "up", "--help"): "--local --workdir",
+        ("supabase", "stop", "--help"): "--no-backup --workdir",
+        (
+            "docker",
+            "context",
+            "inspect",
+            "--format",
+            "{{json .Endpoints.docker.Host}}",
+        ): json.dumps("npipe:////./pipe/docker_engine"),
+    }
+    outputs.update(overrides or {})
 
     def runner(argv, **kwargs):
         calls.append(argv)
-        return ex.subprocess.CompletedProcess(argv, 0, "9.9.9", "")
+        return ex.subprocess.CompletedProcess(argv, 0, outputs[tuple(argv)], "")
+
+    return calls, runner
+
+
+def test_preflight_rejects_wrong_cli_before_start(tmp_path):
+    calls, runner = preflight_double({("supabase", "--version"): "9.9.9"})
 
     executor = ex.Executor(REPO, tmp_path, runner=runner)
 
@@ -878,9 +900,93 @@ def test_preflight_rejects_wrong_cli_before_start(tmp_path):
     assert calls == [["supabase", "--version"]]
 
 
-def test_busy_port_is_refused_and_open_listener_is_closed(monkeypatch):
-    from unittest.mock import MagicMock
+@pytest.mark.parametrize(
+    ("command", "help_text"),
+    [
+        (("supabase", "start", "--help"), "--workdir"),
+        (("supabase", "start", "--help"), "--exclude"),
+        (("supabase", "db", "reset", "--help"), "--no-seed --workdir"),
+        (("supabase", "db", "reset", "--help"), "--local --workdir"),
+        (("supabase", "db", "reset", "--help"), "--local --no-seed"),
+        (("supabase", "migration", "up", "--help"), "--workdir"),
+        (("supabase", "migration", "up", "--help"), "--local"),
+        (("supabase", "stop", "--help"), "--workdir"),
+        (("supabase", "stop", "--help"), "--no-backup"),
+    ],
+)
+def test_preflight_rejects_each_missing_cli_flag_before_start(
+    tmp_path, command, help_text
+):
+    calls, runner = preflight_double({command: help_text})
 
+    with pytest.raises(ValueError, match="CLI flags"):
+        ex.Executor(REPO, tmp_path, runner=runner).preflight()
+
+    assert calls[-1] == list(command)
+
+
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "unix:///var/run/docker.sock",
+        "npipe:////./pipe/docker_engine",
+        "npipe:////./pipe/dockerDesktopLinuxEngine",
+    ],
+)
+def test_preflight_accepts_each_local_docker_endpoint(tmp_path, endpoint):
+    command = (
+        "docker",
+        "context",
+        "inspect",
+        "--format",
+        "{{json .Endpoints.docker.Host}}",
+    )
+    calls, runner = preflight_double({command: json.dumps(endpoint)})
+
+    ex.Executor(REPO, tmp_path, runner=runner).preflight()
+
+    assert calls[-1] == list(command)
+
+
+def test_preflight_rejects_nonlocal_docker_endpoint(tmp_path):
+    command = (
+        "docker",
+        "context",
+        "inspect",
+        "--format",
+        "{{json .Endpoints.docker.Host}}",
+    )
+    calls, runner = preflight_double({command: json.dumps("tcp://192.0.2.1:2375")})
+
+    with pytest.raises(ValueError, match="non-local Docker context"):
+        ex.Executor(REPO, tmp_path, runner=runner).preflight()
+
+    assert calls[-1] == list(command)
+
+
+def test_free_ports_binds_and_closes_all_disposable_listeners(monkeypatch):
+    listeners = [MagicMock() for _ in range(3)]
+    sockets = iter(listeners)
+    monkeypatch.setattr(ex.socket, "socket", lambda *_args: next(sockets))
+
+    ex.free_ports()
+
+    assert [listener.bind.call_args.args[0] for listener in listeners] == [
+        ("0.0.0.0", 55320),
+        ("0.0.0.0", 55321),
+        ("0.0.0.0", 55322),
+    ]
+    for listener in listeners:
+        listener.close.assert_called_once_with()
+        if os.name == "nt":
+            listener.setsockopt.assert_called_once_with(
+                ex.socket.SOL_SOCKET, ex.socket.SO_EXCLUSIVEADDRUSE, 1
+            )
+        else:
+            listener.setsockopt.assert_not_called()
+
+
+def test_busy_port_is_refused_and_open_listener_is_closed(monkeypatch):
     first = MagicMock()
     second = MagicMock()
     second.bind.side_effect = OSError("in use")
@@ -994,7 +1100,15 @@ def test_prepare_copies_only_approved_inputs_before_guarded_start(
         ],
         ["docker", "volume", "ls", "--format", "{{.Name}}"],
         ["supabase", "--version"],
-        ["supabase", "start", "-x", ex.EXCLUDED, "--workdir", str(run)],
+        [
+            "supabase",
+            "start",
+            "-x",
+            "realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,"
+            "studio,edge-runtime,logflare,vector,supavisor",
+            "--workdir",
+            str(run),
+        ],
         ["docker", "inspect", "supabase_db_" + PROJECT],
         [
             "docker",
@@ -1031,3 +1145,32 @@ def test_prepare_copies_only_approved_inputs_before_guarded_start(
     assert copied == [
         (migration, run / "supabase/migrations/20260812000001_one.sql")
     ]
+
+
+def test_prepare_rejects_owned_nonce_before_volume_inventory_or_start(
+    monkeypatch, tmp_path
+):
+    run = tmp_path / ("a" * 32)
+    run.mkdir()
+    command = (
+        "docker",
+        "ps",
+        "-a",
+        "--no-trunc",
+        "--filter",
+        "label=com.supabase.cli.project=" + PROJECT,
+        "--format",
+        "{{.ID}}",
+    )
+    calls, runner = preflight_double({command: "a" * 64 + "\n"})
+    monkeypatch.setattr(ex, "free_ports", lambda: None)
+
+    with pytest.raises(ValueError, match="nonce already owns Docker containers"):
+        ex.Executor(REPO, run, runner=runner).prepare()
+
+    assert calls[-1] == list(command)
+    assert not any(call[:2] == ["docker", "volume"] for call in calls)
+    assert not any(
+        call[:2] == ["supabase", "start"] and call[-1:] != ["--help"]
+        for call in calls
+    )
