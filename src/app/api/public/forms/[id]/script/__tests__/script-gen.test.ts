@@ -149,7 +149,7 @@ describe('buildPopupScript (generated string)', () => {
   })
 
   it('R7: button label escaped, style-sanitizer applied, URL whitelists in place', () => {
-    expect(js).toContain('esc(p.text||"OK")')
+    expect(js).toContain('esc(applyOffer(p.text||"OK"))')
     expect(js).toContain('sv(p.bgColor,"#F97316")')
     expect(js).toContain('safeUrl(p.url)')
     expect(js).toContain('safeUrl(btn.dataset.url)')

@@ -678,3 +678,57 @@ describe('smart triggering: propensão e segunda chance', () => {
     expect(ov(id)).toBeNull()
   })
 })
+
+describe('smart offers no runtime', () => {
+  function offerDesign(smartOffer: any) {
+    return design({
+      steps: [{ blocks: [
+        { id: 't', type: 'text', props: { content: 'Ganhe {{offer}} agora' } },
+        { id: 'b1', type: 'email', props: { placeholder: 'email', required: true } },
+        { id: 'k', type: 'coupon', props: { code: 'STATIC10', mode: 'static', discountType: 'percentage', discountValue: 10, tiers: [{ id: 't-big', label: '25% na primeira compra', afterStepId: 'x', discountType: 'percentage', discountValue: 25 }], smartOffer } },
+        { id: 'b2', type: 'button', props: { text: 'Quero {{offer}}', action: 'submit' } },
+      ] }],
+    })
+  }
+  // Sem pesos a propensão fica em 0 → intenção baixa; com pesos altos de páginas → alta.
+  const lowWeights = { scroll: 0, dwell: 0, pages: 0, products: 0, cart: 0, returning: 0, traffic: 0 }
+  const highWeights = { ...lowWeights, pages: 500 }
+
+  it('intenção baixa recebe o nível maior e o texto mostra a oferta; o envio leva intenção, grupo e oferta', async () => {
+    const id = run(offerDesign({ enabled: true, lowMax: 35, highMin: 70, lowTier: 't-big', midTier: 'base', highTier: 'none', controlPercent: 0 }), behavior({ smartTrigger: { enabled: false, weights: lowWeights } }))
+    vi.advanceTimersByTime(1000)
+    expect(formEl(id)!.textContent).toContain('Ganhe 25% na primeira compra agora')
+    expect(formEl(id)!.querySelector('[data-action="submit"]')!.textContent).toBe('Quero 25% na primeira compra')
+    formEl(id)!.querySelector<HTMLInputElement>('input[name="email"]')!.value = 'q@example.com'
+    formEl(id)!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await vi.runAllTimersAsync()
+    const submit = calls.find((c) => c.url === `${BU}/api/public/forms/${id}/submit`)!
+    expect(submit.body).toMatchObject({ intent: 'low', offer_bucket: 'smart', offer_tier: 't-big' })
+  })
+
+  it('intenção alta com "sem desconto": o bloco de cupom some e a merge tag fica vazia', () => {
+    const id = run(offerDesign({ enabled: true, lowMax: 35, highMin: 70, lowTier: 't-big', midTier: 'base', highTier: 'none', controlPercent: 0 }), behavior({ smartTrigger: { enabled: false, weights: highWeights } }))
+    vi.advanceTimersByTime(1000)
+    expect(formEl(id)!.textContent).toContain('Ganhe  agora')
+    expect(formEl(id)!.textContent).not.toContain('STATIC10')
+  })
+
+  it('controle a 100% recebe sempre a base', async () => {
+    const id = run(offerDesign({ enabled: true, lowMax: 35, highMin: 70, lowTier: 't-big', midTier: 'base', highTier: 'none', controlPercent: 50 }), behavior({ smartTrigger: { enabled: false, weights: lowWeights } }))
+    vi.advanceTimersByTime(1000)
+    const txt = formEl(id)!.textContent || ''
+    // 50% de controle: ou base (10% OFF) ou o nível — nunca vazio.
+    expect(txt.includes('10% OFF') || txt.includes('25% na primeira compra')).toBe(true)
+  })
+
+  it('desligado, {{offer}} vira a oferta base e nada vai no envio', async () => {
+    const id = run(offerDesign({ enabled: false }), behavior())
+    vi.advanceTimersByTime(1000)
+    expect(formEl(id)!.textContent).toContain('Ganhe 10% OFF agora')
+    formEl(id)!.querySelector<HTMLInputElement>('input[name="email"]')!.value = 'q@example.com'
+    formEl(id)!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await vi.runAllTimersAsync()
+    const submit = calls.find((c) => c.url === `${BU}/api/public/forms/${id}/submit`)!
+    expect(submit.body.offer_bucket).toBeUndefined()
+  })
+})

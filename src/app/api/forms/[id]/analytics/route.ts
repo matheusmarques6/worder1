@@ -48,7 +48,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     admin.rpc('popup_holdout_report', { p_organization_id: orgId, p_form_id: formId, p_days: days }),
     admin
       .from('crm_form_submissions')
-      .select('id, answers, created_at, user_agent, device, country, coupon_code, converted_at, conversion_value')
+      .select('id, answers, created_at, user_agent, device, country, coupon_code, converted_at, conversion_value, offer_bucket, offer_tier, intent, propensity_score')
       .eq('organization_id', orgId)
       .eq('form_id', formId)
       .gte('created_at', since)
@@ -135,6 +135,23 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   }
   const optInPeople = Math.min(optedPeople.size, Math.max(totals.submissions, optedPeople.size))
 
+  // Smart Offers: inscritos por grupo (oferta por intenção × controle) com
+  // pedidos e receita — a comparação que diz se a margem economizada
+  // custou conversão.
+  const offers: Record<'smart' | 'control', { submissions: number; orders: number; revenue: number; no_offer: number }> = {
+    smart: { submissions: 0, orders: 0, revenue: 0, no_offer: 0 },
+    control: { submissions: 0, orders: 0, revenue: 0, no_offer: 0 },
+  }
+  for (const s of submissions) {
+    const b: 'smart' | 'control' | null = s.offer_bucket === 'smart' ? 'smart' : s.offer_bucket === 'control' ? 'control' : null
+    if (!b) continue
+    offers[b].submissions++
+    if (s.offer_tier === 'none') offers[b].no_offer++
+    if (s.converted_at) { offers[b].orders++; offers[b].revenue += Number(s.conversion_value) || 0 }
+  }
+  const propScores = submissions.map((s) => Number(s.propensity_score)).filter((n) => Number.isFinite(n))
+  const avgPropensity = propScores.length ? Math.round(propScores.reduce((a, b) => a + b, 0) / propScores.length) : null
+
   const converted = submissions.filter((s) => s.converted_at)
   const timeToPurchaseHours = converted
     .map((s) => (new Date(s.converted_at).getTime() - new Date(s.created_at).getTime()) / 3600000)
@@ -175,6 +192,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       median_time_to_purchase_hours: medianHours,
     },
     devices: byDevice,
+    offers: (offers.smart.submissions + offers.control.submissions) > 0 ? offers : null,
+    avg_propensity: avgPropensity,
     holdout: {
       configured: holdoutRows.length > 0 && !!control,
       min_visitors: 30,

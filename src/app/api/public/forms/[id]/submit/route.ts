@@ -1464,7 +1464,20 @@ export async function POST(
       const cp = readCouponBlock(parentDesignJson)
       if (cp) {
         // Recompensa progressiva: o último tier cuja etapa foi visitada.
-        const tier = effectiveRewardTier(cp.tiers, earnedPath)
+        let tier = effectiveRewardTier(cp.tiers, earnedPath)
+        // Smart Offers: a intenção medida na exibição decide a oferta; o
+        // servidor só aceita o que a regra produz. "Nenhuma" pula o cupom.
+        let offerNone = false
+        if (cp.smartOffer.enabled) {
+          const { resolveOffer } = await import('@/lib/popups/offers')
+          const off = resolveOffer(cp.smartOffer, { intent: (body as any)?.intent, bucket: (body as any)?.offer_bucket, tier: (body as any)?.offer_tier }, cp.tiers.map((t) => t.id))
+          submissionPatch.intent = off.intent
+          submissionPatch.offer_bucket = off.bucket
+          submissionPatch.offer_tier = off.tier
+          if (off.tier === 'none') offerNone = true
+          else if (off.tier === 'base') tier = null
+          else tier = cp.tiers.find((t) => t.id === off.tier) || null
+        }
         const eff = effectiveDiscount(cp, tier)
         rewardTierKey = eff.tierKey
 
@@ -1483,7 +1496,9 @@ export async function POST(
         }
         const base = { kind: eff.kind, value: eff.value, auto_apply: cp.autoApply, show_code: cp.showCode, tier: eff.tierKey }
 
-        if (contactId) {
+        if (offerNone) {
+          // Intenção alta sem desconto: a inscrição vale, o cupom não sai.
+        } else if (contactId) {
           const { data, error } = await supabase.rpc('issue_popup_incentive', {
             p_organization_id: form.organization_id,
             p_store_id: form.store_id || null,

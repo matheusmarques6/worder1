@@ -21,6 +21,7 @@ import {
   type CouponKind,
 } from './shopify-discounts'
 import { ShopifyThrottledError } from '@/lib/shopify/graphql-client'
+import { readSmartOffer, type SmartOfferConfig } from '@/lib/popups/offers'
 import { readRewardTiers, type RewardTier } from '@/lib/popups/branching'
 
 export interface CouponPoolRow {
@@ -71,6 +72,8 @@ export interface CouponBlockConfig {
   collectionIds: string[]
   /** Recompensa progressiva: tiers desbloqueados por etapa (Fase 2). */
   tiers: RewardTier[]
+  /** Smart Offers: oferta por intenção (Fase 3). */
+  smartOffer: SmartOfferConfig
 }
 
 /** O desconto efetivo de um tier (ou da base, quando tier é nulo). */
@@ -111,6 +114,7 @@ export function readCouponBlock(designJson: any): CouponBlockConfig | null {
     autoApply: p.autoApply !== false,
     showCode: p.showCode !== false,
     collectionIds: Array.isArray(p.collectionIds) ? p.collectionIds.filter((x: any) => typeof x === 'string' && x.startsWith('gid://')) : [],
+    smartOffer: readSmartOffer(p),
     tiers: readRewardTiers(p),
   }
 }

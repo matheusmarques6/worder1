@@ -1262,6 +1262,49 @@ const BorderStyleControl = ({ p, up, def = 'solid' }: { p: any; up: (k: string, 
 // (10% ao entrar o e-mail, 15% depois do quiz). Cada tier é desbloqueado
 // por uma etapa; vale o último tier cuja etapa foi visitada. Em modo
 // único, cada tier tem o próprio estoque de códigos.
+// Smart Offers: a oferta segue a intenção medida na hora de mostrar. Cada
+// faixa (baixa / média / alta) recebe a base, um nível progressivo ou
+// nenhuma oferta; uma fatia de controle recebe sempre a base.
+function SmartOfferEditor({ p, up }: { p: any; up: (k: string, v: any) => void }) {
+  const so = { enabled: false, lowMax: 35, highMin: 70, lowTier: 'base', midTier: 'base', highTier: 'base', controlPercent: 20, ...(p.smartOffer || {}) }
+  const set = (patch: Record<string, any>) => up('smartOffer', { ...so, ...patch })
+  const tiers: any[] = Array.isArray(p.tiers) ? p.tiers : []
+  const baseLabel = p.discountType === 'free_shipping' ? 'Frete grátis' : p.discountType === 'fixed_amount' ? `R$ ${p.discountValue ?? 0} OFF` : `${p.discountValue ?? 10}% OFF`
+  const OfferSelect = ({ k, label, hint }: { k: 'lowTier' | 'midTier' | 'highTier'; label: string; hint: string }) => (
+    <LabeledField label={label} hint={hint}>
+      <select className={sel} value={so[k]} onChange={e => set({ [k]: e.target.value })}>
+        <option value="base">Oferta base · {baseLabel}</option>
+        {tiers.map((t: any) => <option key={t.id} value={t.id}>{t.label || 'Nível'} · {t.discountType === 'free_shipping' ? 'Frete grátis' : `${t.discountValue ?? 0}${t.discountType === 'fixed_amount' ? '' : '%'} OFF`}</option>)}
+        <option value="none">Sem desconto (só a inscrição)</option>
+      </select>
+    </LabeledField>
+  )
+  return (
+    <div className="pt-3 border-t border-gray-100 space-y-2">
+      <Toggle label="Oferta por intenção" hint="Quem está quase comprando não precisa do desconto inteiro; quem chegou frio precisa de mais. A intenção é medida na hora de mostrar (rolagem, permanência, páginas, carrinho)." checked={!!so.enabled} onChange={v => set({ enabled: v })} />
+      {so.enabled && (
+        <div className="space-y-2">
+          <p className="text-[11px] text-gray-500 leading-snug bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">Escreva <code className="px-1 bg-white border border-gray-200 rounded text-[10px]">{'{{offer}}'}</code> no texto ou no botão e a oferta escolhida aparece no lugar (ex.: "Ganhe {'{{offer}}'} agora"). Com "sem desconto", o bloco de cupom some.</p>
+          <OfferSelect k="lowTier" label={`Intenção baixa (score < ${so.lowMax})`} hint="Chegou frio: aqui cabe o empurrão maior." />
+          <OfferSelect k="midTier" label={`Intenção média (${so.lowMax}–${so.highMin - 1})`} hint="O padrão." />
+          <OfferSelect k="highTier" label={`Intenção alta (score ≥ ${so.highMin})`} hint="Já ia comprar: dá para segurar margem." />
+          <div className="grid grid-cols-2 gap-2">
+            <LabeledField label="Baixa até">
+              <div className="relative"><input type="number" min={5} max={90} className={inp + ' pr-6'} value={so.lowMax} onChange={e => set({ lowMax: Math.max(5, Math.min(90, +e.target.value || 35)) })} /><span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">pts</span></div>
+            </LabeledField>
+            <LabeledField label="Alta a partir de">
+              <div className="relative"><input type="number" min={10} max={95} className={inp + ' pr-6'} value={so.highMin} onChange={e => set({ highMin: Math.max(so.lowMax + 5, Math.min(95, +e.target.value || 70)) })} /><span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">pts</span></div>
+            </LabeledField>
+          </div>
+          <LabeledField label={`Grupo de controle · ${so.controlPercent}%`} hint="Recebe sempre a oferta base, para medir no analytics se a economia de margem custou conversão.">
+            <input type="range" min={0} max={50} step={5} value={so.controlPercent} onChange={e => set({ controlPercent: +e.target.value })} className="w-full accent-zinc-900" aria-label="Grupo de controle" />
+          </LabeledField>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function RewardTiersEditor({ p, up, steps }: { p: any; up: (k: string, v: any) => void; steps: Array<{ id: string; name: string }> }) {
   const tiers: any[] = Array.isArray(p.tiers) ? p.tiers : []
   const setTier = (i: number, patch: Record<string, any>) => up('tiers', tiers.map((t, j) => (j === i ? { ...t, ...patch } : t)))
@@ -2162,6 +2205,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
                   <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">Há {couponBlocks} blocos de cupom neste popup. O desconto e o estoque seguem o primeiro; os outros só repetem o mesmo código.</p>
                 )}
                 <RewardTiersEditor p={p} up={up} steps={steps} />
+                <SmartOfferEditor p={p} up={up} />
                 <CouponPoolPanel dirty={dirty} />
               </>
             ) : (

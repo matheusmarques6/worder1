@@ -524,6 +524,47 @@ function propensity(){
   if(TRAFFIC==="paid"||TRAFFIC==="email"||TRAFFIC==="messaging")sc+=pw("traffic",5);
   return Math.max(0,Math.min(100,Math.round(sc)));
 }
+// Smart Offers: a oferta escolhida para esta pessoa (base, um nível, ou
+// nenhuma), pela intenção medida na hora de mostrar. O controle recebe a
+// base sempre — é o que permite medir a margem ganha.
+var OFFER={intent:null,bucket:null,tier:null,label:""};
+function couponBlock(){
+  var all=[];(D.steps||[]).forEach(function(st){(st.blocks||[]).forEach(function(b){all.push(b)})});
+  ((D.successStep||{}).blocks||[]).forEach(function(b){all.push(b)});
+  for(var i=0;i<all.length;i++)if(all[i]&&all[i].type==="coupon")return all[i].props||{};
+  return null;
+}
+function offerText(kind,value,label){
+  if(label)return label;
+  if(kind==="free_shipping")return"Frete grátis";
+  if(kind==="fixed_amount"||kind==="fixed")return"R$ "+(Math.round(Number(value)*100)/100)+" OFF";
+  return Math.round(Number(value)||0)+"% OFF";
+}
+function computeOffer(){
+  var cp=couponBlock();
+  if(!cp){OFFER.label="";return}
+  var baseLabel=offerText(cp.discountType,cp.discountValue,cp.offerLabel);
+  var so=cp.smartOffer||{};
+  if(!so.enabled){OFFER.label=baseLabel;return}
+  var lowMax=Math.max(5,Math.min(90,nv(so.lowMax,35))),highMin=Math.max(lowMax+5,Math.min(95,nv(so.highMin,70)));
+  var sc=propensity();
+  OFFER.intent=sc<lowMax?"low":sc>=highMin?"high":"mid";
+  var vid=getVisitorId()||"";
+  var hs=vid+"|offer|"+FID,hv=0;for(var i=0;i<hs.length;i++){hv=(hv*31+hs.charCodeAt(i))>>>0}
+  var ctl=Math.max(0,Math.min(50,nv(so.controlPercent,20)));
+  OFFER.bucket=(hv%100)<ctl?"control":"smart";
+  var pick=OFFER.bucket==="control"?"base":(so[OFFER.intent+"Tier"]||"base");
+  if(pick!=="base"&&pick!=="none"){
+    var tiers=Array.isArray(cp.tiers)?cp.tiers:[],found=null;
+    for(var t=0;t<tiers.length;t++)if(tiers[t]&&tiers[t].id===pick){found=tiers[t];break}
+    if(!found)pick="base";else OFFER.label=offerText(found.discountType,found.discountValue,found.label);
+  }
+  OFFER.tier=pick;
+  if(pick==="base")OFFER.label=baseLabel;
+  if(pick==="none")OFFER.label="";
+  dlog("smart offer",OFFER);
+}
+function applyOffer(txt){return String(txt==null?"":txt).replace(/\{\{\s*offer\s*\}\}/g,OFFER.label||"")}
 // Location gate — país resolvido pela NOSSA borda (/api/public/geo), nunca
 // por um terceiro que receberia o IP do visitante. Cache de sessão; falha
 // aberta.
@@ -682,7 +723,7 @@ function renderBlock(b){
       ts+="font-size:"+nv(p.fontSize,16)+"px;color:"+sv(p.color,"#111827")+";font-weight:"+sv(p.fontWeight,"normal")+";font-style:"+sv(p.fontStyle,"normal")+";text-decoration:"+sv(p.textDecoration,"none")+";text-align:"+sv(p.align,"left")+";line-height:"+nv(p.lineHeight,1.4)+";font-family:"+sv(p.fontFamily,"inherit")+";white-space:pre-wrap;";
       if(p.letterSpacing!=null)ts+="letter-spacing:"+nv(p.letterSpacing,0)+"px;";
       if(p.blockPadTop!=null||p.blockPadRight!=null||p.blockPadBottom!=null||p.blockPadLeft!=null)ts+="padding:"+nv(p.blockPadTop,0)+"px "+nv(p.blockPadRight,0)+"px "+nv(p.blockPadBottom,0)+"px "+nv(p.blockPadLeft,0)+"px;";
-      h='<'+tag+' style="'+ts+'">'+esc(p.content||"")+'</'+tag+'>';
+      h='<'+tag+' style="'+ts+'">'+esc(applyOffer(p.content||""))+'</'+tag+'>';
       break;
     }
     case"image":{
@@ -766,7 +807,7 @@ function renderBlock(b){
       // R7: data-url only when the URL passes the scheme whitelist.
       var bu2=act==="url"?safeUrl(p.url):"";
       var nextAttr=(act==="next-step"&&p.nextStepId&&stepIndexById(p.nextStepId)>=0)?' data-next="'+esc(p.nextStepId)+'"':"";
-      var btn='<button id="'+btnId+'" type="'+(act==="submit"?"submit":"button")+'" data-action="'+esc(act)+'"'+nextAttr+(bu2?' data-url="'+esc(bu2)+'"':"")+' style="box-sizing:border-box!important;width:'+(p.fullWidth?"100%":"auto")+'!important;padding:'+nv(p.paddingV,14)+'px '+nv(p.paddingH,28)+'px!important;background:'+sv(p.bgColor,"#F97316")+';color:'+sv(p.textColor,"#fff")+'!important;font-size:'+nv(p.fontSize,15)+'px!important;font-weight:'+btnFw+'!important;font-family:'+btnFam+'!important;letter-spacing:'+btnLs+'!important;line-height:1.2!important;text-align:center!important;text-transform:none!important;border-radius:'+nv(p.borderRadius,8)+'px!important;'+btnBorder+'!important;cursor:pointer!important;margin:0!important;display:'+(p.fullWidth?"block":"inline-block")+'!important;transition:background 0.2s">'+esc(p.text||"OK")+'</button>';
+      var btn='<button id="'+btnId+'" type="'+(act==="submit"?"submit":"button")+'" data-action="'+esc(act)+'"'+nextAttr+(bu2?' data-url="'+esc(bu2)+'"':"")+' style="box-sizing:border-box!important;width:'+(p.fullWidth?"100%":"auto")+'!important;padding:'+nv(p.paddingV,14)+'px '+nv(p.paddingH,28)+'px!important;background:'+sv(p.bgColor,"#F97316")+';color:'+sv(p.textColor,"#fff")+'!important;font-size:'+nv(p.fontSize,15)+'px!important;font-weight:'+btnFw+'!important;font-family:'+btnFam+'!important;letter-spacing:'+btnLs+'!important;line-height:1.2!important;text-align:center!important;text-transform:none!important;border-radius:'+nv(p.borderRadius,8)+'px!important;'+btnBorder+'!important;cursor:pointer!important;margin:0!important;display:'+(p.fullWidth?"block":"inline-block")+'!important;transition:background 0.2s">'+esc(applyOffer(p.text||"OK"))+'</button>';
       // R10: honor p.align via wrapper when not fullWidth (editor default center).
       h='<div style="'+blockStyleStr(p)+(p.fullWidth?"":"text-align:"+sv(p.align,"center")+";")+'">'+hoverCss+btn+'</div>';
       break;
@@ -774,6 +815,7 @@ function renderBlock(b){
     case"spacer":h='<div style="'+blockStyleStr(p)+'height:'+nv(p.height,24)+'px"></div>';break;
     case"line":h='<div style="'+blockStyleStr(p)+'"><hr style="border:none;border-top:'+nv(p.thickness,1)+'px '+sv(p.style,"solid")+' '+sv(p.color,"#E5E7EB")+';margin:0 auto;width:'+Math.min(Math.max(nv(p.width!=null?p.width:p.widthPct,100),1),100)+'%" /></div>';break;
     case"coupon":{
+      if(OFFER.tier==="none"){h="";break}
       var couponCode=p.code||"CODIGO";
       var dyn=window.__wfDynCoupon&&window.__wfDynCoupon[FID];
       if(dyn&&dyn.code)couponCode=dyn.code;
@@ -876,6 +918,7 @@ function show(){
   shown=true;
   regState("shown");
   dlog("show() — popup rendering now");
+  computeOffer();
   ensureFonts();
   try{
     if(perVisitorCfg.enabled){
@@ -1231,6 +1274,7 @@ function show(){
       payload.traffic_type=TRAFFIC;payload.page_kind=PAGE.kind;
       if(EXP)payload.variant_id=VARIANT_ID;
       payload.propensity_score=propensity();
+      if(OFFER.bucket){payload.intent=OFFER.intent;payload.offer_bucket=OFFER.bucket;payload.offer_tier=OFFER.tier}
       fetch(BU+"/api/public/forms/"+FID+"/submit",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})
       .then(function(r){return r.json().catch(function(){return{}}).then(function(j){return{ok:r.ok,status:r.status,body:j}})})
       .then(function(out){

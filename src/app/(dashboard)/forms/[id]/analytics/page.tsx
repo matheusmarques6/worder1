@@ -50,6 +50,8 @@ interface Analytics {
     median_time_to_purchase_hours: number | null
   }
   devices: { mobile: number; desktop: number; tablet: number; unknown: number }
+  offers: null | Record<'smart' | 'control', { submissions: number; orders: number; revenue: number; no_offer: number }>
+  avg_propensity: number | null
   holdout: {
     configured: boolean
     min_visitors: number
@@ -281,6 +283,30 @@ export default function FormAnalyticsPage() {
           )}
         </div>
       </div>
+
+      {/* Smart Offers: oferta por intenção × controle */}
+      {data.offers && (
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <div className="mb-4">
+            <h3 className="text-sm font-semibold text-gray-900">Oferta por intenção</h3>
+            <p className="text-xs text-gray-500 mt-0.5">Quem recebeu a oferta pela intenção medida contra o grupo de controle, que recebe sempre a oferta base. Se a conversão se mantém, a margem economizada é ganho real.</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {([['smart', 'Oferta por intenção'], ['control', 'Controle (oferta base)']] as const).map(([k, label]) => {
+              const g = data.offers![k]
+              const conv = g.submissions > 0 ? g.orders / g.submissions : 0
+              return (
+                <div key={k} className="rounded-lg border border-gray-100 p-4">
+                  <p className="text-xs font-medium text-gray-500">{label}</p>
+                  <p className="text-lg font-semibold text-gray-900 mt-1 tabular-nums">{pct(conv)} <span className="text-xs font-normal text-gray-400">compraram</span></p>
+                  <p className="text-[11px] text-gray-400 mt-0.5">{int(g.submissions)} inscritos · {int(g.orders)} pedidos · {money(g.revenue)}{k === 'smart' && g.no_offer > 0 ? ` · ${int(g.no_offer)} sem desconto` : ''}</p>
+                </div>
+              )
+            })}
+          </div>
+          {data.avg_propensity != null && <p className="text-[11px] text-gray-400 mt-3">Intenção média dos inscritos no período: {data.avg_propensity} de 100.</p>}
+        </div>
+      )}
 
       {/* Experimento A/B */}
       <ExperimentSection formId={formId} money={money} />
