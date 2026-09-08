@@ -2328,11 +2328,20 @@ def test_full_suites_are_serial_and_stop_at_first_failure(
         stages.append(stage)
         assert events == [("source", False), ("clean", "d" * 40), "proof", "history"]
         events.clear()
-        assert argv[:6] == ["uv", "run", "--directory", str(executor.repo / "runtime"),
-                            "pytest", "--collect-only" if stage == "collect-rls" else "-m"]
+        arguments = {
+            "collect-rls": ["--collect-only", "-m", "rls", "-q"],
+            "db": ["-m", "db and not rls",
+                   "--junitxml=" + str(executor.run / "artifacts/db.xml")],
+            "rls": ["-m", "rls", "--junitxml=" + str(executor.run / "artifacts/rls.xml")],
+            "pipeline": ["-m", "pipeline",
+                         "--junitxml=" + str(executor.run / "artifacts/pipeline.xml")],
+        }
+        assert argv == [
+            "uv", "run", "--directory", str(executor.repo / "runtime"),
+            "pytest", *arguments[stage],
+        ]
         assert kwargs["env"]["WORDER_TEST_DB_SENTINEL"] == "c" * 64
         if stage != "collect-rls":
-            assert argv[6] == {"db": "db and not rls", "rls": "rls", "pipeline": "pipeline"}[stage]
             if stage == "rls":
                 assert "secret" not in (executor.run / "artifacts/db.xml").read_text("utf-8")
             path = Path(argv[-1].removeprefix("--junitxml="))
@@ -2342,7 +2351,6 @@ def test_full_suites_are_serial_and_stop_at_first_failure(
             path.write_text("<testsuite>" + cases + "</testsuite>", encoding="utf-8")
             stdout = ""
         else:
-            assert argv[6:] == ["-m", "rls", "-q"]
             stdout = "tests/db/test_rls.py::test_one\n"
             if failure == "empty":
                 stdout = ""
@@ -2631,14 +2639,29 @@ class FakeCLI:
             )
             assert env["WORDER_TEST_DB_SYSTEM_IDENTIFIER"] == self.sid
             assert env["WORDER_TEST_DB_SENTINEL"] == self.sentinel
-            if argv[5:] == ["--collect-only", "-m", "rls", "-q"]:
-                name = "collect-rls"
+            arguments = {
+                "collect-rls": ["--collect-only", "-m", "rls", "-q"],
+                "db": ["-m", "db and not rls",
+                       "--junitxml=" + str(self.run / "artifacts/db.xml")],
+                "rls": ["-m", "rls", "--junitxml=" + str(self.run / "artifacts/rls.xml")],
+                "pipeline": ["-m", "pipeline",
+                             "--junitxml=" + str(self.run / "artifacts/pipeline.xml")],
+                "focal": ["tests/db/test_case.py::test_one",
+                          "tests/db/test_case.py::test_two[a-1]", "-q",
+                          "--junitxml=" + str(self.run / "artifacts/focal.xml")],
+            }
+            name = next((
+                stage for stage, suffix in arguments.items()
+                if argv == [
+                    "uv", "run", "--directory", str(self.repo / "runtime"), "pytest", *suffix,
+                ]
+            ), None)
+            if name is None:
+                pytest.fail(f"unexpected complete pytest argv: {argv}")
+            if name == "collect-rls":
                 output = "" if self.empty_rls else "tests/db/test_case.py::test_one\n"
             else:
-                report = Path(argv[-1].removeprefix("--junitxml="))
-                if report.parent != self.run / "artifacts":
-                    pytest.fail("report escaped the run")
-                name = report.stem
+                report = self.run / "artifacts" / (name + ".xml")
                 report.write_text(
                     '<testsuite><testcase name="test_one" classname="tests.db.test_case">'
                     '<system-out>postgresql://redact-me ' + self.sentinel + '</system-out>'
@@ -2700,12 +2723,14 @@ def test_prepare_replay_full_test_and_stop_with_fake_cli(tmp_path, monkeypatch):
         {"filename": "20260812000001_a.sql", "version": "20260812000001",
          "sha256": "AC4396CDEE0295DB27F816DC31134189999D0071663E618F4957BC23EDB584D7"},
     ]
+    executor = ex.Executor(executor.repo, executor.run, runner=cli)
     assert executor.execute("Replay") == 0
     assert executor.gate["state"] == "ready" and cli.started
     assert cli.applied == ["20260621", "20260812000001"]
     ready = json.loads((executor.run / "identity.json").read_text("utf-8"))
     assert ready | {"sentinel": None} == prepared
     assert re.fullmatch(r"[0-9a-f]{64}", ready["sentinel"])
+    executor = ex.Executor(executor.repo, executor.run, runner=cli)
     assert executor.execute("Test") == 0
     assert cli.pytest_calls == ["collect-rls", "db", "rls", "pipeline"]
     assert executor.gate["collectedRls"] == 1
@@ -2727,6 +2752,7 @@ def test_prepare_replay_full_test_and_stop_with_fake_cli(tmp_path, monkeypatch):
         ["supabase", "stop", "--no-backup", "--workdir", str(executor.run)],
     ]
     count = len(cli.calls)
+    executor = ex.Executor(executor.repo, executor.run, runner=cli)
     assert executor.execute("Stop") == 0
     assert len(cli.calls) == count
 
@@ -2742,8 +2768,11 @@ def test_integrated_failure_stops_before_the_next_suite(
     tmp_path, monkeypatch, failure, expected, stages,
 ):
     executor, cli = fake_environment(tmp_path, monkeypatch)
-    assert executor.execute("Prepare") == executor.execute("Replay") == 0
+    assert executor.execute("Prepare") == 0
+    executor = ex.Executor(executor.repo, executor.run, runner=cli)
+    assert executor.execute("Replay") == 0
     cli.fail, cli.empty_rls = failure, failure == "empty-rls"
+    executor = ex.Executor(executor.repo, executor.run, runner=cli)
     assert executor.execute("Test") == expected
     assert cli.pytest_calls == stages
     gate = json.loads((executor.run / "gates.json").read_text("utf-8"))
@@ -2760,14 +2789,17 @@ def test_integrated_upgrade_noop_suffix_and_failure_preserve_approved_manifest(
 ):
     executor, cli = fake_environment(tmp_path, monkeypatch)
     assert executor.execute("Prepare", through="20260812000001") == 0
+    executor = ex.Executor(executor.repo, executor.run, runner=cli)
     assert executor.execute("Replay") == 0
     identity = (executor.run / "identity.json").read_bytes()
+    executor = ex.Executor(executor.repo, executor.run, runner=cli)
     assert executor.execute("Upgrade", through="20260812000001") == 0
     assert not any(
         c[:3] == ["supabase", "migration", "up"] and "--help" not in c for c in cli.calls
     )
     source = executor.repo / "supabase/migrations"
     (source / "20260812000002_b.sql").write_bytes(b"select 3;\n")
+    executor = ex.Executor(executor.repo, executor.run, runner=cli)
     assert executor.execute("Upgrade", through="20260812000002") == 0
     assert (executor.run / "identity.json").read_bytes() == identity
     assert cli.applied == ["20260621", "20260812000001", "20260812000002"]
@@ -2778,6 +2810,7 @@ def test_integrated_upgrade_noop_suffix_and_failure_preserve_approved_manifest(
     }
     (source / "20260812000003_c.sql").write_bytes(b"select 4;\n")
     cli.fail = "migration-up"
+    executor = ex.Executor(executor.repo, executor.run, runner=cli)
     assert executor.execute("Upgrade", through="20260812000003") == 18
     assert (executor.run / "manifest.json").read_bytes() == approved
     prospective = json.loads((executor.run / "manifest.prospective.json").read_text("utf-8"))
@@ -2794,12 +2827,15 @@ def test_integrated_upgrade_noop_suffix_and_failure_preserve_approved_manifest(
 @pytest.mark.parametrize("changed", ["manifest", "dirty"])
 def test_new_checkout_cannot_certify_unapproved_inputs(tmp_path, monkeypatch, changed):
     executor, cli = fake_environment(tmp_path, monkeypatch)
-    assert executor.execute("Prepare") == executor.execute("Replay") == 0
+    assert executor.execute("Prepare") == 0
+    executor = ex.Executor(executor.repo, executor.run, runner=cli)
+    assert executor.execute("Replay") == 0
     if changed == "manifest":
         (executor.repo / "supabase/migrations/20260812000002_b.sql").write_bytes(b"select 3;\n")
     else:
         cli.dirty = " M runtime/tests/db/test_case.py"
     cli.commit = "f" * 40
+    executor = ex.Executor(executor.repo, executor.run, runner=cli)
     assert executor.execute("Test") == 2
     assert cli.pytest_calls == []
     assert executor.gate["commit"] == "e" * 40
@@ -2808,10 +2844,13 @@ def test_new_checkout_cannot_certify_unapproved_inputs(tmp_path, monkeypatch, ch
 
 def test_integrated_focal_accepts_immutable_prefix_and_literal_targets(tmp_path, monkeypatch):
     executor, cli = fake_environment(tmp_path, monkeypatch)
-    assert executor.execute("Prepare") == executor.execute("Replay") == 0
+    assert executor.execute("Prepare") == 0
+    executor = ex.Executor(executor.repo, executor.run, runner=cli)
+    assert executor.execute("Replay") == 0
     (executor.repo / "supabase/migrations/20260812000002_b.sql").write_bytes(b"select 3;\n")
     cli.dirty = " M runtime/tests/db/test_case.py"
     selected = ["tests/db/test_case.py::test_one", "tests/db/test_case.py::test_two[a-1]"]
+    executor = ex.Executor(executor.repo, executor.run, runner=cli)
     assert executor.execute("Test", selected) == 0
     assert cli.pytest_calls == ["focal"]
     assert executor.gate["scope"] == "focal" and executor.gate["collectedRls"] == 0
@@ -2829,6 +2868,7 @@ def test_integrated_ambient_hostaddr_blocks_replay_before_reset_or_connection(
     assert executor.execute("Prepare") == 0
     connected = cli.connections
     monkeypatch.setenv("PGHOSTADDR", "10.0.0.1")
+    executor = ex.Executor(executor.repo, executor.run, runner=cli)
     assert executor.execute("Replay") == 2
     assert cli.connections == connected
     assert not any(c[0] == "supabase" and "--workdir" in c and c[1] != "start" for c in cli.calls)
@@ -2839,8 +2879,11 @@ def test_integrated_ambient_hostaddr_blocks_replay_before_reset_or_connection(
 
 def test_integrated_copy_hash_change_prevents_pytest(tmp_path, monkeypatch):
     executor, cli = fake_environment(tmp_path, monkeypatch)
-    assert executor.execute("Prepare") == executor.execute("Replay") == 0
+    assert executor.execute("Prepare") == 0
+    executor = ex.Executor(executor.repo, executor.run, runner=cli)
+    assert executor.execute("Replay") == 0
     (executor.run / "supabase/migrations/20260812000001_a.sql").write_bytes(b"select 99;\n")
+    executor = ex.Executor(executor.repo, executor.run, runner=cli)
     assert executor.execute("Test") == 2
     assert cli.pytest_calls == [] and executor.gate["state"] == "stopped"
     assert not cli.started
@@ -2849,11 +2892,14 @@ def test_integrated_copy_hash_change_prevents_pytest(tmp_path, monkeypatch):
 @pytest.mark.parametrize("changed", ["sid", "container"])
 def test_integrated_stop_refuses_changed_identity(tmp_path, monkeypatch, changed):
     executor, cli = fake_environment(tmp_path, monkeypatch)
-    assert executor.execute("Prepare") == executor.execute("Replay") == 0
+    assert executor.execute("Prepare") == 0
+    executor = ex.Executor(executor.repo, executor.run, runner=cli)
+    assert executor.execute("Replay") == 0
     if changed == "sid":
         cli.sid = "9999999999999999999"
     else:
         cli.container["Id"] = "f" * 64
+    executor = ex.Executor(executor.repo, executor.run, runner=cli)
     assert executor.execute("Stop") == 2
     assert not any(c[:2] == ["supabase", "stop"] and "--help" not in c for c in cli.calls)
     assert executor.gate["state"] == "failed" and cli.started
@@ -2870,6 +2916,7 @@ def test_integrated_unproven_prepare_records_ids_without_cleanup(tmp_path, monke
     assert not (executor.run / "identity.json").exists()
     assert not any(c[:2] == ["supabase", "stop"] and "--help" not in c for c in cli.calls)
     calls = len(cli.calls)
+    executor = ex.Executor(executor.repo, executor.run, runner=cli)
     with pytest.raises(ValueError, match="invalid transition"):
         executor.execute("Stop")
     assert len(cli.calls) == calls
@@ -2901,14 +2948,16 @@ def test_run_process_timeout_and_interrupt_kill_tree_drain_and_reap(
             events.append(("wait",))
 
     def taskkill(argv, **kwargs):
+        assert platform == "nt", "POSIX must not invoke the Windows taskkill backend"
         assert argv == ["taskkill.exe", "/PID", "31337", "/T", "/F"]
         assert kwargs == {"capture_output": True, "check": False, "timeout": 30, "shell": False}
-        events.append(("tree",))
+        events.append(("taskkill",))
         return ex.subprocess.CompletedProcess(argv, 0, "", "")
 
     def killpg(pid, signal):
-        assert (pid, signal) == (31337, ex.signal.SIGKILL)
-        events.append(("tree",))
+        assert platform == "posix", "Windows must not invoke the POSIX killpg backend"
+        assert (pid, signal) == (31337, 9)
+        events.append(("killpg", group_missing))
         if group_missing:
             raise ProcessLookupError()
 
@@ -2924,7 +2973,9 @@ def test_run_process_timeout_and_interrupt_kill_tree_drain_and_reap(
         130 if interrupted else 124, "drained", "diagnostic",
     )
     assert events == [
-        ("communicate", "sql", 1), ("tree",), ("kill",),
+        ("communicate", "sql", 1),
+        ("taskkill",) if platform == "nt" else ("killpg", group_missing),
+        ("kill",),
         ("communicate", None, None), ("wait",),
     ]
     assert popen.call_args.args == (["tool.exe", "run", "pytest"],)
