@@ -56,6 +56,20 @@ def require(condition, reason):
         raise ValueError(reason)
 
 
+def same_typed_value(actual, expected):
+    if type(actual) is not type(expected):
+        return False
+    if isinstance(actual, dict):
+        return actual.keys() == expected.keys() and all(
+            same_typed_value(actual[key], expected[key]) for key in actual
+        )
+    if isinstance(actual, list):
+        return len(actual) == len(expected) and all(
+            same_typed_value(left, right) for left, right in zip(actual, expected, strict=True)
+        )
+    return actual == expected
+
+
 def no_links(path):
     for item in (path, *path.parents):
         if item.exists() or item.is_symlink():
@@ -74,7 +88,9 @@ def safe_run(repo, value):
     supplied = Path(value)
     require(supplied.is_absolute(), "RunDirectory must be absolute")
     no_links(supplied)
-    root = (repo / ".superpowers/sdd/auditoria-ia-disposable").resolve()
+    root = repo / ".superpowers/sdd/auditoria-ia-disposable"
+    no_links(root)
+    root = root.resolve()
     path = supplied.resolve()
     require(
         path.parent == root and re.fullmatch(r"[0-9a-f]{32}", path.name),
@@ -102,6 +118,7 @@ def read_json(path):
 
 def config_text(text, project, enabled, *, source=False):
     require(re.fullmatch(r"worder-audit-[0-9a-f]{32}", project), "invalid project id")
+    require(type(enabled) is bool, "invalid migrations flag")
     actual = tomllib.loads(text)
     desired = copy.deepcopy(EXPECTED)
     desired["project_id"] = project
@@ -118,7 +135,7 @@ def config_text(text, project, enabled, *, source=False):
             type(before["db"]["migrations"]["enabled"]) is bool,
             "missing migrations flag",
         )
-    require(actual == before, "unexpected config schema or value")
+    require(same_typed_value(actual, before), "unexpected config schema or value")
     edits = {
         ("", "project_id"): json.dumps(project),
         ("api", "port"): "55321",
@@ -142,7 +159,10 @@ def config_text(text, project, enabled, *, source=False):
         lines.append(line)
     require(seen == set(edits), "missing explicit section or key")
     result = "\n".join(lines) + "\n"
-    require(tomllib.loads(result) == desired, "config edit changed unrelated fields")
+    require(
+        same_typed_value(tomllib.loads(result), desired),
+        "config edit changed unrelated fields",
+    )
     return result
 
 

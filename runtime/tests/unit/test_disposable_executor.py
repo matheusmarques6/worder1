@@ -1,5 +1,6 @@
 import copy
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -34,6 +35,26 @@ def test_config_rejects_ambiguous_or_extra_sources(mutate):
     source = (REPO / "supabase/config.toml").read_text(encoding="utf-8")
     with pytest.raises((ValueError, ex.tomllib.TOMLDecodeError)):
         ex.config_text(mutate(source), PROJECT, False, source=True)
+
+
+@pytest.mark.parametrize(
+    ("original", "replacement"),
+    [
+        ("major_version = 17", "major_version = 17.0"),
+        ("enabled = true", "enabled = 1"),
+    ],
+)
+def test_config_rejects_equal_values_with_different_toml_types(original, replacement):
+    source = (REPO / "supabase/config.toml").read_text(encoding="utf-8")
+    with pytest.raises(ValueError):
+        ex.config_text(source.replace(original, replacement, 1), PROJECT, False, source=True)
+
+
+@pytest.mark.parametrize("enabled", [0, 1])
+def test_config_requires_boolean_migrations_flag(enabled):
+    source = (REPO / "supabase/config.toml").read_text(encoding="utf-8")
+    with pytest.raises(ValueError):
+        ex.config_text(source, PROJECT, enabled, source=True)
 
 
 def test_inventory_hashes_migrations_in_ascii_filename_order(tmp_path):
@@ -126,6 +147,23 @@ def test_safe_run_accepts_only_direct_nonce_child(tmp_path):
     for bad in (Path("relative"), root, root / ("g" * 32), root / ("a" * 32) / "nested"):
         with pytest.raises(ValueError):
             ex.safe_run(tmp_path, bad)
+
+
+def test_safe_run_rejects_linked_run_root(tmp_path):
+    repo = tmp_path / "repo"
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    root = repo / ".superpowers/sdd/auditoria-ia-disposable"
+    root.parent.mkdir(parents=True)
+    if os.name == "nt":
+        import _winapi
+
+        _winapi.CreateJunction(str(outside), str(root))
+    else:
+        root.symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(ValueError, match="linked path refused"):
+        ex.safe_run(repo, outside / ("a" * 32))
 
 
 def test_json_round_trip_is_ascii_and_replaces_temp_file(tmp_path):
