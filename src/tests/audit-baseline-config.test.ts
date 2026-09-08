@@ -1,7 +1,9 @@
-import { readFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import { expect, it } from 'vitest'
 
 it('permite somente os builds nativos necessários aos testes', () => {
-  const pkg = JSON.parse(readFileSync('package.json', 'utf8'))
-  expect(pkg.pnpm?.onlyBuiltDependencies).toEqual(['esbuild', 'unrs-resolver'])
+  const output = execFileSync('pnpm', ['config', 'get', 'allowBuilds', '--json'], {
+    encoding: 'utf8',
+  })
+  expect(JSON.parse(output)).toEqual({ esbuild: true, 'unrs-resolver': true })
 })

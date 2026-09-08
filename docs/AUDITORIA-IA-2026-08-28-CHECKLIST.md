@@ -5988,8 +5988,8 @@ você decidir se entram na fila.
   direto. Aprovar os builds muda política local de execução — decisão do dono da máquina, não minha.
   *(descoberto no review do item 1)*
 
-  Política explícita adicionada em `package.json`; a execução oficial segue condicionada ao
-  ambiente aprovar os dois builds nativos.
+  Política efetiva adicionada em `pnpm-workspace.yaml` via `allowBuilds`; somente os dois builds
+  nativos são aprovados.
 
 - [ ] **Depois de um takeover humano o agente volta amnésico (org migrada).**
   A fala do atendente vai para `whatsapp_cloud_messages` e para o espelho do inbox, mas
