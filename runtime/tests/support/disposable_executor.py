@@ -8,6 +8,7 @@ import os
 import re
 import shutil
 import signal
+import socket
 import stat
 import subprocess
 import tomllib
@@ -535,6 +536,22 @@ def gate_shape(gate):
     return gate
 
 
+def free_ports():
+    listeners = []
+    try:
+        for port in (55320, 55321, 55322):
+            listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            listeners.append(listener)
+            if os.name == "nt":
+                listener.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+            listener.bind(("0.0.0.0", port))
+    except OSError:
+        raise ValueError("disposable port occupied") from None
+    finally:
+        for listener in listeners:
+            listener.close()
+
+
 class Executor:
     def __init__(self, repo, run, *, runner=run_process):
         self.repo, self.run, self.runner = Path(repo), Path(run), runner
@@ -685,3 +702,86 @@ class Executor:
     def history(self, expected):
         actual = self.psql(self.identity["containerId"], HISTORY_SQL).splitlines()
         require(actual == [row["version"] for row in expected], "migration history mismatch")
+
+    def preflight(self):
+        self.gate["stage"] = "preflight"
+        version = self.command("supabase", "--version", timeout=30).stdout.strip()
+        require(version == "2.111.0", "Supabase CLI version must be 2.111.0")
+        for arguments, flags in [
+            (("start", "--help"), ("--exclude", "--workdir")),
+            (("db", "reset", "--help"), ("--local", "--no-seed", "--workdir")),
+            (("migration", "up", "--help"), ("--local", "--workdir")),
+            (("stop", "--help"), ("--no-backup", "--workdir")),
+        ]:
+            help_text = self.command("supabase", *arguments, timeout=30).stdout
+            require(all(flag in help_text for flag in flags), "CLI flags do not match pin")
+        context = self.command(
+            "docker",
+            "context",
+            "inspect",
+            "--format",
+            "{{json .Endpoints.docker.Host}}",
+            timeout=30,
+        ).stdout.strip()
+        endpoint = json.loads(context)
+        require(
+            endpoint
+            in {
+                "unix:///var/run/docker.sock",
+                "npipe:////./pipe/docker_engine",
+                "npipe:////./pipe/dockerDesktopLinuxEngine",
+            },
+            "non-local Docker context",
+        )
+
+    def prepare(self, through=None):
+        self.preflight()
+        source_config = self.repo / "supabase/config.toml"
+        no_links(source_config)
+        text = config_text(
+            source_config.read_text(encoding="utf-8"),
+            self.project,
+            False,
+            source=True,
+        )
+        source = inventory(self.repo / "supabase/migrations", through)
+        folder = self.run / "supabase/migrations"
+        folder.mkdir(parents=True)
+        (self.run / "supabase/config.toml").write_text(
+            text, encoding="utf-8", newline="\n"
+        )
+        for row in source:
+            shutil.copyfile(
+                self.repo / "supabase/migrations" / row["filename"],
+                folder / row["filename"],
+            )
+        copied = inventory(folder)
+        require(copied == source, "migration changed while copying")
+        write_json(self.run / "manifest.json", copied)
+        self.files()
+        free_ports()
+        existing = self.command(
+            "docker",
+            "ps",
+            "-a",
+            "--no-trunc",
+            "--filter",
+            "label=com.supabase.cli.project=" + self.project,
+            "--format",
+            "{{.ID}}",
+            timeout=30,
+        ).stdout.strip()
+        require(not existing, "nonce already owns Docker containers")
+        before = self.command(
+            "docker", "volume", "ls", "--format", "{{.Name}}", timeout=30
+        ).stdout.splitlines()
+        write_json(self.run / "volumes-before.json", before)
+        self.gate["stage"] = "start"
+        self.local("start", "-x", EXCLUDED)
+        self.gate["stage"] = "prepare-identity"
+        self.identity = self.physical()
+        write_json(
+            self.run / "identity.json", identity_shape(self.identity, self.project)
+        )
+        self.gate["state"] = "prepared"
+        self.save()

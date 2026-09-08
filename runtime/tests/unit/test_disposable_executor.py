@@ -861,3 +861,173 @@ def test_history_requires_exact_versions(tmp_path):
     executor.history(expected)
     with pytest.raises(ValueError, match="migration history mismatch"):
         executor.history(expected[:1])
+
+
+def test_preflight_rejects_wrong_cli_before_start(tmp_path):
+    calls = []
+
+    def runner(argv, **kwargs):
+        calls.append(argv)
+        return ex.subprocess.CompletedProcess(argv, 0, "9.9.9", "")
+
+    executor = ex.Executor(REPO, tmp_path, runner=runner)
+
+    with pytest.raises(ValueError, match="CLI version"):
+        executor.preflight()
+
+    assert calls == [["supabase", "--version"]]
+
+
+def test_busy_port_is_refused_and_open_listener_is_closed(monkeypatch):
+    from unittest.mock import MagicMock
+
+    first = MagicMock()
+    second = MagicMock()
+    second.bind.side_effect = OSError("in use")
+    sockets = iter((first, second))
+    monkeypatch.setattr(ex.socket, "socket", lambda *_args: next(sockets))
+
+    with pytest.raises(ValueError, match="disposable port occupied"):
+        ex.free_ports()
+
+    first.close.assert_called_once_with()
+    second.close.assert_called_once_with()
+
+
+def test_prepare_copies_only_approved_inputs_before_guarded_start(
+    monkeypatch, tmp_path
+):
+    repo = tmp_path / "repo"
+    source = repo / "supabase"
+    migrations = source / "migrations"
+    migrations.mkdir(parents=True)
+    source_config = (REPO / "supabase/config.toml").read_text(encoding="utf-8")
+    (source / "config.toml").write_text(source_config, encoding="utf-8")
+    migration = migrations / "20260812000001_one.sql"
+    migration.write_text("select 1;\n", encoding="ascii")
+    (repo / ".env").write_text("SECRET=remote\n", encoding="ascii")
+    (source / "seed.sql").write_text("select 'forbidden';\n", encoding="ascii")
+
+    run = tmp_path / ("a" * 32)
+    run.mkdir()
+    events = []
+    copied = []
+    real_copyfile = ex.shutil.copyfile
+    real_read_text = Path.read_text
+    real_read_bytes = Path.read_bytes
+
+    def copyfile(source_path, destination_path):
+        copied.append((Path(source_path), Path(destination_path)))
+        return real_copyfile(source_path, destination_path)
+
+    def guarded_read_text(path, *args, **kwargs):
+        assert Path(path) not in {repo / ".env", source / "seed.sql"}
+        return real_read_text(path, *args, **kwargs)
+
+    def guarded_read_bytes(path, *args, **kwargs):
+        assert Path(path) not in {repo / ".env", source / "seed.sql"}
+        return real_read_bytes(path, *args, **kwargs)
+
+    def runner(argv, **kwargs):
+        events.append(argv)
+        if argv == ["supabase", "--version"]:
+            stdout = "2.111.0\n"
+        elif argv[-1:] == ["--help"]:
+            stdout = {
+                ("start", "--help"): "--exclude --workdir",
+                ("db", "reset", "--help"): "--local --no-seed --workdir",
+                ("migration", "up", "--help"): "--local --workdir",
+                ("stop", "--help"): "--no-backup --workdir",
+            }[tuple(argv[1:])]
+        elif argv[:3] == ["docker", "context", "inspect"]:
+            stdout = json.dumps("npipe:////./pipe/docker_engine")
+        elif argv[:2] == ["docker", "volume"]:
+            stdout = "old-volume\n"
+        elif argv[:2] == ["docker", "inspect"]:
+            stdout = json.dumps([container_record()])
+        elif argv[:2] == ["docker", "exec"]:
+            stdout = "123456\n"
+        elif argv[:2] == ["supabase", "start"]:
+            assert (run / "supabase/config.toml").is_file()
+            assert (run / "manifest.json").is_file()
+            assert ex.read_json(run / "volumes-before.json") == ["old-volume"]
+            assert not (run / ".env").exists()
+            assert not (run / "supabase/seed.sql").exists()
+            stdout = ""
+        else:
+            stdout = ""
+        return ex.subprocess.CompletedProcess(argv, 0, stdout, "")
+
+    monkeypatch.setattr(ex.shutil, "copyfile", copyfile)
+    monkeypatch.setattr(Path, "read_text", guarded_read_text)
+    monkeypatch.setattr(Path, "read_bytes", guarded_read_bytes)
+    monkeypatch.setattr(ex, "free_ports", lambda: events.append("ports-free"))
+    monkeypatch.setattr(ex, "read_system_identifier", lambda dsn: "123456")
+    executor = ex.Executor(repo, run, runner=runner)
+    executor.gate["commit"] = "d" * 40
+
+    executor.prepare()
+
+    assert events == [
+        ["supabase", "--version"],
+        ["supabase", "start", "--help"],
+        ["supabase", "db", "reset", "--help"],
+        ["supabase", "migration", "up", "--help"],
+        ["supabase", "stop", "--help"],
+        [
+            "docker",
+            "context",
+            "inspect",
+            "--format",
+            "{{json .Endpoints.docker.Host}}",
+        ],
+        "ports-free",
+        [
+            "docker",
+            "ps",
+            "-a",
+            "--no-trunc",
+            "--filter",
+            "label=com.supabase.cli.project=" + PROJECT,
+            "--format",
+            "{{.ID}}",
+        ],
+        ["docker", "volume", "ls", "--format", "{{.Name}}"],
+        ["supabase", "--version"],
+        ["supabase", "start", "-x", ex.EXCLUDED, "--workdir", str(run)],
+        ["docker", "inspect", "supabase_db_" + PROJECT],
+        [
+            "docker",
+            "exec",
+            "-i",
+            "a" * 64,
+            "psql",
+            "-X",
+            "-v",
+            "ON_ERROR_STOP=1",
+            "-U",
+            "postgres",
+            "-d",
+            "postgres",
+            "-At",
+        ],
+    ]
+    assert sorted(
+        str(path.relative_to(run)).replace("\\", "/")
+        for path in run.rglob("*")
+        if path.is_file()
+    ) == [
+        "events.jsonl",
+        "gates.json",
+        "identity.json",
+        "manifest.json",
+        "supabase/config.toml",
+        "supabase/migrations/20260812000001_one.sql",
+        "volumes-before.json",
+    ]
+    assert ex.read_json(run / "volumes-before.json") == ["old-volume"]
+    assert ex.read_json(run / "identity.json") == valid_identity() | {"sentinel": None}
+    assert ex.read_json(run / "gates.json")["state"] == "prepared"
+    assert copied == [
+        (migration, run / "supabase/migrations/20260812000001_one.sql")
+    ]
