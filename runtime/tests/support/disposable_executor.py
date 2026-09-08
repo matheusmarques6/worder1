@@ -88,16 +88,15 @@ def same_typed_value(actual, expected):
 
 def no_links(path):
     for item in (path, *path.parents):
-        if item.exists() or item.is_symlink():
+        try:
             info = item.lstat()
-            require(
-                not item.is_symlink()
-                and not (
-                    getattr(info, "st_file_attributes", 0)
-                    & stat.FILE_ATTRIBUTE_REPARSE_POINT
-                ),
-                "linked path refused",
-            )
+        except FileNotFoundError:
+            continue
+        require(
+            not stat.S_ISLNK(info.st_mode)
+            and not (getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT),
+            "linked path refused",
+        )
 
 
 def safe_run(repo, value):
@@ -271,6 +270,14 @@ class CommandFailure(RuntimeError):
         self.code = code
 
 
+class ProcessReapFailure(CommandFailure):
+    def __init__(self, code, process):
+        super().__init__(code)
+        # Pipe reader/writer threads may own IO locks. Retain and abandon the
+        # process rather than block in close(); the executor lock requires inspection.
+        self.process = process
+
+
 def child_env(identity=None):
     allowed = {
         "PATH",
@@ -321,24 +328,37 @@ def run_process(argv, *, cwd, env, input=None, timeout=600):
     try:
         stdout, stderr = process.communicate(input=input, timeout=timeout)
         code = process.returncode
+        process.wait(timeout=30)
     except (subprocess.TimeoutExpired, KeyboardInterrupt) as error:
-        if os.name == "nt":
-            with contextlib.suppress(OSError, subprocess.TimeoutExpired):
-                subprocess.run(
+        code = 130 if isinstance(error, KeyboardInterrupt) else 124
+        tree_killed = True
+        try:
+            if os.name == "nt":
+                tree_killed = subprocess.run(
                     ["taskkill.exe", "/PID", str(process.pid), "/T", "/F"],
                     capture_output=True,
                     check=False,
                     timeout=30,
                     shell=False,
-                )
-        else:
-            with contextlib.suppress(ProcessLookupError):
-                os.killpg(process.pid, signal.SIGKILL)
-        process.kill()
-        stdout, stderr = process.communicate()
-        code = 130 if isinstance(error, KeyboardInterrupt) else 124
-    finally:
-        process.wait()
+                ).returncode == 0
+            else:
+                with contextlib.suppress(ProcessLookupError):
+                    os.killpg(process.pid, signal.SIGKILL)
+        except (OSError, subprocess.TimeoutExpired, KeyboardInterrupt):
+            tree_killed = False
+        try:
+            process.kill()
+        except (OSError, KeyboardInterrupt):
+            tree_killed = False
+        try:
+            try:
+                stdout, stderr = process.communicate(timeout=30)
+            finally:
+                process.wait(timeout=30)
+        except (OSError, subprocess.TimeoutExpired, KeyboardInterrupt):
+            raise ProcessReapFailure(code, process) from None
+        if not tree_killed:
+            raise ProcessReapFailure(code, process) from None
     return subprocess.CompletedProcess(argv, 128 - code if code < 0 else code, stdout, stderr)
 
 
@@ -595,6 +615,8 @@ class Executor:
         self.repo, self.run, self.runner = Path(repo), Path(run), runner
         self.project = "worder-audit-" + self.run.name
         self.identity = None
+        self.local_context_proven = False
+        self.reap_failure = None
         self.gate = {
             "commit": None,
             "scope": "setup",
@@ -610,6 +632,8 @@ class Executor:
         write_json(self.run / "gates.json", gate_shape(self.gate))
 
     def command(self, tool, *arguments, stdin=None, identity=None, timeout=600, check=True):
+        if self.reap_failure is not None:
+            raise self.reap_failure
         argv = [tool, *(str(argument) for argument in arguments)]
         try:
             result = self.runner(
@@ -619,6 +643,9 @@ class Executor:
                 input=stdin,
                 timeout=timeout,
             )
+        except ProcessReapFailure as error:
+            self.reap_failure = error
+            result = subprocess.CompletedProcess(argv, error.code, "", "")
         except OSError:
             result = subprocess.CompletedProcess(argv, 127, "", "")
         self.gate["commands"].append(argv)
@@ -643,9 +670,13 @@ class Executor:
             with event_path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(event) + "\n")
         except (Exception, KeyboardInterrupt):
+            if self.reap_failure is not None:
+                raise self.reap_failure from None
             if result.returncode:
                 raise CommandFailure(result.returncode) from None
             raise
+        if self.reap_failure is not None:
+            raise self.reap_failure
         if check and result.returncode:
             raise CommandFailure(result.returncode)
         return result
@@ -747,6 +778,7 @@ class Executor:
         require(actual == [row["version"] for row in expected], "migration history mismatch")
 
     def preflight(self):
+        self.local_context_proven = False
         self.gate["stage"] = "preflight"
         version = self.command("supabase", "--version", timeout=30).stdout.strip()
         require(version == "2.111.0", "Supabase CLI version must be 2.111.0")
@@ -776,6 +808,7 @@ class Executor:
             },
             "non-local Docker context",
         )
+        self.local_context_proven = True
 
     def prepare(self, through=None):
         self.preflight()
@@ -989,6 +1022,7 @@ class Executor:
         self.suite(["-m", "pipeline"], "pipeline")
 
     def stop(self):
+        require(self.local_context_proven, "local Docker context proof unavailable")
         self.gate["stage"] = "stop"
         persisted = identity_shape(read_json(self.run / "identity.json"), self.project)
         if self.identity:
@@ -1014,6 +1048,7 @@ class Executor:
         self.save()
 
     def unproven(self):
+        require(self.local_context_proven, "local Docker context proof unavailable")
         result = self.command(
             "docker", "ps", "-a", "--no-trunc", "--filter",
             "label=com.supabase.cli.project=" + self.project, "--format", "{{.ID}}",
@@ -1026,6 +1061,7 @@ class Executor:
         self.gate["state"] = "unproven"
 
     def execute(self, action, test_targets=None, through=None):
+        self.local_context_proven = False
         test_targets = [] if test_targets is None else test_targets
         require(
             isinstance(action, str) and action in {"Prepare", "Replay", "Upgrade", "Test", "Stop"},
@@ -1078,6 +1114,7 @@ class Executor:
                     self.identity = identity_shape(
                         read_json(self.run / "identity.json"), self.project
                     )
+                    self.preflight()
                 commit = self.command("git", "rev-parse", "HEAD", timeout=30).stdout.strip()
                 require(re.fullmatch(r"[0-9a-f]{40}", commit), "invalid checkout commit")
                 if action == "Test":
@@ -1086,8 +1123,6 @@ class Executor:
                     if not test_targets:
                         self.clean_commit(commit)
                 self.gate["commit"] = commit
-                if action != "Prepare":
-                    self.preflight()
                 if action == "Prepare":
                     self.prepare(through)
                 elif action == "Replay":
@@ -1107,7 +1142,10 @@ class Executor:
                 }
                 self.gate["state"] = "failed"
             finally:
-                if action != "Stop" and (action == "Test" or code):
+                if (
+                    self.reap_failure is None and self.local_context_proven
+                    and action != "Stop" and (action == "Test" or code)
+                ):
                     try:
                         if self.identity and (self.run / "identity.json").is_file():
                             self.stop()
@@ -1135,8 +1173,9 @@ class Executor:
             raise
         finally:
             try:
-                no_links(lock)
-                lock.unlink()
+                if self.reap_failure is None:
+                    no_links(lock)
+                    lock.unlink()
             except (Exception, KeyboardInterrupt):
                 if not code and not primary_error:
                     raise

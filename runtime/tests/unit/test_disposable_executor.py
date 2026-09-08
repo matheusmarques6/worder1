@@ -154,7 +154,9 @@ def test_safe_run_accepts_only_direct_nonce_child(tmp_path):
             ex.safe_run(tmp_path, bad)
 
 
-def test_safe_run_rejects_linked_run_root(tmp_path):
+@pytest.mark.parametrize("dangling", [False, True])
+@pytest.mark.parametrize("supplied", ["inside", "outside"])
+def test_safe_run_rejects_linked_run_root(tmp_path, dangling, supplied):
     repo = tmp_path / "repo"
     outside = tmp_path / "outside"
     outside.mkdir()
@@ -166,9 +168,12 @@ def test_safe_run_rejects_linked_run_root(tmp_path):
         _winapi.CreateJunction(str(outside), str(root))
     else:
         root.symlink_to(outside, target_is_directory=True)
+    if dangling:
+        outside.rmdir()
+        assert not root.exists()
 
     with pytest.raises(ValueError, match="linked path refused"):
-        ex.safe_run(repo, outside / ("a" * 32))
+        ex.safe_run(repo, (root if supplied == "inside" else outside) / ("a" * 32))
 
 
 def test_json_round_trip_is_ascii_and_replaces_temp_file(tmp_path):
@@ -286,7 +291,8 @@ def test_run_process_success_preserves_process_contract(monkeypatch, tmp_path):
             observed["communicate"] = (input, timeout)
             return "out", "err"
 
-        def wait(self):
+        def wait(self, *, timeout):
+            assert timeout == 30
             observed["waited"] = True
 
     def popen(argv, **kwargs):
@@ -345,7 +351,8 @@ def test_run_process_normalizes_signal_return_code(monkeypatch):
         def communicate(self, *, input, timeout):
             return "", ""
 
-        def wait(self):
+        def wait(self, *, timeout):
+            assert timeout == 30
             return None
 
     monkeypatch.setattr(ex.shutil, "which", lambda _: "C:/bin/tool.exe")
@@ -354,54 +361,64 @@ def test_run_process_normalizes_signal_return_code(monkeypatch):
     assert ex.run_process(["tool"], cwd=REPO, env={}).returncode == 137
 
 
-@pytest.mark.skipif(os.name != "nt", reason="Windows taskkill fallback")
-@pytest.mark.parametrize(
-    ("initial_error", "helper_error", "expected_code"),
-    [
-        (ex.subprocess.TimeoutExpired("tool", 1), OSError("taskkill missing"), 124),
-        (
-            KeyboardInterrupt(),
-            ex.subprocess.TimeoutExpired("taskkill", 30),
-            130,
-        ),
-    ],
-)
-def test_run_process_reaps_after_windows_taskkill_failure(
-    monkeypatch, initial_error, helper_error, expected_code
+@pytest.mark.parametrize("interrupted", [False, True])
+@pytest.mark.parametrize("helper_failure", ["missing", "timeout", "nonzero", None])
+@pytest.mark.parametrize("drain_failure", ["pipe-open", "wait", None])
+def test_run_process_reports_unproven_reap_without_unbounded_waits(
+    monkeypatch, interrupted, helper_failure, drain_failure,
 ):
     events = []
+    expected_code = 130 if interrupted else 124
+    initial_error = KeyboardInterrupt() if interrupted else ex.subprocess.TimeoutExpired("tool", 1)
 
     class Process:
         pid = 321
+        stdin = stdout = stderr = SimpleNamespace(
+            close=lambda: pytest.fail("closing pipes may block on live reader/writer threads"),
+        )
 
         def communicate(self, *, input=None, timeout=None):
             events.append(("communicate", input, timeout))
             if len(events) == 1:
                 raise initial_error
+            if drain_failure == "pipe-open":
+                raise ex.subprocess.TimeoutExpired("tool", timeout)
             return "after", "cleanup"
 
         def kill(self):
             events.append(("kill",))
 
-        def wait(self):
-            events.append(("wait",))
+        def wait(self, *, timeout=None):
+            events.append(("wait", timeout))
+            if drain_failure == "wait":
+                raise ex.subprocess.TimeoutExpired("tool", timeout)
 
     def taskkill(argv, **kwargs):
         events.append(("taskkill", argv, kwargs))
-        raise helper_error
+        if helper_failure == "missing":
+            raise OSError("taskkill missing")
+        if helper_failure == "timeout":
+            raise ex.subprocess.TimeoutExpired("taskkill", 30)
+        return ex.subprocess.CompletedProcess(argv, 1 if helper_failure == "nonzero" else 0)
 
+    process = Process()
+    monkeypatch.setattr(ex, "os", SimpleNamespace(name="nt"))
+    monkeypatch.setattr(ex.subprocess, "CREATE_NEW_PROCESS_GROUP", 512, raising=False)
     monkeypatch.setattr(ex.shutil, "which", lambda _: "C:/bin/tool.exe")
-    monkeypatch.setattr(ex.subprocess, "Popen", lambda *_args, **_kwargs: Process())
+    monkeypatch.setattr(ex.subprocess, "Popen", lambda *_args, **_kwargs: process)
     monkeypatch.setattr(ex.subprocess, "run", taskkill)
 
-    result = ex.run_process(["tool"], cwd=REPO, env={}, input="sql", timeout=1)
-
-    assert (result.returncode, result.stdout, result.stderr) == (
-        expected_code,
-        "after",
-        "cleanup",
-    )
-    assert events == [
+    if helper_failure or drain_failure:
+        with pytest.raises(ex.CommandFailure) as failure:
+            ex.run_process(["tool"], cwd=REPO, env={}, input="sql", timeout=1)
+        assert type(failure.value).__name__ == "ProcessReapFailure"
+        assert failure.value.code == expected_code and failure.value.process is process
+    else:
+        result = ex.run_process(["tool"], cwd=REPO, env={}, input="sql", timeout=1)
+        assert (result.returncode, result.stdout, result.stderr) == (
+            expected_code, "after", "cleanup",
+        )
+    assert events[:3] == [
         ("communicate", "sql", 1),
         (
             "taskkill",
@@ -409,9 +426,9 @@ def test_run_process_reaps_after_windows_taskkill_failure(
             {"capture_output": True, "check": False, "timeout": 30, "shell": False},
         ),
         ("kill",),
-        ("communicate", None, None),
-        ("wait",),
     ]
+    assert events[3] == ("communicate", None, 30)
+    assert events[4:] == [("wait", 30)]
 
 
 def test_child_env_is_allowlisted_and_does_not_mutate_parent(monkeypatch):
@@ -653,6 +670,36 @@ def test_command_evidence_failure_preserves_nonzero_process_result(
     else:
         assert failure.value is evidence_error
     assert executor.gate["exitCodes"] == [code]
+
+
+@pytest.mark.parametrize("code", [124, 130])
+@pytest.mark.parametrize("destination", ["save", "events", None])
+def test_unproven_reap_survives_evidence_failure_and_blocks_commands(
+    tmp_path, monkeypatch, code, destination,
+):
+    failure = ex.ProcessReapFailure(code, object())
+    calls = []
+
+    def runner(argv, **kwargs):
+        calls.append(argv)
+        raise failure
+
+    executor = ex.Executor(REPO, tmp_path, runner=runner)
+    original_open = Path.open
+
+    def open_file(path, *args, **kwargs):
+        target = "gates.json.tmp" if destination == "save" else "events.jsonl"
+        if destination and path.name == target:
+            raise OSError("evidence unavailable")
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", open_file)
+    for _ in range(2):
+        with pytest.raises(ex.ProcessReapFailure) as result:
+            executor.command("tool", check=False)
+        assert result.value is failure
+    assert calls == [["tool"]]
+    assert executor.gate["commands"] == [["tool"]] and executor.gate["exitCodes"] == [code]
 
 
 def test_local_and_psql_build_only_fixed_commands(tmp_path):
@@ -1890,8 +1937,10 @@ def lifecycle_run(tmp_path):
     executor = ex.Executor(repo, run)
     executor.gate.update(commit="d" * 40, state="ready")
     executor.save()
-    executor.runner = lambda argv, **kwargs: ex.subprocess.CompletedProcess(
-        argv, 0, "e" * 40 if argv == ["git", "rev-parse", "HEAD"] else "", ""
+    _, preflight = preflight_double()
+    executor.runner = lambda argv, **kwargs: (
+        ex.subprocess.CompletedProcess(argv, 0, "e" * 40, "")
+        if argv == ["git", "rev-parse", "HEAD"] else preflight(argv, **kwargs)
     )
     return executor
 
@@ -1930,7 +1979,6 @@ def test_test_finally_stops_preserving_original_failure(
     executor = lifecycle_run(tmp_path)
     events = []
     before = dict(os.environ)
-    monkeypatch.setattr(executor, "preflight", lambda: None)
     monkeypatch.setattr(executor, "source", lambda focal: [])
     monkeypatch.setattr(executor, "clean_commit", lambda commit: None)
 
@@ -1967,7 +2015,6 @@ def test_test_finally_stops_preserving_original_failure(
 def test_cleanup_evidence_write_failure_does_not_replace_action_failure(tmp_path, monkeypatch):
     executor = lifecycle_run(tmp_path)
     real_save = executor.save
-    monkeypatch.setattr(executor, "preflight", lambda: None)
     monkeypatch.setattr(executor, "source", lambda focal: [])
     monkeypatch.setattr(executor, "clean_commit", lambda commit: None)
 
@@ -2004,7 +2051,6 @@ def test_lifecycle_dispatches_valid_actions_under_exclusive_lock(
     executor = lifecycle_run(tmp_path)
     executor.gate["state"] = state
     executor.save()
-    monkeypatch.setattr(executor, "preflight", lambda: None)
     calls = []
 
     def operation(*args):
@@ -2036,7 +2082,6 @@ def test_lock_release_failure_preserves_nonzero_result(
 ):
     executor = lifecycle_run(tmp_path)
     lock = executor.run.parent / ".executor.lock"
-    monkeypatch.setattr(executor, "preflight", lambda: None)
     monkeypatch.setattr(executor, "source", lambda focal: [])
     monkeypatch.setattr(executor, "clean_commit", lambda commit: None)
     release_error = OSError("release refused")
@@ -2174,9 +2219,12 @@ def test_prepare_failure_without_persisted_identity_records_only_unproven(
     repo = tmp_path / "repo"
     run = repo / ".superpowers/sdd/auditoria-ia-disposable" / ("a" * 32)
     calls = []
+    preflight_calls, preflight = preflight_double()
 
     def runner(argv, **kwargs):
         calls.append(argv)
+        if argv[0] != "git" and argv[:2] != ["docker", "ps"]:
+            return preflight(argv, **kwargs)
         output = "e" * 40 if argv[0] == "git" else "a" * 64 + "\nraw secret\n"
         return ex.subprocess.CompletedProcess(argv, 0, output, "")
 
@@ -2184,6 +2232,7 @@ def test_prepare_failure_without_persisted_identity_records_only_unproven(
 
     def prepare(through):
         assert through == "20260812000001"
+        executor.preflight()
         executor.gate["stage"] = "prepare-identity"
         # In-memory proof cannot authorize cleanup if identity persistence failed.
         executor.identity = valid_identity()
@@ -2193,6 +2242,7 @@ def test_prepare_failure_without_persisted_identity_records_only_unproven(
     assert executor.execute("Prepare", through="20260812000001") == 17
     assert calls == [
         ["git", "rev-parse", "HEAD"],
+        *preflight_calls,
         ["docker", "ps", "-a", "--no-trunc", "--filter",
          "label=com.supabase.cli.project=" + PROJECT, "--format", "{{.ID}}"],
     ]
@@ -2424,9 +2474,12 @@ def test_stop_reproves_persisted_identity_and_confirms_removal(tmp_path, monkeyp
     ex.write_json(run / "volumes-before.json", [])
     ex.write_json(run / "identity.json", valid_identity() | {"sentinel": None})
     calls = []
+    _, preflight = preflight_double()
 
     def runner(argv, **kwargs):
         calls.append(argv)
+        if argv[-1] == "--help" or argv[:3] == ["docker", "context", "inspect"]:
+            return preflight(argv, **kwargs)
         if argv[:2] == ["docker", "inspect"]:
             record = container_record()
             if remaining == "identity-changed":
@@ -2451,6 +2504,8 @@ def test_stop_reproves_persisted_identity_and_confirms_removal(tmp_path, monkeyp
 
     executor = ex.Executor(REPO, run, runner=runner)
     monkeypatch.setattr(ex, "read_system_identifier", lambda dsn: "123456")
+    executor.preflight()
+    calls.clear()
     if remaining:
         with pytest.raises(ValueError):
             executor.stop()
@@ -2922,6 +2977,166 @@ def test_integrated_unproven_prepare_records_ids_without_cleanup(tmp_path, monke
     assert len(cli.calls) == calls
 
 
+@pytest.mark.parametrize("action", ["Prepare", "Replay", "Test", "Stop"])
+def test_execute_remote_context_never_contacts_refused_daemon(tmp_path, monkeypatch, action):
+    executor, cli = fake_environment(tmp_path, monkeypatch)
+    if action != "Prepare":
+        assert executor.execute("Prepare") == 0
+        if action == "Test":
+            assert executor.execute("Replay") == 0
+    calls = []
+    refused = False
+
+    def remote(argv, **kwargs):
+        nonlocal refused
+        if refused:
+            pytest.fail("subprocess after remote context refusal")
+        calls.append(argv)
+        if argv[:3] == ["docker", "context", "inspect"]:
+            refused = True
+            return ex.subprocess.CompletedProcess(argv, 0, '"tcp://192.0.2.1:2375"', "")
+        assert argv[0] != "docker", "daemon operation before local context proof"
+        return cli(argv, **kwargs)
+
+    executor.runner = remote
+    assert executor.execute(action) == 2
+    assert [call for call in calls if call[0] == "docker"] == [[
+        "docker", "context", "inspect", "--format", "{{json .Endpoints.docker.Host}}",
+    ]]
+    gate = ex.read_json(executor.run / "gates.json")
+    assert gate["state"] == "failed" and gate["stage"] == "preflight"
+    assert gate["failure"] == {"stage": "preflight", "kind": "ValueError", "exitCode": 2}
+    assert not (executor.run / "unproven.json").exists()
+    assert not (executor.run.parent / ".executor.lock").exists()
+
+
+def test_each_execute_discards_prior_local_context_proof_before_loading_identity(
+    tmp_path, monkeypatch,
+):
+    executor, cli = fake_environment(tmp_path, monkeypatch)
+    assert executor.execute("Prepare") == 0
+    ex.write_json(executor.run / "identity.json", {})
+    executor.runner = lambda *_a, **_k: pytest.fail("subprocess using previous local context proof")
+    assert executor.execute("Replay") == 2
+    assert cli.started
+    assert executor.gate["state"] == "failed" and executor.gate["stage"] == "preflight"
+    assert not (executor.run / "unproven.json").exists()
+
+
+@pytest.mark.parametrize("failed_check", ["git", "source", "clean_commit"])
+def test_local_context_is_proved_before_test_checkout_checks(tmp_path, monkeypatch, failed_check):
+    executor, cli = fake_environment(tmp_path, monkeypatch)
+    assert executor.execute("Prepare") == 0
+    assert executor.execute("Replay") == 0
+    cli.calls.clear()
+    if failed_check == "source":
+        (executor.repo / "supabase/migrations/20260812000002_b.sql").write_bytes(b"select 3;\n")
+    elif failed_check == "clean_commit":
+        cli.dirty = " M runtime/tests/db/test_case.py"
+
+    def runner(argv, **kwargs):
+        if argv[0] == "git":
+            assert any(call[:3] == ["docker", "context", "inspect"] for call in cli.calls)
+            if failed_check == "git":
+                raise ex.CommandFailure(17)
+        return cli(argv, **kwargs)
+
+    executor = ex.Executor(executor.repo, executor.run, runner=runner)
+    assert executor.execute("Test") == (17 if failed_check == "git" else 2)
+    assert executor.gate["state"] == "stopped" and not cli.started
+    assert cli.pytest_calls == []
+
+
+@pytest.mark.parametrize("method", ["stop", "unproven"])
+def test_cleanup_requires_local_context_proof_even_when_called_directly(
+    tmp_path, monkeypatch, method,
+):
+    executor, cli = fake_environment(tmp_path, monkeypatch)
+    assert executor.execute("Prepare") == 0
+    executor = ex.Executor(executor.repo, executor.run, runner=cli)
+    calls = len(cli.calls)
+    with pytest.raises(ValueError, match="local Docker context"):
+        getattr(executor, method)()
+    assert len(cli.calls) == calls and cli.started
+
+
+@pytest.mark.parametrize("stage", ["preflight", "db", "stop"])
+@pytest.mark.parametrize("interrupted", [False, True])
+@pytest.mark.parametrize("unproven", ["tree", "pipe-open", None])
+def test_unproven_process_reap_blocks_lifecycle_until_inspection(
+    tmp_path, monkeypatch, stage, interrupted, unproven,
+):
+    executor, cli = fake_environment(tmp_path, monkeypatch)
+    assert executor.execute("Prepare") == 0
+    assert executor.execute("Replay") == 0
+    blocked = False
+    events = []
+    expected_code = 130 if interrupted else 124
+    initial_error = KeyboardInterrupt() if interrupted else ex.subprocess.TimeoutExpired("tool", 1)
+
+    class Process:
+        pid = 321
+
+        def communicate(self, *, input=None, timeout=None):
+            events.append(("communicate", timeout))
+            if len(events) == 1:
+                raise initial_error
+            if unproven == "pipe-open":
+                raise ex.subprocess.TimeoutExpired("tool", timeout)
+            return "", ""
+
+        def kill(self):
+            events.append(("kill",))
+
+        def wait(self, *, timeout=None):
+            events.append(("wait", timeout))
+
+    process = Process()
+
+    def runner(argv, **kwargs):
+        nonlocal blocked
+        if blocked:
+            pytest.fail("subprocess after unproven process reap")
+        if not events and executor.gate["stage"] == stage and (
+            argv[0] == "uv" or argv[:2] == ["supabase", "stop"]
+            or argv[:3] == ["docker", "context", "inspect"]
+        ) and "--help" not in argv:
+            blocked = bool(unproven)
+            with monkeypatch.context() as patch:
+                patch.setattr(ex, "os", SimpleNamespace(name="nt"))
+                patch.setattr(ex.shutil, "which", lambda _: "tool.exe")
+                patch.setattr(ex.subprocess, "CREATE_NEW_PROCESS_GROUP", 512, raising=False)
+                patch.setattr(ex.subprocess, "Popen", lambda *_a, **_k: process)
+                patch.setattr(ex.subprocess, "run", lambda *a, **k:
+                              ex.subprocess.CompletedProcess(a[0], 1 if unproven == "tree" else 0))
+                return ex.run_process(argv, **kwargs)
+        return cli(argv, **kwargs)
+
+    executor = ex.Executor(executor.repo, executor.run, runner=runner)
+    assert executor.execute("Test") == expected_code
+    assert events == [("communicate", 30 if stage == "preflight" else 600),
+                      ("kill",), ("communicate", 30), ("wait", 30)]
+    gate = ex.read_json(executor.run / "gates.json")
+    assert gate["failure"] == {
+        "stage": stage, "kind": "ProcessReapFailure" if unproven else "CommandFailure",
+        "exitCode": expected_code,
+    }
+    assert gate["exitCodes"][-1] == (expected_code if unproven or stage != "db" else 0)
+    assert gate["state"] == ("failed" if unproven or stage != "db" else "stopped")
+    lock = executor.run.parent / ".executor.lock"
+    if unproven:
+        assert lock.read_text("utf-8") == str(os.getpid())
+        assert cli.started
+        assert not (executor.run / "unproven.json").exists()
+        with pytest.raises(FileExistsError):
+            ex.Executor(executor.repo, executor.run, runner=runner).execute("Stop")
+        with pytest.raises(ex.CommandFailure) as failure:
+            executor.command("docker", "ps", check=False)
+        assert failure.value.code == expected_code
+    else:
+        assert not lock.exists()
+
+
 @pytest.mark.parametrize("platform,interrupted,group_missing", [
     ("nt", False, False), ("nt", True, False),
     ("posix", False, False), ("posix", True, False), ("posix", False, True),
@@ -2944,8 +3159,8 @@ def test_run_process_timeout_and_interrupt_kill_tree_drain_and_reap(
         def kill(self):
             events.append(("kill",))
 
-        def wait(self):
-            events.append(("wait",))
+        def wait(self, *, timeout):
+            events.append(("wait", timeout))
 
     def taskkill(argv, **kwargs):
         assert platform == "nt", "POSIX must not invoke the Windows taskkill backend"
@@ -2976,7 +3191,7 @@ def test_run_process_timeout_and_interrupt_kill_tree_drain_and_reap(
         ("communicate", "sql", 1),
         ("taskkill",) if platform == "nt" else ("killpg", group_missing),
         ("kill",),
-        ("communicate", None, None), ("wait",),
+        ("communicate", None, 30), ("wait", 30),
     ]
     assert popen.call_args.args == (["tool.exe", "run", "pytest"],)
     assert popen.call_args.kwargs["shell"] is False
