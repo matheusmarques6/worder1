@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
       const { sendEmail } = await import('@/lib/email/resend')
       const baseUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(req.url).origin
       const verifyLink = `${baseUrl}/api/lgpd/data-requests/verify?token=${token}`
-      const fromEmail = process.env.LGPD_FROM_EMAIL || 'privacy@worder.app'
+      const fromEmail = process.env.LGPD_FROM_EMAIL || process.env.RESEND_FROM_EMAIL || 'noreply@worder.email'
 
       await sendEmail({
         to: requester_email,

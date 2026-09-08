@@ -21,27 +21,17 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ forms: [] })
     }
 
-    // Find store by domain: exact match first, then suffix match (covers
-    // "www."-prefixed hosts). The sanitized value can't contain %/_/,
-    // so no LIKE-wildcard or filter injection is possible.
-    let { data: store } = await supabaseAdmin
-      .from('shopify_stores')
-      .select('id, organization_id')
-      .eq('shop_domain', cleanDomain)
-      .eq('is_active', true)
-      .limit(1)
-      .maybeSingle()
-
-    if (!store) {
-      const { data: suffixStore } = await supabaseAdmin
-        .from('shopify_stores')
-        .select('id, organization_id')
-        .ilike('shop_domain', `%${cleanDomain}`)
-        .eq('is_active', true)
-        .limit(1)
-        .maybeSingle()
-      store = suffixStore
-    }
+    // Find store by domain: exact, alias-aware match on shop_domain,
+    // primary_domain (the public storefront host) or any alias; "www."
+    // is stripped by the resolver. The old suffix fallback
+    // (ilike '%domain') let a lookalike host ("groot.com") be served
+    // another store's popups ("drgroot.com").
+    const { resolveStoreByDomain } = await import('@/lib/shopify/resolve-store-by-domain')
+    const store = await resolveStoreByDomain<{ id: string; organization_id: string }>(
+      supabaseAdmin,
+      cleanDomain,
+      { select: 'id, organization_id', activeOnly: true }
+    )
 
     if (!store) {
       return NextResponse.json({ forms: [] })

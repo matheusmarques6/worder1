@@ -227,7 +227,12 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
         buttonRadius: p.buttonRadius ?? 4, buttonFontSize: p.buttonFontSize || 14,
         buttonAlign: p.buttonAlign || 'left',
         buttonPaddingV: p.buttonPaddingV || 10, buttonPaddingH: p.buttonPaddingH || 24,
-        imageWidth: p.imageWidth || 200, imageBorderRadius: p.imageBorderRadius ?? 0,
+        imageWidth: p.imageWidth || 200,
+        // Sem altura escolhida, a caixa é quadrada — o mesmo que o
+        // editor desenha. Sem isso a altura ia livre e um frasco alto
+        // esticava o e-mail inteiro.
+        imageHeight: p.imageHeight || p.imageWidth || 200,
+        imageBorderRadius: p.imageBorderRadius ?? 0,
         separator: p.separator !== false, separatorColor: p.separatorColor || '#E5E7EB',
         stackOnMobile: p.stackOnMobile !== false,
         font,

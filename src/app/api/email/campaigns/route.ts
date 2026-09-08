@@ -23,6 +23,16 @@ export async function GET(request: NextRequest) {
     // saw every campaign in the org because the filter was ignored.
     const storeId = searchParams.get('storeId') || searchParams.get('store_id');
 
+    // A loja pedida tem de ser do usuário — um id de outra organização
+    // é recusado, não vira filtro.
+    if (storeId) {
+      const { validateStoreAccess } = await import('@/lib/api-utils');
+      const access = await validateStoreAccess(auth.supabase as any, user.organization_id, storeId, user.id);
+      if (!access.valid) {
+        return NextResponse.json({ error: access.error }, { status: access.status || 403 });
+      }
+    }
+
     let query = supabaseAdmin
       .from('email_campaigns')
       .select('*, email_templates(id, name)')
@@ -55,27 +65,43 @@ export async function GET(request: NextRequest) {
 
     if (campaignIds.length > 0) {
       try {
-        // Opened counts
-        const { data: openRows } = await supabaseAdmin
-          .from('email_sends')
-          .select('campaign_id')
-          .in('campaign_id', campaignIds)
-          .not('opened_at', 'is', null);
-
-        // Clicked counts
-        const { data: clickRows } = await supabaseAdmin
-          .from('email_sends')
-          .select('campaign_id')
-          .in('campaign_id', campaignIds)
-          .not('clicked_at', 'is', null);
-
-        for (const r of (openRows || []) as any[]) {
-          if (!engagementMap[r.campaign_id]) engagementMap[r.campaign_id] = { opened: 0, clicked: 0 };
-          engagementMap[r.campaign_id].opened++;
-        }
-        for (const r of (clickRows || []) as any[]) {
-          if (!engagementMap[r.campaign_id]) engagementMap[r.campaign_id] = { opened: 0, clicked: 0 };
-          engagementMap[r.campaign_id].clicked++;
+        // Somado no banco. Contar linha a linha aqui parava no teto de
+        // mil linhas do PostgREST: passando de mil aberturas na
+        // organização, as campanhas maiores começavam a aparecer com
+        // menos do que tiveram, sem aviso nenhum.
+        const { data: agg, error: aggErr } = await supabaseAdmin.rpc('campaign_email_stats', {
+          org: user.organization_id,
+          p_store_id: storeId || null,
+        });
+        if (!aggErr && Array.isArray(agg)) {
+          for (const row of agg as any[]) {
+            if (!row?.campaign_id) continue;
+            engagementMap[row.campaign_id] = {
+              opened: Number(row.opened) || 0,
+              clicked: Number(row.clicked) || 0,
+            };
+          }
+        } else {
+          // Banco sem a função ainda: lê paginando, que é o que faltava.
+          const PAGE = 1000;
+          for (const col of ['opened_at', 'clicked_at'] as const) {
+            for (let page = 0; page < 100; page++) {
+              const from = page * PAGE;
+              const { data: rows } = await supabaseAdmin
+                .from('email_sends')
+                .select('campaign_id')
+                .in('campaign_id', campaignIds)
+                .not(col, 'is', null)
+                .range(from, from + PAGE - 1);
+              const list = (rows || []) as any[];
+              for (const r of list) {
+                if (!engagementMap[r.campaign_id]) engagementMap[r.campaign_id] = { opened: 0, clicked: 0 };
+                if (col === 'opened_at') engagementMap[r.campaign_id].opened++;
+                else engagementMap[r.campaign_id].clicked++;
+              }
+              if (list.length < PAGE) break;
+            }
+          }
         }
       } catch {
         console.warn('[EmailCampaigns] Engagement query failed');
@@ -170,6 +196,12 @@ export async function POST(request: NextRequest) {
     if (typeof body.skip_unengaged === 'boolean') insertData.skip_unengaged = body.skip_unengaged
     if (typeof body.skip_unengaged_days === 'number') insertData.skip_unengaged_days = body.skip_unengaged_days
     if (typeof body.send_time_optimization === 'boolean') insertData.send_time_optimization = body.send_time_optimization
+    // UTM desta campanha (sobrescreve o padrão da loja só nela) — settings.utm
+    if (body.utm !== undefined) {
+      const { normalizeMessageUtmConfig } = await import('@/lib/tracking/link-params')
+      const utm = normalizeMessageUtmConfig(body.utm)
+      if (utm) insertData.settings = { ...(insertData.settings || {}), utm }
+    }
     // Agendamento
     if (body.scheduled_at) {
       insertData.scheduled_at = body.scheduled_at

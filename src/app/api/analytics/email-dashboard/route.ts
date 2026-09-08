@@ -13,6 +13,13 @@ export async function GET(request: NextRequest) {
   if (!auth) return authError();
   const organizationId = auth.user.organization_id;
   const days = parseInt(request.nextUrl.searchParams.get('days') || '30');
+  // A tela de análise de e-mail já mandava a loja; esta rota jogava
+  // fora e somava todas — quem via os números da Dr. Groot via os da
+  // Medicube junto, sem nada indicando a mistura.
+  const storeId =
+    request.nextUrl.searchParams.get('storeId') ||
+    request.nextUrl.searchParams.get('store_id') ||
+    null;
 
   try {
     const supabase = getSupabaseClient();
@@ -26,10 +33,10 @@ export async function GET(request: NextRequest) {
     }
 
     const [metrics, timeline, campaigns, conversions] = await Promise.all([
-      getEmailDashboardMetrics(supabase, organizationId, days),
-      getEmailsOverTime(supabase, organizationId, days),
-      getTopEmailCampaigns(supabase, organizationId),
-      getEmailConversionMetrics(supabase, organizationId, days),
+      getEmailDashboardMetrics(supabase, organizationId, days, storeId),
+      getEmailsOverTime(supabase, organizationId, days, storeId),
+      getTopEmailCampaigns(supabase, organizationId, 5, storeId),
+      getEmailConversionMetrics(supabase, organizationId, days, storeId),
     ]);
 
     return NextResponse.json({ metrics, timeline, campaigns, conversions });

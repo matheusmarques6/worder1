@@ -17,6 +17,16 @@ export async function GET(request: NextRequest) {
     const { searchParams } = request.nextUrl;
     const storeId = searchParams.get('store_id') || searchParams.get('storeId');
 
+    // A loja pedida tem de ser do usuário — um id de outra organização
+    // é recusado, não vira filtro.
+    if (storeId) {
+      const { validateStoreAccess } = await import('@/lib/api-utils');
+      const access = await validateStoreAccess(auth.supabase as any, auth.user.organization_id, storeId, auth.user.id);
+      if (!access.valid) {
+        return NextResponse.json({ error: access.error }, { status: access.status || 403 });
+      }
+    }
+
     let query = supabaseAdmin
       .from('email_templates')
       .select('*')

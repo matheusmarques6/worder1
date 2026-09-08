@@ -8,15 +8,18 @@ import {
   MagnifyingGlass,
   PencilSimple,
   Eye,
+  EyeSlash,
   ArrowLeft,
-  CurrencyDollar,
   Package,
   ArrowsClockwise,
-  Export,
   CheckCircle,
   XCircle,
+  Plus,
+  ArrowSquareOut,
+  WarningCircle,
 } from '@phosphor-icons/react'
 import { useStoreStore } from '@/stores'
+import { NewProductModal, CreatedProductNotice, type NewProductResult } from '@/components/products/NewProductModal'
 
 // Formata preço respeitando a moeda da loja (Dr. Melaxin usa USD;
 // outras lojas podem usar BRL/EUR/MXN/etc). Intl.NumberFormat
@@ -54,11 +57,23 @@ interface Product {
   // null means inventory not tracked at the variant level (Shopify
   // returns -1 for those). The UI shows "—" instead of a fake 0.
   totalInventory: number | null
+  /** O que a Shopify diz sobre poder comprar. null = ainda não informado. */
+  available: boolean | null
+  /** Escondido de todos os feeds dinâmicos de e-mail (decisão da Worder). */
+  hiddenFromFeeds: boolean
   tags: string
   variants: any[]
   images: { url: string; alt: string | null }[]
   createdAt: string
   updatedAt: string
+}
+
+interface CatalogMeta {
+  currency: string
+  publicDomain: string | null
+  adminSlug: string | null
+  canCreate: boolean
+  missingScopes: string[]
 }
 
 const statusConfig: Record<string, { label: string; color: string }> = {
@@ -67,16 +82,23 @@ const statusConfig: Record<string, { label: string; color: string }> = {
   archived: { label: 'Arquivado', color: 'bg-red-500/10 text-red-600' },
 }
 
+type FeedFilter = 'all' | 'visible' | 'hidden'
+
 export default function ProductsPage() {
   const { currentStore } = useStoreStore()
   const [products, setProducts] = useState<Product[]>([])
+  const [meta, setMeta] = useState<CatalogMeta>({ currency: 'BRL', publicDomain: null, adminSlug: null, canCreate: true, missingScopes: [] })
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [feedFilter, setFeedFilter] = useState<FeedFilter>('all')
   const [sortBy, setSortBy] = useState<'title' | 'price' | 'totalInventory' | 'updatedAt'>('updatedAt')
   const [storeId, setStoreId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [showNew, setShowNew] = useState(false)
+  const [created, setCreated] = useState<NewProductResult | null>(null)
+  const [togglingId, setTogglingId] = useState<string | null>(null)
 
   const fetchProducts = useCallback(async () => {
     if (!currentStore?.id) return
@@ -90,13 +112,20 @@ export default function ProductsPage() {
       const data = await res.json()
       setProducts(data.products || [])
       setStoreId(data.storeId || null)
+      setMeta({
+        currency: data.currency || currentStore?.currency || 'BRL',
+        publicDomain: data.publicDomain || null,
+        adminSlug: data.adminSlug || null,
+        canCreate: data.canCreate !== false,
+        missingScopes: Array.isArray(data.missingScopes) ? data.missingScopes : [],
+      })
     } catch (err: any) {
       console.error('Error fetching products:', err)
       setError(err.message)
     } finally {
       setLoading(false)
     }
-  }, [currentStore?.id])
+  }, [currentStore?.id, currentStore?.currency])
 
   const hasHydrated = useStoreStore((s) => s._hasHydrated)
   useEffect(() => {
@@ -123,7 +152,6 @@ export default function ProductsPage() {
       if (data.errors && data.errors.length > 0) {
         setError(`Sync parcial: ${data.errors[0]}`)
       }
-      console.log('[Products] Sync result:', data)
       await fetchProducts()
     } catch (err: any) {
       console.error('Sync error:', err)
@@ -133,24 +161,54 @@ export default function ProductsPage() {
     }
   }
 
+  // Ocultar/mostrar nos feeds: otimista, com volta atrás se a API falhar.
+  const toggleFeedVisibility = async (product: Product) => {
+    if (!storeId || togglingId) return
+    const next = !product.hiddenFromFeeds
+    setTogglingId(product.id)
+    setProducts((prev) => prev.map((p) => (p.id === product.id ? { ...p, hiddenFromFeeds: next } : p)))
+    try {
+      const res = await fetch('/api/products/shopify', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storeId, productId: product.id, hiddenFromFeeds: next }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || `Falha ao atualizar (${res.status})`)
+      }
+    } catch (err: any) {
+      setProducts((prev) => prev.map((p) => (p.id === product.id ? { ...p, hiddenFromFeeds: !next } : p)))
+      setError(err.message || 'Não foi possível alterar a visibilidade nos feeds')
+    } finally {
+      setTogglingId(null)
+    }
+  }
+
+  const handleCreated = async (result: NewProductResult) => {
+    setShowNew(false)
+    setCreated(result)
+    if (result.product) {
+      setProducts((prev) => [result.product as Product, ...prev.filter((p) => p.id !== result.product.id)])
+    }
+    // Relê para pegar o que a Shopify completou (handle, imagens processadas).
+    await fetchProducts()
+  }
+
   // Compute KPIs from real data
   const totalProducts = products.length
   const activeProducts = products.filter((p) => p.status === 'active').length
-  // "Sem estoque" só conta produtos que realmente rastreiam inventory.
-  // Quando totalInventory é null (Shopify não rastreia), não é "sem
-  // estoque", é "não rastreado" — antes contava todos como zero e
-  // mostrava "Sem estoque: 82" mesmo a loja não rastreando.
-  const outOfStock = products.filter((p) => typeof p.totalInventory === 'number' && p.totalInventory <= 0).length
+  // "Sem estoque" só conta produtos que realmente rastreiam inventory ou
+  // que a Shopify declarou indisponíveis.
+  const outOfStock = products.filter((p) => p.available === false || (typeof p.totalInventory === 'number' && p.totalInventory <= 0)).length
+  const hiddenCount = products.filter((p) => p.hiddenFromFeeds).length
 
   const kpis = [
     { title: 'Total de Produtos', value: totalProducts.toString(), icon: ShoppingBag, color: 'text-[#F26B2A]' },
     { title: 'Ativos', value: activeProducts.toString(), icon: CheckCircle, color: 'text-emerald-600' },
     { title: 'Sem Estoque', value: outOfStock.toString(), icon: XCircle, color: 'text-red-600' },
-    { title: 'Rascunhos', value: products.filter((p) => p.status === 'draft').length.toString(), icon: Package, color: 'text-gray-600' },
+    { title: 'Ocultos dos feeds', value: hiddenCount.toString(), icon: EyeSlash, color: 'text-amber-600' },
   ]
-
-  // Collect unique product types for filtering
-  const productTypes = ['all', ...new Set(products.map((p) => p.productType).filter(Boolean))] as string[]
 
   const filtered = products
     .filter((p) => {
@@ -160,7 +218,8 @@ export default function ProductsPage() {
         (p.sku && p.sku.toLowerCase().includes(search.toLowerCase())) ||
         (p.vendor && p.vendor.toLowerCase().includes(search.toLowerCase()))
       const matchStatus = statusFilter === 'all' || p.status === statusFilter
-      return matchSearch && matchStatus
+      const matchFeed = feedFilter === 'all' || (feedFilter === 'hidden' ? p.hiddenFromFeeds : !p.hiddenFromFeeds)
+      return matchSearch && matchStatus && matchFeed
     })
     .sort((a, b) => {
       if (sortBy === 'price') return b.price - a.price
@@ -168,6 +227,9 @@ export default function ProductsPage() {
       if (sortBy === 'updatedAt') return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
       return a.title.localeCompare(b.title)
     })
+
+  const storefrontUrl = (p: Product) => (meta.publicDomain && p.handle ? `https://${meta.publicDomain}/products/${p.handle}` : null)
+  const adminUrl = (p: Product) => (meta.adminSlug && p.shopifyProductId ? `https://admin.shopify.com/store/${meta.adminSlug}/products/${p.shopifyProductId}` : null)
 
   if (loading) {
     return (
@@ -190,7 +252,7 @@ export default function ProductsPage() {
           </div>
           <div>
             <h1 className="text-2xl font-bold font-display text-gray-900">Produtos</h1>
-            <p className="text-sm text-gray-500 mt-0.5">Catalogo sincronizado da sua loja</p>
+            <p className="text-sm text-gray-500 mt-0.5">Catálogo sincronizado da sua loja — preço e estoque acompanham a Shopify</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -202,9 +264,13 @@ export default function ProductsPage() {
             <ArrowsClockwise size={14} className={syncing ? 'animate-spin' : ''} />
             {syncing ? 'Sincronizando...' : 'Sync Produtos'}
           </button>
-          <button className="flex items-center gap-2 px-3 py-2 bg-gray-50 text-gray-700 rounded-lg hover:bg-gray-100 text-xs">
-            <Export size={14} />
-            Exportar
+          <button
+            onClick={() => setShowNew(true)}
+            disabled={!storeId}
+            className="flex items-center gap-2 px-3 py-2 bg-brand-500 text-white rounded-lg hover:bg-brand-600 text-xs font-semibold disabled:opacity-50"
+          >
+            <Plus size={14} weight="bold" />
+            Novo produto
           </button>
         </div>
       </div>
@@ -212,6 +278,18 @@ export default function ProductsPage() {
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm">
           {error}
+        </div>
+      )}
+
+      {created && <CreatedProductNotice result={created} onDismiss={() => setCreated(null)} />}
+
+      {!meta.canCreate && meta.missingScopes.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-lg p-3 text-sm flex gap-2">
+          <WarningCircle size={18} className="flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-medium">Para criar produtos daqui, o app da Shopify precisa da permissão {meta.missingScopes.join(', ')}.</p>
+            <p className="text-xs mt-1">Na Shopify: Apps → Desenvolver apps → seu app → Configuração → Escopos da Admin API. Adicione e reinstale o app; a Worder renova o token sozinha. Ocultar dos feeds e a sincronização funcionam normalmente.</p>
+          </div>
         </div>
       )}
 
@@ -262,13 +340,30 @@ export default function ProductsPage() {
             </button>
           ))}
         </div>
+        <div className="flex gap-1">
+          {([
+            { v: 'all', label: 'Feeds: todos' },
+            { v: 'visible', label: 'Nos feeds' },
+            { v: 'hidden', label: 'Ocultos' },
+          ] as { v: FeedFilter; label: string }[]).map((f) => (
+            <button
+              key={f.v}
+              onClick={() => setFeedFilter(f.v)}
+              className={`px-3 py-1.5 text-xs rounded-lg transition-colors whitespace-nowrap ${
+                feedFilter === f.v ? 'bg-amber-500 text-white' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
         <select
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
           className="bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-900 focus:outline-none"
         >
           <option value="updatedAt">Mais recentes</option>
-          <option value="price">Maior preco</option>
+          <option value="price">Maior preço</option>
           <option value="totalInventory">Mais estoque</option>
           <option value="title">Nome A-Z</option>
         </select>
@@ -279,7 +374,7 @@ export default function ProductsPage() {
         <div className="bg-white/50 border border-gray-200 rounded-xl p-12 text-center">
           <Package size={32} className="text-gray-400 mx-auto mb-3" />
           <p className="text-sm text-gray-500">
-            {products.length === 0 ? 'Nenhum produto sincronizado ainda. Clique em "Sync Produtos" para importar.' : 'Nenhum produto encontrado com os filtros atuais.'}
+            {products.length === 0 ? 'Nenhum produto sincronizado ainda. Clique em "Sync Produtos" para importar ou em "Novo produto" para criar.' : 'Nenhum produto encontrado com os filtros atuais.'}
           </p>
         </div>
       ) : (
@@ -290,18 +385,20 @@ export default function ProductsPage() {
                 <th className="text-left text-xs text-gray-500 font-medium p-4 pb-3">Produto</th>
                 <th className="text-left text-xs text-gray-500 font-medium p-4 pb-3">SKU</th>
                 <th className="text-left text-xs text-gray-500 font-medium p-4 pb-3">Status</th>
-                <th className="text-right text-xs text-gray-500 font-medium p-4 pb-3">Preco</th>
+                <th className="text-right text-xs text-gray-500 font-medium p-4 pb-3">Preço</th>
                 <th className="text-right text-xs text-gray-500 font-medium p-4 pb-3">Estoque</th>
                 <th className="text-right text-xs text-gray-500 font-medium p-4 pb-3">Tipo</th>
-                <th className="text-right text-xs text-gray-500 font-medium p-4 pb-3">Acoes</th>
+                <th className="text-right text-xs text-gray-500 font-medium p-4 pb-3">Ações</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((product) => {
                 const status = statusConfig[product.status] || { label: product.status, color: 'bg-zinc-500/10 text-gray-600' }
                 const imageUrl = product.images?.[0]?.url
+                const shopUrl = storefrontUrl(product)
+                const editUrl = adminUrl(product)
                 return (
-                  <tr key={product.id} className="border-b border-gray-200/50 hover:bg-gray-50/30 transition-colors">
+                  <tr key={product.id} className={`border-b border-gray-200/50 hover:bg-gray-50/30 transition-colors ${product.hiddenFromFeeds ? 'opacity-75' : ''}`}>
                     <td className="p-4">
                       <div className="flex items-center gap-3">
                         {imageUrl ? (
@@ -317,7 +414,14 @@ export default function ProductsPage() {
                         )}
                         <div>
                           <p className="text-sm text-gray-900 font-medium">{product.title}</p>
-                          {product.vendor && <p className="text-xs text-gray-500">{product.vendor}</p>}
+                          <div className="flex items-center gap-2">
+                            {product.vendor && <p className="text-xs text-gray-500">{product.vendor}</p>}
+                            {product.hiddenFromFeeds && (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                                Oculto dos feeds
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </td>
@@ -331,17 +435,21 @@ export default function ProductsPage() {
                     </td>
                     <td className="p-4 text-right">
                       <p className="text-sm text-gray-900 font-medium">
-                        {formatProductPrice(product.price, currentStore?.currency)}
+                        {formatProductPrice(product.price, meta.currency)}
                       </p>
                       {product.compareAtPrice && (
                         <p className="text-xs text-gray-400 line-through">
-                          {formatProductPrice(product.compareAtPrice, currentStore?.currency)}
+                          {formatProductPrice(product.compareAtPrice, meta.currency)}
                         </p>
                       )}
                     </td>
                     <td className="p-4 text-right">
-                      {product.totalInventory === null ? (
-                        <span className="text-sm text-gray-400">—</span>
+                      {product.available === false ? (
+                        <span className="text-sm text-red-600" title="A Shopify informa que não dá para comprar agora">
+                          {typeof product.totalInventory === 'number' ? product.totalInventory : 'Indisponível'}
+                        </span>
+                      ) : product.totalInventory === null ? (
+                        <span className="text-sm text-gray-400" title="Sem controle de estoque na Shopify">—</span>
                       ) : (
                         <span
                           className={`text-sm ${
@@ -361,12 +469,41 @@ export default function ProductsPage() {
                     </td>
                     <td className="p-4">
                       <div className="flex items-center gap-1 justify-end">
-                        <button className="p-1.5 rounded hover:bg-gray-50 transition-colors">
-                          <Eye size={14} className="text-gray-500" />
+                        <button
+                          onClick={() => toggleFeedVisibility(product)}
+                          disabled={togglingId === product.id}
+                          className={`p-1.5 rounded transition-colors ${product.hiddenFromFeeds ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-gray-50'} disabled:opacity-50`}
+                          title={product.hiddenFromFeeds ? 'Mostrar nos feeds de produto' : 'Ocultar de todos os feeds de produto'}
+                          aria-label={product.hiddenFromFeeds ? 'Mostrar nos feeds' : 'Ocultar dos feeds'}
+                        >
+                          {product.hiddenFromFeeds
+                            ? <EyeSlash size={14} className="text-amber-600" />
+                            : <Eye size={14} className="text-gray-500" />}
                         </button>
-                        <button className="p-1.5 rounded hover:bg-gray-50 transition-colors">
-                          <PencilSimple size={14} className="text-gray-500" />
-                        </button>
+                        {shopUrl && (
+                          <a
+                            href={shopUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-1.5 rounded hover:bg-gray-50 transition-colors"
+                            title="Ver na loja"
+                            aria-label="Ver na loja"
+                          >
+                            <ArrowSquareOut size={14} className="text-gray-500" />
+                          </a>
+                        )}
+                        {editUrl && (
+                          <a
+                            href={editUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-1.5 rounded hover:bg-gray-50 transition-colors"
+                            title="Editar na Shopify (preço, estoque, fotos)"
+                            aria-label="Editar na Shopify"
+                          >
+                            <PencilSimple size={14} className="text-gray-500" />
+                          </a>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -385,7 +522,7 @@ export default function ProductsPage() {
             <p className="text-sm text-gray-600">
               {totalProducts} produtos sincronizados
             </p>
-            <p className="text-xs text-gray-400">Clique em "Sync Produtos" para atualizar</p>
+            <p className="text-xs text-gray-400">Preço, estoque e disponibilidade chegam pela Shopify em tempo real (webhooks). "Sync Produtos" força uma leitura completa.</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -395,6 +532,15 @@ export default function ProductsPage() {
           </span>
         </div>
       </div>
+
+      {showNew && storeId && (
+        <NewProductModal
+          storeId={storeId}
+          currency={meta.currency}
+          onClose={() => setShowNew(false)}
+          onCreated={handleCreated}
+        />
+      )}
     </div>
   )
 }

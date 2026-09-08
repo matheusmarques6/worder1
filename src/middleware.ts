@@ -11,6 +11,8 @@ const publicRoutes = ['/', '/signup', '/login', '/register', '/forgot-password',
 
 // Public API routes (webhooks, etc)
 const publicApiRoutes = [
+  // Versão publicada (commit/branch) — sem dados sensíveis.
+  '/api/health',
   '/api/auth',
   '/api/shopify',
   '/api/klaviyo',
@@ -44,6 +46,8 @@ const publicApiRoutes = [
   //   /api/storefront  — popup loader.js for manual integrations
   '/api/pixel',
   '/api/identity',
+  // API pública v1 — autenticada por chave de API (Authorization: Bearer wk_live_…)
+  '/api/v1/',
   '/api/recommendations',
   '/api/storefront',
 ];
@@ -219,6 +223,20 @@ export async function middleware(request: NextRequest) {
   // Dev mode: allow dev tokens through
   if (accessToken === 'dev-access-token') {
     return NextResponse.next();
+  }
+
+  // A organização exige verificação em duas etapas e este usuário ainda não
+  // configurou: só a tela de Segurança (e as APIs necessárias) ficam liberadas.
+  if (accessToken && request.cookies.get('wd-2fa-required')?.value === '1' && !isPublicRoute(pathname)) {
+    const allowed = pathname.startsWith('/settings/security') || pathname.startsWith('/api/settings/security')
+      || pathname.startsWith('/api/settings/account') || pathname.startsWith('/api/auth') || pathname.startsWith('/api/stores')
+      || pathname.startsWith('/api/profile') || pathname.startsWith('/api/notifications') || pathname.startsWith('/api/shopify/stores');
+    if (!allowed) {
+      if (pathname.startsWith('/api/')) {
+        return NextResponse.json({ error: 'Configure a verificação em duas etapas para continuar.', code: 'mfa_setup_required' }, { status: 403 });
+      }
+      return NextResponse.redirect(new URL('/settings/security?require2fa=1', request.url));
+    }
   }
 
   // Verify token and check user role

@@ -1,164 +1,76 @@
-'use client';
+'use client'
 
-import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { Plus, Webhook as WebhookIcon, Loader2, FileText, Pencil, Trash2 } from 'lucide-react';
-import { useToast } from '@/components/ui/Toast';
-import { useConfirm } from '@/components/ui/ConfirmDialog';
+// Configurações → Webhooks (desenho PWebhooks): endpoints que recebem eventos
+// da loja em tempo real, assinados com HMAC SHA-256.
 
-interface Subscription {
-  id: string;
-  store_id: string;
-  name: string;
-  url: string;
-  events: string[];
-  status: 'active' | 'paused' | 'disabled';
-  description?: string | null;
-  created_at: string;
-}
+import Link from 'next/link'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
+import { useToast } from '@/components/ui/Toast'
+import { Card, Row, Title, LoadingCard, Badge, IconBtn, Pill, Code } from '@/components/settings/ui'
+import { I } from '@/components/settings/icons'
+import { api, fmtDate } from '@/components/settings/format'
+import { useApi, useAction } from '@/components/settings/hooks'
 
-const STATUS_LABEL: Record<Subscription['status'], string> = {
-  active: 'Ativo',
-  paused: 'Pausado',
-  disabled: 'Desabilitado',
-};
+interface Sub { id: string; name: string; url: string; events: string[]; status: 'active' | 'paused' | 'disabled' | string; store_id: string | null; created_at: string }
+interface Stats { [id: string]: { ok: number; failed: number } }
 
-const STATUS_COLOR: Record<Subscription['status'], string> = {
-  active: 'bg-green-100 text-green-700',
-  paused: 'bg-yellow-100 text-yellow-700',
-  disabled: 'bg-gray-200 text-gray-700',
-};
+export default function WebhooksSettingsPage() {
+  const { data, loading, error, reload } = useApi<{ subscriptions: Sub[] }>('/api/webhooks-admin/subscriptions')
+  const stats = useApi<{ stats: Stats }>('/api/webhooks-admin/deliveries/stats')
+  const confirm = useConfirm()
+  const toast = useToast()
+  const { busy, run } = useAction()
 
-export default function WebhooksListPage() {
-  const toast = useToast();
-  const { confirm } = useConfirm();
-  const [subs, setSubs] = useState<Subscription[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const fetchAll = async () => {
-    const res = await fetch('/api/webhooks-admin/subscriptions');
-    if (res.ok) {
-      const data = await res.json();
-      setSubs(data.subscriptions ?? []);
-    }
-    setLoading(false);
-  };
-
-  useEffect(() => {
-    fetchAll();
-  }, []);
-
-  const handleDelete = async (id: string) => {
-    const ok = await confirm({
-      title: 'Remover este webhook?',
-      description: 'Entregas passadas ficam no histórico.',
-      confirmLabel: 'Remover',
-      cancelLabel: 'Cancelar',
-      destructive: true,
-    });
-    if (!ok) return;
-    const res = await fetch(`/api/webhooks-admin/subscriptions/${id}`, { method: 'DELETE' });
-    if (res.ok) {
-      setSubs((prev) => prev.filter((s) => s.id !== id));
-      toast.success('Webhook removido');
-    } else {
-      toast.error('Falha ao remover', 'Não foi possível remover o webhook. Tente novamente.');
-    }
-  };
+  const remove = async (s: Sub) => {
+    if (!(await confirm.confirm({ title: `Remover ${s.name}?`, description: 'O endpoint deixa de receber eventos imediatamente.', confirmLabel: 'Remover', destructive: true }))) return
+    await run(`rm-${s.id}`, async () => { await api(`/api/webhooks-admin/subscriptions/${s.id}`, { method: 'DELETE' }); await reload(true) }, { success: 'Webhook removido' })
+  }
+  const test = (s: Sub) => run(`t-${s.id}`, async () => { await api(`/api/webhooks-admin/subscriptions/${s.id}/test`, { method: 'POST' }); toast.success('Evento de teste enviado', `Veja o resultado em Logs de ${s.name}.`) }, { error: 'Não foi possível enviar o teste' })
+  const badge = (s: Sub, st?: { ok: number; failed: number }) => {
+    if (s.status !== 'active') return <Badge k="off">{s.status === 'paused' ? 'Pausado' : 'Desativado'}</Badge>
+    if (st && st.failed > 0 && st.failed >= st.ok) return <Badge k="err">Falhando</Badge>
+    return <Badge k="ok">Ativo</Badge>
+  }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900 flex items-center gap-2">
-            <WebhookIcon className="w-6 h-6" />
-            Webhooks de saída
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Receba eventos da sua loja em endpoints externos, assinados com HMAC SHA-256.
-          </p>
-        </div>
-        <Link
-          href="/settings/webhooks/new"
-          className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium"
-        >
-          <Plus className="w-4 h-4" />
-          Novo webhook
-        </Link>
-      </div>
-
-      {loading ? (
-        <div className="flex items-center gap-2 text-sm text-gray-500">
-          <Loader2 className="w-4 h-4 animate-spin" /> Carregando...
-        </div>
-      ) : subs.length === 0 ? (
-        <div className="border border-dashed border-gray-300 rounded-lg p-8 text-center">
-          <WebhookIcon className="w-8 h-8 mx-auto text-gray-400 mb-2" />
-          <p className="text-sm text-gray-600">Nenhum webhook configurado ainda.</p>
-          <Link
-            href="/settings/webhooks/new"
-            className="inline-flex items-center gap-2 mt-3 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium"
-          >
-            <Plus className="w-4 h-4" />
-            Criar o primeiro
-          </Link>
-        </div>
+    <>
+      <Title h="Webhooks" p="Receba eventos da sua loja em tempo real em qualquer URL. Assinados com HMAC SHA-256." right={<Link href="/settings/webhooks/new" className="btn btn-primary"><I n="plus" s={15} />Novo endpoint</Link>} />
+      {loading && !data ? <LoadingCard rows={3} /> : error || !data ? (
+        <Card><div className="empty2"><b>Não foi possível carregar</b>{error}<div><button className="btn" onClick={() => reload()}>Tentar de novo</button></div></div></Card>
       ) : (
-        <div className="border border-gray-200 rounded-lg overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-left text-xs text-gray-500 uppercase">
-              <tr>
-                <th className="px-4 py-2">Nome</th>
-                <th className="px-4 py-2">URL</th>
-                <th className="px-4 py-2">Eventos</th>
-                <th className="px-4 py-2">Status</th>
-                <th className="px-4 py-2 text-right">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {subs.map((s) => (
-                <tr key={s.id} className="border-t border-gray-100">
-                  <td className="px-4 py-3 font-medium text-gray-900">{s.name}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-gray-600 truncate max-w-xs">
-                    {s.url}
-                  </td>
-                  <td className="px-4 py-3 text-gray-600">{s.events.length}</td>
-                  <td className="px-4 py-3">
-                    <span className={`text-xs px-2 py-1 rounded-full ${STATUS_COLOR[s.status]}`}>
-                      {STATUS_LABEL[s.status]}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-1">
-                      <Link
-                        href={`/settings/webhooks/${s.id}/deliveries`}
-                        className="p-2 hover:bg-gray-100 rounded"
-                        title="Logs"
-                      >
-                        <FileText className="w-4 h-4 text-gray-600" />
-                      </Link>
-                      <Link
-                        href={`/settings/webhooks/${s.id}/edit`}
-                        className="p-2 hover:bg-gray-100 rounded"
-                        title="Editar"
-                      >
-                        <Pencil className="w-4 h-4 text-gray-600" />
-                      </Link>
-                      <button
-                        onClick={() => handleDelete(s.id)}
-                        className="p-2 hover:bg-red-50 rounded"
-                        title="Remover"
-                      >
-                        <Trash2 className="w-4 h-4 text-red-600" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Card flush>
+          {data.subscriptions.length === 0 ? <div className="empty2"><b>Nenhum endpoint</b>Crie um webhook para receber pedidos, checkouts abandonados e clientes novos no seu sistema.<div><Link href="/settings/webhooks/new" className="btn btn-primary"><I n="plus" s={15} />Novo endpoint</Link></div></div> : (
+            <div className="tw"><table className="stbl">
+              <thead><tr><th>Endpoint</th><th>Eventos</th><th>Status</th><th className="r hm">Últimas 24 h</th><th></th></tr></thead>
+              <tbody>
+                {data.subscriptions.map((s) => {
+                  const st = stats.data?.stats?.[s.id]
+                  const ev = s.events || []
+                  return (
+                    <tr key={s.id}>
+                      <td className="fx"><span className="nm" style={{ fontFamily: 'var(--mono)', fontSize: 13 }}>{s.url}</span><span className="mt">{s.name} · criado em {fmtDate(s.created_at)}</span></td>
+                      <td><div className="pillrow">{ev.slice(0, 2).map((e) => <Pill key={e}>{e}</Pill>)}{ev.length > 2 && <Pill title={ev.slice(2).join(', ')}>+{ev.length - 2}</Pill>}</div></td>
+                      <td>{badge(s, st)}</td>
+                      <td className="r hm" style={{ color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{st ? `${st.ok} ok · ${st.failed} falhas` : '—'}</td>
+                      <td className="r"><div className="acts">
+                        <IconBtn n="send" s={15} title="Testar" onClick={() => test(s)} disabled={busy === `t-${s.id}`} />
+                        <Link href={`/settings/webhooks/${s.id}/deliveries`} className="ib" title="Logs"><I n="list" s={15} /></Link>
+                        <Link href={`/settings/webhooks/${s.id}/edit`} className="ib" title="Editar"><I n="gear" s={15} /></Link>
+                        <IconBtn n="x" title="Remover" danger onClick={() => remove(s)} disabled={busy === `rm-${s.id}`} />
+                      </div></td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table></div>
+          )}
+        </Card>
       )}
-    </div>
-  );
+      <Card title="Assinatura" desc="Cada endpoint tem o próprio segredo — mostrado uma vez ao criar e rotacionável em Editar.">
+        <Row label="Validação" help="Compare o header X-Worder-Signature com o HMAC SHA-256 do corpo bruto usando o segredo do endpoint.">
+          <Code wrap>{`const sig = crypto.createHmac('sha256', SECRET).update(rawBody).digest('hex')\nif (sig !== req.headers['x-worder-signature']) return res.status(401).end()`}</Code>
+        </Row>
+      </Card>
+    </>
+  )
 }

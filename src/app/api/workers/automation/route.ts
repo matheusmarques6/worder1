@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { executeWorkflow, resumeExecution, Workflow } from '@/lib/automation/execution-engine';
+import { mergeNodeResults } from '@/lib/automation/node-results';
 import { verifyQStashSignature } from '@/lib/queue';
 export const dynamic = 'force-dynamic';
 // Per-run worker — needs the full Pro cap so action_email (60s timeout)
@@ -411,7 +412,13 @@ async function handleExecuteRun(runId: string) {
         ...metadata,
         result: {
           duration: result.duration,
-          nodeResults: result.nodeResults,
+          // Merge with the previous segments: a resumed run only
+          // executes the nodes after the pause, so overwriting here
+          // erased Email 1 the moment the run reached Email 2.
+          nodeResults: mergeNodeResults(
+            (metadata as any)?.result?.nodeResults,
+            result.nodeResults
+          ),
         },
         // Snapshot for the cron to resume cleanly. rerunOnResume
         // tells the next pickup whether to re-execute the paused node

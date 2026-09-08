@@ -49,11 +49,55 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Contato não encontrado' }, { status: 404, headers: CORS });
     }
 
-    const { data: org } = await supabaseAdmin
-      .from('organizations')
-      .select('name, settings, email_settings')
-      .eq('id', verified.orgId)
-      .single();
+    // A marca da página é a da LOJA do envio (token novo carrega storeId).
+    // Sem loja no token: a do contato; só então a organização — que numa
+    // organização com várias lojas é a identidade de outra loja.
+    let brandName: string | null = null;
+    let brandFrom: string | null = null;
+    try {
+      const storeId = verified.storeId || null;
+      let storeRow: any = null;
+      if (storeId) {
+        const { data } = await supabaseAdmin
+          .from('shopify_stores')
+          .select('shop_name, shop_email, settings')
+          .eq('id', storeId)
+          .eq('organization_id', verified.orgId)
+          .maybeSingle();
+        storeRow = data;
+      }
+      if (!storeRow) {
+        const { data: c } = await supabaseAdmin
+          .from('contacts')
+          .select('store_id')
+          .eq('id', verified.contactId)
+          .maybeSingle();
+        if (c?.store_id) {
+          const { data } = await supabaseAdmin
+            .from('shopify_stores')
+            .select('shop_name, shop_email, settings')
+            .eq('id', c.store_id)
+            .eq('organization_id', verified.orgId)
+            .maybeSingle();
+          storeRow = data;
+        }
+      }
+      if (storeRow) {
+        const es = (storeRow.settings as any)?.email_settings || {};
+        brandName = es.default_sender_name || storeRow.shop_name || null;
+        brandFrom = es.default_sender_email || storeRow.shop_email || null;
+      }
+    } catch { /* cai na organização */ }
+
+    if (!brandName) {
+      const { data: org } = await supabaseAdmin
+        .from('organizations')
+        .select('name, settings, email_settings')
+        .eq('id', verified.orgId)
+        .maybeSingle();
+      brandName = org?.name || null;
+      brandFrom = brandFrom || org?.email_settings?.default_sender_email || org?.email_settings?.default_from_email || null;
+    }
 
     return NextResponse.json({
       contact: {
@@ -66,8 +110,8 @@ export async function GET(request: NextRequest) {
         topics: contact.custom_fields?.email_topics || [],
       },
       organization: {
-        name: org?.name || 'Loja',
-        from_email: org?.email_settings?.default_from_email || null,
+        name: brandName || 'Loja',
+        from_email: brandFrom,
       },
     }, { headers: CORS });
   } catch (error: any) {

@@ -17,6 +17,7 @@ import {
   SkipForward,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { BodyPortal } from '@/components/shared/BodyPortal';
 import { useFlowStore } from '@/stores/flowStore';
 import { useHydratedStoreId } from '@/hooks'; // ✅ NOVO
 
@@ -279,13 +280,16 @@ export function TestModal({ automationId, organizationId, onClose }: TestModalPr
   // RENDER
   // ============================================
 
+  // No body: dentro do painel (que anima com transform) o `fixed` não
+  // cobriria a tela. Ver BodyPortal.
   return (
+    <BodyPortal>
     <AnimatePresence>
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+        className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 backdrop-blur-sm"
         onClick={onClose}
       >
         <motion.div
@@ -555,6 +559,7 @@ export function TestModal({ automationId, organizationId, onClose }: TestModalPr
         </motion.div>
       </motion.div>
     </AnimatePresence>
+    </BodyPortal>
   );
 }
 

@@ -656,6 +656,10 @@ export function BlockPreview({
         const layout = p.layoutType || 'image-left'
         const isVertical = layout === 'vertical'
         const imgW = p.imageWidth || 200
+        // A mesma caixa que o envio usa: quadrada quando ninguém
+        // escolheu altura. O editor já desenhava assim; quem discordava
+        // era o HTML enviado.
+        const imgH = p.imageHeight || imgW
         const imgR = p.imageBorderRadius ?? 0
         const sampleProducts = [
           { name: 'Product name', desc: 'Product description', price: 'R$0.00', oldPrice: 'R$0.00' },
@@ -690,7 +694,7 @@ export function BlockPreview({
                       {p.showImage !== false && (
                         <div onClick={subClick('image')} className={subRing('image')} style={{
                           width: isVertical ? '100%' : imgW,
-                          height: isVertical ? imgW * 0.8 : imgW,
+                          height: imgH,
                           flexShrink: 0, background: '#F3F4F6', borderRadius: imgR,
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           color: '#9CA3AF', fontSize: 12, transition: 'outline-color 0.15s',

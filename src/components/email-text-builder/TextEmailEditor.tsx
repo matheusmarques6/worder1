@@ -117,6 +117,8 @@ interface TextEmailEditorProps {
     templateId: string;
     triggerType: string;
     organizationId: string;
+    /** Loja do fluxo — o preview com dados reais usa o catálogo dela. */
+    storeId?: string | null;
   };
   onSave: (design: TextEmailDesign, html: string) => Promise<boolean>;
   onBack: () => void;
@@ -766,6 +768,7 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
           templateId={flowContext.templateId}
           triggerType={flowContext.triggerType}
           organizationId={flowContext.organizationId}
+          storeId={flowContext.storeId}
           onClose={() => setShowFlowPreview(false)}
         />
       )}
@@ -785,6 +788,7 @@ const TextEmailEditor = forwardRef<TextEmailEditorHandle, TextEmailEditorProps>(
           isOpen={showSendTest}
           onClose={() => setShowSendTest(false)}
           defaultSubject={subject || name}
+          storeId={flowContext?.storeId || storeId || null}
           html={renderTextEmailToHtml(
             (editor?.getJSON() as TextDoc) || initial.doc,
             { preheader: previewText || undefined },

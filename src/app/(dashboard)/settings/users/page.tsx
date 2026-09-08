@@ -1,347 +1,123 @@
-'use client';
+'use client'
 
-import { useState, useEffect } from 'react';
-import { Users, Plus, Loader2, X, Send, AlertCircle, Trash2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { useToast } from '@/components/ui/Toast';
-import { useConfirm } from '@/components/ui/ConfirmDialog';
+// Configurações → Equipe e permissões (desenho PEquipe).
 
-interface Member {
-  id: string;
-  email: string;
-  role: 'admin' | 'editor' | 'viewer';
-  status: 'active' | 'invited';
-  created_at: string;
-  profiles?: {
-    name?: string;
-    email?: string;
-  };
-}
+import { useState } from 'react'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
+import { useToast } from '@/components/ui/Toast'
+import { useStoreStore } from '@/stores'
+import { Card, Title, LoadingCard, Badge, Avatar, Modal, Field, IconBtn } from '@/components/settings/ui'
+import { I } from '@/components/settings/icons'
+import { api, timeAgo } from '@/components/settings/format'
+import { useApi, useAction } from '@/components/settings/hooks'
+import { ASSIGNABLE_ROLES, ROLE_MATRIX, roleLabel } from '@/lib/settings/roles'
 
-const ROLE_LABELS: Record<string, { label: string; className: string }> = {
-  admin: { label: 'Administrador', className: 'bg-purple-100 text-purple-700' },
-  editor: { label: 'Editor', className: 'bg-blue-100 text-blue-700' },
-  viewer: { label: 'Leitor', className: 'bg-gray-100 text-gray-600' },
-};
+interface Member { id: string; user_id: string | null; email: string; name: string; avatar_url: string | null; role: string; role_label: string; status: 'active' | 'invited'; invited_at: string | null; last_seen_at: string | null; mfa_enabled: boolean | null; is_me: boolean }
+interface Resp { members: Member[]; me: { id: string; role: string | null } | null; require_2fa: boolean }
 
-const ROLE_OPTIONS: { value: 'admin' | 'editor' | 'viewer'; label: string }[] = [
-  { value: 'admin', label: 'Administrador' },
-  { value: 'editor', label: 'Editor' },
-  { value: 'viewer', label: 'Leitor' },
-];
+export default function TeamSettingsPage() {
+  const { data, loading, error, reload } = useApi<Resp>('/api/settings/users')
+  const { currentStore } = useStoreStore()
+  const storeName = (currentStore as any)?.shop_name || (currentStore as any)?.name || 'sua organização'
+  const confirm = useConfirm()
+  const toast = useToast()
+  const { busy, run } = useAction()
+  const [invite, setInvite] = useState(false)
+  const canManage = ['owner', 'admin'].includes(data?.me?.role || '')
 
-function getInitials(name?: string, email?: string): string {
-  const source = name || email || '?';
-  return source
-    .split(/[\s@]/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map(n => n[0].toUpperCase())
-    .join('');
-}
-
-function formatDate(dateStr: string) {
-  try {
-    return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }).format(
-      new Date(dateStr)
-    );
-  } catch {
-    return '-';
+  const changeRole = async (m: Member, role: string) => {
+    await run(`role-${m.id}`, async () => { await api('/api/settings/users', { method: 'PATCH', json: { id: m.id, role } }); await reload(true) }, { success: `${m.name || m.email} agora é ${roleLabel(role)}` })
   }
-}
-
-export default function UsersSettingsPage() {
-  const toast = useToast();
-  const { confirm } = useConfirm();
-  const [members, setMembers] = useState<Member[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [updatingId, setUpdatingId] = useState<string | null>(null);
-  const [showInvite, setShowInvite] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState<'admin' | 'editor' | 'viewer'>('editor');
-  const [inviting, setInviting] = useState(false);
-  const [inviteError, setInviteError] = useState('');
-  const [inviteSuccess, setInviteSuccess] = useState(false);
-
-  async function fetchMembers() {
-    setLoading(true);
-    try {
-      const res = await fetch('/api/settings/users');
-      if (res.ok) {
-        const data = await res.json();
-        setMembers(data.members || []);
-      }
-    } catch {
-      // ignore
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    fetchMembers();
-  }, []);
-
-  async function handleInvite() {
-    if (!inviteEmail) return;
-    setInviting(true);
-    setInviteError('');
-    try {
-      const res = await fetch('/api/settings/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: inviteEmail, role: inviteRole }),
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        setInviteError(data.error || 'Erro ao convidar');
-      } else {
-        setInviteSuccess(true);
-        setInviteEmail('');
-        setInviteRole('editor');
-        await fetchMembers();
-        setTimeout(() => {
-          setInviteSuccess(false);
-          setShowInvite(false);
-        }, 2000);
-      }
-    } catch {
-      setInviteError('Erro ao convidar membro');
-    } finally {
-      setInviting(false);
-    }
-  }
-
-  async function handleChangeRole(member: Member, role: 'admin' | 'editor' | 'viewer') {
-    if (role === member.role) return;
-    setUpdatingId(member.id);
-    try {
-      const res = await fetch('/api/settings/users', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: member.id, role }),
-      });
-      if (res.ok) {
-        setMembers(prev => prev.map(m => (m.id === member.id ? { ...m, role } : m)));
-        toast.success('Função atualizada');
-      } else {
-        const data = await res.json().catch(() => ({}));
-        toast.error('Erro ao alterar função', data.error || 'Tente novamente.');
-      }
-    } catch {
-      toast.error('Erro ao alterar função', 'Tente novamente.');
-    } finally {
-      setUpdatingId(null);
-    }
-  }
-
-  async function handleRemove(member: Member) {
-    const email = member.email || member.profiles?.email || 'este membro';
-    const ok = await confirm({
-      title: `Remover ${email}?`,
-      description: 'O membro perderá o acesso à organização imediatamente.',
-      confirmLabel: 'Remover',
-      cancelLabel: 'Cancelar',
-      destructive: true,
-    });
-    if (!ok) return;
-    setUpdatingId(member.id);
-    try {
-      const res = await fetch('/api/settings/users', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: member.id }),
-      });
-      if (res.ok) {
-        setMembers(prev => prev.filter(m => m.id !== member.id));
-        toast.success('Membro removido');
-      } else {
-        const data = await res.json().catch(() => ({}));
-        toast.error('Erro ao remover', data.error || 'Tente novamente.');
-      }
-    } catch {
-      toast.error('Erro ao remover', 'Tente novamente.');
-    } finally {
-      setUpdatingId(null);
-    }
+  const resend = (m: Member) => run(`resend-${m.id}`, async () => { await api('/api/settings/users', { method: 'POST', json: { id: m.id, resend: true } }) }, { success: 'Convite reenviado', error: 'Não foi possível reenviar' })
+  const remove = async (m: Member) => {
+    const invited = m.status === 'invited'
+    const ok = await confirm.confirm({ title: invited ? 'Cancelar convite?' : `Remover ${m.name || m.email}?`, description: invited ? 'O link do convite deixa de funcionar.' : 'A pessoa perde o acesso imediatamente. Campanhas e automações criadas por ela continuam.', confirmLabel: invited ? 'Cancelar convite' : 'Remover', destructive: true })
+    if (!ok) return
+    await run(`rm-${m.id}`, async () => { await api('/api/settings/users', { method: 'DELETE', json: { id: m.id } }); await reload(true) }, { success: invited ? 'Convite cancelado' : 'Pessoa removida' })
   }
 
   return (
-    <div className="p-8 max-w-4xl">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Equipe</h1>
-          <p className="text-gray-500 mt-1">Gerencie os membros da sua organização.</p>
-        </div>
-        <button
-          onClick={() => setShowInvite(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Convidar Membro
-        </button>
-      </div>
-
-      {/* Invite Dialog */}
-      {showInvite && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 mx-4">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">Convidar Membro</h2>
-              <button onClick={() => setShowInvite(false)} className="p-1 hover:bg-gray-100 rounded">
-                <X className="w-4 h-4 text-gray-500" />
-              </button>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                <input
-                  type="email"
-                  value={inviteEmail}
-                  onChange={e => setInviteEmail(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  placeholder="colega@empresa.com"
-                  onKeyDown={e => e.key === 'Enter' && handleInvite()}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Função</label>
-                <select
-                  value={inviteRole}
-                  onChange={e => setInviteRole(e.target.value as any)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                >
-                  <option value="admin">Administrador — acesso total</option>
-                  <option value="editor">Editor — pode editar</option>
-                  <option value="viewer">Leitor — somente leitura</option>
-                </select>
-              </div>
-              {inviteError && (
-                <p className="flex items-center gap-1 text-sm text-red-500">
-                  <AlertCircle className="w-4 h-4" /> {inviteError}
-                </p>
-              )}
-              {inviteSuccess && (
-                <p className="text-sm text-green-600 font-medium">Convite enviado com sucesso!</p>
-              )}
-            </div>
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => setShowInvite(false)}
-                className="flex-1 px-4 py-2 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleInvite}
-                disabled={inviting || !inviteEmail}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
-              >
-                {inviting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                Convidar
-              </button>
-            </div>
-          </div>
-        </div>
+    <>
+      <Title h="Equipe e permissões" p={`Quem acessa ${storeName} e o que cada pessoa pode fazer.`} right={canManage ? <button type="button" className="btn btn-primary" onClick={() => setInvite(true)}><I n="plus" s={15} />Convidar pessoa</button> : undefined} />
+      {loading && !data ? <LoadingCard rows={4} /> : error ? (
+        <Card><div className="empty2"><b>Não foi possível carregar a equipe</b>{error}<div><button className="btn" onClick={() => reload()}>Tentar de novo</button></div></div></Card>
+      ) : (
+        <Card flush>
+          <div className="tw"><table className="stbl">
+            <thead><tr><th>Pessoa</th><th>Função</th><th>Status</th><th className="hm">Último acesso</th><th></th></tr></thead>
+            <tbody>
+              {(data?.members || []).map((m) => (
+                <tr key={m.id}>
+                  <td className="fx"><div className="person"><Avatar name={m.name || m.email} src={m.avatar_url} sm /><div><span className="nm">{m.name || m.email.split('@')[0]}{m.is_me && <Badge k="acc" dot={false} style={{ marginLeft: 8 }}>Você</Badge>}</span><span className="mt">{m.email}</span></div></div></td>
+                  <td>
+                    {m.role === 'owner' || !canManage || m.is_me ? m.role_label : (
+                      <select className="in" style={{ height: 32, width: 170 }} value={m.role} disabled={busy === `role-${m.id}`} onChange={(e) => changeRole(m, e.target.value)} aria-label={`Função de ${m.name || m.email}`}>
+                        {!ASSIGNABLE_ROLES.some((r) => r.value === m.role) && <option value={m.role}>{m.role_label}</option>}
+                        {ASSIGNABLE_ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+                      </select>
+                    )}
+                  </td>
+                  <td>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {m.status === 'active' ? <Badge k="ok">Ativo</Badge> : <Badge k="warn">Pendente</Badge>}
+                      {data?.require_2fa && m.status === 'active' && m.mfa_enabled === false && m.role !== 'owner' && <Badge k="err" dot={false}>2FA pendente</Badge>}
+                    </div>
+                  </td>
+                  <td className="hm" style={{ color: 'var(--text-3)' }}>{m.status === 'invited' ? `Convite enviado ${timeAgo(m.invited_at).toLowerCase()}` : m.is_me ? 'Agora' : m.last_seen_at ? timeAgo(m.last_seen_at) : '—'}</td>
+                  <td className="r"><div className="acts">
+                    {canManage && m.status === 'invited' && <IconBtn n="refresh" s={15} title="Reenviar convite" onClick={() => resend(m)} disabled={busy === `resend-${m.id}`} className={busy === `resend-${m.id}` ? 'spin' : ''} />}
+                    {canManage && m.role !== 'owner' && !m.is_me && <IconBtn n="x" title={m.status === 'invited' ? 'Cancelar convite' : 'Remover'} danger onClick={() => remove(m)} disabled={busy === `rm-${m.id}`} />}
+                  </div></td>
+                </tr>
+              ))}
+              {data && data.members.length === 0 && <tr><td colSpan={5}><div className="empty2"><b>Só você por aqui</b>Convide sua equipe para trabalhar junto.</div></td></tr>}
+            </tbody>
+          </table></div>
+        </Card>
       )}
 
-      {/* Members table */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        {loading ? (
-          <div className="p-12 flex items-center justify-center">
-            <Loader2 className="w-6 h-6 animate-spin text-orange-500" />
-          </div>
-        ) : members.length === 0 ? (
-          <div className="p-12 text-center">
-            <Users className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500 font-medium">Nenhum membro ainda</p>
-            <p className="text-gray-400 text-sm mt-1">Convide membros para colaborar na sua organização.</p>
-          </div>
-        ) : (
-          <table className="w-full">
-            <thead className="border-b border-gray-100">
-              <tr className="text-left">
-                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Membro</th>
-                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Email</th>
-                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Função</th>
-                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Entrou em</th>
-                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
-                <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide text-right">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {members.map(member => {
-                const name = member.profiles?.name;
-                const email = member.email || member.profiles?.email || '';
-                const initials = getInitials(name, email);
-                const role = ROLE_LABELS[member.role] || ROLE_LABELS.viewer;
-                return (
-                  <tr key={member.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center text-orange-600 font-semibold text-sm flex-shrink-0">
-                          {initials}
-                        </div>
-                        <span className="text-sm font-medium text-gray-900">{name || '—'}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">{email}</td>
-                    <td className="px-6 py-4">
-                      <span className={cn('px-2.5 py-0.5 rounded-full text-xs font-medium', role.className)}>
-                        {role.label}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">{formatDate(member.created_at)}</td>
-                    <td className="px-6 py-4">
-                      <span
-                        className={cn(
-                          'px-2.5 py-0.5 rounded-full text-xs font-medium',
-                          member.status === 'active'
-                            ? 'bg-green-100 text-green-700'
-                            : 'bg-yellow-100 text-yellow-700'
-                        )}
-                      >
-                        {member.status === 'active' ? 'Ativo' : 'Convidado'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center justify-end gap-2">
-                        <select
-                          aria-label="Alterar função"
-                          value={member.role}
-                          disabled={updatingId === member.id}
-                          onChange={e => handleChangeRole(member, e.target.value as 'admin' | 'editor' | 'viewer')}
-                          className="px-2 py-1 border border-gray-200 rounded-lg text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
-                        >
-                          {ROLE_OPTIONS.map(opt => (
-                            <option key={opt.value} value={opt.value}>
-                              {opt.label}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          aria-label="Remover membro"
-                          title="Remover membro"
-                          disabled={updatingId === member.id}
-                          onClick={() => handleRemove(member)}
-                          className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
-                        >
-                          {updatingId === member.id ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Trash2 className="w-4 h-4" />
-                          )}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-      </div>
-    </div>
-  );
+      <Card title="Funções" desc="O que cada função pode fazer." flush>
+        <div className="tw"><table className="stbl">
+          <thead><tr><th>Permissão</th><th>Administrador</th><th>Editor</th><th>Analista</th><th>Suporte</th></tr></thead>
+          <tbody>
+            {ROLE_MATRIX.map(([p, ...c]) => (
+              <tr key={p}><td>{p}</td>{c.map((v, i) => <td key={i}>{v ? <I n="check" s={16} c="var(--pos)" /> : <span style={{ color: 'var(--text-3)' }}>—</span>}</td>)}</tr>
+            ))}
+          </tbody>
+        </table></div>
+      </Card>
+
+      {invite && <InviteModal onClose={() => setInvite(false)} onDone={(email, active) => { setInvite(false); toast.success(active ? 'Pessoa adicionada' : 'Convite enviado', active ? `${email} já tem acesso.` : `${email} recebeu um e-mail para criar a senha.`); reload(true) }} />}
+    </>
+  )
+}
+
+function InviteModal({ onClose, onDone }: { onClose: () => void; onDone: (email: string, active: boolean) => void }) {
+  const [email, setEmail] = useState('')
+  const [name, setName] = useState('')
+  const [role, setRole] = useState('member')
+  const [err, setErr] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const ok = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+  const submit = async () => {
+    setBusy(true); setErr(null)
+    try {
+      const r = await api<{ status?: string }>('/api/settings/users', { method: 'POST', json: { email, name, role } })
+      onDone(email.trim().toLowerCase(), r?.status === 'active')
+    } catch (e: any) { setErr(e.message) } finally { setBusy(false) }
+  }
+  const desc = ASSIGNABLE_ROLES.find((r) => r.value === role)?.desc
+  return (
+    <Modal title="Convidar pessoa" desc="Ela recebe um e-mail para criar a senha e entra direto na sua organização." onClose={onClose}
+      footer={<><button type="button" className="btn" onClick={onClose}>Cancelar</button><button type="button" className="btn btn-primary" disabled={!ok || busy} onClick={submit}>{busy && <I n="refresh" s={14} className="spin" />}Enviar convite</button></>}>
+      <form onSubmit={(e) => { e.preventDefault(); if (ok && !busy) submit() }} style={{ display: 'grid', gap: 14 }}>
+        <Field label="E-mail" error={err}><input className={'in' + (err ? ' err' : '')} type="email" autoFocus value={email} onChange={(e) => setEmail(e.target.value)} placeholder="pessoa@empresa.com.br" /></Field>
+        <Field label="Nome (opcional)"><input className="in" value={name} onChange={(e) => setName(e.target.value)} placeholder="Como aparece na equipe" /></Field>
+        <Field label="Função">
+          <select className="in" value={role} onChange={(e) => setRole(e.target.value)}>{ASSIGNABLE_ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}</select>
+          {desc && <div className="hp" style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 6 }}>{desc}</div>}
+        </Field>
+      </form>
+    </Modal>
+  )
 }

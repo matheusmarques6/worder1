@@ -24,16 +24,34 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const nowIso = new Date().toISOString()
-  const { data: due, error } = await supabaseAdmin
+  const now = new Date()
+  const nowIso = now.toISOString()
+
+  // A campanha no fuso do destinatário precisa acordar ANTES da hora
+  // marcada: quem está em UTC+14 chega às 09:00 locais 17 horas antes
+  // de um lojista em São Paulo. Se só olhássemos scheduled_at <= now,
+  // esses contatos perderiam a hora e receberiam todos de uma vez,
+  // atrasados. Buscamos a janela adiantada e descartamos, em memória,
+  // as campanhas de horário fixo que ainda não venceram.
+  const { recipientModeLeadTimeMs } = await import('@/lib/scheduling/campaign-plan')
+  const leadIso = new Date(now.getTime() + recipientModeLeadTimeMs()).toISOString()
+
+  const { data: candidates, error } = await supabaseAdmin
     .from('email_campaigns')
-    .select('id, organization_id, scheduled_at')
+    .select('id, organization_id, scheduled_at, timezone_mode')
     .eq('status', 'scheduled')
-    .lte('scheduled_at', nowIso)
+    .lte('scheduled_at', leadIso)
+    // Mais vencidas primeiro: sem ordenar, uma campanha futura em modo
+    // 'recipient' podia ocupar o limite e adiar as que já venceram.
+    .order('scheduled_at', { ascending: true })
     .limit(50)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  if (!due || due.length === 0) return NextResponse.json({ dispatched: 0 })
+
+  const due = (candidates || []).filter((c: any) =>
+    c.timezone_mode === 'recipient' || !c.scheduled_at || c.scheduled_at <= nowIso
+  )
+  if (due.length === 0) return NextResponse.json({ dispatched: 0 })
 
   // Marca como 'sending' atomicamente para evitar dupla execução
   // via condicional UPDATE
@@ -70,10 +88,13 @@ export async function GET(req: NextRequest) {
       results.push({ id: camp.id, ok: res.ok, status: res.status })
     } catch (err: any) {
       results.push({ id: camp.id, ok: false, error: err?.message })
-      // Volta pra scheduled pra tentar de novo
+      // Volta pra scheduled pra tentar de novo. sent_at precisa voltar
+      // junto: o claim já tinha carimbado, e deixá-lo preenchido faz a
+      // campanha aparecer como "enviada" numa retentativa que ainda
+      // não enviou nada.
       await supabaseAdmin
         .from('email_campaigns')
-        .update({ status: 'scheduled' })
+        .update({ status: 'scheduled', sent_at: null })
         .eq('id', camp.id)
     }
   }

@@ -1,3 +1,4 @@
+# ruff: noqa: T201
 """Medida do ruling D, item 39 da auditoria — turno sintético, ANTES x DEPOIS.
 
 Não precisa de banco nem de provedor real: monta o MESMO turno com o
@@ -17,6 +18,7 @@ ainda mais no segundo, e é o número mais realista para produção com RAG.
 Uso: `cd runtime && PYTHONUTF8=1 .venv/Scripts/python.exe scripts/measure_transcript_duplication.py`
 """
 
+from agents_runtime.agent_core.mission_resolver import MissionVersion, merge_mission
 from agents_runtime.agent_core.prompt_compiler import (
     AgentBlock,
     ChannelBlock,
@@ -24,7 +26,6 @@ from agents_runtime.agent_core.prompt_compiler import (
     StateBlock,
     compile_prompt,
 )
-from agents_runtime.agent_core.mission_resolver import MissionVersion, merge_mission
 
 AGENT = AgentBlock(
     agent_id="a1",
@@ -214,7 +215,13 @@ def total_chars(system_text: str, chat_texts: list[str]) -> int:
     return len(system_text) + sum(len(t) for t in chat_texts)
 
 
-def report(label: str, old_system: str, old_chat: list[str], new_system: str, new_chat: list[str]) -> None:
+def report(
+    label: str,
+    old_system: str,
+    old_chat: list[str],
+    new_system: str,
+    new_chat: list[str],
+) -> None:
     old_total = total_chars(old_system, old_chat)
     new_total = total_chars(new_system, new_chat)
     print(f"--- {label} ---")

@@ -532,7 +532,15 @@ export async function POST(
     // UTM data for contact profile (if behavior.utm.storeOnConsent is true)
     const popupBehavior = (form.behavior as any) || (designJson.behavior as any) || {}
     const audienceCfg: any = (popupBehavior as any)?.audience || {}
-    const doubleOptInEnabled = !!audienceCfg.doubleOptIn
+    // Padrão da organização (Configurações → Privacidade e LGPD) vale quando
+    // o formulário não define a confirmação dupla explicitamente.
+    let doubleOptInEnabled = !!audienceCfg.doubleOptIn
+    if (audienceCfg.doubleOptIn === undefined || audienceCfg.doubleOptIn === null) {
+      try {
+        const { data: orgRow } = await supabase.from('organizations').select('settings').eq('id', form.organization_id).maybeSingle()
+        doubleOptInEnabled = !!(orgRow?.settings as any)?.privacy?.double_opt_in
+      } catch { /* mantém o padrão do formulário */ }
+    }
     const storeUtmOnConsent = popupBehavior?.utm?.storeOnConsent === true
     const utmPayload: Record<string, any> = {}
     if (storeUtmOnConsent) {
@@ -595,6 +603,18 @@ export async function POST(
     const CONTACT_SELECT = 'id, custom_fields, utm_data, store_id'
 
     if (hasContactData) {
+      // Configurações → Entregabilidade → "Validar e-mails na entrada":
+      // endereços descartáveis/temporários não entram na lista (o lead
+      // continua salvo pelo telefone/nome, se houver).
+      if (contactData.email) {
+        try {
+          const { checkEmail, shouldValidateOnEntry } = await import('@/lib/email/email-hygiene')
+          if (await shouldValidateOnEntry(form.organization_id) && !checkEmail(contactData.email).ok) {
+            console.log('[Form Submit] E-mail rejeitado pela higiene da lista')
+            delete contactData.email
+          }
+        } catch { /* falha aberta */ }
+      }
       // Tentar encontrar contato existente por email (já normalizado
       // lowercase em extractContactData — invariante do índice único)
       if (contactData.email) {
@@ -1018,8 +1038,10 @@ export async function POST(
         const baseUrl = getAppBaseUrl()
         const confirmUrl = `${baseUrl}/api/public/confirm-opt-in?token=${encodeURIComponent(token)}`
 
+        // Remetente DA LOJA do formulário — o e-mail de confirmação de um
+        // popup da Medicube não pode sair como a loja irmã.
         const { getEmailProviderForOrg } = await import('@/lib/email/providers')
-        const { provider, config } = await getEmailProviderForOrg(form.organization_id)
+        const { provider, config } = await getEmailProviderForOrg(form.organization_id, (form as any).store_id || null)
         const fromEmail = config.defaultFrom || 'onboarding@resend.dev'
         const senderName = config.defaultSenderName || 'Worder'
         const subject = `Confirme sua inscrição`

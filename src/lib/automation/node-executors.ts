@@ -173,11 +173,61 @@ const triggerExecutors: Record<string, NodeExecutor> = {
 // ACTION EXECUTORS
 // ============================================
 
+/**
+ * Chave de duplicidade de um envio de automação.
+ *
+ * (automação, nó, contato, dia). O dia entra porque reentrada legítima
+ * no mesmo fluxo — abandonar o carrinho de novo semana que vem — tem de
+ * continuar enviando; o que não pode é o MESMO passo sair seis vezes
+ * numa tarde porque seis runs paralelas existem.
+ *
+ * Sem automação ou sem contato identificado não há o que deduplicar:
+ * devolve null e o envio segue sem trava (é o caso do e-mail de teste).
+ */
+function buildEmailDedupeKey(
+  context: any,
+  node: any,
+  organizationId?: string
+): string | null {
+  const workflow = context?.workflow || {};
+  const automationId =
+    context?.automation_id || workflow.automationId || workflow.id || null;
+  const contactId = context?.contact?.id || null;
+  const nodeId = node?.id || null;
+  if (!automationId || !contactId || !nodeId) return null;
+  const dia = new Date().toISOString().slice(0, 10);
+  return `auto:${automationId}:${nodeId}:${contactId}:${dia}`;
+}
+
 const actionExecutors: Record<string, NodeExecutor> = {
   // ========== WHATSAPP ==========
   action_whatsapp: {
     async execute({ node, config, context, credentials, isTest, supabase, organizationId }) {
       const phone = context.contact?.phone;
+
+      // Regras de envio (Configurações → Regras de envio): horário de
+      // silêncio e limite por contato no canal whatsapp.
+      if (!isTest && organizationId) {
+        try {
+          const { getOrgSendingRules, nextAllowedSendTime, isFrequencyCapped, quietHoursApplyTo } =
+            await import('@/lib/email/sending-rules');
+          const rules = await getOrgSendingRules(organizationId);
+          const resumeAt = quietHoursApplyTo(rules, 'whatsapp') ? nextAllowedSendTime(rules, new Date(), (context.contact as any)?.timezone || null) : null;
+          if (resumeAt) {
+            return { status: 'waiting', output: { postponedFor: 'quiet_hours', resumeAt: resumeAt.toISOString() }, waitUntil: resumeAt };
+          }
+          const cid = (context.contact as any)?.id;
+          if (await isFrequencyCapped(organizationId, cid, rules, 'whatsapp')) {
+            if (rules.campaignPriority) {
+              const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+              return { status: 'waiting', output: { postponedFor: 'frequency_cap', resumeAt: tomorrow.toISOString() }, waitUntil: tomorrow };
+            }
+            return { status: 'success', output: { sent: false, skipped: true, reason: 'Limite de frequência atingido' } };
+          }
+        } catch (e) {
+          console.warn('[action_whatsapp] sending rules check failed (proceeding):', e);
+        }
+      }
 
       if (isTest) {
         return {
@@ -237,8 +287,8 @@ const actionExecutors: Record<string, NodeExecutor> = {
               automation_run_id: runId,
               flow_id: flowId,
               node_id: node?.id || null,
-              message_body: config.message || null,
-              template_name: config.templateId || null,
+              message_body: config.message || config.bodyText || null,
+              template_name: config.templateName || config.templateId || null,
               template_params: config.templateParams || null,
               status: 'pending',
             })
@@ -254,16 +304,26 @@ const actionExecutors: Record<string, NodeExecutor> = {
         console.warn('[action_whatsapp] whatsapp_sends prep failed (proceeding):', e);
       }
 
+      // O editor de WhatsApp grava templateName (nome Meta) e o modo em
+      // messageMode; fluxos antigos gravavam templateId. Aceitar os dois
+      // — sem isso o modo template caía no ramo de texto com body vazio.
+      const templateName: string | undefined =
+        config.templateName || config.templateId || undefined
+      // Modo texto explícito vence (template que sobrou de uma troca de
+      // modo não pode reativar); legado sem messageMode segue o antigo
+      // critério "tem template → é template".
+      const isTemplateMode = !!templateName && config.messageMode !== 'text'
+
       // Onda 10 — guard opt-out (automation nunca tem override; e silencioso).
       if (organizationId && phone) {
         let tplCategory: 'MARKETING' | 'UTILITY' | 'AUTHENTICATION' | undefined
-        if (config.templateId && supabase) {
+        if (templateName && supabase) {
           try {
             const { data: tpl } = await supabase
               .from('whatsapp_templates')
               .select('category')
               .eq('organization_id', organizationId)
-              .eq('name', config.templateId)
+              .eq('name', templateName)
               .maybeSingle()
             const upper = (tpl?.category as string | undefined)?.toUpperCase()
             if (upper === 'MARKETING' || upper === 'UTILITY' || upper === 'AUTHENTICATION') {
@@ -284,6 +344,36 @@ const actionExecutors: Record<string, NodeExecutor> = {
         }
       }
 
+      // UTM + identificação em todo link do texto (configuração da loja do
+      // envio; utm_medium=whatsapp). Só no modo texto — no modo template a
+      // URL mora no template aprovado pela Meta.
+      let textBody: string = config.message || config.bodyText || '';
+      if (!isTemplateMode && textBody) {
+        try {
+          const { stampMessageLinks } = await import('@/lib/tracking/outbound-text');
+          textBody = await stampMessageLinks({
+            text: textBody,
+            organizationId,
+            storeId: (context as any).storeId || null,
+            channel: 'whatsapp',
+            context: {
+              messageType: 'automation',
+              automationName: workflow.name || (context as any).automation_name || '',
+              automationId,
+              messageName: (node as any)?.data?.label || config.label || 'WhatsApp',
+              messageId: node?.id || null,
+              sendId: whatsappSendId,
+              contactId: (context.contact as any)?.id || null,
+              storeName: (context as any)?.store?.name || null,
+              storeDomain: (context as any)?.store?.domain || null,
+            },
+          });
+          if (supabase && whatsappSendId && textBody !== (config.message || config.bodyText)) {
+            await supabase.from('whatsapp_sends').update({ message_body: textBody }).eq('id', whatsappSendId);
+          }
+        } catch { /* texto original segue */ }
+      }
+
       try {
         let result: any;
         let externalMessageId: string | null = null;
@@ -301,17 +391,19 @@ const actionExecutors: Record<string, NodeExecutor> = {
               body: JSON.stringify({
                 messaging_product: 'whatsapp',
                 to: phone.replace(/\D/g, ''),
-                type: config.templateId ? 'template' : 'text',
-                ...(config.templateId
+                type: isTemplateMode ? 'template' : 'text',
+                ...(isTemplateMode
                   ? {
                       template: {
-                        name: config.templateId,
+                        name: templateName,
                         language: { code: config.language || 'pt_BR' },
                         components: config.templateParams || [],
                       },
                     }
                   : {
-                      text: { body: config.message },
+                      // O editor grava o texto em bodyText; message é o
+                      // legado — aceitar os dois (já com os links carimbados).
+                      text: { body: textBody },
                     }),
               }),
             }
@@ -409,10 +501,12 @@ const actionExecutors: Record<string, NodeExecutor> = {
       // send (let the flow continue without spamming).
       if (!isTest && organizationId) {
         try {
-          const { getOrgSendingRules, nextAllowedSendTime, isFrequencyCapped } =
+          const { getOrgSendingRules, nextAllowedSendTime, isFrequencyCapped, quietHoursApplyTo } =
             await import('@/lib/email/sending-rules');
           const rules = await getOrgSendingRules(organizationId);
-          const resumeAt = nextAllowedSendTime(rules);
+          // Horário de silêncio só nos canais escolhidos em Regras de envio
+          // (padrão: WhatsApp e SMS; e-mail entra quando "Todos").
+          const resumeAt = quietHoursApplyTo(rules, 'email') ? nextAllowedSendTime(rules) : null;
           if (resumeAt) {
             return {
               status: 'waiting',
@@ -422,6 +516,11 @@ const actionExecutors: Record<string, NodeExecutor> = {
           }
           const contactIdForCap = (context.contact as any)?.id;
           if (await isFrequencyCapped(organizationId, contactIdForCap, rules)) {
+            if (rules.campaignPriority) {
+              // "Campanhas têm prioridade": a automação espera o próximo dia.
+              const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+              return { status: 'waiting', output: { postponedFor: 'frequency_cap', resumeAt: tomorrow.toISOString() }, waitUntil: tomorrow };
+            }
             return {
               status: 'success',
               output: {
@@ -515,23 +614,38 @@ const actionExecutors: Record<string, NodeExecutor> = {
           // Shared guard (see @/lib/email/consent) — blocks boolean false AND
           // the TEXT states pending/denied/... so double-opt-in 'pending'
           // contacts don't get the welcome flow before they confirm.
-          const { isEmailBlocked } = await import('@/lib/email/consent');
-          const isInvalid = !!consentRow && isEmailBlocked(consentRow.email_consent, consentRow.status);
+          //
+          // O alcance é definido pelo sending threshold da automação
+          // (Omnisend): 'subscribed' (padrão, = comportamento de sempre),
+          // 'nonSubscribed' (alcança quem nunca optou — recuperação de
+          // carrinho) ou 'all' (transacional). Bounce/denúncia/inválido
+          // ficam bloqueados em qualquer nível.
+          const { isEmailBlockedForThreshold, normalizeThreshold } = await import('@/lib/email/consent');
+          const emailThreshold = normalizeThreshold(
+            (context as any)?.sendingThresholds?.email
+          );
+          const isInvalid = !!consentRow && isEmailBlockedForThreshold(
+            consentRow.email_consent,
+            consentRow.status,
+            emailThreshold
+          );
           if (isInvalid) {
-            console.log('[action_email] ⊘ skipped — email marked invalid', {
+            console.log('[action_email] ⊘ skipped — email bloqueado pelo threshold', {
               nodeId: node?.id,
               contactEmail: email,
               emailConsent: consentRow?.email_consent,
               contactStatus: consentRow?.status,
+              threshold: emailThreshold,
             });
             return {
               status: 'success',
               output: {
                 sent: false,
                 skipped: true,
-                reason: `Email marcado como inválido (status=${consentRow?.status || 'opt-out'}). Flow continua nos próximos nodes.`,
+                reason: `Email não permitido para este contato (status=${consentRow?.status || 'opt-out'}, alcance=${emailThreshold}). Flow continua nos próximos nodes.`,
                 contactStatus: consentRow?.status,
                 emailConsent: consentRow?.email_consent,
+                threshold: emailThreshold,
               },
             };
           }
@@ -576,6 +690,28 @@ const actionExecutors: Record<string, NodeExecutor> = {
 
           // Use pre-rendered HTML from template
           html = template.html || '';
+
+          // Conteúdo universal em dia. O html gravado é uma cópia do
+          // momento em que o e-mail foi salvo; salvar o universal
+          // reescreve essa cópia, mas se aquela escrita não chegou (uma
+          // falha no meio, um template restaurado de versão antiga), a
+          // automação mandaria o rodapé velho — e é aqui que ele para.
+          // Sem a organização não dá para consultar a biblioteca sem
+          // atravessar inquilinos — melhor o html gravado.
+          if (template.design_json && organizationId) {
+            try {
+              const { hasUniversalContent, resolveSavedBlocks } = await import('@/lib/email/render');
+              if (hasUniversalContent(template.design_json)) {
+                const { renderDocumentToHtml } = await import('@/lib/email/render-html');
+                const resolved = await resolveSavedBlocks(template.design_json, organizationId);
+                const fresh = renderDocumentToHtml(resolved);
+                if (fresh) html = fresh;
+              }
+            } catch (err) {
+              console.warn('[action_email] falha ao atualizar o conteúdo universal:', err);
+            }
+          }
+
           if (!html) {
             html = '<p>Template sem conteúdo HTML renderizado</p>';
           }
@@ -638,20 +774,42 @@ const actionExecutors: Record<string, NodeExecutor> = {
         }
 
         // 2b. Smart Sending — skip if contact received email recently
+        // Desligado por padrão — ligar é escolha do lojista por nó.
+        // Quando ligado, pula quem recebeu qualquer e-mail nas últimas
+        // N horas (o mesmo sentido do Smart Sending da Omnisend).
         if (config.smartSending && !isTest && context.contact?.id) {
-          const skipHours = config.smartSendingHours || 16;
+          const skipHours = Math.max(1, Number(config.smartSendingHours) || 16);
           const cutoff = new Date(Date.now() - skipHours * 60 * 60 * 1000).toISOString();
-          const { data: recentSends } = await supabase
+          let q = supabase
             .from('email_sends')
             .select('id')
             .eq('contact_id', context.contact.id)
             .gte('created_at', cutoff)
+            // Envio que falhou não chegou a ninguém: contá-lo bloqueava
+            // o próximo e-mail por causa de um erro nosso, e o contato
+            // ficava sem receber nada.
+            .not('status', 'in', '("failed","cancelled","bounced")')
             .limit(1);
+          // Escopo da organização: o cliente é service-role e sem este
+          // filtro a consulta atravessa todos os inquilinos.
+          if (organizationId) q = q.eq('organization_id', organizationId);
+          const { data: recentSends, error: smartErr } = await q;
 
-          if (recentSends && recentSends.length > 0) {
+          if (smartErr) {
+            // Na dúvida, ENVIA. Um erro de leitura não pode virar
+            // silêncio para o contato.
+            console.warn('[action_email] Smart Sending: consulta falhou, seguindo com o envio:', smartErr);
+          } else if (recentSends && recentSends.length > 0) {
+            console.log('[action_email] ⊘ Smart Sending', {
+              nodeId: node?.id, skipHours, contactId: context.contact.id,
+            });
             return {
               status: 'success',
-              output: { skipped: true, reason: `Smart Sending: contato recebeu email nas últimas ${skipHours}h` },
+              output: {
+                sent: false,
+                skipped: true,
+                reason: `Smart Sending: contato recebeu e-mail nas últimas ${skipHours}h`,
+              },
             };
           }
         }
@@ -725,39 +883,38 @@ const actionExecutors: Record<string, NodeExecutor> = {
           }
         }
 
-        // 2c. UTM Tracking — append UTM params to every outbound link.
-        //
-        // Always on: the merchant gets attribution out of the box so
-        // automation emails show up under "email" in their analytics
-        // tool without any extra config. The "Ativar Rastreamento UTM"
-        // toggle in the editor just unlocks per-node CUSTOM utm_source /
-        // utm_medium / utm_campaign values; when it's off (or absent
-        // on legacy nodes) we fall through to the worder/email defaults.
-        // Set utmTracking=false explicitly on a node to opt out entirely.
-        const utmEnabled = config.utmTracking !== false; // default true
-        if (utmEnabled) {
-          const utmSource = (config.utmTracking && config.utmSource) || 'worder';
-          const utmMedium = (config.utmTracking && config.utmMedium) || 'email';
-          const utmCampaign = (config.utmTracking && config.utmCampaign) || '';
-          const utmParams = `utm_source=${encodeURIComponent(utmSource)}&utm_medium=${encodeURIComponent(utmMedium)}${utmCampaign ? `&utm_campaign=${encodeURIComponent(utmCampaign)}` : ''}`;
-
-          html = html.replace(
-            /(<a\s[^>]*href=["'])([^"'#][^"']*)(["'][^>]*>)/gi,
-            (match: string, before: string, url: string, after: string) => {
-              if (url.includes('utm_source') || url.includes('unsubscribe') || url.includes('mailto:')) return match;
-              // Skip unresolved merge tags and URLs that don't look like
-              // navigable destinations. Appending UTM to a leftover
-              // `{{ trigger.X }}` or to a stray `&discount=...` (which
-              // happens when an earlier merge tag rendered to '') would
-              // produce a URL the click-tracker then encodes verbatim,
-              // and the redirect handler bounces to the store home.
-              if (url.includes('{{')) return match;
-              if (!/^(https?:\/\/|\/)/i.test(url)) return match;
-              const separator = url.includes('?') ? '&' : '?';
-              return `${before}${url}${separator}${utmParams}${after}`;
-            }
-          );
-        }
+        // 2c. UTM + identificação em todo link — feito em sendCampaignEmail
+        // (prepareEmailHtml) com a configuração da LOJA e as variáveis do
+        // envio: `automation: <nome> (<id>)`, nome/id deste nó, etc.
+        // Aqui só se decide o que este nó SOBRESCREVE:
+        //   • "Personalizar UTMs" (utmTracking=true) → os campos do nó
+        //     valem no lugar do padrão da loja, campo a campo;
+        //   • utmDisabled=true → este e-mail sai sem UTM (a identificação
+        //     do contato/envio continua, ela nunca é removida).
+        // Nós antigos com utmTracking=false (checkbox desmarcado) caem no
+        // padrão da loja — antes isso desligava TODAS as UTMs sem querer.
+        const utmOverrides =
+          config.utmTracking === true
+            ? {
+                utm_source: config.utmSource || '',
+                utm_medium: config.utmMedium || '',
+                utm_campaign: config.utmCampaign || '',
+                utm_content: config.utmContent || '',
+                utm_term: config.utmTerm || '',
+                utm_id: config.utmId || '',
+              }
+            : null;
+        const utmDisabled = config.utmDisabled === true;
+        const linkWorkflow = (context as any).workflow || {};
+        const linkContext = {
+          messageType: 'automation' as const,
+          automationName:
+            linkWorkflow.name || (context as any).automation_name || (context as any).automationName || '',
+          automationId:
+            (context as any).automation_id || linkWorkflow.automationId || linkWorkflow.id || null,
+          messageName: (node as any)?.data?.label || config.label || config.name || 'Email',
+          messageId: node?.id || null,
+        };
 
         // 3. Build sender info
         // When the node has no explicit sender AND the flow belongs to a
@@ -769,10 +926,12 @@ const actionExecutors: Record<string, NodeExecutor> = {
         // '' lets sendCampaignEmail fall back to config.defaultSenderName
         // (the store's name), not the generic context store / 'Worder'.
         const runStoreId = (context as any).storeId || null;
-        const senderName = config.senderName
-          || (runStoreId ? '' : ((context as any).store?.name || 'Worder'));
-        const senderEmail = config.senderEmail
-          || (runStoreId ? '' : (credentials?.defaultFrom || 'noreply@example.com'));
+        // Sem remetente no nó, fica vazio e sendCampaignEmail resolve a
+        // identidade certa: a loja do fluxo ou, num fluxo da organização
+        // inteira, a loja do contato. O fallback antigo aqui
+        // ('noreply@example.com' / nome da organização) furava essa regra.
+        const senderName = config.senderName || '';
+        const senderEmail = config.senderEmail || '';
 
         // 4. Send via the full campaign pipeline so automation emails
         //    get the same tracking as campaigns (open pixel, click
@@ -801,7 +960,9 @@ const actionExecutors: Record<string, NodeExecutor> = {
         const eventData = context.trigger?.data || {};
         try {
           const { enrichOrderItemImages } = await import('@/lib/email/render');
-          await enrichOrderItemImages(eventData, supabase, undefined, organizationId);
+          // Com a loja do fluxo, a imagem vem do catálogo DELA; sem loja
+          // (fluxo da organização inteira) fica a cerca da organização.
+          await enrichOrderItemImages(eventData, supabase, runStoreId || undefined, organizationId);
         } catch {}
 
         // Resolve order-products blocks using enriched event data
@@ -820,18 +981,32 @@ const actionExecutors: Record<string, NodeExecutor> = {
         // because the HTML/subject were pre-rendered by the variable
         // engine above — prepareEmailHtml still adds tracking + footer.
         const contact = context.contact as any;
+        // O contexto canônico (VariableContext) é camelCase — é o que os
+        // dois crons montam. Ler só snake_case aqui zerava {{first_name}},
+        // {{last_name}} e {{full_name}} em TODO envio real de automação
+        // (o preview e o /execute passam a linha crua do banco, por isso
+        // funcionavam e o bug só aparecia na caixa de entrada: o assunto
+        // "{{first_name}}, seu pedido..." chegava como ", seu pedido...").
+        // Aceitar as duas formas cobre os quatro chamadores.
+        const firstName = contact?.firstName || contact?.first_name || '';
+        const lastName = contact?.lastName || contact?.last_name || '';
+        const customFields = contact?.customFields || contact?.custom_fields;
         const triggerData = context.trigger?.data || {};
         const triggerProps = triggerData.properties || triggerData;
         const mergeData: Record<string, string> = {
-          first_name: contact?.first_name || '',
-          last_name: contact?.last_name || '',
-          full_name: [contact?.first_name, contact?.last_name].filter(Boolean).join(' '),
+          first_name: firstName,
+          last_name: lastName,
+          full_name: [firstName, lastName].filter(Boolean).join(' '),
           email: email || '',
           phone: contact?.phone || '',
-          total_orders: String(contact?.total_orders || 0),
-          total_spent: String(contact?.total_spent || 0),
+          total_orders: String(contact?.totalOrders ?? contact?.total_orders ?? 0),
+          total_spent: String(contact?.totalSpent ?? contact?.total_spent ?? 0),
           store_name: (context as any)?.store?.name || '',
           store_url: (context as any)?.store?.domain ? `https://${(context as any).store.domain}` : '',
+          // Faltavam no mergeData: eram oferecidas no editor e chegavam
+          // em branco na caixa de entrada.
+          store_email: (context as any)?.store?.email || '',
+          store_phone: (context as any)?.store?.phone || '',
         };
         // Flatten event/trigger data into merge tags as event.*
         if (triggerProps && typeof triggerProps === 'object') {
@@ -867,7 +1042,7 @@ const actionExecutors: Record<string, NodeExecutor> = {
           mergeData['tracking_number'] = triggerProps.TrackingNumber || '';
           mergeData['event.ItemCount'] = String(triggerProps.ItemCount || triggerProps.item_count || '');
           mergeData['event.DiscountCode'] = (triggerProps.DiscountCodes || triggerProps.discount_codes || [])[0]?.code || '';
-          mergeData['event.customer_name'] = triggerProps.CustomerName || [contact?.first_name, contact?.last_name].filter(Boolean).join(' ');
+          mergeData['event.customer_name'] = triggerProps.CustomerName || [firstName, lastName].filter(Boolean).join(' ');
           mergeData['event.email'] = triggerProps.CustomerEmail || email || '';
           // Also flatten top-level trigger data keys
           for (const [k, v] of Object.entries(triggerData)) {
@@ -895,8 +1070,8 @@ const actionExecutors: Record<string, NodeExecutor> = {
           }
         }
         // Custom fields
-        if (contact?.custom_fields && typeof contact.custom_fields === 'object') {
-          for (const [k, v] of Object.entries(contact.custom_fields)) {
+        if (customFields && typeof customFields === 'object') {
+          for (const [k, v] of Object.entries(customFields as Record<string, unknown>)) {
             mergeData[`custom.${k}`] = String(v ?? '');
             mergeData[`custom_${k}`] = String(v ?? '');
           }
@@ -954,7 +1129,31 @@ const actionExecutors: Record<string, NodeExecutor> = {
           // Trigger type so the "Produtos do Gatilho" block builds the
           // correct CTA link (checkout recovery / cart permalink / product).
           triggerType: (context as any).trigger?.type || null,
+          // UTM + identificação de todo link (ver 2c acima).
+          linkContext,
+          utmOverrides,
+          utmDisabled,
+          // Trava de duplicidade: um índice único no banco garante que
+          // este passo, deste fluxo, para este contato, saia UMA vez por
+          // dia. É o que faltava — a idempotência existente age na
+          // INSCRIÇÃO e não ajuda quando as runs duplicadas já existem.
+          // Reentrada legítima no fluxo em outro dia continua enviando.
+          dedupeKey: buildEmailDedupeKey(context, node, organizationId),
         });
+
+        // A trava do banco recusou: outra execução já mandou este mesmo
+        // e-mail. O fluxo segue para o próximo nó como se tivesse
+        // enviado — porque, do ponto de vista do contato, enviou.
+        if ((result as any).skipped) {
+          console.log('[action_email] ⊘ duplicado bloqueado', {
+            nodeId: node?.id,
+            contactId: (context.contact as any)?.id,
+          });
+          return {
+            status: 'success',
+            output: { sent: false, skipped: true, reason: 'Envio duplicado bloqueado' },
+          };
+        }
 
         if (!result.success) {
           // Permanent failures from Resend (invalid recipient,
@@ -1052,6 +1251,30 @@ const actionExecutors: Record<string, NodeExecutor> = {
     async execute({ node, config, context, credentials, isTest, supabase, organizationId }) {
       const phone = context.contact?.phone;
 
+      // Regras de envio (Configurações → Regras de envio): horário de
+      // silêncio e limite por contato no canal sms.
+      if (!isTest && organizationId) {
+        try {
+          const { getOrgSendingRules, nextAllowedSendTime, isFrequencyCapped, quietHoursApplyTo } =
+            await import('@/lib/email/sending-rules');
+          const rules = await getOrgSendingRules(organizationId);
+          const resumeAt = quietHoursApplyTo(rules, 'sms') ? nextAllowedSendTime(rules, new Date(), (context.contact as any)?.timezone || null) : null;
+          if (resumeAt) {
+            return { status: 'waiting', output: { postponedFor: 'quiet_hours', resumeAt: resumeAt.toISOString() }, waitUntil: resumeAt };
+          }
+          const cid = (context.contact as any)?.id;
+          if (await isFrequencyCapped(organizationId, cid, rules, 'sms')) {
+            if (rules.campaignPriority) {
+              const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+              return { status: 'waiting', output: { postponedFor: 'frequency_cap', resumeAt: tomorrow.toISOString() }, waitUntil: tomorrow };
+            }
+            return { status: 'success', output: { sent: false, skipped: true, reason: 'Limite de frequência atingido' } };
+          }
+        } catch (e) {
+          console.warn('[action_sms] sending rules check failed (proceeding):', e);
+        }
+      }
+
       if (isTest) {
         return {
           status: 'success',
@@ -1070,6 +1293,43 @@ const actionExecutors: Record<string, NodeExecutor> = {
       const smsBody = (config.message || config.text || '').trim();
       if (!smsBody) {
         return { status: 'error', output: null, error: 'Mensagem de SMS vazia' };
+      }
+
+      // Sending threshold do canal SMS (Omnisend). Default 'all' = sem
+      // filtro, exatamente como este nó sempre se comportou; apertar para
+      // 'subscribed'/'nonSubscribed' é escolha explícita do lojista na UI
+      // do gatilho. Bounce/denúncia/inválido bloqueiam em qualquer nível.
+      {
+        const organizationId = (context as any).organizationId || (context as any).organization_id;
+        const contactId = (context.contact as any)?.id;
+        const rawThreshold = (context as any)?.sendingThresholds?.sms;
+        if (rawThreshold && organizationId && contactId && supabase) {
+          try {
+            const { isSmsBlockedForThreshold, normalizeThreshold } = await import('@/lib/email/consent');
+            const smsThreshold = normalizeThreshold(rawThreshold);
+            const { data: row } = await supabase
+              .from('contacts')
+              .select('sms_consent, status')
+              .eq('id', contactId)
+              .maybeSingle();
+            if (row && isSmsBlockedForThreshold(row.sms_consent, row.status, smsThreshold)) {
+              console.log('[action_sms] ⊘ skipped — SMS bloqueado pelo threshold', {
+                nodeId: node?.id, contactId, threshold: smsThreshold, status: row.status,
+              });
+              return {
+                status: 'success',
+                output: {
+                  sent: false,
+                  skipped: true,
+                  reason: `SMS não permitido para este contato (alcance=${smsThreshold}). Flow continua nos próximos nodes.`,
+                  threshold: smsThreshold,
+                },
+              };
+            }
+          } catch (e) {
+            console.warn('[action_sms] threshold check failed (proceeding):', e);
+          }
+        }
       }
 
       // Pre-create the send row so attribution finds it even before
@@ -1132,6 +1392,34 @@ const actionExecutors: Record<string, NodeExecutor> = {
 
       const provider = credentials?.provider || credentials?.type || null;
 
+      // UTM + identificação em todo link do SMS (configuração da loja do
+      // envio; utm_medium=sms). Depois da linha criada, para o link levar
+      // o worderSendID deste envio.
+      let smsBodyToSend = smsBody;
+      try {
+        const { stampMessageLinks } = await import('@/lib/tracking/outbound-text');
+        smsBodyToSend = await stampMessageLinks({
+          text: smsBody,
+          organizationId,
+          storeId: (context as any).storeId || null,
+          channel: 'sms',
+          context: {
+            messageType: 'automation',
+            automationName: workflow.name || (context as any).automation_name || '',
+            automationId,
+            messageName: (node as any)?.data?.label || config.label || 'SMS',
+            messageId: node?.id || null,
+            sendId: smsSendId,
+            contactId: (context.contact as any)?.id || null,
+            storeName: (context as any)?.store?.name || null,
+            storeDomain: (context as any)?.store?.domain || null,
+          },
+        });
+        if (smsBodyToSend !== smsBody && supabase && smsSendId) {
+          await supabase.from('sms_sends').update({ message_body: smsBodyToSend }).eq('id', smsSendId);
+        }
+      } catch { /* texto original segue */ }
+
       // Twilio integration path. Other providers (Zenvia, Vonage)
       // can plug in the same way — they all expose a single POST
       // endpoint that takes (to, from, body) and returns a message id.
@@ -1142,7 +1430,7 @@ const actionExecutors: Record<string, NodeExecutor> = {
           const body = new URLSearchParams({
             To: phone.startsWith('+') ? phone : `+${phone.replace(/\D/g, '')}`,
             From: from,
-            Body: smsBody,
+            Body: smsBodyToSend,
           });
           const response = await fetch(
             `https://api.twilio.com/2010-04-01/Accounts/${credentials.accountSid}/Messages.json`,
@@ -1554,10 +1842,17 @@ const actionExecutors: Record<string, NodeExecutor> = {
       }
 
       try {
-        // Preparar headers
+        // Preparar headers. A UI grava headers como STRING JSON — espalhar
+        // uma string viraria chaves numéricas ('0': '{', ...). Parse antes.
+        let extraHeaders: Record<string, string> = {};
+        if (typeof config.headers === 'string') {
+          try { extraHeaders = JSON.parse(config.headers || '{}'); } catch { extraHeaders = {}; }
+        } else if (config.headers && typeof config.headers === 'object') {
+          extraHeaders = config.headers;
+        }
         const headers: Record<string, string> = {
           'Content-Type': 'application/json',
-          ...config.headers,
+          ...extraHeaders,
         };
 
         // Adicionar autenticação se houver credenciais
@@ -1672,12 +1967,20 @@ const actionExecutors: Record<string, NodeExecutor> = {
       if (!contactId || !organizationId) {
         return { status: 'error', output: null, error: 'Contato ou organização não encontrado' };
       }
+      if (!config.listId) {
+        return { status: 'error', output: null, error: 'Nenhuma lista selecionada no nó' };
+      }
       try {
-        await supabase.from('list_contacts').upsert({
+        // Supabase não lança — sem checar o error, FK quebrada ou lista
+        // apagada viravam "success" sem gravar nada.
+        const { error } = await supabase.from('list_contacts').upsert({
           list_id: config.listId,
           contact_id: contactId,
           organization_id: organizationId,
         }, { onConflict: 'list_id,contact_id' });
+        if (error) {
+          return { status: 'error', output: null, error: `Falha ao adicionar à lista: ${error.message}` };
+        }
         return { status: 'success', output: { added: true, listId: config.listId } };
       } catch (error: any) {
         return { status: 'error', output: null, error: error.message };
@@ -1690,8 +1993,14 @@ const actionExecutors: Record<string, NodeExecutor> = {
   // Aguardar resposta com timeout — marca conversa aguardando
   action_whatsapp_wait_reply: {
     async execute({ config, context, isTest }) {
+      // defaultConfig do catálogo grava timeoutMinutes; fluxos antigos,
+      // timeoutSeconds — aceitar os dois (senão era sempre 1h fixa).
+      const timeoutSeconds =
+        Number(config.timeoutSeconds) ||
+        (Number(config.timeoutMinutes) ? Number(config.timeoutMinutes) * 60 : 0) ||
+        3600;
       if (isTest) {
-        return { status: 'success', output: { waiting: true, timeout_seconds: config.timeoutSeconds || 3600 } };
+        return { status: 'success', output: { waiting: true, timeout_seconds: timeoutSeconds } };
       }
       try {
         const { supabaseAdmin } = await import('@/lib/supabase-admin');
@@ -1699,7 +2008,7 @@ const actionExecutors: Record<string, NodeExecutor> = {
         if (!conversationId) {
           return { status: 'error', output: null, error: 'conversationId missing from context' };
         }
-        const timeoutMs = (config.timeoutSeconds || 3600) * 1000;
+        const timeoutMs = timeoutSeconds * 1000;
         await supabaseAdmin
           .from('whatsapp_conversations')
           .update({
@@ -1731,11 +2040,16 @@ const actionExecutors: Record<string, NodeExecutor> = {
         if (!conversationId || !organizationId) {
           return { status: 'error', output: null, error: 'conversationId/organizationId missing' };
         }
+        // defaultConfig do catálogo grava {targetType, targetId}; fluxos
+        // antigos gravam agentId/queueId direto — aceitar os dois (sem
+        // isso a transferência ia sem destino nenhum).
+        const agentId = config.agentId || (config.targetType === 'agent' ? config.targetId : undefined);
+        const queueId = config.queueId || (config.targetType === 'queue' ? config.targetId : undefined);
         const result = await transferConversation({
           conversationId,
           organizationId,
-          toAgentId: config.agentId,
-          toQueueId: config.queueId,
+          toAgentId: agentId,
+          toQueueId: queueId,
           reason: config.reason || 'Transferido por automacao',
         });
         if (result.error) {
@@ -1965,12 +2279,31 @@ const actionExecutors: Record<string, NodeExecutor> = {
       }
       try {
         const { generateShopifyCoupon } = await import('@/lib/services/whatsapp/shopify-coupon-service');
+        // Sem credencial explícita, usa a loja da automação (o engine põe
+        // storeId no contexto) — antes o nó ia SEMPRE sem shopDomain/token.
+        let shopDomain: string | undefined = credentials?.shopDomain;
+        let accessToken: string | undefined = credentials?.accessToken;
+        if ((!shopDomain || !accessToken) && context.storeId) {
+          const { supabaseAdmin } = await import('@/lib/supabase-admin');
+          const { data: store } = await supabaseAdmin
+            .from('shopify_stores')
+            .select('shop_domain, access_token')
+            .eq('id', context.storeId)
+            .eq('is_active', true)
+            .maybeSingle();
+          shopDomain = shopDomain || store?.shop_domain;
+          accessToken = accessToken || store?.access_token;
+        }
+        if (!shopDomain || !accessToken) {
+          return { status: 'error', output: null, error: 'Sem loja Shopify conectada para gerar o cupom (automação sem loja e nó sem credencial)' };
+        }
         const result = await generateShopifyCoupon({
-          shopDomain: credentials?.shopDomain,
-          accessToken: credentials?.accessToken,
+          shopDomain,
+          accessToken,
           discountType: config.discountType || 'percentage',
           value: config.value || 10,
-          validityDays: config.validityDays || 7,
+          // O catálogo grava expiryDays; fluxos antigos, validityDays.
+          validityDays: config.validityDays || config.expiryDays || 7,
           prefix: config.prefix || 'GIFT',
           contactEmail: context.contact?.email,
         });
@@ -2016,13 +2349,19 @@ const actionExecutors: Record<string, NodeExecutor> = {
       if (!contactId || !organizationId) {
         return { status: 'error', output: null, error: 'Contato ou organização não encontrado' };
       }
+      if (!config.listId) {
+        return { status: 'error', output: null, error: 'Nenhuma lista selecionada no nó' };
+      }
       try {
-        await supabase
+        const { error } = await supabase
           .from('list_contacts')
           .delete()
           .eq('list_id', config.listId)
           .eq('contact_id', contactId)
           .eq('organization_id', organizationId);
+        if (error) {
+          return { status: 'error', output: null, error: `Falha ao remover da lista: ${error.message}` };
+        }
         return { status: 'success', output: { removed: true, listId: config.listId } };
       } catch (error: any) {
         return { status: 'error', output: null, error: error.message };
@@ -2051,7 +2390,7 @@ const conditionExecutors: Record<string, NodeExecutor> = {
 
   condition_field: {
     async execute({ config, context }) {
-      const value1 = getNestedValue(context, config.field);
+      const value1 = resolveConditionValue(context, config.field);
       const value2 = config.value;
       const operator = config.operator || 'equals';
 
@@ -2162,15 +2501,21 @@ const conditionExecutors: Record<string, NodeExecutor> = {
 
       let acc = 0;
       let chosen = variants[0];
-      for (const v of variants) {
-        acc += Math.max(0, Number(v.weight || 1));
-        if (bucket <= acc) { chosen = v; break; }
+      let chosenIndex = 0;
+      for (let i = 0; i < variants.length; i++) {
+        acc += Math.max(0, Number(variants[i].weight || 1));
+        if (bucket <= acc) { chosen = variants[i]; chosenIndex = i; break; }
       }
 
+      // O card do nó só expõe os handles 'true'/'false' (BaseNode), então
+      // devolver o NOME da variante como branch não casava com handle
+      // nenhum e o markSkippedBranches descartava os DOIS ramos — o fluxo
+      // morria no randomizer. Primeira variante → 'true', demais → 'false';
+      // o nome real continua no output para o histórico.
       return {
         status: 'success',
-        output: { variant: chosen.name, bucket, totalWeight },
-        branch: chosen.name,
+        output: { variant: chosen.name, variantIndex: chosenIndex, bucket, totalWeight },
+        branch: chosenIndex === 0 ? 'true' : 'false',
       };
     },
   },
@@ -2184,7 +2529,7 @@ const conditionExecutors: Record<string, NodeExecutor> = {
       const results: boolean[] = [];
 
       for (const condition of conditions) {
-        const value1 = getNestedValue(context, condition.field);
+        const value1 = resolveConditionValue(context, condition.field);
         const result = evaluateCondition(value1, condition.operator, condition.value);
         results.push(result);
       }
@@ -2244,7 +2589,7 @@ const conditionExecutors: Record<string, NodeExecutor> = {
 
 const controlExecutors: Record<string, NodeExecutor> = {
   control_delay: {
-    async execute({ config, isTest }) {
+    async execute({ config, context, isTest, supabase, organizationId }) {
       // Cascade through every shape the editor might have saved the
       // delay in:
       //   config.delay.{value,unit}    — automation/index.tsx
@@ -2279,34 +2624,72 @@ const controlExecutors: Record<string, NodeExecutor> = {
       const delayMs = value * (multipliers[unit] || multipliers.hours);
       let resumeAt = new Date(Date.now() + delayMs);
 
-      // Apply day-of-week restrictions (allowedDays: 0=Mon, 1=Tue, ..., 6=Sun)
-      if (config.restrictDays && config.allowedDays?.length > 0) {
-        const allowedDays: number[] = config.allowedDays;
-        // JS getDay(): 0=Sun, 1=Mon... → convert to 0=Mon, 6=Sun
-        let guard = 0;
-        while (!allowedDays.includes(resumeAt.getDay() === 0 ? 6 : resumeAt.getDay() - 1) && guard < 8) {
-          resumeAt = new Date(resumeAt.getTime() + 24 * 60 * 60 * 1000);
-          guard++;
-        }
-      }
+      // As restrições de dia e de horário eram avaliadas com
+      // getDay()/getHours()/setHours(), ou seja, no relógio do
+      // SERVIDOR — que na Vercel é UTC. "Enviar só entre 09:00 e
+      // 21:00" saía como 06:00 às 18:00 no Brasil, silenciosamente.
+      // Agora a janela é sempre de um fuso explícito:
+      //   'recipient' → fuso do contato (padrão da Omnisend)
+      //   'store'     → fuso da loja/organização, igual para todos
+      const restringeDias = Boolean(config.restrictDays) && config.allowedDays?.length > 0;
+      const restringeHora = Boolean(config.restrictTime) && config.timeFrom && config.timeTo;
 
-      // Apply time window restrictions
-      if (config.restrictTime && config.timeFrom && config.timeTo) {
-        const [fromH, fromM] = config.timeFrom.split(':').map(Number);
-        const [toH, toM] = config.timeTo.split(':').map(Number);
-        const hour = resumeAt.getHours();
-        const min = resumeAt.getMinutes();
-        const current = hour * 60 + min;
-        const from = fromH * 60 + fromM;
-        const to = toH * 60 + toM;
+      if (restringeDias || restringeHora) {
+        const { clampToSendWindow } = await import('@/lib/scheduling/timezone');
+        const { resolveTimezoneForRun } = await import('@/lib/scheduling/resolve');
 
-        if (current < from) {
-          resumeAt.setHours(fromH, fromM, 0, 0);
-        } else if (current > to) {
-          // Move to next day at fromH:fromM
-          resumeAt = new Date(resumeAt.getTime() + 24 * 60 * 60 * 1000);
-          resumeAt.setHours(fromH, fromM, 0, 0);
+        const modo = config.timezoneMode === 'store' ? 'store' : 'recipient';
+        const alvo = await resolveTimezoneForRun(supabase, {
+          // No modo 'store' o contato é ignorado de propósito: o
+          // lojista pediu UM horário, igual para a base inteira.
+          contact: modo === 'recipient' ? context?.contact : undefined,
+          storeId: (context as any)?.storeId,
+          organizationId: organizationId || (context as any)?.organizationId,
+        });
+
+        let fromHour: number | undefined;
+        let fromMinute = 0;
+        let toHour: number | undefined;
+        let toMinute = 0;
+        if (restringeHora) {
+          const [fh, fm] = String(config.timeFrom).split(':').map(Number);
+          const [th, tm] = String(config.timeTo).split(':').map(Number);
+          if (Number.isInteger(fh) && Number.isInteger(th)) {
+            fromHour = fh; fromMinute = fm || 0;
+            toHour = th; toMinute = tm || 0;
+          }
         }
+
+        // A UI grava os dias como 0=segunda … 6=domingo; o núcleo usa
+        // a convenção do JS (0=domingo). Converter aqui evita que a
+        // regra deslize um dia — o bug que fazia "só dias úteis"
+        // liberar domingo e barrar sexta.
+        const allowedWeekdays = restringeDias
+          ? (config.allowedDays as number[]).map((d) => (d === 6 ? 0 : d + 1))
+          : undefined;
+
+        resumeAt = clampToSendWindow(resumeAt, alvo.timezone, {
+          fromHour, fromMinute, toHour, toMinute, allowedWeekdays,
+        });
+
+        if (isTest) {
+          return {
+            status: 'success',
+            output: {
+              delay: `${value} ${unit}`,
+              resumeAt: resumeAt.toISOString(),
+              timezone: alvo.timezone,
+              timezoneSource: alvo.source,
+              test: true,
+            },
+          };
+        }
+
+        return {
+          status: 'waiting',
+          output: { delay: `${value} ${unit}`, timezone: alvo.timezone, timezoneSource: alvo.source },
+          waitUntil: resumeAt,
+        };
       }
 
       if (isTest) {
@@ -2325,19 +2708,38 @@ const controlExecutors: Record<string, NodeExecutor> = {
   },
 
   control_delay_until: {
-    async execute({ config, isTest }) {
+    async execute({ config, context, isTest, supabase, organizationId }) {
       let resumeAt: Date;
+      let timezone: string | undefined;
+      let timezoneSource: string | undefined;
 
       if (config.datetime) {
+        // Instante absoluto escolhido no calendário: já vem com fuso
+        // embutido, não há o que reinterpretar.
         resumeAt = new Date(config.datetime);
-      } else if (config.time) {
-        const [hours, minutes] = config.time.split(':').map(Number);
-        resumeAt = new Date();
-        resumeAt.setHours(hours, minutes, 0, 0);
-        
-        if (resumeAt <= new Date()) {
-          resumeAt.setDate(resumeAt.getDate() + 1);
+        if (isNaN(resumeAt.getTime())) {
+          return { status: 'error', output: null, error: 'Data/hora inválida' };
         }
+      } else if (config.time) {
+        // "Espere até as 09:00" só quer dizer alguma coisa dentro de um
+        // fuso. setHours() usava o do servidor (UTC na Vercel), então
+        // 09:00 chegava como 06:00 no Brasil.
+        const [hours, minutes] = String(config.time).split(':').map(Number);
+        if (!Number.isInteger(hours)) {
+          return { status: 'error', output: null, error: 'Horário inválido' };
+        }
+        const { nextOccurrenceInTz } = await import('@/lib/scheduling/timezone');
+        const { resolveTimezoneForRun } = await import('@/lib/scheduling/resolve');
+
+        const modo = config.timezoneMode === 'store' ? 'store' : 'recipient';
+        const alvo = await resolveTimezoneForRun(supabase, {
+          contact: modo === 'recipient' ? context?.contact : undefined,
+          storeId: (context as any)?.storeId,
+          organizationId: organizationId || (context as any)?.organizationId,
+        });
+        timezone = alvo.timezone;
+        timezoneSource = alvo.source;
+        resumeAt = nextOccurrenceInTz(alvo.timezone, hours, minutes || 0);
       } else {
         return {
           status: 'error',
@@ -2349,13 +2751,13 @@ const controlExecutors: Record<string, NodeExecutor> = {
       if (isTest) {
         return {
           status: 'success',
-          output: { resumeAt: resumeAt.toISOString(), test: true },
+          output: { resumeAt: resumeAt.toISOString(), timezone, timezoneSource, test: true },
         };
       }
 
       return {
         status: 'waiting',
-        output: { resumeAt: resumeAt.toISOString() },
+        output: { resumeAt: resumeAt.toISOString(), timezone, timezoneSource },
         waitUntil: resumeAt,
       };
     },
@@ -2415,6 +2817,49 @@ const controlExecutors: Record<string, NodeExecutor> = {
 function getNestedValue(obj: any, path: string): any {
   if (!path) return undefined;
   return path.split('.').reduce((current, key) => current?.[key], obj);
+}
+
+// Resolve um caminho de condição contra o contexto REAL de execução.
+// A UI oferece caminhos como `event.total` e `contact.first_name`, mas o
+// contexto montado pelos runners usa `trigger.data.*` e contato camelCase
+// (firstName/lastName/createdAt) — sem estes aliases quase toda opção do
+// dropdown de condição resolvia undefined e a condição caía sempre no
+// ramo "não".
+const CONTACT_FIELD_ALIASES: Record<string, string> = {
+  first_name: 'firstName',
+  last_name: 'lastName',
+  created_at: 'createdAt',
+  lifecycle_stage: 'lifecycleStage',
+  total_orders: 'totalOrders',
+  total_spent: 'totalSpent',
+  last_order_at: 'lastOrderAt',
+};
+
+function resolveConditionValue(context: any, path: string): any {
+  if (!path) return undefined;
+  // 1) caminho literal
+  let v = getNestedValue(context, path);
+  if (v !== undefined) return v;
+  // 2) event.* → trigger.data.* (mesmo alias do variable-engine)
+  if (path.startsWith('event.')) {
+    v = getNestedValue(context, `trigger.data.${path.slice('event.'.length)}`);
+    if (v !== undefined) return v;
+  }
+  // 3) contact.snake_case → contact.camelCase
+  if (path.startsWith('contact.')) {
+    const field = path.slice('contact.'.length);
+    const alias = CONTACT_FIELD_ALIASES[field];
+    if (alias) {
+      v = getNestedValue(context, `contact.${alias}`);
+      if (v !== undefined) return v;
+    }
+  }
+  // 4) campo solto → tenta no payload do gatilho
+  if (!path.includes('.')) {
+    v = getNestedValue(context, `trigger.data.${path}`);
+    if (v !== undefined) return v;
+  }
+  return undefined;
 }
 
 function evaluateCondition(value1: any, operator: string, value2: any): boolean {

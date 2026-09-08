@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseClient } from '@/lib/api-utils';
+import { requireStore } from '@/lib/api/guards';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -22,25 +22,19 @@ async function shopifyFetch(shopDomain: string, accessToken: string, endpoint: s
 }
 
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const storeId = searchParams.get('storeId');
+  // A loja vem pela URL e daqui sai o access_token dela para chamar a
+  // Shopify. Sem esta cerca, um id de loja de outra organização bastava.
+  const guard = await requireStore(request);
+  if (!guard.ok) return guard.response;
+  const { supabase, storeId, organizationId } = guard;
 
-  if (!storeId) {
-    return NextResponse.json({ 
-      error: 'Passe ?storeId=XXX',
-    });
-  }
 
   try {
-    const supabase = getSupabaseClient();
-    if (!supabase) {
-      return NextResponse.json({ error: 'Database error' }, { status: 500 });
-    }
-
     const { data: store } = await supabase
       .from('shopify_stores')
       .select('shop_domain, access_token')
       .eq('id', storeId)
+      .eq('organization_id', organizationId)
       .single();
 
     if (!store) {

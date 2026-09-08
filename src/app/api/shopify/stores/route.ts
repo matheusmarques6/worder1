@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getAuthClient, authError } from '@/lib/api-utils';
+import { isTombstoneStore } from '@/lib/stores/placeholder';
 
 export const dynamic = 'force-dynamic';
 
@@ -80,8 +81,11 @@ export async function GET(request: NextRequest) {
     const liveStores = (stores || []).filter((s: any) => {
       if (s.is_active === false) return false;
       if (s.connection_status === 'disconnected') return false;
-      const dom: string = s.shop_domain || '';
-      if (dom.endsWith('.worder.local')) return false;
+      // Só as lápides arquivadas somem. A loja criada em "Adicionar
+      // loja" que ainda não tem integração usa o mesmo domínio
+      // sintético e é uma loja de verdade — escondê-la fazia o
+      // "configurar integração depois" parecer que não criou nada.
+      if (isTombstoneStore(s)) return false;
       return true;
     });
 

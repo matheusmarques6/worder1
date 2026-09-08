@@ -109,6 +109,14 @@ export interface ShopifyOrder {
   checkout_id?: number;
   created_at: string;
   updated_at: string;
+  /** Pedido de teste (Bogus Gateway). Chega como paid e não pode
+   *  entrar em receita nenhuma. */
+  test?: boolean;
+  /** Data em que o pagamento foi processado — usada como referência da
+   *  janela de atribuição quando created_at falta. */
+  processed_at?: string;
+  /** Total já reembolsado; a receita atribuída é sempre líquida. */
+  total_refunded?: string;
 }
 
 export interface ShopifyCheckout {

@@ -61,18 +61,28 @@ async function recordOpen(emailSendId: string, headers: Headers) {
     // Route the timestamp to the right column. MPP opens land in
     // mpp_opened_at so dashboards + the attribution RPC can ignore
     // them by default. Genuine opens land in opened_at as before.
-    if (mpp.isMpp) {
-      const { error: mppErr } = await supabaseAdmin.from('email_sends')
-        .update({ mpp_opened_at: now }).eq('id', emailSendId).is('mpp_opened_at', null);
-      // Schema sem mpp_opened_at: melhor contar como abertura normal do
-      // que perder o evento (é o que acontecia antes da coluna existir).
-      if (mppErr) {
+    // Uma função no banco cuida das duas coisas de uma vez: marca a
+    // primeira abertura na coluna certa e soma no contador. O contador
+    // precisa de soma atômica — duas aberturas ao mesmo tempo, lidas e
+    // gravadas daqui, viram uma só.
+    const { error: bumpErr } = await supabaseAdmin.rpc('bump_email_send_open', {
+      p_send_id: emailSendId,
+      p_mpp: mpp.isMpp,
+    });
+    if (bumpErr) {
+      // Banco sem a função ainda: pelo menos a primeira abertura fica
+      // registrada, que é o que os painéis leem.
+      if (mpp.isMpp) {
+        const { error: mppErr } = await supabaseAdmin.from('email_sends')
+          .update({ mpp_opened_at: now }).eq('id', emailSendId).is('mpp_opened_at', null);
+        if (mppErr) {
+          await supabaseAdmin.from('email_sends')
+            .update({ opened_at: now }).eq('id', emailSendId).is('opened_at', null);
+        }
+      } else {
         await supabaseAdmin.from('email_sends')
           .update({ opened_at: now }).eq('id', emailSendId).is('opened_at', null);
       }
-    } else {
-      await supabaseAdmin.from('email_sends')
-        .update({ opened_at: now }).eq('id', emailSendId).is('opened_at', null);
     }
 
     // CDP: contact_events — only record human opens. MPP opens are

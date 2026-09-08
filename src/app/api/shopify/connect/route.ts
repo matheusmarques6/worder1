@@ -9,6 +9,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient, getAuthClient, authError } from '@/lib/api-utils';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { SupabaseClient } from '@supabase/supabase-js';
+import { normalizePublicHost, publicStoreHost, normalizePhone } from '@/lib/shopify/store-url';
+import { isTombstoneStore } from '@/lib/stores/placeholder';
 export const dynamic = 'force-dynamic';
 
 let _supabase: SupabaseClient | null = null;
@@ -84,6 +86,12 @@ export async function POST(request: NextRequest) {
           access_token: accessToken.trim(),
           api_secret: apiSecret?.trim() || null,
           shop_email: shopData.email,
+          // shop.json traz `domain` = domínio principal público (o que o
+          // cliente vê) e `myshopify_domain` = host da API. {{store_url}}
+          // sai do primeiro.
+          primary_domain: normalizePublicHost(shopData.domain) || null,
+          primary_domain_checked_at: new Date().toISOString(),
+          shop_phone: normalizePhone(shopData.phone) || null,
           currency: shopData.currency,
           timezone: shopData.timezone,
           is_active: true,
@@ -116,6 +124,9 @@ export async function POST(request: NextRequest) {
         shop_domain: shopDomain,
         shop_name: name,
         shop_email: shopData.email,
+        primary_domain: normalizePublicHost(shopData.domain) || null,
+        primary_domain_checked_at: new Date().toISOString(),
+        shop_phone: normalizePhone(shopData.phone) || null,
         access_token: accessToken.trim(),
         api_secret: apiSecret?.trim() || null,
         currency: shopData.currency,
@@ -127,6 +138,15 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (insertError) throw insertError;
+
+    // A loja nasce com remetente próprio: <nome-da-loja>@worder.email,
+    // único na Worder. Nunca herda o remetente de outra loja.
+    try {
+      const { ensureStoreSharedSender } = await import('@/lib/email/shared-sender');
+      await ensureStoreSharedSender(newStore.id);
+    } catch (e) {
+      console.warn('[Connect] remetente compartilhado não alocado:', (e as Error).message);
+    }
 
     // First connect — kick off install-extras so the merchant doesn't
     // have to click anything to get the storefront script tag, web
@@ -208,11 +228,12 @@ export async function GET(request: NextRequest) {
     if (error) throw error;
 
     const stores = (allStores || []).filter((s: any) => {
-      const dom: string = s.shop_domain || '';
       // Cleanup tombstones we keep around so old foreign keys still
-      // resolve. They use the .worder.local TLD and either an
-      // "archived-" or "manual-" prefix when soft-deleted.
-      if (dom.endsWith('.worder.local')) return false;
+      // resolve. Só as ARQUIVADAS: a linha manual-*.worder.local de uma
+      // loja recém-criada, ainda sem integração, é uma loja de verdade
+      // e some do switcher se cair aqui — era o que acontecia com quem
+      // escolhia "configurar integração depois".
+      if (isTombstoneStore(s)) return false;
       // REAL stores stay listed whatever the connection state. This
       // used to also drop is_active=false / status='disconnected'
       // rows, but this endpoint feeds the same zustand list as the
@@ -243,6 +264,9 @@ export async function GET(request: NextRequest) {
         shop_name: s.shop_name,
         domain: s.shop_domain,
         shop_domain: s.shop_domain,
+        // Host que o cliente vê — o que {{store_url}} usa.
+        publicDomain: publicStoreHost(s) || null,
+        primary_domain: s.primary_domain || null,
         email: s.shop_email,
         shop_email: s.shop_email,
         currency: s.currency,

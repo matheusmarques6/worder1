@@ -15,6 +15,7 @@
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
+import { normalizePublicHost, normalizePhone } from '@/lib/shopify/store-url';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import crypto from 'crypto';
 
@@ -35,6 +36,22 @@ const REQUIRED_WEBHOOKS = [
 
 function redirectTo(appUrl: string, path: string) {
   return NextResponse.redirect(`${appUrl}${path}`);
+}
+
+// Redirect de conflito enriquecido: além do código, leva id/nome/domínio
+// da loja ativa bloqueadora e (se houver) a linha que se tentava
+// reativar, pra UI mostrar QUEM bloqueia e oferecer mesclar/desativar
+// sem outro fetch. Params ausentes → a UI cai no texto genérico antigo.
+function conflictRedirect(
+  appUrl: string,
+  blocker: { id: string; shop_name?: string | null; shop_domain?: string | null },
+  targetStoreId: string | null
+) {
+  const qs = new URLSearchParams({ error: 'domain_conflict', conflict_store_id: blocker.id });
+  if (blocker.shop_name) qs.set('conflict_store_name', blocker.shop_name);
+  if (blocker.shop_domain) qs.set('conflict_store_domain', blocker.shop_domain);
+  if (targetStoreId) qs.set('target_store_id', targetStoreId);
+  return redirectTo(appUrl, `/integrations/shopify?${qs.toString()}`);
 }
 
 export async function GET(request: NextRequest) {
@@ -148,6 +165,8 @@ export async function GET(request: NextRequest) {
     let planName = '';
     let timezone = '';
     let permanentDomain: string | null = null;
+    let publicPrimaryDomain: string | null = null;
+    let shopPhone: string | null = null;
     let shopifyShopId: string | null = null;
     try {
       const infoRes = await fetch(`https://${shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
@@ -157,7 +176,7 @@ export async function GET(request: NextRequest) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          query: `{ shop { id name email currencyCode timezoneAbbreviation myshopifyDomain plan { displayName } } }`,
+          query: `{ shop { id name email currencyCode timezoneAbbreviation myshopifyDomain primaryDomain { host } billingAddress { phone } plan { displayName } } }`,
         }),
       });
       if (infoRes.ok) {
@@ -170,6 +189,9 @@ export async function GET(request: NextRequest) {
           planName = s.plan?.displayName || '';
           timezone = s.timezoneAbbreviation || '';
           permanentDomain = (s.myshopifyDomain || '').toLowerCase() || null;
+          // Domínio principal público — a fonte de {{store_url}}.
+          publicPrimaryDomain = normalizePublicHost(s.primaryDomain?.host) || null;
+          shopPhone = normalizePhone(s.billingAddress?.phone) || null;
           if (s.id) {
             const m = String(s.id).match(/Shop\/(\d+)/);
             shopifyShopId = m ? m[1] : String(s.id);
@@ -240,13 +262,13 @@ export async function GET(request: NextRequest) {
     if (shopifyShopId) {
       const { data: shopIdRows } = await supabase
         .from('shopify_stores')
-        .select('id, is_active')
+        .select('id, is_active, shop_name, shop_domain')
         .eq('organization_id', organizationId)
         .eq('shopify_shop_id', shopifyShopId)
         .neq('id', existingStore?.id || '00000000-0000-0000-0000-000000000000');
       for (const r of (shopIdRows || []) as any[]) {
         if (r.is_active) {
-          return redirectTo(APP_URL, '/integrations/shopify?error=domain_conflict');
+          return conflictRedirect(APP_URL, r, existingStore?.id ?? null);
         }
         await supabase.from('shopify_stores').update({ shopify_shop_id: null }).eq('id', r.id);
       }
@@ -257,13 +279,13 @@ export async function GET(request: NextRequest) {
     {
       const { data: blockers } = await supabase
         .from('shopify_stores')
-        .select('id, is_active')
+        .select('id, is_active, shop_name, shop_domain')
         .eq('organization_id', organizationId)
         .eq('shop_domain', canonicalDomain)
         .neq('id', existingStore?.id || '00000000-0000-0000-0000-000000000000');
       for (const b of (blockers || []) as any[]) {
         if (b.is_active) {
-          return redirectTo(APP_URL, '/integrations/shopify?error=domain_conflict');
+          return conflictRedirect(APP_URL, b, existingStore?.id ?? null);
         }
         await supabase
           .from('shopify_stores')
@@ -279,6 +301,9 @@ export async function GET(request: NextRequest) {
       shopify_shop_id: shopifyShopId,
       shop_name: shopName,
       shop_email: shopEmail,
+      primary_domain: publicPrimaryDomain,
+      primary_domain_checked_at: new Date().toISOString(),
+      shop_phone: shopPhone,
       access_token: accessToken,
       api_secret: clientSecret,
       client_id: clientId,
@@ -322,12 +347,31 @@ export async function GET(request: NextRequest) {
       }
       storeId = existingStore.id;
     } else {
+      // Alterar integração NUNCA cria loja nova. Sem linha alvo (nem
+      // storeId nem dedup), o INSERT só é permitido no fluxo explícito
+      // "Adicionar loja" (allow_create no state) ou em org sem lojas.
+      if (pending.allow_create !== true) {
+        const { count } = await supabase
+          .from('shopify_stores')
+          .select('id', { count: 'exact', head: true })
+          .eq('organization_id', organizationId);
+        if ((count || 0) > 0) {
+          return redirectTo(APP_URL, '/integrations/shopify?error=no_target_store');
+        }
+      }
       const { data, error } = await supabase.from('shopify_stores').insert(storeRecord).select('id').single();
       if (error || !data) {
         console.error('[ShopifyOAuthManual] store insert failed:', error);
         return redirectTo(APP_URL, '/integrations/shopify?error=save_failed');
       }
       storeId = data.id;
+      // A loja nasce com remetente próprio: <nome-da-loja>@worder.email.
+      try {
+        const { ensureStoreSharedSender } = await import('@/lib/email/shared-sender');
+        await ensureStoreSharedSender(storeId);
+      } catch (e) {
+        console.warn('[ShopifyOAuthManual] remetente compartilhado não alocado:', (e as Error).message);
+      }
     }
 
     // ── Webhooks (REST, mesmos 17 tópicos e URL do connect manual) ──
@@ -411,6 +455,29 @@ export async function GET(request: NextRequest) {
     // NUNCA apagar placeholders de outras lojas aqui — são lojas que o
     // usuário criou e ainda não conectou. Com storeId alvo, o placeholder
     // vira a própria loja conectada (mesmo id).
+
+    // ── Loader da vitrine + demais extras (fire-and-forget) ──
+    // O escopo write_script_tags é pedido no início do OAuth, mas nada
+    // aqui instalava o ScriptTag: a permissão existia e o loader nunca
+    // subia, então a tela mostrava "Loader não pôde ser instalado
+    // automaticamente" e o lojista tinha de colar o script no
+    // theme.liquid à mão. O connect manual chama isto pelo navegador
+    // depois de conectar; aqui o retorno é um redirect, então o
+    // navegador nunca chegava a chamar.
+    try {
+      fetch(`${APP_URL}/api/shopify/install-extras`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Internal-Request': 'true',
+          // A rota exige o header E o bearer: sem os dois ela cai no
+          // caminho de sessão, que aqui não existe (o callback é público,
+          // o clique final vem do navegador do dono da loja).
+          Authorization: `Bearer ${process.env.CRON_SECRET || ''}`,
+        },
+        body: JSON.stringify({ storeId }),
+      }).catch(() => {});
+    } catch { /* ignore */ }
 
     // ── Sync inicial (fire-and-forget) ──
     try {

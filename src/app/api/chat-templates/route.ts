@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { requireOrgFromAuth } from '@/lib/auth/require-org';
 
 // Lazy service-role client — created only when the handler runs so a
 // missing env var at build/import time doesn't throw.
@@ -18,17 +19,20 @@ function getSupabase(): SupabaseClient {
 // GET - List Chat Templates
 // =============================================
 export async function GET(request: NextRequest) {
+  // A organização vinha no pedido e nada exigia sessão: qualquer um
+  // lia e escrevia na organização que quisesse, só informando o id.
+  // Agora ela vem do token.
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const organizationId = auth.orgId;
+
   try {
     const supabase = getSupabase()
     const { searchParams } = new URL(request.url)
-    const organizationId = searchParams.get('organization_id')
     const storeId = searchParams.get('store_id')
     const category = searchParams.get('category')
     const search = searchParams.get('search')
 
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
-    }
 
     let query = supabase
       .from('chat_templates')
@@ -90,11 +94,17 @@ export async function GET(request: NextRequest) {
 // POST - Create Chat Template
 // =============================================
 export async function POST(request: NextRequest) {
+  // A organização vinha no pedido e nada exigia sessão: qualquer um
+  // lia e escrevia na organização que quisesse, só informando o id.
+  // Agora ela vem do token.
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const organization_id = auth.orgId;
+
   try {
     const supabase = getSupabase()
     const body = await request.json()
     const {
-      organization_id,
       store_id,
       created_by,
       name,
@@ -105,9 +115,9 @@ export async function POST(request: NextRequest) {
       media_type,
     } = body
 
-    if (!organization_id || !name || !content) {
+    if (!name || !content) {
       return NextResponse.json(
-        { error: 'organization_id, name, and content are required' },
+        { error: 'name and content are required' },
         { status: 400 }
       )
     }
@@ -122,7 +132,6 @@ export async function POST(request: NextRequest) {
     const { data: template, error } = await supabase
       .from('chat_templates')
       .insert({
-        organization_id,
         store_id,
         created_by,
         name,
@@ -151,6 +160,12 @@ export async function POST(request: NextRequest) {
 // PUT - Update Chat Template
 // =============================================
 export async function PUT(request: NextRequest) {
+  // Editar e apagar iam pelo id, com a chave de serviço e sem sessão:
+  // qualquer um mexia no modelo de qualquer organização.
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const organizationId = auth.orgId;
+
   try {
     const supabase = getSupabase()
     const body = await request.json()
@@ -173,6 +188,7 @@ export async function PUT(request: NextRequest) {
       .from('chat_templates')
       .update(updates)
       .eq('id', id)
+      .eq('organization_id', organizationId)
       .select()
       .single()
 
@@ -192,6 +208,12 @@ export async function PUT(request: NextRequest) {
 // DELETE - Delete Chat Template
 // =============================================
 export async function DELETE(request: NextRequest) {
+  // Editar e apagar iam pelo id, com a chave de serviço e sem sessão:
+  // qualquer um mexia no modelo de qualquer organização.
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const organizationId = auth.orgId;
+
   try {
     const supabase = getSupabase()
     const { searchParams } = new URL(request.url)
@@ -206,6 +228,7 @@ export async function DELETE(request: NextRequest) {
       .from('chat_templates')
       .update({ is_active: false })
       .eq('id', id)
+      .eq('organization_id', organizationId)
 
     if (error) {
       console.error('Error deleting template:', error)

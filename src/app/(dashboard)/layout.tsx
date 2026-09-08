@@ -179,7 +179,7 @@ export default function DashboardLayout({
   const [storeSwitching, setStoreSwitching] = useState(false)
   const pathname = usePathname()
 
-  const { stores, currentStore, setStores, setCurrentStore, addStore, _hasHydrated } = useStoreStore()
+  const { stores, currentStore, setStores, setCurrentStore, addStore, removeStore, _hasHydrated } = useStoreStore()
   const { user, setUser, setLoading, signOut } = useAuthStore()
   const router = useRouter()
   const [userMenuOpen, setUserMenuOpen] = useState(false)
@@ -363,6 +363,31 @@ export default function DashboardLayout({
 
   const getInitials = (name: string) =>
     name.split(' ').map(word => word[0]).join('').toUpperCase().slice(0, 2)
+
+  // Loja criada em "Adicionar loja" e ainda sem integração: domínio
+  // sintético e ativa. É a única que a API deixa apagar, porque não há
+  // pedido, contato ou automação pendurado nela.
+  const isStoreRemovable = (store: ShopifyStore) =>
+    Boolean(store.domain?.endsWith('.worder.local')) && store.isActive !== false
+
+  const handleRemoveStore = async (store: ShopifyStore) => {
+    if (!confirm(`Remover a loja "${store.name}"? Ela ainda não tem integração Shopify.`)) return
+    try {
+      const res = await fetch(`/api/stores/${store.id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        alert(j.error || 'Não foi possível remover a loja.')
+        return
+      }
+      removeStore(store.id)
+      // Se a loja removida era a selecionada, cai na primeira restante.
+      if (currentStore?.id === store.id) {
+        setCurrentStore(stores.find(s => s.id !== store.id) || null)
+      }
+    } catch {
+      alert('Erro de conexão ao remover a loja.')
+    }
+  }
 
   const handleAddStore = async (store: any) => {
     setAddStoreModalOpen(false)
@@ -580,20 +605,36 @@ export default function DashboardLayout({
                   <p className="px-2 py-1 text-[10px] font-medium text-gray-500 uppercase tracking-wider">Suas Lojas</p>
                   <div className="space-y-1 mt-1 max-h-48 overflow-y-auto">
                     {stores.map((store) => (
-                      <button key={store.id} onClick={() => { handleSwitchStore(store); setStoreDropdownOpen(false) }}
-                        className={cn('w-full flex items-center gap-3 p-2 rounded-md transition-colors',
+                      <div key={store.id}
+                        className={cn('group flex items-center rounded-md transition-colors',
                           currentStore?.id === store.id ? 'bg-brand-500/10 text-brand-400' : 'text-gray-300 hover:bg-white/5')}>
-                        <div className="w-7 h-7 rounded bg-gray-700 flex items-center justify-center text-[10px] font-bold text-gray-300">
-                          {getInitials(store.name)}
-                        </div>
-                        <div className="flex-1 text-left min-w-0">
-                          <p className="text-sm font-medium truncate">{store.name}</p>
-                          <p className="text-[11px] text-gray-500 truncate">
-                            {displayStoreDomain(store.domain, store.isActive)}
-                          </p>
-                        </div>
-                        {currentStore?.id === store.id && <Check className="w-4 h-4 text-brand-400 flex-shrink-0" />}
-                      </button>
+                        <button onClick={() => { handleSwitchStore(store); setStoreDropdownOpen(false) }}
+                          className="flex-1 flex items-center gap-3 p-2 min-w-0">
+                          <div className="w-7 h-7 rounded bg-gray-700 flex items-center justify-center text-[10px] font-bold text-gray-300">
+                            {getInitials(store.name)}
+                          </div>
+                          <div className="flex-1 text-left min-w-0">
+                            <p className="text-sm font-medium truncate">{store.name}</p>
+                            <p className="text-[11px] text-gray-500 truncate">
+                              {displayStoreDomain(store.domain, store.isActive)}
+                            </p>
+                          </div>
+                          {currentStore?.id === store.id && <Check className="w-4 h-4 text-brand-400 flex-shrink-0" />}
+                        </button>
+                        {/* Só a loja que ainda não tem integração pode ser
+                            removida — a API recusa apagar qualquer outra.
+                            Sem isso, um "Adicionar loja" repetido por engano
+                            deixa duplicatas sem saída na lista. */}
+                        {isStoreRemovable(store) && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleRemoveStore(store) }}
+                            title="Remover loja (ainda sem integração)"
+                            className="p-2 mr-1 text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity flex-shrink-0"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     ))}
                   </div>
                 </div>

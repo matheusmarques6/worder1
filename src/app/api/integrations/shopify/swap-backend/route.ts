@@ -87,7 +87,7 @@ export async function PATCH(request: NextRequest) {
     if (cleanDomain !== store.shop_domain) {
       const { data: collision } = await supabase
         .from('shopify_stores')
-        .select('id, shop_domain, is_active')
+        .select('id, shop_domain, shop_name, is_active')
         .eq('organization_id', organizationId)
         .neq('id', storeId)
         .or(`shop_domain.eq.${cleanDomain},shop_domain_aliases.cs.{${cleanDomain}}`)
@@ -97,6 +97,8 @@ export async function PATCH(request: NextRequest) {
           {
             error: `Outra loja ativa nesta organização já usa ${cleanDomain}. Mescle ou exclua a duplicada antes de trocar.`,
             collidingStoreId: collision.id,
+            collidingStoreName: collision.shop_name ?? null,
+            collidingStoreDomain: collision.shop_domain ?? null,
           },
           { status: 409 }
         );
@@ -203,7 +205,7 @@ export async function PATCH(request: NextRequest) {
     {
       const { data: blockers } = await supabase
         .from('shopify_stores')
-        .select('id, shop_domain, is_active')
+        .select('id, shop_domain, shop_name, is_active')
         .eq('organization_id', organizationId)
         .neq('id', storeId)
         .eq('shop_domain', primaryDomain);
@@ -213,6 +215,8 @@ export async function PATCH(request: NextRequest) {
           return NextResponse.json({
             error: `Outra loja ATIVA já usa ${primaryDomain}. Mescle ou exclua antes de prosseguir.`,
             collidingStoreId: b.id,
+            collidingStoreName: b.shop_name ?? null,
+            collidingStoreDomain: b.shop_domain ?? null,
           }, { status: 409 });
         }
         // Inactive — free the domain by renaming to a placeholder

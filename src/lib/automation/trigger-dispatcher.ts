@@ -34,6 +34,20 @@ export function shouldIncludeAutomationForStore(
   return automationStoreId === eventStoreId
 }
 
+/**
+ * Lê o conector lógico (E/OU) de uma lista de filtros a partir do
+ * trigger_config. Espelha o `logicalOperator` dos filterGroups da
+ * Omnisend. Ausente → 'and', que é o comportamento de todo fluxo já
+ * salvo (nenhuma regressão em automações existentes).
+ * Exportada para teste unitário.
+ */
+export function filterLogicOf(
+  triggerConfig: Record<string, any> | null | undefined,
+  key: 'triggerFiltersLogic' | 'audienceFiltersLogic'
+): 'and' | 'or' {
+  return String(triggerConfig?.[key] || 'and').toLowerCase() === 'or' ? 'or' : 'and'
+}
+
 export interface DispatchOptions {
   organizationId: string
   triggerType: string // ex: 'trigger_form_submitted', 'trigger_segment', etc
@@ -292,8 +306,11 @@ export async function dispatchTrigger(opts: DispatchOptions): Promise<DispatchRe
       eligible = eligible.filter((a: any) => {
         const filters = a.audience_filters
         if (!Array.isArray(filters) || filters.length === 0) return true
-        // AND across all filter rows
-        return filters.every(matchesFilter)
+        // E/OU entre as linhas (Omnisend: um grupo com logicalOperator).
+        // Default 'and' preserva o comportamento de todos os fluxos já salvos.
+        return filterLogicOf(a.trigger_config, 'audienceFiltersLogic') === 'or'
+          ? filters.some(matchesFilter)
+          : filters.every(matchesFilter)
       })
     }
   } else {
@@ -309,7 +326,7 @@ export async function dispatchTrigger(opts: DispatchOptions): Promise<DispatchRe
   // audience_filters but evaluated against the trigger payload instead
   // of the contact. Crucial for "only fire viewed_product when SKU =
   // X" / "only fire placed_order when value > 100".
-  const evalAgainstPayload = (filters: any[], payload: any): boolean => {
+  const evalAgainstPayload = (filters: any[], payload: any, logic: 'and' | 'or' = 'and'): boolean => {
     if (!Array.isArray(filters) || filters.length === 0) return true
     const props = payload?.properties || payload || {}
     const items: any[] = Array.isArray(props.Items) ? props.Items : []
@@ -325,9 +342,16 @@ export async function dispatchTrigger(opts: DispatchOptions): Promise<DispatchRe
           return undefined
         }) : []
       }
-      // Cart/order level
+      // Cart/order level. Os produtores não falam a mesma língua: o
+      // webhook Shopify manda $value/Value, o EventBus manda total_price,
+      // o pixel e o event-processor mandam order_value/cart_value. Ler só
+      // as duas primeiras fazia o filtro "valor > X" enxergar 0 e reprovar
+      // silenciosamente todo pedido vindo dos outros caminhos.
       if (field === 'cart_value' || field === 'order_value' || field === 'value') {
-        return parseFloat(props.$value || props.Value || props.cart_value || props.value || 0)
+        return parseFloat(
+          props.$value ?? props.Value ?? props.cart_value ?? props.order_value ??
+          props.total_price ?? props.totalPrice ?? props.total_value ?? props.value ?? 0
+        )
       }
       if (field === 'item_count') return items.length || parseInt(props.ItemCount || 0, 10)
       if (field === 'currency') return props.Currency || props.currency
@@ -337,7 +361,7 @@ export async function dispatchTrigger(opts: DispatchOptions): Promise<DispatchRe
 
     const numericFields = new Set(['cart_value', 'order_value', 'value', 'item_count'])
 
-    return filters.every((row: any) => {
+    const evalRow = (row: any): boolean => {
       const op = row.operator || 'equals'
       const val = row.value
       const raw = pickValue(row.field)
@@ -379,11 +403,17 @@ export async function dispatchTrigger(opts: DispatchOptions): Promise<DispatchRe
         case 'not_in_list': return haystack.every(h => !list.includes(h))
         default: return true
       }
-    })
+    }
+
+    return logic === 'or' ? filters.some(evalRow) : filters.every(evalRow)
   }
 
   eligible = eligible.filter((a: any) =>
-    evalAgainstPayload(a.trigger_filters || [], triggerData)
+    evalAgainstPayload(
+      a.trigger_filters || [],
+      triggerData,
+      filterLogicOf(a.trigger_config, 'triggerFiltersLogic')
+    )
   )
 
   // 3d. Skip Contacts overlap protection (Omnisend-style). When the

@@ -213,7 +213,7 @@ export default function AnalyticsPage() {
         fetch(`/api/analytics?range=${range}${storeParam}`).then((r) =>
           r.ok ? r.json() : null
         ).catch(() => null),
-        fetch(`/api/analytics/email-dashboard?days=${days}`).then((r) =>
+        fetch(`/api/analytics/email-dashboard?days=${days}${currentStore?.id ? `&storeId=${currentStore.id}` : ''}`).then((r) =>
           r.ok ? r.json() : null
         ).catch(() => null),
         fetch(`/api/settings/attribution`).then((r) =>

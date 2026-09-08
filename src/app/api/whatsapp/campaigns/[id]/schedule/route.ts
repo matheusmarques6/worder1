@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
+import { requireOrgFromAuth } from '@/lib/auth/require-org';
 export const dynamic = 'force-dynamic';
 
 // POST /api/whatsapp/campaigns/[id]/schedule
@@ -7,6 +8,12 @@ export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  // A campanha vinha só pelo id, com a chave de serviço e sem sessão:
+  // qualquer um agendava a campanha de qualquer organização.
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const { orgId } = auth;
+
   try {
     const { id } = params
     const body = await request.json()
@@ -21,6 +28,7 @@ export async function POST(
       .from('whatsapp_campaigns')
       .select('status, template_id, audience_count')
       .eq('id', id)
+      .eq('organization_id', orgId)
       .single()
 
     if (!campaign) {
@@ -48,6 +56,7 @@ export async function POST(
         updated_at: new Date().toISOString()
       })
       .eq('id', id)
+      .eq('organization_id', orgId)
       .select('*')
       .single()
 
@@ -56,6 +65,7 @@ export async function POST(
     // Log
     await supabase.from('whatsapp_campaign_logs').insert({
       campaign_id: id,
+      organization_id: orgId,
       log_type: 'info',
       message: `Campanha agendada para ${new Date(scheduled_at).toLocaleString('pt-BR')}`,
       details: { scheduled_at, timezone }

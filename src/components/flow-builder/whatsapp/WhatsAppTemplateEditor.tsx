@@ -29,6 +29,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { BodyPortal } from '@/components/shared/BodyPortal';
 import { VariablePicker } from '../variables/VariablePicker';
 import { extractVariablesFromText } from '../variables/variableDefinitions';
 
@@ -420,12 +421,15 @@ export function WhatsAppTemplateEditor({
   );
 
   if (isModal) {
+    // No body: aberto de dentro do painel lateral (que anima com
+    // transform) o `fixed` não cobriria a tela. Ver BodyPortal.
     return (
+      <BodyPortal>
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+        className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
         onClick={onClose}
       >
         <motion.div
@@ -438,6 +442,7 @@ export function WhatsAppTemplateEditor({
           {content}
         </motion.div>
       </motion.div>
+      </BodyPortal>
     );
   }
 

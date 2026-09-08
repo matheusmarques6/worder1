@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseClient } from '@/lib/api-utils';
+import { requireStore } from '@/lib/api/guards';
 
 // ===== VERSÃO DO CÓDIGO - ATUALIZAR A CADA DEPLOY =====
 const API_VERSION = 'v8-senior-fix-2024-10-14';
@@ -534,26 +534,22 @@ function calculateKPIsFromOrders(
 }
 
 export async function GET(request: NextRequest) {
+  // A loja vem pela URL e daqui sai o access_token dela para chamar a
+  // Shopify. Sem esta cerca, um id de loja de outra organização bastava.
+  const guard = await requireStore(request);
+  if (!guard.ok) return guard.response;
+  const { supabase, storeId, organizationId } = guard;
+
   try {
-    const supabase = getSupabaseClient();
-    if (!supabase) {
-      return NextResponse.json({ success: false, error: 'Database not configured' });
-    }
-
-    // Get parameters
     const { searchParams } = new URL(request.url);
-    const storeId = searchParams.get('storeId');
     const period = searchParams.get('period') || '7d';
-
-    if (!storeId) {
-      return NextResponse.json({ success: false, error: 'storeId is required' });
-    }
 
     // Get store from database
     const { data: store, error: storeError } = await supabase
       .from('shopify_stores')
       .select('*')
       .eq('id', storeId)
+      .eq('organization_id', organizationId)
       .single();
 
     if (storeError || !store) {

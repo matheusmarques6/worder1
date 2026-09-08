@@ -54,15 +54,16 @@ export async function GET(request: NextRequest) {
       .maybeSingle();
     store = data;
   } else {
-    const { data } = await admin
-      .from('shopify_stores')
-      .select('id, organization_id, shop_domain, shop_domain_aliases')
-      .eq('organization_id', orgId)
-      .eq('is_active', true)
-      .order('installed_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    store = data;
+    // Sem storeId só serve a ÚNICA loja ativa da organização.
+    const { pickStore, pickStoreError } = await import('@/lib/stores/pick-store');
+    const picked = await pickStore<any>(admin, {
+      orgIds: [orgId], select: 'id, organization_id, shop_domain, shop_domain_aliases',
+    });
+    if (!picked.store) {
+      const err = pickStoreError(picked.reason);
+      return NextResponse.json({ error: err.error, code: err.code }, { status: err.status });
+    }
+    store = picked.store;
   }
   if (!store) return NextResponse.json({ error: 'Loja não encontrada' }, { status: 404 });
 

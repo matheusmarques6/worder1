@@ -13,6 +13,7 @@
 // =============================================
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError } from '@/lib/api-utils';
+import { normalizePublicHost, normalizePhone } from '@/lib/shopify/store-url';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { ensureFreshToken } from '@/lib/shopify/ensure-fresh-token';
 
@@ -27,6 +28,10 @@ const REQUIRED_WEBHOOKS = [
   'checkouts/create', 'checkouts/update',
   'customers/create', 'customers/update', 'customers/delete',
   'products/create', 'products/update', 'products/delete',
+  // Estoque por local: mantém a disponibilidade dos produtos (e por
+  // consequência os feeds) em dia quando só o inventário muda. Exige
+  // read_inventory — só é registrado quando o app tem essa permissão.
+  'inventory_levels/update',
   'refunds/create',
   'fulfillments/create', 'fulfillments/update',
   'app/uninstalled',
@@ -100,15 +105,16 @@ export async function POST(request: NextRequest) {
       .single();
     store = data;
   } else {
-    const { data } = await supabase
-      .from('shopify_stores')
-      .select('*')
-      .eq('organization_id', organizationId)
-      .eq('is_active', true)
-      .order('installed_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    store = data;
+    // Sem storeId só serve a ÚNICA loja ativa da organização. "A mais
+    // nova" instalava webhooks e pixel na loja errada assim que uma
+    // segunda loja era cadastrada.
+    const { pickStore, pickStoreError } = await import('@/lib/stores/pick-store');
+    const picked = await pickStore<any>(supabase, { orgIds: organizationId ? [organizationId] : [], select: '*' });
+    if (!picked.store) {
+      const err = pickStoreError(picked.reason);
+      return NextResponse.json({ error: err.error, code: err.code }, { status: err.status });
+    }
+    store = picked.store;
   }
 
   if (!store) return NextResponse.json({ error: 'Loja não encontrada' }, { status: 404 });
@@ -156,12 +162,26 @@ export async function POST(request: NextRequest) {
           'X-Shopify-Access-Token': store.access_token,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ query: `{ shop { myshopifyDomain } }` }),
+        body: JSON.stringify({ query: `{ shop { myshopifyDomain primaryDomain { host } billingAddress { phone } } }` }),
       }
     );
     if (canonRes.ok) {
       const j = await canonRes.json();
       const canonical = (j.data?.shop?.myshopifyDomain || '').toLowerCase() || null;
+      // Domínio principal PÚBLICO (drgroot.com) — a fonte de {{store_url}}.
+      // Reconsultado aqui porque install-extras roda na conexão e no
+      // "Reinstalar tudo": é o momento em que a loja acaba de ser ligada
+      // ou o lojista acabou de mexer nela.
+      const primaryHost = normalizePublicHost(j.data?.shop?.primaryDomain?.host) || null;
+      const shopPhone = normalizePhone(j.data?.shop?.billingAddress?.phone) || null;
+      const identidade: Record<string, any> = { primary_domain_checked_at: new Date().toISOString() };
+      if (primaryHost && primaryHost !== store.primary_domain) identidade.primary_domain = primaryHost;
+      if (shopPhone && shopPhone !== store.shop_phone) identidade.shop_phone = shopPhone;
+      const { error: pdErr } = await supabase.from('shopify_stores').update(identidade).eq('id', store.id);
+      if (!pdErr) {
+        if (identidade.primary_domain) store.primary_domain = identidade.primary_domain;
+        if (identidade.shop_phone) store.shop_phone = identidade.shop_phone;
+      }
       const typed = String(store.shop_domain || '').toLowerCase();
       if (canonical && canonical !== typed) {
         const existingAliases: string[] = Array.isArray(store.shop_domain_aliases) ? store.shop_domain_aliases : [];
@@ -239,9 +259,15 @@ export async function POST(request: NextRequest) {
   let webhookFailed = 0;
   const failedTopics: string[] = [];
 
+  const storedScopes: string[] = Array.isArray(store.scopes) ? store.scopes.map((s: any) => String(s).toLowerCase()) : [];
   for (const topic of REQUIRED_WEBHOOKS) {
     if (existingTopics.includes(topic)) {
       webhookExisting++;
+      continue;
+    }
+    // Sem read_inventory a Shopify recusa a inscrição; pular evita
+    // contar como falha um webhook que o app nem pode receber.
+    if (topic === 'inventory_levels/update' && storedScopes.length > 0 && !storedScopes.includes('read_inventory')) {
       continue;
     }
     // Bulk-finish and any other topic in WEBHOOK_PATH_OVERRIDES gets a

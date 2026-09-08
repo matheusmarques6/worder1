@@ -12,31 +12,81 @@
 // Module-cached: shop_domain is stable, so we cache per warm lambda to avoid a
 // lookup on every run.
 
+import { publicStoreHost } from '@/lib/shopify/store-url'
+
 type MinimalClient = {
   from: (t: string) => any
 }
 
-const cache = new Map<string, string | null>()
+export interface StoreIdentity {
+  /**
+   * Host PÚBLICO da vitrine — o domínio principal (drgroot.com) quando
+   * conhecido, senão o *.myshopify.com. É o que vai em {{store_url}} e
+   * no absolutizar de links relativos (/products/x). Todos os leitores
+   * de context.store.domain são voltados ao cliente, então este é o
+   * host certo para eles.
+   */
+  domain: string | null
+  /** Host da Admin API (*.myshopify.com). Só para falar com a Shopify. */
+  adminDomain: string | null
+  name: string | null
+  email: string | null
+  phone: string | null
+}
+
+const cache = new Map<string, StoreIdentity>()
+
+/**
+ * Identidade da loja para o contexto da automação.
+ *
+ * Antes só o domínio era carregado, então {{store_name}} lia
+ * context.store.name — que nunca existia — e saía vazio em TODO e-mail
+ * de automação; {{store_email}} e {{store_phone}} nem chegavam ao
+ * mergeData. As três eram oferecidas no seletor e nenhuma funcionava.
+ */
+export async function resolveStoreIdentity(
+  supabase: MinimalClient | null | undefined,
+  storeId: string | null | undefined
+): Promise<StoreIdentity> {
+  const vazio: StoreIdentity = { domain: null, adminDomain: null, name: null, email: null, phone: null }
+  if (!storeId || !supabase) return vazio
+  const hit = cache.get(storeId)
+  if (hit) return hit
+  let identity = vazio
+  try {
+    const { data, error } = await supabase
+      .from('shopify_stores')
+      .select('shop_domain, primary_domain, shop_name, shop_email, shop_phone')
+      // maybeSingle + tratamento explícito: um select com coluna errada
+      // devolve erro, e engolir isso foi o que deixou as variáveis de
+      // loja vazias por meses sem nenhum sinal.
+      .eq('id', storeId)
+      .maybeSingle()
+    if (error) console.error('[store-host] falha ao ler a loja:', error)
+    if (data) {
+      identity = {
+        domain: publicStoreHost(data) || null,
+        adminDomain: (data.shop_domain as string) || null,
+        name: (data.shop_name as string) || null,
+        email: (data.shop_email as string) || null,
+        phone: (data.shop_phone as string) || null,
+      }
+    }
+  } catch {
+    identity = vazio
+  }
+  // Uma identidade vazia não entra no cache: se a leitura falhou por um
+  // instante, a próxima execução tenta de novo em vez de ficar sem loja
+  // até o processo reiniciar.
+  if (identity.domain || identity.name) cache.set(storeId, identity)
+  return identity
+}
 
 export async function resolveStoreShopDomain(
   supabase: MinimalClient | null | undefined,
   storeId: string | null | undefined
 ): Promise<string | null> {
-  if (!storeId || !supabase) return null
-  if (cache.has(storeId)) return cache.get(storeId)!
-  let domain: string | null = null
-  try {
-    const { data } = await supabase
-      .from('shopify_stores')
-      .select('shop_domain')
-      .eq('id', storeId)
-      .maybeSingle()
-    domain = (data?.shop_domain as string) || null
-  } catch {
-    domain = null
-  }
-  cache.set(storeId, domain)
-  return domain
+  return (await resolveStoreIdentity(supabase, storeId)).domain
 }
 
 /** Build the `store` context field ({ domain }) or undefined when unknown. */

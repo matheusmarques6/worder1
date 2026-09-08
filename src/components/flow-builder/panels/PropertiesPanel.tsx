@@ -28,7 +28,7 @@ interface Pipeline {
 // PROPERTIES PANEL
 // ============================================
 
-export function PropertiesPanel({ organizationId, automationId }: { organizationId?: string; automationId?: string }) {
+export function PropertiesPanel({ organizationId, automationId, storeId }: { organizationId?: string; automationId?: string; storeId?: string }) {
   const selectedNode = useSelectedNode();
   const selectNode = useFlowStore((state) => state.selectNode);
   const updateNode = useFlowStore((state) => state.updateNode);
@@ -564,6 +564,50 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
             )}
 
             {/* ============================== */}
+            {/* TRIGGER: POPUP SUBSCRIBED / FORM SUBMITTED */}
+            {/* Seletor de popup/formulário (estilo Omnisend: o gatilho */}
+            {/* de inscrição filtra por formulário de origem). O motor  */}
+            {/* já lê trigger_config.form_id — faltava a UI gravar.     */}
+            {/* ============================== */}
+            {(selectedNode.data.nodeType === 'trigger_popup_subscribed' ||
+              selectedNode.data.nodeType === 'trigger_form_submitted') && (
+              <FormTriggerConfig
+                config={selectedNode.data.config || {}}
+                onUpdate={handleUpdate}
+                storeId={storeId}
+                popupOnly={selectedNode.data.nodeType === 'trigger_popup_subscribed'}
+              />
+            )}
+
+            {/* TRIGGER: SEGMENTO — o cron de segmentos já filtra por
+                trigger_config.segment_id; sem este seletor todo fluxo de
+                segmento disparava pra QUALQUER segmento da org. */}
+            {selectedNode.data.nodeType === 'trigger_segment' && (
+              <SegmentTriggerConfig
+                config={selectedNode.data.config || {}}
+                onUpdate={handleUpdate}
+              />
+            )}
+
+            {/* TRIGGER: EVENTO CUSTOMIZADO — nome do evento que dispara.
+                Vazio = qualquer evento (compat com fluxos existentes). */}
+            {selectedNode.data.nodeType === 'trigger_custom_event' && (
+              <div className="space-y-2">
+                <label className="text-xs text-gray-500">Nome do evento</label>
+                <input
+                  type="text"
+                  value={selectedNode.data.config?.event_name || ''}
+                  onChange={(e) => handleUpdate('event_name', e.target.value)}
+                  placeholder="ex: pedido_avaliado"
+                  className="w-full px-3 py-2 rounded-lg bg-white border border-gray-200 text-sm text-gray-700 placeholder-gray-400 font-mono focus:outline-none focus:border-blue-500/50"
+                />
+                <p className="text-[10px] text-gray-400">
+                  Só dispara quando o evento enviado pela API tiver exatamente este nome. Vazio = qualquer evento.
+                </p>
+              </div>
+            )}
+
+            {/* ============================== */}
             {/* GENERIC TRIGGER INFO          */}
             {/* For triggers without specific config */}
             {/* ============================== */}
@@ -713,6 +757,16 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                     </div>
                   )}
                 </div>
+
+                {/* Em QUAL relógio a janela vale. Sem essa escolha o
+                    motor usava o relógio do servidor (UTC), e "09:00"
+                    saía como 06:00 no Brasil. */}
+                {(selectedNode.data.config?.restrictDays || selectedNode.data.config?.restrictTime) && (
+                  <DelayTimezoneMode
+                    value={selectedNode.data.config?.timezoneMode || 'recipient'}
+                    onChange={(v) => handleUpdate('timezoneMode', v)}
+                  />
+                )}
               </div>
             )}
 
@@ -748,6 +802,10 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                     <p className="text-[10px] text-gray-400">
                       Se o horário já passou hoje, aguardará até amanhã
                     </p>
+                    <DelayTimezoneMode
+                      value={selectedNode.data.config?.timezoneMode || 'recipient'}
+                      onChange={(v) => handleUpdate('timezoneMode', v)}
+                    />
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -1351,6 +1409,67 @@ export function PropertiesPanel({ organizationId, automationId }: { organization
                 isRemove={selectedNode.data.nodeType === 'action_remove_from_list'}
               />
             )}
+
+            {/* GERAR CUPOM SHOPIFY — estava na paleta sem NENHUM painel:
+                o nó publicava vazio e rodava com os defaults do executor. */}
+            {selectedNode.data.nodeType === 'action_shopify_coupon' && (
+              <ShopifyCouponConfig
+                config={selectedNode.data.config || {}}
+                onUpdate={handleUpdate}
+              />
+            )}
+
+            {/* AGUARDAR RESPOSTA (WhatsApp) — idem: sem painel, timeout
+                era sempre o default de 1h. */}
+            {selectedNode.data.nodeType === 'action_whatsapp_wait_reply' && (
+              <div className="space-y-2">
+                <label className="text-xs text-gray-500">Tempo máximo de espera</label>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    min="1"
+                    value={selectedNode.data.config?.timeoutMinutes ?? 60}
+                    onChange={(e) => handleUpdate('timeoutMinutes', e.target.value ? parseInt(e.target.value, 10) : 60)}
+                    className="flex-1 px-3 py-2 rounded-lg bg-white border border-gray-200 text-sm text-gray-700 focus:outline-none focus:border-blue-500/50"
+                  />
+                  <span className="px-3 py-2 text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-lg">minutos</span>
+                </div>
+                <p className="text-[10px] text-gray-400">Se o contato não responder nesse tempo, o fluxo continua.</p>
+              </div>
+            )}
+
+            {/* CONDIÇÃO KEYWORD (WhatsApp) — sem painel, a condição caía
+                sempre no ramo "Sim" (keyword vazia = qualquer mensagem). */}
+            {selectedNode.data.nodeType === 'condition_whatsapp_keyword' && (
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <label className="text-xs text-gray-500">Palavras-chave (separe por vírgula)</label>
+                  <input
+                    type="text"
+                    value={selectedNode.data.config?.keyword || ''}
+                    onChange={(e) => handleUpdate('keyword', e.target.value)}
+                    placeholder="sim, quero, aceito"
+                    className="w-full px-3 py-2 rounded-lg bg-white border border-gray-200 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:border-blue-500/50"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs text-gray-500">Modo de comparação</label>
+                  <div className="relative">
+                    <select
+                      value={selectedNode.data.config?.matchType || 'contains'}
+                      onChange={(e) => handleUpdate('matchType', e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg appearance-none bg-white border border-gray-200 text-sm text-gray-700 focus:outline-none focus:border-blue-500/50"
+                    >
+                      <option value="contains">Contém</option>
+                      <option value="equals">Igual (mensagem exata)</option>
+                      <option value="regex">Expressão regular</option>
+                    </select>
+                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                  </div>
+                  <p className="text-[10px] text-gray-400">Sem palavra-chave, qualquer mensagem cai no ramo &quot;Sim&quot;.</p>
+                </div>
+              </div>
+            )}
           </section>
 
           {/* Variables hint */}
@@ -1730,6 +1849,277 @@ function FilterConditionsEditor({
 }
 
 // ============================================
+// FORM/POPUP TRIGGER CONFIG
+// Seletor "de qual popup/formulário" pros gatilhos de inscrição —
+// mesmo modelo da Omnisend (trigger de signup filtra pelo formulário
+// de origem). Grava trigger_config.form_id (a chave que o dispatcher
+// compara no submit) + form_name pro resumo do nó. Vazio = qualquer.
+// ============================================
+
+// Mesmo gate do runtime (submit/route.ts): só estes form_types disparam
+// trigger_popup_subscribed.
+const VISUAL_POPUP_TYPES = ['popup', 'flyout', 'banner', 'fullpage'];
+
+interface FormTriggerConfigProps {
+  config: Record<string, any>;
+  onUpdate: (key: string, value: any) => void;
+  storeId?: string;
+  popupOnly: boolean;
+}
+
+function FormTriggerConfig({ config, onUpdate, storeId, popupOnly }: FormTriggerConfigProps) {
+  const [forms, setForms] = useState<{ id: string; name: string; form_type: string; status: string }[]>([]);
+  const [loadingForms, setLoadingForms] = useState(false);
+  const [formsError, setFormsError] = useState(false);
+
+  const noun = popupOnly ? 'popup' : 'formulário';
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoadingForms(true);
+      setFormsError(false);
+      try {
+        // Sem storeId o endpoint devolve só os globais (store_id null) —
+        // comportamento correto: popups de outra loja não devem aparecer.
+        const qs = storeId ? `?storeId=${encodeURIComponent(storeId)}` : '';
+        const res = await fetch(`/api/forms${qs}`, { cache: 'no-store' });
+        if (!res.ok) { if (!cancelled) setFormsError(true); return; }
+        const data = await res.json();
+        const list = (data.forms || []).filter((f: any) =>
+          popupOnly ? VISUAL_POPUP_TYPES.includes(f.form_type) : true
+        );
+        if (!cancelled) setForms(list);
+      } catch {
+        if (!cancelled) setFormsError(true);
+      } finally {
+        if (!cancelled) setLoadingForms(false);
+      }
+    })();
+    return () => { cancelled = true };
+  }, [storeId, popupOnly]);
+
+  // Popup escolhido antes e apagado/da outra loja: manter selecionável
+  // pra não trocar silenciosamente o gatilho pra "qualquer" ao abrir.
+  const selectedMissing = config.form_id && !forms.some((f) => f.id === config.form_id);
+
+  return (
+    <div className="space-y-2">
+      <label className="text-xs text-gray-500">
+        {popupOnly ? 'Qual popup dispara esta automação' : 'Qual formulário dispara esta automação'}
+      </label>
+      <div className="relative">
+        <select
+          value={config.form_id || ''}
+          onChange={(e) => {
+            const id = e.target.value;
+            const f = forms.find((x) => x.id === id);
+            // Uma escrita só: handleUpdate faz merge por chave e duas
+            // chamadas seguidas usam snapshots distintos sem problema,
+            // mas o par form_id/form_name deve ficar sempre consistente.
+            onUpdate('form_id', id || null);
+            onUpdate('form_name', f?.name || null);
+          }}
+          disabled={loadingForms}
+          className={cn(
+            'w-full px-3 py-2 rounded-lg appearance-none',
+            'bg-white border border-gray-200',
+            'text-sm text-gray-700',
+            'focus:outline-none focus:border-blue-500/50',
+            'disabled:opacity-50'
+          )}
+        >
+          <option value="">{popupOnly ? 'Qualquer popup' : 'Qualquer formulário'}</option>
+          {selectedMissing && (
+            <option value={config.form_id}>
+              {config.form_name ? `${config.form_name} (não encontrado)` : `(${noun} removido)`}
+            </option>
+          )}
+          {forms.map((f) => (
+            <option key={f.id} value={f.id}>
+              {f.name || f.id}{f.status !== 'published' ? ' (rascunho)' : ''}
+            </option>
+          ))}
+        </select>
+        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+      </div>
+      {formsError ? (
+        <p className="text-[10px] text-red-500">Erro ao carregar {noun}s</p>
+      ) : loadingForms ? (
+        <p className="text-[10px] text-gray-400">Carregando {noun}s…</p>
+      ) : forms.length === 0 && !selectedMissing ? (
+        <p className="text-[10px] text-gray-400">
+          Nenhum {noun} encontrado nesta loja — crie um em Formulários &amp; Popups.
+        </p>
+      ) : (
+        <p className="text-[10px] text-gray-400">
+          Escolha um {noun} específico ou deixe &quot;Qualquer&quot; para disparar com todos
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ============================================
+// SEGMENT TRIGGER CONFIG
+// Seletor "de qual segmento" — o cron detect-segment-changes filtra por
+// trigger_config.segment_id; vazio = qualquer segmento.
+// ============================================
+
+function SegmentTriggerConfig({ config, onUpdate }: {
+  config: Record<string, any>;
+  onUpdate: (key: string, value: any) => void;
+}) {
+  const [segments, setSegments] = useState<{ id: string; name: string }[]>([]);
+  const [loadingSegments, setLoadingSegments] = useState(false);
+  const [segmentsError, setSegmentsError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoadingSegments(true);
+      setSegmentsError(false);
+      try {
+        const res = await fetch('/api/segments', { cache: 'no-store' });
+        if (!res.ok) { if (!cancelled) setSegmentsError(true); return; }
+        const data = await res.json();
+        if (!cancelled) setSegments((data.segments || []).map((s: any) => ({ id: s.id, name: s.name || s.id })));
+      } catch {
+        if (!cancelled) setSegmentsError(true);
+      } finally {
+        if (!cancelled) setLoadingSegments(false);
+      }
+    })();
+    return () => { cancelled = true };
+  }, []);
+
+  const selectedMissing = config.segment_id && !segments.some((s) => s.id === config.segment_id);
+
+  return (
+    <div className="space-y-2">
+      <label className="text-xs text-gray-500">Qual segmento dispara esta automação</label>
+      <div className="relative">
+        <select
+          value={config.segment_id || ''}
+          onChange={(e) => {
+            const id = e.target.value;
+            const s = segments.find((x) => x.id === id);
+            onUpdate('segment_id', id || null);
+            onUpdate('segment_name', s?.name || null);
+          }}
+          disabled={loadingSegments}
+          className={cn(
+            'w-full px-3 py-2 rounded-lg appearance-none',
+            'bg-white border border-gray-200',
+            'text-sm text-gray-700',
+            'focus:outline-none focus:border-blue-500/50',
+            'disabled:opacity-50'
+          )}
+        >
+          <option value="">Qualquer segmento</option>
+          {selectedMissing && (
+            <option value={config.segment_id}>
+              {config.segment_name ? `${config.segment_name} (não encontrado)` : '(segmento removido)'}
+            </option>
+          )}
+          {segments.map((s) => (
+            <option key={s.id} value={s.id}>{s.name}</option>
+          ))}
+        </select>
+        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+      </div>
+      {segmentsError ? (
+        <p className="text-[10px] text-red-500">Erro ao carregar segmentos</p>
+      ) : (
+        <p className="text-[10px] text-gray-400">
+          Escolha um segmento específico ou deixe &quot;Qualquer&quot; para disparar em todos
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ============================================
+// SHOPIFY COUPON CONFIG
+// O nó "Gerar Cupom" estava na paleta sem painel — publicava vazio e
+// rodava só com os defaults do executor.
+// ============================================
+
+function ShopifyCouponConfig({ config, onUpdate }: {
+  config: Record<string, any>;
+  onUpdate: (key: string, value: any) => void;
+}) {
+  const selectCls = cn(
+    'w-full px-3 py-2 rounded-lg appearance-none',
+    'bg-white border border-gray-200',
+    'text-sm text-gray-700',
+    'focus:outline-none focus:border-blue-500/50'
+  );
+  const inputCls = cn(
+    'w-full px-3 py-2 rounded-lg',
+    'bg-white border border-gray-200',
+    'text-sm text-gray-700 placeholder-gray-400',
+    'focus:outline-none focus:border-blue-500/50'
+  );
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1.5">
+          <label className="text-xs text-gray-500">Tipo de desconto</label>
+          <div className="relative">
+            <select
+              value={config.discountType || 'percentage'}
+              onChange={(e) => onUpdate('discountType', e.target.value)}
+              className={selectCls}
+            >
+              <option value="percentage">Porcentagem (%)</option>
+              <option value="fixed_amount">Valor fixo (R$)</option>
+            </select>
+            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-xs text-gray-500">Valor</label>
+          <input
+            type="number"
+            min="1"
+            value={config.value ?? 10}
+            onChange={(e) => onUpdate('value', e.target.value ? parseFloat(e.target.value) : 10)}
+            className={inputCls}
+          />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1.5">
+          <label className="text-xs text-gray-500">Validade (dias)</label>
+          <input
+            type="number"
+            min="1"
+            value={config.validityDays ?? config.expiryDays ?? 7}
+            onChange={(e) => onUpdate('validityDays', e.target.value ? parseInt(e.target.value, 10) : 7)}
+            className={inputCls}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-xs text-gray-500">Prefixo do código</label>
+          <input
+            type="text"
+            value={config.prefix || ''}
+            onChange={(e) => onUpdate('prefix', e.target.value.toUpperCase())}
+            placeholder="GIFT"
+            className={cn(inputCls, 'font-mono uppercase')}
+          />
+        </div>
+      </div>
+      <p className="text-[10px] text-gray-400">
+        O cupom é gerado na loja Shopify da automação e fica disponível na variável{' '}
+        <code className="font-mono">{'{{ coupon.code }}'}</code>.
+      </p>
+    </div>
+  );
+}
+
+// ============================================
 // ORDER TRIGGER CONFIG
 // ============================================
 
@@ -1887,10 +2277,19 @@ function NotifyActionConfig({ config, onUpdate, organizationId }: NotifyActionCo
     if (!organizationId) return;
     setLoadingUsers(true);
     try {
-      const res = await fetch(`/api/organization/members?organizationId=${organizationId}`);
+      // /api/organization/members nunca existiu — a lista vinha sempre
+      // vazia e o alerta interno virava no-op. A rota real é
+      // /api/settings/users (organization_members + profiles).
+      const res = await fetch('/api/settings/users');
       if (res.ok) {
         const data = await res.json();
-        setUsers(data.members || []);
+        const members = (data.members || []).map((m: any) => ({
+          // O executor notifica por user_id (notifications.user_id).
+          id: m.user_id || m.id,
+          email: m.profiles?.email || m.email || '',
+          name: m.profiles?.full_name || m.profiles?.name || undefined,
+        })).filter((u: any) => u.id);
+        setUsers(members);
       }
     } catch (e) {
       console.error('Error fetching users:', e);
@@ -2071,6 +2470,31 @@ function AbandonedCartConfig({ config, onUpdate, organizationId }: AbandonedCart
           ))}
         </select>
         {storeLoadError && <p className="text-[10px] text-red-500 mt-1">Erro ao carregar lojas</p>}
+      </div>
+
+      {/* Tempo de abandono — o cron de carrinho abandonado LÊ
+          config.abandonTime/abandonUnit, mas este painel não tinha os
+          inputs: o tempo era sempre o default de 30 min. */}
+      <div className="space-y-1.5">
+        <label className="text-sm font-medium text-gray-700">Considerar abandonado após</label>
+        <div className="flex gap-2">
+          <input
+            type="number"
+            min="1"
+            value={config.abandonTime ?? 30}
+            onChange={(e) => onUpdate('abandonTime', e.target.value ? parseInt(e.target.value, 10) : 30)}
+            className={inputCls}
+          />
+          <select
+            value={config.abandonUnit || 'minutes'}
+            onChange={(e) => onUpdate('abandonUnit', e.target.value)}
+            className={selectCls}
+          >
+            <option value="minutes">minutos</option>
+            <option value="hours">horas</option>
+          </select>
+        </div>
+        <p className="text-xs text-gray-400">Tempo sem atividade no carrinho antes de disparar</p>
       </div>
 
       {/* Minimum cart value */}
@@ -2315,8 +2739,11 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
           }
         } catch { /* non-blocking — fall through to org default */ }
       }
-      // 2) Org-level fallback for whatever is STILL empty
-      if (need.senderName || need.senderEmail) {
+      // 2) Org-level fallback for whatever is STILL empty — SÓ para fluxos
+      //    sem loja. Num fluxo de loja, o padrão da organização é a
+      //    identidade de outra loja; o campo fica vazio e o envio usa a
+      //    identidade da própria loja (getEmailProviderForOrg com storeId).
+      if (!storeId && (need.senderName || need.senderEmail)) {
         try {
           const r = await fetch('/api/settings/organization');
           const d = await r.json();
@@ -2430,22 +2857,26 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
             const opened = nodeMetrics?.opened ?? 0;
             const clicked = nodeMetrics?.clicked ?? 0;
             const revenue = nodeMetrics?.revenue ?? 0;
+            const waiting = (nodeMetrics as any)?.waiting ?? 0;
             const openRate = sent > 0 ? Math.round((opened / sent) * 100) : null;
             const clickRate = sent > 0 ? Math.round((clicked / sent) * 100) : null;
             const fmt = (n: number) =>
               n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             return (
               <>
+                {/* A contagem junto da taxa: uma taxa sozinha, com
+                    poucos envios, é lida como desempenho quando é só
+                    um clique ou dois. */}
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Taxa de abertura</span>
+                  <span className="text-sm text-gray-600">Aberturas</span>
                   <span className={`text-sm ${openRate === null ? 'text-gray-400' : 'text-gray-900 font-medium'}`}>
-                    {openRate === null ? '--' : `${openRate}%`}
+                    {openRate === null ? '--' : `${opened} de ${sent} · ${openRate}%`}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Taxa de cliques</span>
+                  <span className="text-sm text-gray-600">Cliques</span>
                   <span className={`text-sm ${clickRate === null ? 'text-gray-400' : 'text-gray-900 font-medium'}`}>
-                    {clickRate === null ? '--' : `${clickRate}%`}
+                    {clickRate === null ? '--' : `${clicked} de ${sent} · ${clickRate}%`}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
@@ -2458,6 +2889,21 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
                   <span className="text-xs text-gray-400">Enviados</span>
                   <span className="text-xs text-gray-500">{sent}</span>
                 </div>
+                {waiting > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-400">Aguardando aqui agora</span>
+                    <span className="text-xs text-amber-700 font-medium">{waiting}</span>
+                  </div>
+                )}
+                {sent > 0 && revenue === 0 && (
+                  // "R$ 0" sozinho não distingue "ninguém comprou" de
+                  // "isto não está medindo". A receita só entra quando um
+                  // pedido cai na janela de atribuição depois do e-mail.
+                  <p className="text-[11px] text-gray-400 leading-snug pt-1">
+                    Sem receita atribuída ainda: nenhum pedido caiu na janela de
+                    atribuição depois deste e-mail.
+                  </p>
+                )}
               </>
             );
           })()}
@@ -2648,43 +3094,73 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
             <input type="checkbox" checked={config.smartSending || false} onChange={(e) => onUpdate('smartSending', e.target.checked)}
               className="w-4 h-4 mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
             <div>
-              <p className="text-sm text-gray-900">Pular perfis contatados recentemente</p>
+              <p className="text-sm text-gray-900">Pular quem recebeu e-mail há pouco</p>
               <p className="text-xs text-gray-500 mt-0.5">
-                <span className="text-blue-600">Smart Sending</span> will skip anyone who received an email within the last {config.smartSendingHours || 16} hours.
+                <span className="text-blue-600">Smart Sending</span> pula o contato que já recebeu
+                qualquer e-mail seu nas últimas {config.smartSendingHours || 16} horas. Desligado por
+                padrão — envio duplicado do mesmo passo já é bloqueado sempre.
               </p>
             </div>
           </label>
           {config.smartSending && (
             <div className="flex items-center gap-2 ml-6">
-              <span className="text-xs text-gray-500">Skip window:</span>
-              <input type="number" min="1" value={config.smartSendingHours || 16} onChange={(e) => onUpdate('smartSendingHours', parseInt(e.target.value) || 16)}
+              <span className="text-xs text-gray-500">Janela:</span>
+              <input type="number" min="1" max="168" value={config.smartSendingHours || 16}
+                onChange={(e) => onUpdate('smartSendingHours', Math.min(168, Math.max(1, parseInt(e.target.value) || 16)))}
                 className="w-14 px-2 py-1 rounded border border-gray-200 text-xs text-gray-700 focus:outline-none focus:border-blue-500" />
-              <span className="text-xs text-gray-500">hours</span>
+              <span className="text-xs text-gray-500">horas</span>
             </div>
           )}
 
-          {/* UTM Tracking — always on by default. Toggle unlocks the
-              custom utm_source / utm_medium / utm_campaign fields. */}
+          {/* UTM — todo link já sai com as 6 UTMs da loja (Configurações →
+              UTM) + identificação do contato/envio. O toggle só permite
+              SOBRESCREVER os templates neste e-mail, campo a campo. */}
           <label className="flex items-start gap-2.5 cursor-pointer">
-            <input type="checkbox" checked={config.utmTracking || false} onChange={(e) => onUpdate('utmTracking', e.target.checked)}
+            <input type="checkbox" checked={config.utmTracking === true} onChange={(e) => onUpdate('utmTracking', e.target.checked)}
               className="w-4 h-4 mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
             <div>
-              <p className="text-sm text-gray-900">Personalizar UTMs</p>
+              <p className="text-sm text-gray-900">Personalizar UTMs deste e-mail</p>
               <p className="text-xs text-gray-500 mt-0.5">
-                Todos os links já saem com <span className="text-blue-600">utm_source=worder</span> + <span className="text-blue-600">utm_medium=email</span>. Ative pra trocar os valores ou adicionar uma <span className="text-blue-600">utm_campaign</span>.
+                Todos os links já saem com as UTMs da loja (padrão: <span className="text-blue-600">automation: nome do fluxo (id)</span>,
+                conteúdo = nome deste e-mail) e com a identificação do contato e do envio. Ative para trocar
+                os valores só aqui. Variáveis: <span className="text-blue-600">{'{{automation_name}}'}</span>,{' '}
+                <span className="text-blue-600">{'{{message_name}}'}</span>, <span className="text-blue-600">{'{{channel}}'}</span>,{' '}
+                <span className="text-blue-600">{'{{send_date}}'}</span>, <span className="text-blue-600">{'{{link_text}}'}</span>…
+                <a href="/settings/utm" target="_blank" rel="noreferrer" className="ml-1 text-blue-600 underline">Ver padrão da loja</a>
               </p>
             </div>
           </label>
-          {config.utmTracking && (
+          {config.utmTracking === true && (
             <div className="space-y-2 ml-6">
-              <input type="text" value={config.utmSource || 'worder'} onChange={(e) => onUpdate('utmSource', e.target.value)}
-                placeholder="utm_source" className="w-full px-2 py-1.5 rounded border border-gray-200 text-xs text-gray-700 focus:outline-none focus:border-blue-500" />
-              <input type="text" value={config.utmMedium || 'email'} onChange={(e) => onUpdate('utmMedium', e.target.value)}
-                placeholder="utm_medium" className="w-full px-2 py-1.5 rounded border border-gray-200 text-xs text-gray-700 focus:outline-none focus:border-blue-500" />
-              <input type="text" value={config.utmCampaign || ''} onChange={(e) => onUpdate('utmCampaign', e.target.value)}
-                placeholder="utm_campaign" className="w-full px-2 py-1.5 rounded border border-gray-200 text-xs text-gray-700 focus:outline-none focus:border-blue-500" />
+              {([
+                ['utmSource', 'utm_source', 'worder'],
+                ['utmMedium', 'utm_medium', '{{channel}}'],
+                ['utmCampaign', 'utm_campaign', 'automation: {{automation_name}} ({{automation_id}})'],
+                ['utmContent', 'utm_content', '{{message_name}} ({{message_id}})'],
+                ['utmTerm', 'utm_term', '{{send_date}}'],
+                ['utmId', 'utm_id', '{{automation_id}}'],
+              ] as Array<[string, string, string]>).map(([field, key, def]) => (
+                <div key={field} className="flex items-center gap-2">
+                  <span className="w-[92px] shrink-0 text-[11px] font-mono text-gray-500">{key}</span>
+                  <input type="text" value={config[field] || ''} onChange={(e) => onUpdate(field, e.target.value)}
+                    placeholder={`padrão da loja: ${def}`}
+                    className="flex-1 min-w-0 px-2 py-1.5 rounded border border-gray-200 text-xs text-gray-700 focus:outline-none focus:border-blue-500" />
+                </div>
+              ))}
+              <p className="text-[11px] text-gray-400">Campo vazio = usa o padrão da loja.</p>
             </div>
           )}
+          <label className="flex items-start gap-2.5 cursor-pointer">
+            <input type="checkbox" checked={config.utmDisabled === true} onChange={(e) => onUpdate('utmDisabled', e.target.checked)}
+              className="w-4 h-4 mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+            <div>
+              <p className="text-sm text-gray-900">Não adicionar UTM neste e-mail</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Os links saem sem <span className="text-blue-600">utm_*</span>. A identificação do contato/envio
+                (<span className="text-blue-600">worderContactID</span>, <span className="text-blue-600">worderSendID</span>) continua — é ela que atribui as vendas.
+              </p>
+            </div>
+          </label>
         </div>
       </div>
 
@@ -2714,6 +3190,7 @@ function EmailActionConfig({ config, onUpdate, onLabelChange, triggerType, organ
           templateId={config.templateId}
           triggerType={triggerType}
           organizationId={organizationId}
+          storeId={storeId}
           onClose={() => setShowPreviewMode(false)}
         />
       )}
@@ -2902,6 +3379,90 @@ interface ExitCondition {
   value?: string;
 }
 
+// Conector lógico entre as linhas de filtro (E / OU) — equivalente ao
+// logicalOperator dos filterGroups da Omnisend. Só aparece a partir da
+// 2ª linha, quando a escolha passa a fazer diferença.
+function FilterLogicToggle({ value, onChange }: {
+  value: string;
+  onChange: (v: 'and' | 'or') => void;
+}) {
+  const isOr = String(value).toLowerCase() === 'or';
+  const btn = (active: boolean) => cn(
+    'px-2 py-0.5 text-[10px] font-semibold rounded transition-colors',
+    active ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-700'
+  );
+  return (
+    <div className="flex items-center gap-2 mt-1">
+      <div className="flex items-center gap-0.5 bg-gray-100 rounded p-0.5">
+        <button type="button" onClick={() => onChange('and')} className={btn(!isOr)}>E</button>
+        <button type="button" onClick={() => onChange('or')} className={btn(isOr)}>OU</button>
+      </div>
+      <span className="text-[10px] text-gray-400">
+        {isOr ? 'Basta uma condição ser verdadeira' : 'Todas as condições precisam ser verdadeiras'}
+      </span>
+    </div>
+  );
+}
+
+// Em qual relógio a espera é medida. Antes desta escolha o motor usava
+// o horário do servidor — UTC na Vercel —, então "enviar entre 09:00 e
+// 21:00" na prática era 06:00 às 18:00 no Brasil.
+function DelayTimezoneMode({ value, onChange }: {
+  value: string;
+  onChange: (v: 'recipient' | 'store') => void;
+}) {
+  const isStore = value === 'store';
+  const btn = (active: boolean) => cn(
+    'px-2 py-1 text-[10px] font-semibold rounded transition-colors',
+    active ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-700'
+  );
+  return (
+    <div className="space-y-1 pt-1">
+      <label className="text-[10px] text-gray-500 uppercase tracking-wide">Fuso horário</label>
+      <div className="flex items-center gap-0.5 bg-gray-100 rounded p-0.5 w-fit">
+        <button type="button" onClick={() => onChange('recipient')} className={btn(!isStore)}>
+          Do contato
+        </button>
+        <button type="button" onClick={() => onChange('store')} className={btn(isStore)}>
+          Da loja
+        </button>
+      </div>
+      <p className="text-[10px] text-gray-400 leading-snug">
+        {isStore
+          ? 'Todos seguem o relógio da loja, não importa onde estejam.'
+          : 'Cada contato segue o próprio relógio. Sem fuso conhecido, usa o da loja.'}
+      </p>
+    </div>
+  );
+}
+
+// Alcance de envio por canal (sendingThresholds da Omnisend).
+function SendingThresholdSelect({ label, value, onChange, inputCls, hint }: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  inputCls: string;
+  hint?: string;
+}) {
+  const descriptions: Record<string, string> = {
+    subscribed: 'Somente quem deu consentimento',
+    nonSubscribed: 'Inclui quem nunca optou (ex.: deixou o e-mail no checkout)',
+    all: 'Inclui quem se descadastrou — apenas transacional',
+  };
+  return (
+    <div className="space-y-1">
+      <label className="text-xs font-medium text-gray-700">{label}</label>
+      <select value={value} onChange={(e) => onChange(e.target.value)} className={inputCls}>
+        <option value="subscribed">Apenas inscritos</option>
+        <option value="nonSubscribed">Inscritos + não inscritos</option>
+        <option value="all">Todos os contatos</option>
+      </select>
+      <p className="text-[10px] text-gray-400">{descriptions[value] || descriptions.subscribed}</p>
+      {hint && <p className="text-[10px] text-gray-400">{hint}</p>}
+    </div>
+  );
+}
+
 function TriggerFiltersConfig({ config, onUpdate, triggerType }: {
   config: Record<string, any>;
   onUpdate: (key: string, value: any) => void;
@@ -2947,6 +3508,9 @@ function TriggerFiltersConfig({ config, onUpdate, triggerType }: {
   const removeAudienceFilter = (idx: number) => {
     onUpdate('audienceFilters', audienceFilters.filter((_, i) => i !== idx));
   };
+
+  // Sending thresholds (Omnisend) — alcance do envio por canal.
+  const sendingThresholds: Record<string, string> = config.sendingThresholds || {};
 
   // Exit Conditions
   const exitConditions: ExitCondition[] = config.exitConditions || [];
@@ -3030,6 +3594,12 @@ function TriggerFiltersConfig({ config, onUpdate, triggerType }: {
         {triggerFilters.length === 0 && (
           <p className="text-xs text-gray-400">Nenhum filtro aplicado.</p>
         )}
+        {triggerFilters.length > 1 && (
+          <FilterLogicToggle
+            value={config.triggerFiltersLogic || 'and'}
+            onChange={(v) => onUpdate('triggerFiltersLogic', v)}
+          />
+        )}
         {triggerFilters.map((filter, idx) => (
           <div key={idx} className="flex gap-1.5 items-start mt-2">
             <div className="flex-1 space-y-1.5">
@@ -3068,6 +3638,12 @@ function TriggerFiltersConfig({ config, onUpdate, triggerType }: {
         {audienceFilters.length === 0 && (
           <p className="text-xs text-gray-400">Nenhum filtro de perfil aplicado.</p>
         )}
+        {audienceFilters.length > 1 && (
+          <FilterLogicToggle
+            value={config.audienceFiltersLogic || 'and'}
+            onChange={(v) => onUpdate('audienceFiltersLogic', v)}
+          />
+        )}
         {audienceFilters.map((filter, idx) => (
           <div key={idx} className="flex gap-1.5 items-start mt-2">
             <div className="flex-1 space-y-1.5">
@@ -3088,6 +3664,43 @@ function TriggerFiltersConfig({ config, onUpdate, triggerType }: {
             </button>
           </div>
         ))}
+      </div>
+
+      <hr className="border-gray-200" />
+
+      {/* ---- SENDING THRESHOLDS (Omnisend style) ---- */}
+      <div>
+        <h4 className="text-sm font-semibold text-gray-900 mb-2">Quem pode receber</h4>
+        <p className="text-xs text-gray-500 mb-3">
+          Até onde o envio deste fluxo alcança, por canal. Contatos com bounce definitivo
+          ou denúncia de spam nunca recebem, em nenhuma opção.
+        </p>
+
+        <div className="space-y-3">
+          <SendingThresholdSelect
+            label="E-mail"
+            value={sendingThresholds.email || 'subscribed'}
+            onChange={(v) => onUpdate('sendingThresholds', { ...sendingThresholds, email: v })}
+            inputCls={inputCls}
+          />
+          <SendingThresholdSelect
+            label="SMS"
+            value={sendingThresholds.sms || 'all'}
+            onChange={(v) => onUpdate('sendingThresholds', { ...sendingThresholds, sms: v })}
+            inputCls={inputCls}
+            hint="O SMS começa sem filtro para não interromper fluxos já ativos — recomendamos mudar para “Apenas inscritos”."
+          />
+        </div>
+
+        {(sendingThresholds.email === 'all' || sendingThresholds.sms === 'all') && (
+          <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded">
+            <p className="text-[10.5px] text-amber-800 leading-relaxed">
+              <strong>“Todos” inclui quem se descadastrou.</strong> Use apenas em mensagens
+              transacionais (confirmação de pedido, rastreio). Em mensagens promocionais isso
+              viola o pedido de descadastro do contato.
+            </p>
+          </div>
+        )}
       </div>
 
       <hr className="border-gray-200" />

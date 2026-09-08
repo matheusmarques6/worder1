@@ -12,14 +12,38 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const days = parseInt(searchParams.get('days') || '30', 10)
   const since = new Date(Date.now() - days * 86400000).toISOString()
+  // A página manda a loja selecionada; a rota ignorava e somava a
+  // organização inteira. Um id de outra organização é recusado.
+  const storeId = searchParams.get('storeId') || searchParams.get('store_id')
+  if (storeId) {
+    const { validateStoreAccess } = await import('@/lib/api-utils')
+    const access = await validateStoreAccess(auth.supabase as any, orgId, storeId, auth.user.id)
+    if (!access.valid) return NextResponse.json({ error: access.error }, { status: access.status || 403 })
+  }
 
   try {
     // ── KPIs: aggregate stats ──
-    const { data: allSends } = await supabaseAdmin
+    let sendsQuery = supabaseAdmin
       .from('email_sends')
       .select('status, opened_at, clicked_at, isp_domain, sent_at, complained_at')
       .eq('organization_id', orgId)
       .gte('sent_at', since)
+    if (storeId) sendsQuery = sendsQuery.eq('store_id', storeId)
+
+    // Aqui as linhas são necessárias mesmo (o agrupamento é por
+    // provedor), então o jeito é paginar: sem isso o PostgREST corta em
+    // mil e o painel passa a descrever só uma fatia do período, com
+    // cara de número completo.
+    const PAGE = 1000
+    const allSends: any[] = []
+    for (let page = 0; page < 100; page++) {
+      const from = page * PAGE
+      const { data, error } = await sendsQuery.range(from, from + PAGE - 1)
+      if (error) break
+      const rows = data || []
+      allSends.push(...rows)
+      if (rows.length < PAGE) break
+    }
 
     const sends = allSends || []
     const total = sends.length

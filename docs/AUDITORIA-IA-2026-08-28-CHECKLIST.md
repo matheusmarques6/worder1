@@ -5006,8 +5006,10 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   no CI. Não quantificado: com que frequência uma missão de toque tem tools ligadas na prática (não
   foram inspecionados dados nem seeds).
 
-- [ ] **74. `ruff check .` está VERMELHO na branch, e é o passo de lint do CI** `[confirmado]` ·
+- [x] **74. `ruff check .` está VERMELHO na branch, e é o passo de lint do CI** `[confirmado]` ·
   *(descoberto no item 44)*
+  **RESOLVIDO NA INTEGRAÇÃO 08/09.** O script de medição declara `T201` como exceção intencional,
+  os imports e as duas linhas longas foram formatados, e `ruff check .` passou sem erros.
   Medido nesta máquina em `e2d1f38a`, antes de qualquer mudança do item 44: `uv run --directory
   runtime ruff check .` (exatamente o comando de `.github/workflows/runtime.yml:51`) devolve
   **10 erros**, todos pré-existentes e alheios ao item 44 — a contagem é idêntica antes e depois dos
@@ -5193,6 +5195,9 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
 - [ ] **80. `send-batch` lê `shopify_orders` E `shopify_checkouts` sem escopo de tenant, por
   `supabaseAdmin`, e manda o resultado por e-mail — pedido e carrinho da loja B saem pelo canal da
   loja A** `[confirmado]` · *(descoberto no item 50)*
+  **REAVALIADO APÓS O SYNC 08/09: CONTINUA ABERTO.** O remoto passou a conferir a campanha por
+  `(id, organization_id)`, mas as duas consultas que escolhem pedido/carrinho por e-mail continuam
+  sem `organization_id` ou `store_id`; portanto o vazamento descrito abaixo permanece possível.
   Citações ancoradas em `a6d6332d`.
   **São DUAS consultas, não uma.** Em
   `src/app/api/email/campaigns/send-batch/route.ts`, dentro do laço que monta o `mergeData` de cada
@@ -5401,7 +5406,10 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   campo, a projeção `null::timestamptz` e os dois asserts saem juntos. **Não apagar sem decidir:**
   apagar é a saída barata que fecha a porta do RF-006 sem que ninguém tenha dito que quer fechá-la.
 
-- [ ] **86. Organização vinda do CORPO da requisição governando escrita com chave de serviço** `[confirmado]` · *(descoberto no item 58)*
+- [x] **86. Organização vinda do CORPO da requisição governando escrita com chave de serviço** `[confirmado]` · *(descoberto no item 58)*
+  **RESOLVIDO PELO REMOTO (`dec756bf`) E REVALIDADO NA INTEGRAÇÃO 08/09.** `queue/settings`,
+  `queue/assign` e `queue/items` agora chamam `requireOrgFromAuth`, derivam a organização do token e
+  escopam as consultas/escritas com esse valor. A suíte `multi-tenant-invariants` passou (5/5).
   Citações ancoradas em `3c4bcad6`. O item 58 apagou uma rota em que o `organizationId` chegava **no
   corpo** e mandava em `upsert`/`update` feitos com `supabaseAdmin` — que **não passa por RLS** —,
   contida só pelo segredo de debug. Antes de fechar o achado como "morreu com a deleção", a revisão

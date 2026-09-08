@@ -20,6 +20,16 @@ const nextConfig = {
         hostname: '*.supabase.co',
         pathname: '/storage/**',
       },
+      // CDN das imagens de e-mail (cdn.worder.email) — o host por onde
+      // toda imagem da biblioteca sai. Lido do ambiente para não fixar
+      // o domínio no código.
+      ...(process.env.CDN_IMAGES_DOMAIN
+        ? [{
+            protocol: 'https',
+            hostname: process.env.CDN_IMAGES_DOMAIN.replace(/^https?:\/\//i, '').replace(/\/+$/, ''),
+            pathname: '/storage/**',
+          }]
+        : []),
     ],
   },
   // Em produção, remove todos os console.* exceto error/warn.

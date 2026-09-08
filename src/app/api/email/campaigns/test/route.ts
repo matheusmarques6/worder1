@@ -51,11 +51,44 @@ export async function POST(request: NextRequest) {
     // Use a fake emailSendId for test emails
     const testSendId = 'test-' + Date.now();
 
+    // Blocos dinâmicos de produto com a loja DA CAMPANHA — o teste tem de
+    // mostrar os produtos e links que o cliente vai receber. Sem isto o
+    // e-mail de teste saía com os comentários <!-- WORDER_*_BLOCK --> crus.
+    let htmlSource: string = template.html;
+    try {
+      const { resolveProductBlocks, resolveCartBlocks } = await import('@/lib/email/render');
+      htmlSource = await resolveProductBlocks(htmlSource, user.organization_id, undefined, undefined, campaign.store_id || null);
+      htmlSource = await resolveCartBlocks(htmlSource, user.organization_id, undefined, undefined, null, undefined, campaign.store_id || null);
+    } catch (e: any) {
+      console.warn('[TestCampaign] dynamic block resolve failed:', e?.message);
+    }
+
+    // UTM + identificação como no envio real (configuração da loja da campanha).
+    let linkParams: any = null;
+    try {
+      const { getUtmSettings } = await import('@/lib/tracking/utm-settings');
+      const { makeLinkParamsResolver, normalizeMessageUtmConfig } = await import('@/lib/tracking/link-params');
+      const { settings } = await getUtmSettings(user.organization_id, campaign.store_id || null);
+      const campaignUtm = normalizeMessageUtmConfig((campaign as any).settings?.utm);
+      linkParams = makeLinkParamsResolver(settings, {
+        channel: 'email',
+        messageType: 'campaign',
+        campaignName: campaign.name || '',
+        campaignId: campaign.id,
+        emailSubject: renderMergeTags(campaign.subject || '', sampleData, { escape: false }),
+        sendId: testSendId,
+        storeName: sampleData.store_name,
+        storeDomain: sampleData.store_url,
+        extra: sampleData,
+      }, { utmOverrides: campaignUtm?.overrides || null, utmDisabled: campaignUtm?.disabled === true });
+    } catch { /* teste segue sem UTM no href */ }
+
     const finalHtml = prepareEmailHtml({
-      html: template.html,
+      html: htmlSource,
       mergeData: sampleData,
       emailSendId: testSendId,
       baseUrl,
+      linkParams,
     });
 
     // escape:false — subject is text/plain (no &amp; in the inbox).

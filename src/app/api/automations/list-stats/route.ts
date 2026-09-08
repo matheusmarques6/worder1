@@ -1,15 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError } from '@/lib/api-utils';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 
 export const dynamic = 'force-dynamic';
 
-// Batch metrics for the automations table on /automations.
-// Returns { [automationId]: { sent, opened, clicked, revenue } } so the
-// listing page can render Sent / Open rate / Click rate / Revenue
-// columns without doing an N+1 GET per row. We read email_sends
-// (the canonical engagement table) directly by automation_id — it's
-// indexed and avoids the heavier metadata-walk that
-// /api/automations/[id]/stats has to do for per-node breakdowns.
+// Métricas da tabela de fluxos em /automations: enviados, taxa de
+// abertura, taxa de clique e receita por linha.
+//
+// A soma acontece no banco. Antes esta rota puxava CADA envio e contava
+// em JavaScript — e o PostgREST devolve no máximo mil linhas. Com 1488
+// envios, a conta parava em mil e o corte caía no maior fluxo: a série
+// de boas-vindas aparecia com 803 quando tinha 1103, e os oito fluxos
+// da tela somavam exatos 1000. Nada avisava; o número só estava errado,
+// e ficava mais errado a cada envio novo.
 export async function GET(request: NextRequest) {
   const auth = await getAuthClient();
   if (!auth) return authError();
@@ -20,7 +23,30 @@ export async function GET(request: NextRequest) {
     request.nextUrl.searchParams.get('storeId') ||
     request.nextUrl.searchParams.get('store_id');
 
+  type Stat = { sent: number; opened: number; clicked: number; revenue: number };
+  const stats: Record<string, Stat> = {};
+
   try {
+    const { data, error } = await supabaseAdmin.rpc('automation_email_stats', {
+      org: organizationId,
+      p_store_id: storeId || null,
+    });
+
+    if (!error && Array.isArray(data)) {
+      for (const row of data as any[]) {
+        if (!row?.automation_id) continue;
+        stats[row.automation_id] = {
+          sent: Number(row.sent) || 0,
+          opened: Number(row.opened) || 0,
+          clicked: Number(row.clicked) || 0,
+          revenue: Number(row.revenue) || 0,
+        };
+      }
+      return NextResponse.json({ stats });
+    }
+
+    // Banco sem a função ainda: lê os envios paginando. Mais lento, mas
+    // paginado — o defeito era justamente ler sem paginar.
     let automationsQuery = supabase
       .from('automations')
       .select('id')
@@ -29,39 +55,33 @@ export async function GET(request: NextRequest) {
     const { data: automations } = await automationsQuery;
 
     const ids: string[] = (automations || []).map((a: any) => a.id).filter(Boolean);
+    for (const id of ids) stats[id] = { sent: 0, opened: 0, clicked: 0, revenue: 0 };
+    if (ids.length === 0) return NextResponse.json({ stats });
 
-    const stats: Record<
-      string,
-      { sent: number; opened: number; clicked: number; revenue: number }
-    > = {};
-    for (const id of ids) {
-      stats[id] = { sent: 0, opened: 0, clicked: 0, revenue: 0 };
-    }
-
-    if (ids.length === 0) {
-      return NextResponse.json({ stats });
-    }
-
-    // Email sends are the dominant channel and the only table with a
-    // direct automation_id column (whatsapp/sms stats live behind
-    // automation_runs.metadata which we walk in the per-flow detail
-    // endpoint). Chunk to stay under PostgREST limits.
+    const PAGE = 1000;
+    const MAX_PAGES = 100;
     const CHUNK = 200;
     for (let i = 0; i < ids.length; i += CHUNK) {
       const chunk = ids.slice(i, i + CHUNK);
-      const { data: rows } = await supabase
-        .from('email_sends')
-        .select('automation_id, sent_at, opened_at, clicked_at, conversion_value')
-        .eq('organization_id', organizationId)
-        .in('automation_id', chunk);
-      for (const row of rows || []) {
-        const aid = (row as any).automation_id;
-        if (!aid || !stats[aid]) continue;
-        if ((row as any).sent_at) stats[aid].sent++;
-        if ((row as any).opened_at) stats[aid].opened++;
-        if ((row as any).clicked_at) stats[aid].clicked++;
-        const cv = Number((row as any).conversion_value);
-        if (Number.isFinite(cv) && cv > 0) stats[aid].revenue += cv;
+      for (let page = 0; page < MAX_PAGES; page++) {
+        const from = page * PAGE;
+        const { data: rows } = await supabase
+          .from('email_sends')
+          .select('automation_id, sent_at, opened_at, clicked_at, conversion_value')
+          .eq('organization_id', organizationId)
+          .in('automation_id', chunk)
+          .range(from, from + PAGE - 1);
+        const list = rows || [];
+        for (const row of list) {
+          const aid = (row as any).automation_id;
+          if (!aid || !stats[aid]) continue;
+          if ((row as any).sent_at) stats[aid].sent++;
+          if ((row as any).opened_at) stats[aid].opened++;
+          if ((row as any).clicked_at) stats[aid].clicked++;
+          const cv = Number((row as any).conversion_value);
+          if (Number.isFinite(cv) && cv > 0) stats[aid].revenue += cv;
+        }
+        if (list.length < PAGE) break;
       }
     }
 

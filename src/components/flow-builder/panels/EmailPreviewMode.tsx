@@ -4,6 +4,7 @@ import * as React from 'react';
 import { useState, useEffect, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, Monitor, Smartphone, ChevronDown, Send, Mail, CheckCircle2, XCircle, Inbox, Loader2, Copy, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { BodyPortal } from '@/components/shared/BodyPortal';
 
 // ── Event-type labels (clean, muted style — no heavy coloring) ────────────
 const EVENT_LABELS: Record<string, string> = {
@@ -64,6 +65,8 @@ interface EmailPreviewModeProps {
   templateId: string;
   triggerType: string;
   organizationId: string;
+  /** Loja do fluxo — produtos, links e {{store_*}} do preview saem dela. */
+  storeId?: string | null;
   onClose: () => void;
 }
 
@@ -75,7 +78,7 @@ interface EventItem {
   occurred_at: string;
 }
 
-export function EmailPreviewMode({ templateId, triggerType, organizationId, onClose }: EmailPreviewModeProps) {
+export function EmailPreviewMode({ templateId, triggerType, organizationId, storeId, onClose }: EmailPreviewModeProps) {
   const [activeTab, setActiveTab] = useState<'preview' | 'send_test'>('preview');
   const [viewMode, setViewMode] = useState<'desktop' | 'mobile'>('desktop');
   const [events, setEvents] = useState<EventItem[]>([]);
@@ -89,6 +92,10 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, onCl
   const [testEmail, setTestEmail] = useState('');
   const [sending, setSending] = useState(false);
   const [sendResult, setSendResult] = useState<'success' | 'error' | null>(null);
+  // Quem assinou o teste (a API devolve) — a pessoa vê na hora se saiu
+  // com a identidade da loja certa.
+  const [sentFrom, setSentFrom] = useState<string>('');
+  const [sendMessage, setSendMessage] = useState<string>('');
 
   // 1. Load events on mount
   useEffect(() => {
@@ -101,7 +108,7 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, onCl
       const res = await fetch('/api/automations/email-preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ templateId, triggerType, organizationId, action: 'list_events' }),
+        body: JSON.stringify({ templateId, triggerType, organizationId, storeId: storeId || undefined, action: 'list_events' }),
       });
       const data = await res.json();
       const eventList: EventItem[] = data.events || [];
@@ -117,7 +124,7 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, onCl
       // silent
     }
     setLoading(false);
-  }, [templateId, triggerType, organizationId]);
+  }, [templateId, triggerType, organizationId, storeId]);
 
   // 2. Render preview for a specific contact
   const renderPreview = async (contactId?: string) => {
@@ -130,6 +137,7 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, onCl
           ...(contactId ? { contactId } : {}),
           triggerType,
           organizationId,
+          storeId: storeId || undefined,
         }),
       });
       if (res.ok) {
@@ -167,13 +175,19 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, onCl
           contactId: currentEvent?.contact_id,
           triggerType,
           organizationId,
+          storeId: storeId || undefined,
           action: 'send_test',
           testEmail,
         }),
       });
+      const data = await res.json().catch(() => ({}));
       setSendResult(res.ok ? 'success' : 'error');
+      setSentFrom(res.ok ? (data.from || '') : '');
+      setSendMessage(res.ok ? (data.hint || '') : (data.error || 'Erro ao enviar. Verifique as configurações.'));
     } catch {
       setSendResult('error');
+      setSentFrom('');
+      setSendMessage('Erro de conexão.');
     }
     setSending(false);
   };
@@ -277,7 +291,10 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, onCl
 
   const displayName = (currentEvent as any)?.contact_email || contact?.email || 'Sem lead';
 
+  // No body: aberto de dentro do painel lateral (que anima com transform)
+  // o `fixed` não cobriria a tela. Ver BodyPortal.
   return (
+    <BodyPortal>
     <div className="fixed inset-0 z-[9999] bg-zinc-50 flex flex-col font-sans">
       {/* ── Header ───────────────────────────────────────────────── */}
       <div className="flex items-center justify-between px-6 h-14 border-b border-zinc-200 bg-white">
@@ -398,13 +415,17 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, onCl
                   {sendResult === 'success' && (
                     <div className="flex items-start gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
                       <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                      <p className="text-[12px] text-emerald-800">Email de teste enviado com sucesso</p>
+                      <div className="min-w-0">
+                        <p className="text-[12px] text-emerald-800">Email de teste enviado com sucesso</p>
+                        {sentFrom && <p className="text-[11px] text-emerald-700/90 mt-0.5 font-mono break-all">Remetente: {sentFrom}</p>}
+                        {sendMessage && <p className="text-[11px] text-amber-700 mt-1">{sendMessage}</p>}
+                      </div>
                     </div>
                   )}
                   {sendResult === 'error' && (
                     <div className="flex items-start gap-2 p-3 bg-rose-50 border border-rose-200 rounded-lg">
                       <XCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                      <p className="text-[12px] text-rose-800">Erro ao enviar. Verifique as configurações.</p>
+                      <p className="text-[12px] text-rose-800">{sendMessage || 'Erro ao enviar. Verifique as configurações.'}</p>
                     </div>
                   )}
                 </div>
@@ -538,6 +559,7 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, onCl
         </div>
       </div>
     </div>
+    </BodyPortal>
   );
 }
 

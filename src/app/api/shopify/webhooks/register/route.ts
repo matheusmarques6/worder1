@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseClient } from '@/lib/api-utils'
+import { requireOrgFromAuth } from '@/lib/auth/require-org'
 export const dynamic = 'force-dynamic';
 
 const WEBHOOK_URL_BASE = process.env.NEXT_PUBLIC_APP_URL || ''
@@ -22,6 +23,14 @@ const REQUIRED_WEBHOOKS = [
 ]
 
 export async function POST(request: NextRequest) {
+  // Registrar webhooks usa o access_token da loja. A rota aceitava
+  // `storeId` solto, sem sessão: um id alheio registrava webhooks na
+  // Shopify de outra empresa. A organização passa a vir do token e a
+  // loja tem de ser dela.
+  const auth = await requireOrgFromAuth(request)
+  if (auth instanceof NextResponse) return auth
+  const organizationId = auth.orgId
+
   const supabase = getSupabaseClient()
 
   if (!supabase) {
@@ -30,18 +39,14 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { storeId, organizationId } = body
+    const { storeId } = body
 
-    if (!storeId && !organizationId) {
-      return NextResponse.json({ error: 'storeId or organizationId required' }, { status: 400 })
-    }
-
-    // Buscar loja
-    let query = supabase.from('shopify_stores').select('*')
+    // Buscar loja, sempre dentro da organização da sessão
+    let query = supabase.from('shopify_stores').select('*').eq('organization_id', organizationId)
     if (storeId) {
       query = query.eq('id', storeId)
     } else {
-      query = query.eq('organization_id', organizationId).eq('is_active', true)
+      query = query.eq('is_active', true)
     }
 
     const { data: store, error: storeError } = await query.maybeSingle()
@@ -213,17 +218,15 @@ export async function POST(request: NextRequest) {
 
 // GET - Listar webhooks registrados
 export async function GET(request: NextRequest) {
+  // Mesma história do POST: a organização vinha na URL, sem sessão.
+  const auth = await requireOrgFromAuth(request)
+  if (auth instanceof NextResponse) return auth
+  const organizationId = auth.orgId
+
   const supabase = getSupabaseClient()
 
   if (!supabase) {
     return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
-  }
-
-  const searchParams = request.nextUrl.searchParams
-  const organizationId = searchParams.get('organizationId')
-
-  if (!organizationId) {
-    return NextResponse.json({ error: 'organizationId required' }, { status: 400 })
   }
 
   try {

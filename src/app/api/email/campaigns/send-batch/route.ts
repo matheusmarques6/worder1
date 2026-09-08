@@ -9,6 +9,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { publicStoreUrl } from '@/lib/shopify/store-url';
 import { sendBatchEmails } from '@/lib/email/resend';
 import { isEmailBlocked } from '@/lib/email/consent';
 import {
@@ -16,6 +17,7 @@ import {
   resolveProductBlocks,
   resolveCartBlocks,
   resolveSavedBlocks,
+  hasUniversalContent,
   renderMergeTags,
 } from '@/lib/email/render';
 import { renderDocumentToHtml } from '@/lib/email/render-html';
@@ -81,11 +83,15 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Get campaign with template
+    // A organização vem no corpo e a campanha vinha só pelo id: nada
+    // conferia se uma é da outra. A rota é interna, mas quem chama
+    // monta as duas coisas separado — e um lote com a organização de um
+    // e a campanha de outro enviaria conteúdo alheio no nome errado.
     const { data: campaign, error: campaignError } = await supabaseAdmin
       .from('email_campaigns')
       .select('*, email_templates(*)')
       .eq('id', campaign_id)
+      .eq('organization_id', organizationId)
       .single();
 
     if (campaignError || !campaign) {
@@ -102,8 +108,9 @@ export async function POST(req: NextRequest) {
     // Resolve universal/saved blocks — re-render HTML if design_json has linked blocks
     if (template.design_json) {
       try {
-        const hasLinkedBlocks = JSON.stringify(template.design_json).includes('_savedBlockId')
-        if (hasLinkedBlocks) {
+        // Seção conta tanto quanto bloco: na prática todo universal em
+        // uso é uma seção, e a checagem antiga só via `_savedBlockId`.
+        if (hasUniversalContent(template.design_json)) {
           const resolvedDoc = await resolveSavedBlocks(template.design_json, organizationId)
           template.html = renderDocumentToHtml(resolvedDoc)
         }
@@ -141,16 +148,27 @@ export async function POST(req: NextRequest) {
     let storeEmail = '';
     let storePhone = '';
     if (campaign.store_id) {
-      const { data: store } = await supabaseAdmin
+      // As colunas são shop_*, não name/domain/email/phone. Pedir os
+      // nomes errados fazia o PostgREST devolver erro, store vinha
+      // null e as QUATRO variáveis de loja saíam vazias em toda
+      // campanha — {{store_name}}, {{store_url}}, {{store_email}} e
+      // {{store_phone}} eram oferecidas no editor e nunca resolviam.
+      const { data: store, error: storeErr } = await supabaseAdmin
         .from('shopify_stores')
-        .select('name, domain, email, phone')
+        .select('shop_name, shop_domain, primary_domain, shop_email, shop_phone')
         .eq('id', campaign.store_id)
-        .single();
+        .maybeSingle();
+      if (storeErr) {
+        console.error('[SendBatch] falha ao ler a loja para as merge tags:', storeErr);
+      }
       if (store) {
-        storeName = store.name || '';
-        storeUrl = store.domain ? `https://${store.domain}` : '';
-        storeEmail = store.email || '';
-        storePhone = store.phone || '';
+        storeName = store.shop_name || '';
+        // O domínio PRINCIPAL (drgroot.com), não o *.myshopify.com da
+        // API. Se o lojista trocar o domínio, a sincronização atualiza a
+        // coluna e a variável acompanha sem ninguém editar template.
+        storeUrl = publicStoreUrl(store);
+        storeEmail = store.shop_email || '';
+        storePhone = store.shop_phone || '';
       }
     }
 
@@ -158,6 +176,14 @@ export async function POST(req: NextRequest) {
     // quando configurado (host alinhado ao remetente), senão o app.
     const { getTrackingBaseUrl } = await import('@/lib/email/tracking-url');
     const baseUrl = await getTrackingBaseUrl(organizationId, campaign.store_id || null);
+
+    // UTM + identificação de todo link: configuração da LOJA da campanha,
+    // carregada uma vez por lote e resolvida por destinatário abaixo.
+    const { getUtmSettings } = await import('@/lib/tracking/utm-settings');
+    const { makeLinkParamsResolver, normalizeMessageUtmConfig } = await import('@/lib/tracking/link-params');
+    const { settings: utmSettings } = await getUtmSettings(organizationId, campaign.store_id || null);
+    // Sobrescrita desta campanha (etapa de configurações), como na Omnisend.
+    const campaignUtm = normalizeMessageUtmConfig((campaign as any).settings?.utm);
 
     // ──────────────────────────────────────────
     // Suppression list
@@ -415,6 +441,9 @@ export async function POST(req: NextRequest) {
             provider: 'resend',
             status: 'queued',
             organization_id: organizationId,
+            // Loja da campanha (senão a do contato): é o que o rastreador
+            // de clique e os relatórios por loja leem.
+            store_id: campaign.store_id || contact.store_id || null,
             isp_domain: contactIsp,
           })
           .select('id')
@@ -471,9 +500,31 @@ export async function POST(req: NextRequest) {
           .update({ ab_variant: variant })
           .eq('id', emailSend.id)
 
-        // Resolve dynamic product/cart blocks per contact
-        let htmlResolved = await resolveProductBlocks(htmlSource, organizationId, contact.id);
-        htmlResolved = await resolveCartBlocks(htmlResolved, organizationId, contact.id);
+        // Resolve dynamic product/cart blocks per contact — com a loja da
+        // campanha, para que o catálogo e os links sejam DESTA loja e não
+        // da loja ativa mais nova da organização.
+        let htmlResolved = await resolveProductBlocks(htmlSource, organizationId, contact.id, undefined, campaign.store_id || null);
+        htmlResolved = await resolveCartBlocks(htmlResolved, organizationId, contact.id, undefined, null, storeUrl, campaign.store_id || null);
+
+        // escape:false — subject is text/plain (no &amp; in the inbox).
+        // Antes do HTML: o assunto também alimenta as UTMs ({{email_subject}}).
+        let finalSubject = renderMergeTags(subjectSource, mergeData, { escape: false });
+
+        // UTM + identificação em TODO link deste destinatário.
+        const linkParams = makeLinkParamsResolver(utmSettings, {
+          channel: 'email',
+          messageType: 'campaign',
+          campaignName: campaign.name || '',
+          campaignId: campaign_id,
+          emailSubject: finalSubject,
+          abVariant: campaign.ab_test_enabled ? variant : '',
+          sendId: emailSend.id,
+          contactId: contact.id,
+          storeName,
+          storeDomain: storeUrl,
+          sentAt: new Date(),
+          extra: mergeData,
+        }, { utmOverrides: campaignUtm?.overrides || null, utmDisabled: campaignUtm?.disabled === true });
 
         // Prep final HTML (merge tags + tracking pixel + click tracking + unsubscribe)
         let finalHtml = prepareEmailHtml({
@@ -484,9 +535,9 @@ export async function POST(req: NextRequest) {
           contactId: contact.id,
           orgId: organizationId,
           campaignId: campaign_id,
+          storeId: campaign.store_id || undefined,
+          linkParams,
         });
-        // escape:false — subject is text/plain (no &amp; in the inbox).
-        let finalSubject = renderMergeTags(subjectSource, mergeData, { escape: false });
 
         // Strip any unresolved merge tags so customers never see raw
         // {{template_syntax}} in their inbox. Log a warning so the
@@ -519,7 +570,7 @@ export async function POST(req: NextRequest) {
         // contact — the placeholder '?token=unsub' was a no-op that
         // wouldn't have processed any clicks.
         const { buildUnsubscribeUrl, buildListUnsubscribeHeaders } = await import('@/lib/email/render');
-        const unsubUrl = buildUnsubscribeUrl(emailSend.id, baseUrl, contact.id, organizationId, campaign_id || undefined);
+        const unsubUrl = buildUnsubscribeUrl(emailSend.id, baseUrl, contact.id, organizationId, campaign_id || undefined, campaign.store_id || undefined);
         const antiSpamHeaders: Record<string, string> = {
           ...buildListUnsubscribeHeaders(unsubUrl),
           'Precedence': 'bulk',

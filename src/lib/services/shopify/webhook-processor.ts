@@ -262,14 +262,21 @@ async function handleOrderCreate(
   // attribution. The RPC is idempotent on (order_id, organization_id)
   // so when both webhooks DO fire on the same order, the second call
   // short-circuits and revenue isn't double-counted.
-  if (orderValue > 0) {
+  // Pipeline alternativo: usa o MESMO motor de crédito único do
+  // pipeline principal. Antes chamava só a atribuição de e-mail,
+  // pulando os demais canais e a revogação.
+  if (orderValue > 0 && !order.test) {
     try {
-      const { attributeEmailConversion } = await import('@/lib/email/attribution');
-      await attributeEmailConversion({
+      const { attributeOrder } = await import('@/lib/attribution');
+      await attributeOrder({
         contactId: contact.id,
         organizationId: store.organization_id,
         orderId: String(order.id),
         orderValue,
+        orderAt: order.created_at || order.processed_at,
+        refunded: parseFloat(order.total_refunded || '0') || 0,
+        currency: order.currency || 'BRL',
+        storeId: store.id,
       });
     } catch (err) {
       console.error('[Webhook] Order create attribution error:', err);
@@ -407,14 +414,18 @@ async function handleOrderPaid(
   // Email conversion attribution — if this contact recently opened or
   // clicked an email from us, credit the revenue to that send/campaign.
   // Runs before the rule engine so downstream automations see the data.
-  if (contactId && orderValue > 0) {
+  if (contactId && orderValue > 0 && !order.test) {
     try {
-      const { attributeEmailConversion } = await import('@/lib/email/attribution');
-      await attributeEmailConversion({
+      const { attributeOrder } = await import('@/lib/attribution');
+      await attributeOrder({
         contactId,
         organizationId: store.organization_id,
         orderId: String(order.id),
         orderValue,
+        orderAt: order.created_at || order.processed_at,
+        refunded: parseFloat(order.total_refunded || '0') || 0,
+        currency: order.currency || 'BRL',
+        storeId: store.id,
       });
     } catch (err) {
       console.error('[Webhook] Attribution error:', err);
@@ -524,13 +535,25 @@ async function handleOrderCancelled(
   
   await supabase
     .from('shopify_orders')
-    .update({ 
+    .update({
       financial_status: 'cancelled',
       updated_at: new Date().toISOString(),
     })
     .eq('shopify_order_id', String(order.id))
     .eq('store_id', store.id);
-  
+
+  // Este pipeline creditava receita e NUNCA revogava: lojas roteadas
+  // por aqui acumulavam receita de pedidos cancelados para sempre.
+  try {
+    const { revokeOrderAttribution } = await import('@/lib/attribution');
+    await revokeOrderAttribution({
+      organizationId: store.organization_id,
+      orderId: String(order.id),
+    });
+  } catch (err) {
+    console.error('[Webhook] Attribution revoke error:', err);
+  }
+
   const { data: orderRecord } = await supabase
     .from('shopify_orders')
     .select('contact_id')

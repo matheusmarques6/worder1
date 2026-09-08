@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { isTombstoneStore } from '@/lib/stores/placeholder';
 
 export const dynamic = 'force-dynamic';
 
@@ -66,10 +67,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, stores: [], error: error.message });
     }
 
-    // Filter out internal placeholder stores (manual-.worder.local)
-    const realStores = (stores || []).filter((s: any) =>
-      !s.shop_domain?.endsWith('.worder.local')
-    );
+    // Esconde só as LÁPIDES (linhas arquivadas guardadas por causa das
+    // chaves estrangeiras). A loja que o usuário acabou de criar e
+    // ainda não integrou também usa domínio .worder.local, e o filtro
+    // antigo a apagava da lista: quem escolhia "configurar integração
+    // depois" via o modal fechar e nada aparecer — a loja existia no
+    // banco e era invisível para sempre.
+    const realStores = (stores || []).filter((s: any) => !isTombstoneStore(s));
 
     return NextResponse.json({
       success: true,
@@ -145,6 +149,16 @@ export async function POST(request: NextRequest) {
     if (insertError) {
       console.error('[/api/stores POST] Error:', insertError);
       return NextResponse.json({ error: insertError.message }, { status: 500 });
+    }
+
+    // A loja nasce com remetente próprio: <nome-da-loja>@worder.email,
+    // único na Worder. Nunca herda o remetente de outra loja.
+    try {
+      const { ensureStoreSharedSender } = await import('@/lib/email/shared-sender');
+      const r = await ensureStoreSharedSender(store.id);
+      if (r?.settings) store.settings = { ...(store.settings || {}), email_settings: r.settings };
+    } catch (e) {
+      console.warn('[/api/stores POST] remetente compartilhado não alocado:', (e as Error).message);
     }
 
     return NextResponse.json({ store });
