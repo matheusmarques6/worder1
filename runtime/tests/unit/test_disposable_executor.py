@@ -969,6 +969,7 @@ def test_replay_proves_reset_sentinel_history_before_ready(monkeypatch, tmp_path
     executor.gate.update(commit="d" * 40, state="prepared")
     executor.identity = valid_identity()
     executor.identity["sentinel"] = None
+    prepared = copy.deepcopy(executor.identity)
     approved = [
         {
             "filename": "20260812000001_one.sql",
@@ -980,6 +981,8 @@ def test_replay_proves_reset_sentinel_history_before_ready(monkeypatch, tmp_path
     executor.save()
     events = []
     calls = []
+    token_sizes = []
+    fixed_sentinel = "d" * 64
 
     def files():
         events.append("files")
@@ -987,7 +990,11 @@ def test_replay_proves_reset_sentinel_history_before_ready(monkeypatch, tmp_path
 
     def physical():
         events.append("physical")
-        return executor.identity | {"sentinel": None}
+        return copy.deepcopy(prepared)
+
+    def token_hex(size):
+        token_sizes.append(size)
+        return fixed_sentinel
 
     def proof():
         events.append("proof")
@@ -1027,12 +1034,12 @@ def test_replay_proves_reset_sentinel_history_before_ready(monkeypatch, tmp_path
     monkeypatch.setattr(executor, "physical", physical)
     monkeypatch.setattr(executor, "proof", proof)
     monkeypatch.setattr(executor, "history", history)
+    monkeypatch.setattr(ex.secrets, "token_hex", token_hex)
     executor.runner = runner
 
     executor.replay()
 
-    sentinel = executor.identity["sentinel"]
-    assert ex.re.fullmatch(ex.TOKEN_RE, sentinel)
+    assert token_sizes == [32]
     assert events == [
         "files",
         "physical",
@@ -1077,10 +1084,68 @@ def test_replay_proves_reset_sentinel_history_before_ready(monkeypatch, tmp_path
         "worker_role, sender_role;\n"
         "revoke all on testing.disposable_identity from public, anon, authenticated, "
         "service_role, worker_role, sender_role;\n"
-        f"insert into testing.disposable_identity(token) values ('{sentinel}');\ncommit;\n"
+        f"insert into testing.disposable_identity(token) values ('{fixed_sentinel}');\n"
+        "commit;\n"
     )
-    assert ex.read_json(run / "identity.json") == executor.identity
+    persisted = ex.read_json(run / "identity.json")
+    assert persisted | {"sentinel": None} == prepared
+    assert persisted["sentinel"] == fixed_sentinel
     assert ex.read_json(run / "gates.json")["state"] == "ready"
+
+
+@pytest.mark.parametrize("failing_step", ["proof", "history"])
+def test_replay_verification_failure_does_not_persist_identity_or_ready(
+    monkeypatch, tmp_path, failing_step
+):
+    run = executor_run(tmp_path)
+    executor = ex.Executor(REPO, run)
+    executor.gate.update(commit="d" * 40, state="prepared")
+    executor.identity = valid_identity()
+    executor.identity["sentinel"] = None
+    prepared = copy.deepcopy(executor.identity)
+    approved = [
+        {
+            "filename": "20260812000001_one.sql",
+            "version": "20260812000001",
+            "sha256": "A" * 64,
+        }
+    ]
+    ex.write_json(run / "identity.json", prepared)
+    executor.save()
+
+    def runner(argv, **kwargs):
+        if argv == ["supabase", "--version"]:
+            stdout = "2.111.0\n"
+        elif argv == [
+            "supabase",
+            "db",
+            "reset",
+            "--local",
+            "--no-seed",
+            "--workdir",
+            str(run),
+        ] or argv[:2] == ["docker", "exec"]:
+            stdout = ""
+        else:
+            pytest.fail(f"unexpected CLI: {argv}")
+        return ex.subprocess.CompletedProcess(argv, 0, stdout, "")
+
+    def verify(step):
+        if step == failing_step:
+            raise RuntimeError(f"{step} failed")
+
+    monkeypatch.setattr(executor, "files", lambda: approved)
+    monkeypatch.setattr(executor, "physical", lambda: None)
+    monkeypatch.setattr(executor, "proof", lambda: verify("proof"))
+    monkeypatch.setattr(executor, "history", lambda _expected: verify("history"))
+    monkeypatch.setattr(ex.secrets, "token_hex", lambda _size: "d" * 64)
+    executor.runner = runner
+
+    with pytest.raises(RuntimeError, match=f"{failing_step} failed"):
+        executor.replay()
+
+    assert ex.read_json(run / "identity.json") == prepared
+    assert ex.read_json(run / "gates.json")["state"] == "replaying"
 
 
 def preflight_double(overrides=None):
