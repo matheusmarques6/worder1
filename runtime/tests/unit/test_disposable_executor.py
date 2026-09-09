@@ -13,7 +13,31 @@ import pytest
 from tests.support import disposable_executor as ex
 
 REPO = Path(__file__).resolve().parents[3]
-PROJECT = "worder-audit-" + "a" * 32
+PROJECT = "waudit-" + "a" * 32
+
+
+def test_generated_project_preserves_full_nonce_within_cli_limit(tmp_path):
+    nonce = "0123456789abcdef0123456789abcdef"
+    executor = ex.Executor(REPO, tmp_path / nonce)
+
+    assert len(executor.project) <= 40
+    assert executor.project == "waudit-" + nonce
+    source = (REPO / "supabase/config.toml").read_text(encoding="utf-8")
+    rendered = ex.config_text(source, executor.project, False, source=True)
+    sanitized = rendered.replace(executor.project, executor.project[:40])
+    assert sanitized == rendered
+    assert ex.config_text(sanitized, executor.project, False) == rendered
+
+
+@pytest.mark.parametrize("project", [
+    "worder-audit-" + "a" * 32,
+    ("worder-audit-" + "a" * 32)[:40],
+    "waudit-" + "a" * 31,
+])
+def test_config_refuses_legacy_or_truncated_project_ids(project):
+    source = (REPO / "supabase/config.toml").read_text(encoding="utf-8")
+    with pytest.raises(ValueError, match="invalid project id"):
+        ex.config_text(source, project, False, source=True)
 
 
 def test_config_changes_only_closed_fields():
@@ -275,6 +299,52 @@ def test_container_mapping_matches_persisted_disposable_port():
     assert physical["port"] == 45322
     identity = {**physical, "systemIdentifier": "123456", "sentinel": "c" * 64}
     assert ex.identity_shape(identity, PROJECT) == valid_identity()
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_inspect_record_accepts_observed_dual_stack_bindings(reverse):
+    data = container_record()
+    mapping = [
+        {"HostIp": "0.0.0.0", "HostPort": "45322"},
+        {"HostIp": "::", "HostPort": "45322"},
+    ]
+    data["NetworkSettings"]["Ports"]["5432/tcp"] = mapping[::-1] if reverse else mapping
+
+    assert ex.inspect_record([data], PROJECT, [], valid_identity()) == {
+        "projectId": PROJECT, "containerId": "a" * 64, "imageId": "sha256:" + "b" * 64,
+        "volumeName": "supabase_db_" + PROJECT, "port": 45322,
+    }
+
+
+@pytest.mark.parametrize("bindings", [
+    [("0.0.0.0", "45322"), ("::", "45323")],
+    [("0.0.0.0", "45323"), ("::", "45322")],
+    [("::", "45322")],
+    [("0.0.0.0", "45322"), ("0.0.0.0", "45322")],
+    [("::", "45322"), ("::", "45322")],
+    [("192.0.2.1", "45322"), ("::", "45322")],
+    [("0.0.0.0", "45322"), ("::1", "45322")],
+    [("0.0.0.0", "45322"), ("::", "45322"), ("127.0.0.1", "45322")],
+    [("0.0.0.0", "45322"), ("::", 45322)],
+])
+def test_inspect_record_refuses_unapproved_dual_stack_bindings(bindings):
+    data = container_record()
+    data["NetworkSettings"]["Ports"]["5432/tcp"] = [
+        {"HostIp": host, "HostPort": port} for host, port in bindings
+    ]
+    with pytest.raises(ValueError, match="port mapping mismatch"):
+        ex.inspect_record([data], PROJECT, [])
+
+
+@pytest.mark.parametrize("field", ["name", "label"])
+def test_inspect_record_refuses_a_truncated_project_identity(field):
+    data = container_record()
+    if field == "name":
+        data["Name"] = "/supabase_db_" + PROJECT[:-1]
+    else:
+        data["Config"]["Labels"]["com.supabase.cli.project"] = PROJECT[:-1]
+    with pytest.raises(ValueError):
+        ex.inspect_record([data], PROJECT, [])
 
 
 def executor_run(tmp_path):
@@ -2655,6 +2725,10 @@ class FakeCLI:
         self.commit = "e" * 40
         self.dirty = ""
         self.container = container_record()
+        self.container["NetworkSettings"]["Ports"]["5432/tcp"] = [
+            {"HostIp": "0.0.0.0", "HostPort": "45322"},
+            {"HostIp": "::", "HostPort": "45322"},
+        ]
         _, self.preflight = preflight_double()
 
     def connect(self, dsn, **kwargs):
@@ -2698,10 +2772,17 @@ class FakeCLI:
             "realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,"
             "studio,edge-runtime,logflare,vector,supavisor", "--workdir", str(self.run),
         ]:
-            config = tomllib.loads((self.run / "supabase/config.toml").read_text("utf-8"))
+            config_path = self.run / "supabase/config.toml"
+            text = config_path.read_text("utf-8")
+            config = tomllib.loads(text)
             assert config["db"]["migrations"]["enabled"] is False
             assert config["db"]["seed"]["enabled"] is False
             assert not (self.run / "supabase/seed.sql").exists()
+            # CLI 2.111.0 persists its 40-character project-id limit during start.
+            config_path.write_text(
+                text.replace(config["project_id"], config["project_id"][:40]),
+                encoding="utf-8", newline="\n",
+            )
             branches = self.run / "supabase/.branches"
             branches.mkdir()
             (branches / "_current_branch").write_bytes(b"main")
@@ -2832,6 +2913,14 @@ def test_prepare_accepts_cli_owned_current_branch_after_start(tmp_path, monkeypa
     assert code == 0, executor.gate["failure"]
     assert executor.gate["failure"] is None
     assert executor.gate["state"] == "prepared"
+    assert executor.project == PROJECT
+    assert tomllib.loads((executor.run / "supabase/config.toml").read_text("utf-8"))[
+        "project_id"
+    ] == PROJECT
+    assert [
+        "docker", "ps", "-a", "--no-trunc", "--filter",
+        "label=com.supabase.cli.project=" + PROJECT, "--format", "{{.ID}}",
+    ] in cli.calls
     assert ["docker", "inspect", "supabase_db_" + PROJECT] in cli.calls
     assert json.loads((executor.run / "identity.json").read_text("utf-8")) == {
         **valid_identity(), "systemIdentifier": "1234567890123456789", "sentinel": None,

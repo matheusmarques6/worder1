@@ -132,7 +132,7 @@ def read_json(path):
 
 
 def config_text(text, project, enabled, *, source=False):
-    require(re.fullmatch(r"worder-audit-[0-9a-f]{32}", project), "invalid project id")
+    require(re.fullmatch(r"waudit-[0-9a-f]{32}", project), "invalid project id")
     require(type(enabled) is bool, "invalid migrations flag")
     actual = tomllib.loads(text)
     desired = copy.deepcopy(EXPECTED)
@@ -398,9 +398,11 @@ def inspect_record(data, project, before, prior=None):
         mapping = db["NetworkSettings"]["Ports"].get("5432/tcp")
         require(
             isinstance(mapping, list)
-            and len(mapping) == 1
-            and mapping[0]["HostPort"] == "45322"
-            and mapping[0]["HostIp"] in {"127.0.0.1", "0.0.0.0"},
+            and len(mapping) in {1, 2}
+            and all(binding["HostPort"] == "45322" for binding in mapping)
+            and sorted(binding["HostIp"] for binding in mapping) in [
+                ["127.0.0.1"], ["0.0.0.0"], ["0.0.0.0", "::"],
+            ],
             "port mapping mismatch",
         )
         require(isinstance(db["Mounts"], list), "invalid data mounts")
@@ -621,7 +623,7 @@ def sanitize_report(path, sentinel):
 class Executor:
     def __init__(self, repo, run, *, runner=run_process):
         self.repo, self.run, self.runner = Path(repo), Path(run), runner
-        self.project = "worder-audit-" + self.run.name
+        self.project = "waudit-" + self.run.name
         self.identity = None
         self.local_context_proven = False
         self.reap_failure = None
@@ -1110,7 +1112,7 @@ class Executor:
             "MigrationThrough only applies to Prepare or Upgrade",
         )
         self.run = safe_run(self.repo, self.run)
-        self.project = "worder-audit-" + self.run.name
+        self.project = "waudit-" + self.run.name
         root = self.run.parent
         no_links(root)
         root.mkdir(parents=True, exist_ok=True)
