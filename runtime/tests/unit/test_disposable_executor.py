@@ -3137,6 +3137,74 @@ def test_prepare_upgrade_uses_exact_two_phase_history_and_fixed_fixture(
     )
 
 
+def test_prepare_upgrade_rechecks_copied_prefix_after_start_before_applying(
+    tmp_path, monkeypatch,
+):
+    executor, cli = upgrade_environment(tmp_path, monkeypatch)
+
+    def runner(argv, **kwargs):
+        result = cli(argv, **kwargs)
+        if argv[:2] == ["supabase", "start"] and "--workdir" in argv:
+            copied = executor.run / "supabase/migrations/20260812000004_engine_functions.sql"
+            copied.write_bytes(b"select 'changed after start';\n")
+        return result
+
+    executor.runner = runner
+    assert executor.execute("PrepareUpgrade") == 2
+    assert cli.migration_ups == 0
+    assert not cli.fixture_loaded
+    assert cli.stop_called
+    assert executor.gate["failure"] == {
+        "stage": "legacy-prefix", "kind": "ValueError", "exitCode": 2,
+    }
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("PGHOSTADDR", "203.0.113.10"),
+        ("PGSERVICE", "remote"),
+        ("PGSERVICEFILE", "remote.conf"),
+    ],
+)
+def test_prepare_upgrade_refuses_ambient_libpq_before_start(
+    tmp_path, monkeypatch, name, value,
+):
+    executor, cli = upgrade_environment(tmp_path, monkeypatch)
+    monkeypatch.setenv(name, value)
+
+    assert executor.execute("PrepareUpgrade") == 2
+
+    assert not cli.started
+    assert not any(
+        call[:2] == ["supabase", "start"] and "--workdir" in call
+        for call in cli.calls
+    )
+    assert executor.gate["failure"] == {
+        "stage": "preflight", "kind": "ValueError", "exitCode": 2,
+    }
+
+
+def test_sealed_cycle_never_checks_or_executes_db_reset(tmp_path, monkeypatch):
+    executor, cli = upgrade_environment(tmp_path, monkeypatch)
+    assert executor.execute("PrepareUpgrade") == 0
+
+    executor = ex.Executor(executor.repo, executor.run, runner=cli)
+    assert executor.execute("Upgrade") == 0
+    selected = [
+        "tests/db/test_case.py::test_one",
+        "tests/db/test_case.py::test_two[a-1]",
+    ]
+    executor = ex.Executor(executor.repo, executor.run, runner=cli)
+    assert executor.execute("Test", selected) == 0
+
+    assert executor.gate["state"] == "stopped"
+    assert [
+        call for call in cli.calls
+        if call[:3] == ["supabase", "db", "reset"]
+    ] == []
+
+
 @pytest.mark.parametrize("kind", ["linked", "reparse"])
 def test_prepare_upgrade_refuses_linked_fixture_before_start(tmp_path, monkeypatch, kind):
     executor, cli = upgrade_environment(tmp_path, monkeypatch)

@@ -1010,9 +1010,11 @@ class Executor:
         )
         fixture_sql = fixture_bytes.decode("utf-8")
 
+        validate_dsn(DSN)
         self.prepare(LEGACY_PREFIX_END, check_reset=False)
         self.gate.update(state="upgrading", stage="legacy-prefix")
         self.config(True)
+        self.files(prefix)
         self.save()
         self.local("migration", "up", "--local")
         self.history(prefix)
@@ -1274,7 +1276,9 @@ class Executor:
                     self.identity = identity_shape(
                         read_json(self.run / "identity.json"), self.project
                     )
-                    self.preflight()
+                    marker = self.run / "upgrade-baseline.json"
+                    no_links(marker)
+                    self.preflight(check_reset=not marker.is_file())
                 commit = self.command("git", "rev-parse", "HEAD", timeout=30).stdout.strip()
                 require(re.fullmatch(r"[0-9a-f]{40}", commit), "invalid checkout commit")
                 if action == "Test":
