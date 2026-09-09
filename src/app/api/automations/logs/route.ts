@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthClient, authError } from '@/lib/api-utils';
+import { sanitizeSearchTerm } from '@/lib/db/search-term'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,6 +19,9 @@ export async function GET(request: NextRequest) {
   const source = searchParams.get('source')
   const days = searchParams.get('days')
   const search = searchParams.get('search')
+  // O termo vai para dentro de um filtro do PostgREST: vírgula e
+  // parêntese deixariam de ser texto e passariam a ser consulta.
+  const buscaSegura = sanitizeSearchTerm(search)
   const page = parseInt(searchParams.get('page') || '1')
   const limit = parseInt(searchParams.get('limit') || '50')
 
@@ -44,8 +48,8 @@ export async function GET(request: NextRequest) {
       query = query.gte('created_at', daysAgo.toISOString())
     }
 
-    if (search) {
-      query = query.or(`message.ilike.%${search}%,rule_name.ilike.%${search}%,event_type.ilike.%${search}%`)
+    if (buscaSegura) {
+      query = query.or(`message.ilike.%${buscaSegura}%,rule_name.ilike.%${buscaSegura}%,event_type.ilike.%${buscaSegura}%`)
     }
 
     const { data, error } = await query

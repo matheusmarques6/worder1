@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
+import { sanitizeSearchTerm } from '@/lib/db/search-term'
 export const dynamic = 'force-dynamic';
 
 async function getOrgId(supabase: any) {
@@ -28,6 +29,9 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const phonebookId = searchParams.get('phonebook_id');
     const search = searchParams.get('search');
+    // O termo vai para dentro de um filtro do PostgREST: vírgula e
+    // parêntese deixariam de ser texto e passariam a ser consulta.
+    const buscaSegura = sanitizeSearchTerm(search)
     const limit = parseInt(searchParams.get('limit') || '100');
     const offset = parseInt(searchParams.get('offset') || '0');
 
@@ -41,8 +45,8 @@ export async function GET(request: NextRequest) {
         .order('created_at', { ascending: false })
         .range(offset, offset + limit - 1);
 
-      if (search) {
-        query = query.or(`name.ilike.%${search}%,mobile.ilike.%${search}%,email.ilike.%${search}%`);
+      if (buscaSegura) {
+        query = query.or(`name.ilike.%${buscaSegura}%,mobile.ilike.%${buscaSegura}%,email.ilike.%${buscaSegura}%`);
       }
 
       const { data, error, count } = await query;

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { requireOrgFromAuth } from '@/lib/auth/require-org';
+import { sanitizeSearchTerm } from '@/lib/db/search-term'
 
 // Lazy service-role client — created only when the handler runs so a
 // missing env var at build/import time doesn't throw.
@@ -32,6 +33,9 @@ export async function GET(request: NextRequest) {
     const storeId = searchParams.get('store_id')
     const category = searchParams.get('category')
     const search = searchParams.get('search')
+    // O termo vai para dentro de um filtro do PostgREST: vírgula e
+    // parêntese deixariam de ser texto e passariam a ser consulta.
+    const buscaSegura = sanitizeSearchTerm(search)
 
 
     let query = supabase
@@ -56,8 +60,8 @@ export async function GET(request: NextRequest) {
       query = query.eq('category', category)
     }
 
-    if (search) {
-      query = query.or(`name.ilike.%${search}%,content.ilike.%${search}%`)
+    if (buscaSegura) {
+      query = query.or(`name.ilike.%${buscaSegura}%,content.ilike.%${buscaSegura}%`)
     }
 
     const { data: templates, error } = await query

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 import { getAuthClient, authError } from '@/lib/api-utils'
+import { sanitizeSearchTerm } from '@/lib/db/search-term'
 export const dynamic = 'force-dynamic';
 
 // Resolve every org the authenticated user actually belongs to. The
@@ -35,6 +36,9 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status')
     const type = searchParams.get('type')
     const search = searchParams.get('search')
+    // O termo vai para dentro de um filtro do PostgREST: vírgula e
+    // parêntese deixariam de ser texto e passariam a ser consulta.
+    const buscaSegura = sanitizeSearchTerm(search)
     const storeId = searchParams.get('storeId')
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '20')
@@ -71,7 +75,7 @@ export async function GET(request: NextRequest) {
     if (type) query = query.eq('type', type)
     // O termo vai para dentro de um ilike: vírgula e parêntese saem, senão
     // deixam de ser busca e passam a ser filtro.
-    if (search) query = query.ilike('name', `%${search.replace(/[%,()]/g, '')}%`)
+    if (buscaSegura) query = query.ilike('name', `%${buscaSegura}%`)
 
     const { data, error, count } = await query
     if (error) {

@@ -93,7 +93,9 @@ describe('campanhas de WhatsApp · listar', () => {
     await get('?search=' + encodeURIComponent('promo),(x'))
     const q = db.on('whatsapp_campaigns')[0]
     const ilike = q.filters.find((f) => f.op === 'ilike')
-    expect(ilike?.value).toBe('%promox%')
+    // O saneador troca a gramática por espaço: "promo),(x" busca "promo x",
+    // não "promox" — colar as palavras mudaria o que a pessoa procurou.
+    expect(ilike?.value).toBe('%promo x%')
   })
 
   it('falha de leitura vira erro, não lista vazia', async () => {

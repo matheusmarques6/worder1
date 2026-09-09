@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 import { requireOrgFromAuth } from '@/lib/auth/require-org';
+import { sanitizeSearchTerm } from '@/lib/db/search-term'
 export const dynamic = 'force-dynamic';
 
 // GET /api/whatsapp/inbox/quick-replies
@@ -13,6 +14,9 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const category = searchParams.get('category')
     const search = searchParams.get('search')
+    // O termo vai para dentro de um filtro do PostgREST: vírgula e
+    // parêntese deixariam de ser texto e passariam a ser consulta.
+    const buscaSegura = sanitizeSearchTerm(search)
 
     let query = supabase
       .from('whatsapp_quick_replies')
@@ -25,8 +29,8 @@ export async function GET(request: NextRequest) {
       query = query.eq('category', category)
     }
 
-    if (search) {
-      query = query.or(`shortcut.ilike.%${search}%,title.ilike.%${search}%,content.ilike.%${search}%`)
+    if (buscaSegura) {
+      query = query.or(`shortcut.ilike.%${buscaSegura}%,title.ilike.%${buscaSegura}%,content.ilike.%${buscaSegura}%`)
     }
 
     const { data, error } = await query

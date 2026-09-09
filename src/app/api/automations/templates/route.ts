@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient, getAuthClient, authError } from '@/lib/api-utils';
 import { SupabaseClient } from '@supabase/supabase-js';
+import { sanitizeSearchTerm } from '@/lib/db/search-term'
 export const dynamic = 'force-dynamic';
 
 // Module-level lazy client
@@ -34,6 +35,9 @@ export async function GET(request: NextRequest) {
   const category = searchParams.get('category');
   const featured = searchParams.get('featured') === 'true';
   const search = searchParams.get('search');
+  // O termo vai para dentro de um filtro do PostgREST: vírgula e
+  // parêntese deixariam de ser texto e passariam a ser consulta.
+  const buscaSegura = sanitizeSearchTerm(search)
 
   try {
     let query = supabase
@@ -50,8 +54,8 @@ export async function GET(request: NextRequest) {
       query = query.eq('is_featured', true);
     }
 
-    if (search) {
-      query = query.or(`name.ilike.%${search}%,description.ilike.%${search}%`);
+    if (buscaSegura) {
+      query = query.or(`name.ilike.%${buscaSegura}%,description.ilike.%${buscaSegura}%`);
     }
 
     const { data, error } = await query;

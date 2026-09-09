@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthClient, authError } from '@/lib/api-utils'
+import { sanitizeSearchTerm } from '@/lib/db/search-term'
 
 // GET - List conversations
 export async function GET(request: NextRequest) {
@@ -16,6 +17,9 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '50')
     const offset = parseInt(searchParams.get('offset') || '0')
     const search = searchParams.get('search')
+    // O termo vai para dentro de um filtro do PostgREST: vírgula e
+    // parêntese deixariam de ser texto e passariam a ser consulta.
+    const buscaSegura = sanitizeSearchTerm(search)
 
     let query = supabase
       .from('instagram_conversations')
@@ -45,8 +49,8 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    if (search) {
-      query = query.or(`username.ilike.%${search}%,contact_name.ilike.%${search}%`)
+    if (buscaSegura) {
+      query = query.or(`username.ilike.%${buscaSegura}%,contact_name.ilike.%${buscaSegura}%`)
     }
 
     const { data, error, count } = await query

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { sanitizeSearchTerm } from '@/lib/db/search-term'
 
 // Use public client for help (doesn't require auth)
 function getPublicSupabase() {
@@ -21,6 +22,9 @@ export async function GET(request: NextRequest) {
     const categorySlug = searchParams.get('category');
     const articleSlug = searchParams.get('article');
     const search = searchParams.get('search');
+    // O termo vai para dentro de um filtro do PostgREST: vírgula e
+    // parêntese deixariam de ser texto e passariam a ser consulta.
+    const buscaSegura = sanitizeSearchTerm(search)
 
     // Get categories
     const { data: categories, error: catError } = await supabase
@@ -75,8 +79,8 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      if (search) {
-        articleQuery = articleQuery.or(`title.ilike.%${search}%,summary.ilike.%${search}%`);
+      if (buscaSegura) {
+        articleQuery = articleQuery.or(`title.ilike.%${buscaSegura}%,summary.ilike.%${buscaSegura}%`);
       }
 
       const { data: articleData, error: articleError } = await articleQuery;

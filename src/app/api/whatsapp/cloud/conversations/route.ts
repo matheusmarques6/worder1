@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 import { createWhatsAppCloudClient } from '@/lib/whatsapp/cloud-api';
 import { getAccessToken } from '@/lib/whatsapp/account-loader';
+import { sanitizeSearchTerm } from '@/lib/db/search-term'
 export const dynamic = 'force-dynamic';
 
 // =============================================
@@ -41,6 +42,9 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status'); // open, closed, all
     const assignedTo = searchParams.get('assignedTo');
     const search = searchParams.get('search');
+    // O termo vai para dentro de um filtro do PostgREST: vírgula e
+    // parêntese deixariam de ser texto e passariam a ser consulta.
+    const buscaSegura = sanitizeSearchTerm(search)
     const limit = parseInt(searchParams.get('limit') || '50');
     const offset = parseInt(searchParams.get('offset') || '0');
 
@@ -73,8 +77,8 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    if (search) {
-      query = query.or(`contact_name.ilike.%${search}%,contact_phone.ilike.%${search}%`);
+    if (buscaSegura) {
+      query = query.or(`contact_name.ilike.%${buscaSegura}%,contact_phone.ilike.%${buscaSegura}%`);
     }
 
     // Ordenar e paginar

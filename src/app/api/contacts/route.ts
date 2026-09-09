@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError, validateStoreAccess } from '@/lib/api-utils';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { EventBus, EventType } from '@/lib/events';
+import { sanitizeSearchTerm } from '@/lib/db/search-term'
 export const dynamic = 'force-dynamic';
 
 // GET - List contacts or get single contact
@@ -28,6 +29,9 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const contactId = searchParams.get('id');
   const search = searchParams.get('search');
+  // O termo vai para dentro de um filtro do PostgREST: vírgula e
+  // parêntese deixariam de ser texto e passariam a ser consulta.
+  const buscaSegura = sanitizeSearchTerm(search)
   const tags = searchParams.get('tags');
   const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
   // Cap the page size so a crafted ?limit=1000000 can't pull the whole table
@@ -91,8 +95,8 @@ export async function GET(request: NextRequest) {
       query = query.eq('store_id', storeId);
     }
 
-    if (search) {
-      query = query.or(`email.ilike.%${search}%,first_name.ilike.%${search}%,last_name.ilike.%${search}%,phone.ilike.%${search}%`);
+    if (buscaSegura) {
+      query = query.or(`email.ilike.%${buscaSegura}%,first_name.ilike.%${buscaSegura}%,last_name.ilike.%${buscaSegura}%,phone.ilike.%${buscaSegura}%`);
     }
 
     if (tags) {
