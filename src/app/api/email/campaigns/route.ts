@@ -127,7 +127,26 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    return NextResponse.json({ campaigns: campaignsWithStats });
+    // Resumo do topo da tela. A tela já pedia `stats` e a rota nunca
+    // mandava: os quatro cartões mostravam zero para sempre, por cima de
+    // uma lista com campanhas de verdade.
+    //
+    // As médias são ponderadas pelo volume, não pela quantidade de
+    // campanhas: um teste para dez pessoas com 100% de abertura não pode
+    // valer o mesmo que um disparo para dez mil.
+    const somaEnviados = campaignsWithStats.reduce((acc: number, c: any) => acc + (Number(c.stats.total) || 0), 0);
+    const somaAbertos = campaignsWithStats.reduce((acc: number, c: any) => acc + (Number(c.stats.opened) || 0), 0);
+    const somaCliques = campaignsWithStats.reduce((acc: number, c: any) => acc + (Number(c.stats.clicked) || 0), 0);
+
+    return NextResponse.json({
+      campaigns: campaignsWithStats,
+      stats: {
+        total: campaignsWithStats.length,
+        sent: campaignsWithStats.filter((c: any) => c.status === 'sent').length,
+        avg_open_rate: somaEnviados > 0 ? (somaAbertos / somaEnviados) * 100 : 0,
+        avg_click_rate: somaEnviados > 0 ? (somaCliques / somaEnviados) * 100 : 0,
+      },
+    });
   } catch (error) {
     console.error('[EmailCampaigns] Error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

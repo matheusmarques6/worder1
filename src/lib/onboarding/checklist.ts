@@ -22,8 +22,6 @@ export interface OnboardingFacts {
   embedActive: boolean
   /** Popups publicados (sem contar variantes de teste). */
   publishedPopups: number
-  /** Inscrições já capturadas por popup. */
-  subscribers: number
   /** A organização tem domínio próprio verificado? */
   domainVerified: boolean
   /** Campanhas já enviadas. */
@@ -65,7 +63,6 @@ export function buildChecklist(facts: OnboardingFacts): Checklist {
     hasStore: !!facts.hasStore,
     embedActive: !!facts.embedActive,
     publishedPopups: Math.max(0, Number(facts.publishedPopups) || 0),
-    subscribers: Math.max(0, Number(facts.subscribers) || 0),
     domainVerified: !!facts.domainVerified,
     campaignsSent: Math.max(0, Number(facts.campaignsSent) || 0),
     automationsActive: Math.max(0, Number(facts.automationsActive) || 0),

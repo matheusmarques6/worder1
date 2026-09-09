@@ -23,13 +23,22 @@ export async function GET(request: NextRequest) {
   const auth = await getAuthClient()
   if (!auth) return authError()
   const orgId = auth.user.organization_id
-  const storeId = request.nextUrl.searchParams.get('storeId')
   const admin = getSupabaseAdmin()
+
+  // O storeId entra num filtro `or(...)` montado como texto. Um valor que
+  // não é UUID não é uma loja — é uma tentativa de mexer na consulta.
+  const storeIdBruto = request.nextUrl.searchParams.get('storeId')
+  const storeId = storeIdBruto && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(storeIdBruto)
+    ? storeIdBruto
+    : null
+  if (storeIdBruto && !storeId) {
+    return NextResponse.json({ error: 'storeId inválido' }, { status: 400 })
+  }
 
   const count = (table: string) =>
     admin.from(table).select('id', { count: 'exact', head: true }).eq('organization_id', orgId)
 
-  const [stores, popups, subs, domains, automations, campaigns] = await Promise.all([
+  const [stores, popups, domains, automations, campaigns] = await Promise.all([
     admin
       .from('shopify_stores')
       .select('id, embed_installed')
@@ -41,7 +50,6 @@ export async function GET(request: NextRequest) {
       if (storeId) q = q.or(`store_id.eq.${storeId},store_id.is.null`)
       return q
     })(),
-    count('crm_form_submissions'),
     admin
       .from('email_domains')
       .select('id')
@@ -62,7 +70,6 @@ export async function GET(request: NextRequest) {
     hasStore: lojas.length > 0,
     embedActive: relevantes.some((s) => s.embed_installed === true),
     publishedPopups: popups.count || 0,
-    subscribers: subs.count || 0,
     domainVerified: (domains.data || []).length > 0,
     automationsActive: automations.count || 0,
     campaignsSent: campaigns.count || 0,

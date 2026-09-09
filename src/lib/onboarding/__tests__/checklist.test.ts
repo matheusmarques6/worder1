@@ -5,7 +5,7 @@ import { buildChecklist, type OnboardingFacts } from '../checklist'
 
 const zero: OnboardingFacts = {
   hasStore: false, embedActive: false, publishedPopups: 0,
-  subscribers: 0, domainVerified: false, campaignsSent: 0, automationsActive: 0,
+  domainVerified: false, campaignsSent: 0, automationsActive: 0,
 }
 const facts = (p: Partial<OnboardingFacts> = {}): OnboardingFacts => ({ ...zero, ...p })
 const byId = (c: ReturnType<typeof buildChecklist>, id: string) => c.steps.find((s) => s.id === id)!
@@ -50,7 +50,7 @@ describe('roteiro de primeiros passos', () => {
   it('com tudo feito, o roteiro se dá por encerrado', () => {
     const c = buildChecklist(facts({
       hasStore: true, embedActive: true, publishedPopups: 1,
-      domainVerified: true, campaignsSent: 3, automationsActive: 1, subscribers: 40,
+      domainVerified: true, campaignsSent: 3, automationsActive: 1,
     }))
     expect(c.complete).toBe(true)
     expect(c.next).toBeNull()

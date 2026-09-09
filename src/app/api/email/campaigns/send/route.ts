@@ -231,7 +231,7 @@ export async function POST(request: NextRequest) {
 
     if (contactsError) {
       console.error('[SendCampaign] Error fetching contacts:', contactsError);
-      await setCampaignStatus({ status: 'failed' }, 'contatos não resolvidos');
+      await setCampaignStatus({ status: 'failed', error_message: 'Não foi possível resolver a lista de destinatários.' }, 'contatos não resolvidos');
       return NextResponse.json({ error: 'Failed to resolve contacts' }, { status: 500 });
     }
 
@@ -321,7 +321,9 @@ export async function POST(request: NextRequest) {
       const sentInWindow = await sentInAllowanceWindow(supabaseAdmin, organizationId, campaign.store_id)
       const verdict = evaluateSharedAllowance({ fromEmail: resolvedFrom, sentInWindow, aboutToSend: contacts.length })
       if (!verdict.allowed) {
-        await setCampaignStatus({ status: 'draft', sent_at: null }, 'franquia do endereço temporário')
+        // Com o motivo gravado, a tela explica por que a campanha voltou
+        // para rascunho em vez de deixar o lojista adivinhando.
+        await setCampaignStatus({ status: 'draft', sent_at: null, error_message: verdict.reason }, 'franquia do endereço temporário')
         return NextResponse.json({
           error: verdict.reason,
           code: 'SHARED_DOMAIN_ALLOWANCE',

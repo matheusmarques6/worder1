@@ -24,6 +24,11 @@ async function get(query = '') {
 
 const passo = (body: any, id: string) => body.steps.find((s: any) => s.id === id)
 
+// O storeId vai para dentro de um filtro montado como texto: aqui só
+// passa UUID, e os testes usam ids de verdade por isso.
+const LOJA_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+const LOJA_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+
 beforeEach(() => {
   vi.resetModules()
   db = fakeSupabase({ rows: {} })
@@ -62,11 +67,11 @@ describe('roteiro de primeiros passos · rota', () => {
   it('com uma loja escolhida, é a vitrine DELA que precisa estar ativa', async () => {
     db = fakeSupabase({
       rows: { shopify_stores: [
-        { id: 'store-a', embed_installed: false },
-        { id: 'store-b', embed_installed: true },
+        { id: LOJA_A, embed_installed: false },
+        { id: LOJA_B, embed_installed: true },
       ] },
     })
-    const { body } = await get('?storeId=store-a')
+    const { body } = await get(`?storeId=${LOJA_A}`)
     expect(passo(body, 'store').done).toBe(true)
     // A irmã já ativada não fecha o passo desta loja.
     expect(passo(body, 'embed').done).toBe(false)
@@ -74,10 +79,15 @@ describe('roteiro de primeiros passos · rota', () => {
 
   it('sem loja escolhida, qualquer vitrine ativa fecha o passo', async () => {
     db = fakeSupabase({
-      rows: { shopify_stores: [{ id: 'store-a', embed_installed: false }, { id: 'store-b', embed_installed: true }] },
+      rows: { shopify_stores: [{ id: LOJA_A, embed_installed: false }, { id: LOJA_B, embed_installed: true }] },
     })
     const { body } = await get()
     expect(passo(body, 'embed').done).toBe(true)
+  })
+
+  it('storeId que não é UUID é recusado, em vez de virar filtro', async () => {
+    const { res } = await get('?storeId=abc),(x')
+    expect(res.status).toBe(400)
   })
 
   it('não guarda cache: o roteiro reflete o estado de agora', async () => {

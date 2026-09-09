@@ -110,8 +110,18 @@ export async function GET(request: NextRequest) {
     token_invalid_at: w.token_invalid_at,
   }))
 
+  // Se a leitura dos domínios falhou, a lista vem vazia — e "vazia" é
+  // exatamente o que dispara o convite para verificar um domínio. Cobrar
+  // do lojista um passo que ele talvez já tenha dado, por causa de um erro
+  // nosso, é pior do que não dizer nada.
+  const domainsUnknown = !!domainsRes.error
+  if (domainsUnknown) console.warn('[sending-health] não consegui ler os domínios:', domainsRes.error!.message)
+
   const issues = buildSendingIssues({
-    sender: { email: senderEmail, onSharedDomain: isSharedDomainEmail(senderEmail) || !senderEmail },
+    sender: {
+      email: senderEmail,
+      onSharedDomain: domainsUnknown ? false : (isSharedDomainEmail(senderEmail) || !senderEmail),
+    },
     domains,
     allowance: {
       onSharedDomain: allowance.onSharedDomain,

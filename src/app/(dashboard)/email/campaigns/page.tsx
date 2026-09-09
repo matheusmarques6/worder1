@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { useStoreStore } from '@/stores'
+import { useToast } from '@/components/ui/Toast'
 import { SendingHealthPanel } from '@/components/shared/SendingHealthPanel'
 
 interface Campaign {
@@ -25,13 +26,28 @@ interface Campaign {
   name: string
   subject: string
   status: 'draft' | 'scheduled' | 'sending' | 'sent' | 'failed'
-  recipients_count: number
-  sent_count: number
-  open_rate: number
-  click_rate: number
+  /** Público resolvido no disparo. */
+  total_recipients?: number | null
+  /** Motivo da última falha, quando houve. */
+  error_message?: string | null
   scheduled_at?: string
   sent_at?: string
   created_at: string
+  /**
+   * Números calculados pela rota a partir de email_sends. A tela lia
+   * `recipients_count`, `sent_count` e `open_rate` do topo do objeto —
+   * campos que a rota nunca mandou: a coluna de destinatários mostrava
+   * NaN e as taxas, 0,0% para toda campanha.
+   */
+  stats?: {
+    total: number
+    delivered: number
+    opened: number
+    clicked: number
+    bounced: number
+    open_rate: string
+    click_rate: string
+  }
 }
 
 interface CampaignStats {
@@ -49,34 +65,69 @@ const statusConfig: Record<string, { label: string; className: string }> = {
   failed: { label: 'Falhou', className: 'bg-red-50 text-red-700 border border-red-200' },
 }
 
-const formatNumber = (n: number) => new Intl.NumberFormat('pt-BR').format(n)
-const formatPercent = (n: number) => `${n.toFixed(1)}%`
+const formatNumber = (n: number | null | undefined) =>
+  new Intl.NumberFormat('pt-BR').format(Number(n) || 0)
+const formatPercent = (n: number | string | null | undefined) =>
+  `${(Number(n) || 0).toFixed(1).replace('.', ',')}%`
 
 export default function CampaignsPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [stats, setStats] = useState<CampaignStats>({ total: 0, sent: 0, avg_open_rate: 0, avg_click_rate: 0 })
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [retrying, setRetrying] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const { currentStore } = useStoreStore()
+  const toast = useToast()
 
   const fetchCampaigns = useCallback(async () => {
-    if (!currentStore?.id) return
+    // Antes esta função voltava sem fazer nada quando não havia loja
+    // escolhida — e como o "carregando" começa ligado, quem ainda não
+    // conectou uma loja ficava olhando o esqueleto da tabela para sempre.
     setLoading(true)
     try {
       const params = new URLSearchParams()
-      if (currentStore) params.set('store_id', currentStore?.id || '')
-      const res = await fetch(`/api/email/campaigns?${params}`)
+      if (currentStore?.id) params.set('store_id', currentStore.id)
+      const res = await fetch(`/api/email/campaigns?${params}`, { cache: 'no-store' })
       if (res.ok) {
         const data = await res.json()
         setCampaigns(data.campaigns || [])
         setStats(data.stats || { total: 0, sent: 0, avg_open_rate: 0, avg_click_rate: 0 })
+      } else {
+        // Silêncio aqui virava "nenhuma campanha", que é diferente de
+        // "não consegui carregar".
+        console.error('[Campanhas] falha ao carregar:', res.status, await res.text().catch(() => ''))
+        setLoadError('Não foi possível carregar as campanhas. Recarregue a página.')
       }
     } catch (err) {
       console.error('Failed to fetch campaigns:', err)
+      setLoadError('Não foi possível carregar as campanhas. Verifique sua conexão.')
     } finally {
       setLoading(false)
     }
-  }, [currentStore])
+  }, [currentStore?.id])
+
+  /**
+   * Destrava uma campanha presa em "sending" ou marcada como falha: ela
+   * volta para rascunho e o lojista reenvia quando quiser. A rota já
+   * existia e nunca funcionava — escrevia numa coluna que não existia no
+   * banco e respondia "não está num estado que permite retentativa".
+   */
+  const retry = async (c: Campaign) => {
+    setRetrying(c.id)
+    try {
+      const res = await fetch(`/api/email/campaigns/${c.id}/retry`, { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error('Não foi possível destravar', data.error || '')
+        return
+      }
+      toast.success('Campanha de volta para rascunho', 'Revise e envie quando quiser.')
+      await fetchCampaigns()
+    } finally {
+      setRetrying(null)
+    }
+  }
 
   const hasHydrated = useStoreStore((s) => s._hasHydrated)
   useEffect(() => {
@@ -141,6 +192,12 @@ export default function CampaignsPage() {
       {/* O que impede as mensagens de chegar. Fica ANTES dos números: de
           nada adianta a taxa de abertura se o domínio caiu. */}
       <SendingHealthPanel channel="email" />
+
+      {loadError && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {loadError}
+        </div>
+      )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -255,6 +312,11 @@ export default function CampaignsPage() {
                           <p className="text-xs text-gray-500 truncate max-w-xs">
                             {campaign.subject}
                           </p>
+                          {/* O motivo da falha, onde ele importa. Antes a
+                              tela dizia "Falhou" e nada mais. */}
+                          {campaign.error_message && (campaign.status === 'failed' || campaign.status === 'sending') && (
+                            <p className="text-xs text-red-600 mt-1 max-w-md leading-snug">{campaign.error_message}</p>
+                          )}
                         </div>
                       </td>
                       <td className="px-4 py-3">
@@ -266,17 +328,17 @@ export default function CampaignsPage() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <span className="text-sm text-gray-900">
-                          {formatNumber(campaign.recipients_count)}
+                          {formatNumber(campaign.total_recipients ?? campaign.stats?.total)}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right">
                         <span className="text-sm text-gray-900">
-                          {formatPercent(campaign.open_rate)}
+                          {campaign.stats && campaign.stats.total > 0 ? formatPercent(campaign.stats.open_rate) : '—'}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right">
                         <span className="text-sm text-gray-900">
-                          {formatPercent(campaign.click_rate)}
+                          {campaign.stats && campaign.stats.total > 0 ? formatPercent(campaign.stats.click_rate) : '—'}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right">
@@ -287,12 +349,24 @@ export default function CampaignsPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <Link
-                          href={`/email/campaigns/${campaign.id}`}
-                          className="p-1.5 text-gray-400 hover:text-gray-600 rounded-md hover:bg-gray-100 transition-colors"
-                        >
-                          <ChevronRight className="w-4 h-4" />
-                        </Link>
+                        <div className="flex items-center justify-end gap-1">
+                          {(campaign.status === 'failed' || campaign.status === 'sending') && (
+                            <button
+                              onClick={() => retry(campaign)}
+                              disabled={retrying === campaign.id}
+                              title="Voltar para rascunho para reenviar"
+                              className="text-xs font-medium text-gray-600 hover:text-gray-900 border border-gray-200 rounded-md px-2 py-1 disabled:opacity-50"
+                            >
+                              {retrying === campaign.id ? 'Destravando…' : 'Destravar'}
+                            </button>
+                          )}
+                          <Link
+                            href={`/email/campaigns/${campaign.id}`}
+                            className="p-1.5 text-gray-400 hover:text-gray-600 rounded-md hover:bg-gray-100 transition-colors"
+                          >
+                            <ChevronRight className="w-4 h-4" />
+                          </Link>
+                        </div>
                       </td>
                     </tr>
                   )

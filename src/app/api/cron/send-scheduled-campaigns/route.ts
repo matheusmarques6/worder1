@@ -53,26 +53,33 @@ export async function GET(req: NextRequest) {
   )
   if (due.length === 0) return NextResponse.json({ dispatched: 0 })
 
-  // Marca como 'sending' atomicamente para evitar dupla execução
-  // via condicional UPDATE
+  // NÃO marcamos a campanha como 'sending' aqui.
+  //
+  // Este cron marcava, e /send recusa campanha que já está em 'sending'
+  // com 400 ("Campaign is already sending"). Ou seja: TODA campanha
+  // agendada morria neste ponto — a resposta 400 não é exceção, então nem
+  // a volta para 'scheduled' acontecia, e ela ficava presa em 'sending'
+  // para sempre. Sem erro na tela, sem e-mail enviado.
+  //
+  // A proteção contra despacho duplo não precisa disto: /send faz o
+  // claim atômico dele (UPDATE ... WHERE status IN ('draft','scheduled')),
+  // e o segundo processo recebe 409 em vez de enviar de novo.
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(req.url).origin
   const cronSecret = process.env.CRON_SECRET || ''
 
+  /** Tira a campanha da fila e devolve para rascunho, com o motivo. */
+  const parkAsDraft = async (camp: any, motivo: string) => {
+    const { error } = await supabaseAdmin
+      .from('email_campaigns')
+      .update({ status: 'draft', sent_at: null, error_message: motivo })
+      .eq('id', camp.id)
+      .eq('organization_id', camp.organization_id)
+      .in('status', ['scheduled', 'sending'])
+    if (error) console.error(`[SendScheduled] campanha ${camp.id} não voltou para rascunho:`, error.message)
+  }
+
   const results: any[] = []
   for (const camp of due) {
-    const { data: claimed, error: claimErr } = await supabaseAdmin
-      .from('email_campaigns')
-      .update({ status: 'sending', sent_at: new Date().toISOString() })
-      .eq('id', camp.id)
-      .eq('status', 'scheduled')
-      .select('id')
-      .maybeSingle()
-
-    if (claimErr || !claimed) {
-      results.push({ id: camp.id, claimed: false })
-      continue
-    }
-
     // Chama /send (sem auth de usuário — passa internal header)
     try {
       const res = await fetch(`${baseUrl}/api/email/campaigns/send`, {
@@ -85,17 +92,31 @@ export async function GET(req: NextRequest) {
         },
         body: JSON.stringify({ campaign_id: camp.id }),
       })
-      results.push({ id: camp.id, ok: res.ok, status: res.status })
+      const body: any = res.ok ? null : await res.json().catch(() => ({}))
+      results.push({ id: camp.id, ok: res.ok, status: res.status, error: body?.error })
+
+      // 422 é problema de configuração — domínio sem verificar, franquia
+      // do endereço temporário, reprovação no preflight. Tentar de novo a
+      // cada minuto não resolve nada e mantém a campanha numa fila que
+      // nunca anda: ela volta para rascunho com o motivo, aparece na tela
+      // e o painel de saúde do envio já avisa o que fazer.
+      if (res.status === 422) {
+        await parkAsDraft(camp, body?.error || 'Configuração de envio pendente')
+      } else if (!res.ok) {
+        console.error(`[SendScheduled] campanha ${camp.id} respondeu ${res.status}:`, body?.error || '(sem detalhe)')
+      }
     } catch (err: any) {
       results.push({ id: camp.id, ok: false, error: err?.message })
-      // Volta pra scheduled pra tentar de novo. sent_at precisa voltar
-      // junto: o claim já tinha carimbado, e deixá-lo preenchido faz a
-      // campanha aparecer como "enviada" numa retentativa que ainda
-      // não enviou nada.
-      await supabaseAdmin
+      // A requisição não chegou (ou caiu no meio). Se /send já tinha feito
+      // o claim, a campanha ficaria presa em 'sending' — devolver para
+      // 'scheduled' faz o próximo minuto tentar de novo.
+      const { error: revertError } = await supabaseAdmin
         .from('email_campaigns')
         .update({ status: 'scheduled', sent_at: null })
         .eq('id', camp.id)
+        .eq('organization_id', camp.organization_id)
+        .eq('status', 'sending')
+      if (revertError) console.error(`[SendScheduled] campanha ${camp.id} presa em "sending":`, revertError.message)
     }
   }
 
