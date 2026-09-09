@@ -288,7 +288,7 @@ FUNCTIONS = (
     ("get_user_organization_id", "",
      "75201ac93ee64426135de60415cbc8fe4eaeac23ff6488749037d23cafd9c3bc"),
     ("handle_new_user", "",
-     "84ace8fc631dd633ce872a87742119e12a57fb4d24e975c82e8165b98ef4b0b0"),
+     "b332ee52c4b4810af7f8ebbb54f10aff9fd58f106de695089c87ea6969db60eb"),
 )
 
 

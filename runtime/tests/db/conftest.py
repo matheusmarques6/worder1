@@ -68,33 +68,26 @@ class TwoTenants:
 
 
 def _create_tenant(conn: psycopg.Connection, label: str) -> Tenant:
-    # Worder: organizations + profiles; profiles.organization_id IS the
-    # membership (there is no memberships table — see runtime/FORK.md).
-    organization_id = uuid.uuid4()
+    # The canonical auth trigger provisions all tenant-owned rows.
     user_id = uuid.uuid4()
 
-    with conn.cursor() as cur:
-        cur.execute(
-            "insert into public.organizations (id, name, slug) values (%s, %s, %s)",
-            (organization_id, label, label),
-        )
-        cur.execute(
+    with conn.transaction():
+        conn.execute(
             """
-            insert into auth.users (id, instance_id, aud, role, email, encrypted_password)
+            insert into auth.users
+                (id, instance_id, aud, role, email, encrypted_password, raw_user_meta_data)
             values (%s, '00000000-0000-0000-0000-000000000000', 'authenticated',
-                    'authenticated', %s, '')
+                    'authenticated', %s, '', '{}')
             """,
             (user_id, f"{label}@example.test"),
         )
-        cur.execute(
-            """
-            insert into public.profiles (id, email, organization_id, role)
-            values (%s, %s, %s, 'owner')
-            """,
-            (user_id, f"{label}@example.test", organization_id),
-        )
+        row = conn.execute(
+            "select organization_id from public.profiles where id=%s", (user_id,)
+        ).fetchone()
+        if row is None:
+            raise AssertionError("auth trigger did not create a profile")
 
-    return Tenant(id=organization_id, user_id=user_id)
+    return Tenant(id=row[0], user_id=user_id)
 
 
 @pytest.fixture
