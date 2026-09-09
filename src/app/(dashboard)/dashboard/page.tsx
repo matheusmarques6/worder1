@@ -12,8 +12,9 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts'
-import { RefreshCw, ChevronDown, TrendingUp, TrendingDown, Info, ExternalLink, Download } from 'lucide-react'
+import { RefreshCw, ChevronDown, TrendingUp, TrendingDown, Info, Download } from 'lucide-react'
 import { ShopifySyncProgress } from '@/components/shopify/ShopifySyncProgress'
+import { OnboardingChecklist } from '@/components/dashboard/OnboardingChecklist'
 
 // ──────────────────────────────────────────────────────────────
 // Types
@@ -394,28 +395,12 @@ export default function DashboardPage() {
           <p className="text-[14px] text-[#A1A1AA] mt-1">Aqui está o resumo da sua operação.</p>
         </header>
 
-        {/* ── Onboarding banner: shown until a Shopify store is connected ── */}
-        {!loading && !data.hasShopify && (
-          <div
-            className="mb-11 rounded-[14px] bg-white px-6 py-5 flex items-center justify-between gap-4 flex-wrap"
-            style={{ border: '1px solid #E4E4E7' }}
-          >
-            <div className="flex-1 min-w-0">
-              <div className="text-[14px] font-bold text-[#18181B]" style={{ letterSpacing: '-0.01em' }}>
-                Conecte sua loja para liberar a dashboard
-              </div>
-              <p className="text-[13px] text-[#71717A] mt-1 leading-relaxed">
-                Vincule sua Shopify para ver receita, pedidos e atribuição das suas campanhas e automações em tempo real.
-              </p>
-            </div>
-            <Link
-              href="/integrations"
-              className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-white bg-[#18181B] hover:bg-[#27272A] transition-colors px-4 py-2 rounded-[8px] shrink-0"
-            >
-              Conectar Shopify <ExternalLink className="w-3.5 h-3.5" />
-            </Link>
-          </div>
-        )}
+        {/* ── Primeiros passos ──
+            No lugar do aviso solto de "conecte sua loja", que dizia o
+            primeiro passo e sumia: o caminho inteiro até a primeira
+            campanha, com cada passo marcado por um fato no banco. Some
+            sozinho quando tudo está feito. */}
+        {!loading && <OnboardingChecklist />}
 
         {/* ── Background sync progress (Shopify) ──
             Polled live while a worker drains GraphQL/Bulk results into
