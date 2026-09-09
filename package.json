@@ -13,7 +13,10 @@
     "test:coverage": "vitest run --coverage",
     "worker:dev": "npx ts-node --project worker/tsconfig.json worker/campaign-worker.ts",
     "worker:build": "cd worker && npm run build",
-    "worker:start": "cd worker && npm start"
+    "worker:start": "cd worker && npm start",
+    "e2e": "playwright test",
+    "e2e:ui": "playwright test --ui",
+    "e2e:report": "playwright show-report"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.1.0",
@@ -69,6 +72,7 @@
     "zustand": "^4.4.7"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/jsdom": "^30.0.0",
     "@types/lodash": "^4.17.24",

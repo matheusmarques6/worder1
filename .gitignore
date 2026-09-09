@@ -50,3 +50,8 @@ Thumbs.db
 *.log
 .env.local
 package-lock.json
+
+# Testes de ponta a ponta (Playwright)
+/test-results/
+/playwright-report/
+/e2e/.auth/
