@@ -48,7 +48,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     admin.rpc('popup_holdout_report', { p_organization_id: orgId, p_form_id: formId, p_days: days }),
     admin
       .from('crm_form_submissions')
-      .select('id, answers, created_at, user_agent, device, country, coupon_code, converted_at, conversion_value, offer_bucket, offer_tier, intent, propensity_score')
+      .select('id, answers, created_at, user_agent, device, country, coupon_code, converted_at, conversion_value, offer_bucket, offer_tier, intent, propensity_score, game_prize')
       .eq('organization_id', orgId)
       .eq('form_id', formId)
       .gte('created_at', since)
@@ -149,6 +149,21 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     if (s.offer_tier === 'none') offers[b].no_offer++
     if (s.converted_at) { offers[b].orders++; offers[b].revenue += Number(s.conversion_value) || 0 }
   }
+  // Jogo: quantas vezes cada prêmio saiu e quantos desses compraram — a
+  // roleta que só dá "tente de novo" aparece aqui antes de virar reclamação.
+  const prizeMap = new Map<string, { label: string; prize: string; count: number; orders: number }>()
+  let plays = 0
+  for (const s of submissions) {
+    const g: any = s.game_prize
+    if (!g || typeof g !== 'object') continue
+    plays++
+    const key = `${g.segment_id || g.segment}|${g.label || ''}`
+    const row = prizeMap.get(key) || { label: String(g.label || '—'), prize: String(g.prize || 'base'), count: 0, orders: 0 }
+    row.count++
+    if (s.converted_at) row.orders++
+    prizeMap.set(key, row)
+  }
+  const games = plays > 0 ? { plays, prizes: [...prizeMap.values()].sort((a, b) => b.count - a.count) } : null
   const propScores = submissions.map((s) => Number(s.propensity_score)).filter((n) => Number.isFinite(n))
   const avgPropensity = propScores.length ? Math.round(propScores.reduce((a, b) => a + b, 0) / propScores.length) : null
 
@@ -193,6 +208,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     },
     devices: byDevice,
     offers: (offers.smart.submissions + offers.control.submissions) > 0 ? offers : null,
+    games,
     avg_propensity: avgPropensity,
     holdout: {
       configured: holdoutRows.length > 0 && !!control,

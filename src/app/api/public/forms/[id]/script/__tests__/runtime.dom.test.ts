@@ -732,3 +732,93 @@ describe('smart offers no runtime', () => {
     expect(submit.body.offer_bucket).toBeUndefined()
   })
 })
+
+describe('gamificação: roleta e raspadinha', () => {
+  function freshPage() {
+    for (const k of Object.keys(window)) if (k.startsWith('__wf')) delete (window as any)[k]
+  }
+  // O /submit devolve o que o servidor decidiu (game + cupom); o resto
+  // segue o mock padrão.
+  function withSubmit(extra: Record<string, any>) {
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).includes('/submit')) {
+        let body: any = null
+        try { body = JSON.parse(String(init?.body)) } catch { body = null }
+        calls.push({ url: String(url), init, body })
+        return new Response(JSON.stringify({ success: true, submission_id: 'sub-1', contact_id: 'ct-1', consent: {}, ...extra }), { status: 200 })
+      }
+      return fetchMock(url, init)
+    }))
+  }
+  const segments = [
+    { id: 's1', label: '10% OFF', prize: 'base', weight: 40, color: '#F97316' },
+    { id: 's2', label: 'Quase!', prize: 'none', weight: 20, color: '#111827' },
+    { id: 's3', label: 'Frete grátis', prize: 't-ship', weight: 20, color: '#FDBA74' },
+    { id: 's4', label: '10% OFF', prize: 'base', weight: 20, color: '#374151' },
+  ]
+  function gameDesign(block: any) {
+    return design({
+      steps: [{ blocks: [
+        { id: 'b1', type: 'email', props: { placeholder: 'email', required: true } },
+        block,
+      ] }],
+      successStep: { blocks: [
+        { id: 's1', type: 'text', props: { content: 'Você ganhou {{prize}}' } },
+        { id: 'k1', type: 'coupon', props: { code: 'STATIC10', mode: 'static' } },
+      ] },
+    })
+  }
+
+  it('roleta: os segmentos saem do design, o servidor decide e a roleta para no prêmio antes do sucesso', async () => {
+    freshPage()
+    withSubmit({
+      game: { type: 'wheel', segment: 2, segment_id: 's3', label: 'Frete grátis', prize: 't-ship' },
+      coupon: { code: 'SHIP-1', kind: 'free_shipping', value: 0, ends_at: null, auto_apply: false, show_code: true },
+    })
+    const results = listen('gameResult')
+    const id = run(gameDesign({ id: 'w1', type: 'wheel', props: { segments, buttonText: 'Girar!' } }))
+    await vi.advanceTimersByTimeAsync(1500)
+    const form = formEl(id)!
+    const svg = form.querySelector('svg[id^="wf-wheel-"]') as SVGElement
+    expect(svg).toBeTruthy()
+    expect(svg.querySelectorAll('path').length).toBe(4)
+    expect(svg.querySelectorAll('text')[2].textContent).toBe('Frete grátis')
+    expect(form.querySelector('[data-action="submit"]')!.textContent).toBe('Girar!')
+    ;(form.querySelector('input[name="email"]') as HTMLInputElement).value = 'ana@example.com'
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await vi.advanceTimersByTimeAsync(50)
+    // Gira para o terceiro de quatro setores (centro a 225°): cinco voltas
+    // menos 225°, com folga só dentro do setor. Sucesso ainda não.
+    const rot = parseFloat(String(svg.style.transform || '').replace(/[^0-9.-]/g, ''))
+    expect(rot).toBeGreaterThanOrEqual(1800 - 225 - 22.5)
+    expect(rot).toBeLessThanOrEqual(1800 - 225 + 22.5)
+    expect(root(id)!.textContent).not.toContain('Você ganhou')
+    expect(results[0]).toMatchObject({ game: 'wheel', segment: 2, label: 'Frete grátis', prize: 't-ship' })
+    await vi.advanceTimersByTimeAsync(5500)
+    expect(root(id)!.textContent).toContain('Você ganhou Frete grátis')
+    expect(root(id)!.textContent).toContain('SHIP-1')
+  })
+
+  it('raspadinha: sem canvas revela direto; prêmio "nada" esconde o bloco de cupom', async () => {
+    freshPage()
+    const orig = (HTMLCanvasElement.prototype as any).getContext
+    ;(HTMLCanvasElement.prototype as any).getContext = () => null
+    try {
+      withSubmit({ game: { type: 'scratch', segment: 1, segment_id: 's2', label: 'Quase!', prize: 'none' }, coupon: null })
+      const id = run(gameDesign({ id: 'sc1', type: 'scratch', props: { segments, buttonText: 'Raspar' } }))
+      await vi.advanceTimersByTimeAsync(1500)
+      const form = formEl(id)!
+      expect(form.querySelector('canvas')).toBeTruthy()
+      ;(form.querySelector('input[name="email"]') as HTMLInputElement).value = 'ana@example.com'
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      await vi.advanceTimersByTimeAsync(50)
+      expect(root(id)!.querySelector('[id^="wf-scr-p-"]')!.textContent).toBe('Quase!')
+      await vi.advanceTimersByTimeAsync(3000)
+      const txt = root(id)!.textContent || ''
+      expect(txt).toContain('Você ganhou Quase!')
+      expect(txt).not.toContain('STATIC10')
+    } finally {
+      ;(HTMLCanvasElement.prototype as any).getContext = orig
+    }
+  })
+})

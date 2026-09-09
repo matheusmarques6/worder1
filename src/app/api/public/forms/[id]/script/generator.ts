@@ -530,6 +530,8 @@ function propensity(){
 // nenhuma), pela intenção medida na hora de mostrar. O controle recebe a
 // base sempre — é o que permite medir a margem ganha.
 var OFFER={intent:null,bucket:null,tier:null,label:""};
+// Jogo (roleta/raspadinha): o resultado vem do servidor no envio.
+var GAME={result:null};
 function couponBlock(){
   var all=[];(PD.steps||[]).forEach(function(st){(st.blocks||[]).forEach(function(b){all.push(b)})});
   ((PD.successStep||{}).blocks||[]).forEach(function(b){all.push(b)});
@@ -567,7 +569,7 @@ function computeOffer(){
   if(pick==="none")OFFER.label="";
   dlog("smart offer",OFFER);
 }
-function applyOffer(txt){return String(txt==null?"":txt).replace(/\{\{\s*offer\s*\}\}/g,OFFER.label||"")}
+function applyOffer(txt){return String(txt==null?"":txt).replace(/\\{\\{\\s*offer\\s*\\}\\}/g,OFFER.label||"").replace(/\\{\\{\\s*prize\\s*\\}\\}/g,GAME.result?String(GAME.result.label||""):"")}
 // Location gate — país resolvido pela NOSSA borda (/api/public/geo), nunca
 // por um terceiro que receberia o IP do visitante. Cache de sessão; falha
 // aberta.
@@ -717,6 +719,63 @@ function visibleBlocks(bs){
     return true;
   });
 }
+// Segmentos do jogo como o runtime os desenha (o servidor sanitiza os
+// mesmos campos ao sortear — o índice devolvido bate com esta lista).
+function gameSegs(p){
+  var l=Array.isArray(p.segments)?p.segments.slice(0,12):[],o=[],cols=["#F97316","#111827","#FDBA74","#374151","#FB923C","#1F2937","#FED7AA","#4B5563"];
+  for(var i=0;i<l.length;i++){
+    var s=l[i]||{};
+    o.push({label:String(s.label||("Pr\\u00eamio "+(i+1))).slice(0,40),color:/^#[0-9a-fA-F]{6}$/.test(String(s.color||""))?s.color:cols[i%cols.length],textColor:/^#[0-9a-fA-F]{6}$/.test(String(s.textColor||""))?s.textColor:null});
+  }
+  return o;
+}
+function gameBtn(p,def){
+  return '<button type="submit" data-action="submit" style="box-sizing:border-box;margin:14px 0 0;padding:'+nv(p.paddingV,14)+'px '+nv(p.paddingH,28)+'px;background:'+sv(p.bgColor,"#F97316")+';color:'+sv(p.textColor,"#fff")+';font-size:'+nv(p.fontSize,15)+'px;font-weight:700;font-family:inherit;line-height:1.2;border:none;border-radius:'+nv(p.borderRadius,8)+'px;cursor:pointer;display:'+(p.fullWidth?"block":"inline-block")+';width:'+(p.fullWidth?"100%":"auto")+';transition:opacity .2s">'+esc(applyOffer(p.buttonText||def))+'</button>';
+}
+// Depois do envio: gira a roleta (ou libera a raspadinha) até o segmento
+// que o servidor sorteou, e só então chama done() — a etapa de sucesso.
+function playGameAnim(el,g,done){
+  var type=el.getAttribute("data-game"),gid=el.getAttribute("data-game-id"),fin=false;
+  function end(ms){if(fin)return;fin=true;setTimeout(done,ms==null?900:ms)}
+  try{
+    if(type==="wheel"){
+      var svg=$("wf-wheel-"+gid),n=parseInt(el.getAttribute("data-n"),10)||0,i=Math.max(0,Math.min(n-1,parseInt(g.segment,10)||0));
+      if(!svg||n<2){end(0);return}
+      // Cinco voltas e para no centro do setor, com uma folga aleatória
+      // dentro dele para não parar sempre no mesmo ponto.
+      var seg=360/n,rot=360*5-((i+0.5)*seg)+(Math.random()-0.5)*seg*0.5;
+      svg.style.transition="transform 4.2s cubic-bezier(.12,.72,.08,1)";
+      void svg.getBoundingClientRect();
+      svg.style.transform="rotate("+rot.toFixed(2)+"deg)";
+      var t=setTimeout(function(){end()},4500);
+      svg.addEventListener("transitionend",function(){clearTimeout(t);end()},{once:true});
+      return;
+    }
+    if(type==="scratch"){
+      var cv=$("wf-scr-c-"+gid),pz=$("wf-scr-p-"+gid),hint=$("wf-scr-h-"+gid);
+      if(pz)pz.textContent=String(g.label||"");
+      var cx=null;try{cx=cv&&cv.getContext?cv.getContext("2d"):null}catch(e){}
+      // Sem canvas (navegador antigo, leitor de tela): revela direto.
+      if(!cv||!cx){if(cv)cv.style.display="none";end(1200);return}
+      var W=cv.width,H=cv.height,down=false,strokes=0;
+      function reveal(){if(fin)return;cv.style.transition="opacity .5s";cv.style.opacity="0";cv.style.pointerEvents="none";end(1100)}
+      function pos(ev){var r=cv.getBoundingClientRect(),t=ev.touches?ev.touches[0]:ev;return{x:(t.clientX-r.left)*W/Math.max(1,r.width),y:(t.clientY-r.top)*H/Math.max(1,r.height)}}
+      function check(){try{var d=cx.getImageData(0,0,W,H).data,c=0,tot=0;for(var k=3;k<d.length;k+=64){tot++;if(d[k]===0)c++}if(tot&&c/tot>0.45)reveal()}catch(e){reveal()}}
+      function scratch(ev){if(fin)return;if(ev.cancelable)ev.preventDefault();var q=pos(ev);cx.globalCompositeOperation="destination-out";cx.beginPath();cx.arc(q.x,q.y,Math.max(16,W/12),0,Math.PI*2);cx.fill();if(++strokes%6===0)check()}
+      cv.style.cursor="grab";
+      cv.addEventListener("mousedown",function(e){down=true;scratch(e)});
+      cv.addEventListener("mousemove",function(e){if(down)scratch(e)});
+      window.addEventListener("mouseup",function(){down=false});
+      cv.addEventListener("touchstart",scratch,{passive:false});
+      cv.addEventListener("touchmove",scratch,{passive:false});
+      if(hint){hint.style.display="block";hint.addEventListener("click",function(e){e.preventDefault();reveal()})}
+      // Quem não raspa em 20 s vê o prêmio mesmo assim.
+      setTimeout(reveal,20000);
+      return;
+    }
+  }catch(e){}
+  end(0);
+}
 function renderBlock(b){
   var p=b.props||{},h="";
   switch(b.type){
@@ -818,7 +877,7 @@ function renderBlock(b){
     case"spacer":h='<div style="'+blockStyleStr(p)+'height:'+nv(p.height,24)+'px"></div>';break;
     case"line":h='<div style="'+blockStyleStr(p)+'"><hr style="border:none;border-top:'+nv(p.thickness,1)+'px '+sv(p.style,"solid")+' '+sv(p.color,"#E5E7EB")+';margin:0 auto;width:'+Math.min(Math.max(nv(p.width!=null?p.width:p.widthPct,100),1),100)+'%" /></div>';break;
     case"coupon":{
-      if(OFFER.tier==="none"){h="";break}
+      if(OFFER.tier==="none"||(GAME.result&&GAME.result.prize==="none")){h="";break}
       var couponCode=p.code||"CODIGO";
       var dyn=window.__wfDynCoupon&&window.__wfDynCoupon[FID];
       if(dyn&&dyn.code)couponCode=dyn.code;
@@ -829,6 +888,35 @@ function renderBlock(b){
       } else {
         h='<div style="'+boxCss+'"><p style="font-size:11px;color:#6B7280;margin:0 0 4px">'+esc(p.description||"")+'</p><p style="font-size:'+nv(p.fontSize,20)+'px;font-weight:bold;color:'+sv(p.codeColor,"#F97316")+';letter-spacing:2px;margin:0;cursor:pointer" onclick="navigator.clipboard&&navigator.clipboard.writeText(this.textContent)">'+esc(couponCode)+'</p></div>';
       }
+      break;
+    }
+    case"wheel":{
+      var wsg=gameSegs(p);if(wsg.length<2)break;
+      var wn=wsg.length,wid=bid(b.id),WR=140,WC=150,wsz=Math.max(180,Math.min(440,nv(p.size,300))),wp="";
+      for(var wi=0;wi<wn;wi++){
+        var a0=(wi*360/wn-90)*Math.PI/180,a1=((wi+1)*360/wn-90-(wn===2?0.01:0))*Math.PI/180;
+        wp+='<path d="M'+WC+' '+WC+' L'+(WC+WR*Math.cos(a0)).toFixed(2)+' '+(WC+WR*Math.sin(a0)).toFixed(2)+' A'+WR+' '+WR+' 0 0 1 '+(WC+WR*Math.cos(a1)).toFixed(2)+' '+(WC+WR*Math.sin(a1)).toFixed(2)+' Z" fill="'+wsg[wi].color+'" stroke="'+sv(p.strokeColor,"#FFFFFF")+'" stroke-width="2"></path>';
+        var am=(wi+0.5)*360/wn-90,ar=am*Math.PI/180,tx=(WC+WR*0.62*Math.cos(ar)).toFixed(2),ty=(WC+WR*0.62*Math.sin(ar)).toFixed(2);
+        wp+='<text x="'+tx+'" y="'+ty+'" transform="rotate('+am.toFixed(2)+' '+tx+' '+ty+')" text-anchor="middle" dominant-baseline="middle" font-size="'+nv(p.labelSize,12)+'" font-weight="700" font-family="inherit" fill="'+(wsg[wi].textColor||sv(p.labelColor,"#FFFFFF"))+'">'+esc(wsg[wi].label)+'</text>';
+      }
+      h='<div data-game="wheel" data-game-id="'+wid+'" data-n="'+wn+'" style="'+blockStyleStr(p,true,true)+'text-align:center">'
+        +'<div style="position:relative;display:inline-block;width:'+wsz+'px;max-width:100%">'
+        +'<div style="position:absolute;left:50%;top:-4px;transform:translateX(-50%);width:0;height:0;border-left:11px solid transparent;border-right:11px solid transparent;border-top:24px solid '+sv(p.pointerColor,"#111827")+';z-index:2;filter:drop-shadow(0 2px 2px rgba(0,0,0,.25))"></div>'
+        +'<svg id="wf-wheel-'+wid+'" viewBox="0 0 300 300" role="img" aria-label="'+esc(p.ariaLabel||"Roleta de pr\\u00eamios")+'" style="width:100%;height:auto;display:block;transform:rotate(0deg);will-change:transform">'+wp+'<circle cx="150" cy="150" r="16" fill="'+sv(p.strokeColor,"#FFFFFF")+'" stroke="'+sv(p.pointerColor,"#111827")+'" stroke-width="3"></circle></svg>'
+        +'</div>'+gameBtn(p,"Girar")+'</div>';
+      break;
+    }
+    case"scratch":{
+      var ssg=gameSegs(p);if(!ssg.length)break;
+      var scid=bid(b.id),SW=Math.max(160,Math.min(480,nv(p.width,300))),SH=Math.max(80,Math.min(320,nv(p.height,150)));
+      h='<div data-game="scratch" data-game-id="'+scid+'" style="'+blockStyleStr(p,true,true)+'text-align:center">'
+        +'<div id="wf-scr-'+scid+'" style="position:relative;display:inline-block;width:'+SW+'px;max-width:100%;height:'+SH+'px;border-radius:'+nv(p.cardRadius,12)+'px;overflow:hidden;background:'+sv(p.prizeBg,"#FFF7ED")+';box-shadow:0 4px 14px rgba(0,0,0,.12)">'
+        +'<div id="wf-scr-p-'+scid+'" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:12px;font-size:'+nv(p.prizeSize,24)+'px;font-weight:800;color:'+sv(p.prizeColor,"#F97316")+';text-align:center;line-height:1.2">?</div>'
+        +'<canvas id="wf-scr-c-'+scid+'" width="'+SW+'" height="'+SH+'" aria-hidden="true" style="position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:not-allowed"></canvas>'
+        +'</div>'
+        +'<div id="wf-scr-h-'+scid+'" style="display:none;margin-top:8px;font-size:12px;color:#6B7280"><a href="#" style="color:inherit;text-decoration:underline">'+esc(p.revealText||"Revelar pr\\u00eamio")+'</a></div>'
+        +gameBtn(p,"Raspar")+'</div>';
+      (function(cid,cover,ctext,tcol){setTimeout(function(){var cv=$(cid);if(!cv)return;try{var cx=cv.getContext("2d");if(!cx)return;cx.fillStyle=cover;cx.fillRect(0,0,cv.width,cv.height);cx.fillStyle=tcol;cx.font="700 16px sans-serif";cx.textAlign="center";cx.textBaseline="middle";cx.fillText(ctext,cv.width/2,cv.height/2)}catch(e){}},60)})("wf-scr-c-"+scid,sv(p.coverColor,"#9CA3AF"),String(p.coverText||"Raspe aqui").slice(0,40),sv(p.coverTextColor,"#FFFFFF"));
       break;
     }
     case"countdown":{
@@ -1405,6 +1493,7 @@ function show(){
       beacon("reward",{kind:res.coupon.kind||null});
       wfEmit("rewardClaimed",{code:res.coupon.code,kind:res.coupon.kind||null,value:res.coupon.value!=null?res.coupon.value:null,endsAt:res.coupon.ends_at||null,autoApplied:willAutoApply});
     }
+    function finish(){
     if(act==="redirect"&&redirectUrl){
       if(willAutoApply){
         // Mesma loja: a própria Shopify aplica e redireciona. Fora dela,
@@ -1440,6 +1529,16 @@ function show(){
     }
     var delay=postSubmit.closeDelay!=null?nv(postSubmit.closeDelay,4):4;
     if(delay>0)setTimeout(function(){close(false)},delay*1000);
+    }
+    // Jogo: o servidor já sorteou. A roleta gira (ou a raspadinha abre) até
+    // o prêmio, e só então entra a etapa de sucesso — que pode mostrar
+    // {{prize}} e o cupom daquele nível.
+    var gameEl=content.querySelector("[data-game]");
+    if(res&&res.game&&gameEl){
+      GAME.result=res.game;
+      wfEmit("gameResult",{game:res.game.type||null,segment:res.game.segment,label:res.game.label||null,prize:res.game.prize||null});
+      playGameAnim(gameEl,res.game,finish);
+    } else finish();
   }
   // Progressive profiling loads known fields before first render.
   loadKnownFields(function(){renderForm(renderStep(0))});

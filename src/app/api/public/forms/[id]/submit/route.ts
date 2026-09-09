@@ -1459,6 +1459,43 @@ export async function POST(
     // nunca rodar.
     const submissionPatch: Record<string, any> = {}
 
+    // 8.4d. Jogo (roleta/raspadinha): o prêmio é sorteado AQUI, pelo peso
+    // dos segmentos, nunca no navegador. Quem já jogou neste popup recebe
+    // o mesmo resultado de novo — reenviar não é uma segunda chance.
+    let gameResult: import('@/lib/popups/games').GameResult | null = null
+    let gameReplay = false
+    try {
+      const { readGameBlock, playGame } = await import('@/lib/popups/games')
+      const game = readGameBlock(designJson) || readGameBlock(parentDesignJson)
+      if (game) {
+        if (contactId) {
+          const { data: prevRow } = await supabase
+            .from('crm_form_submissions')
+            .select('game_prize')
+            .eq('organization_id', form.organization_id)
+            .eq('form_id', formId)
+            .eq('contact_id', contactId)
+            .neq('id', submission.id)
+            .not('game_prize', 'is', null)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+          const prev: any = prevRow?.game_prize
+          const seg = prev && Number.isInteger(prev.segment) ? game.segments[prev.segment] : null
+          // O resultado antigo só vale se o segmento ainda é o mesmo; se o
+          // lojista mexeu nos prêmios, sorteia de novo.
+          if (seg && seg.id === prev.segment_id) {
+            gameResult = { type: game.type, segment: prev.segment, segmentId: seg.id, label: seg.label, prize: seg.prize }
+            gameReplay = true
+          }
+        }
+        if (!gameResult) gameResult = playGame(game)
+        submissionPatch.game_prize = { type: gameResult.type, segment: gameResult.segment, segment_id: gameResult.segmentId, label: gameResult.label, prize: gameResult.prize, replay: gameReplay }
+      }
+    } catch (e: any) {
+      console.warn('[Form Submit] game play errored:', e?.message)
+    }
+
     try {
       const { readCouponBlock, effectiveDiscount } = await import('@/lib/coupons/pool-service')
       const cp = readCouponBlock(parentDesignJson)
@@ -1477,6 +1514,13 @@ export async function POST(
           if (off.tier === 'none') offerNone = true
           else if (off.tier === 'base') tier = null
           else tier = cp.tiers.find((t) => t.id === off.tier) || null
+        }
+        // Jogo: o segmento sorteado decide o nível — por cima da recompensa
+        // progressiva e da oferta por intenção. "Nada" pula o cupom.
+        if (gameResult) {
+          if (gameResult.prize === 'none') offerNone = true
+          else if (gameResult.prize === 'base') { offerNone = false; tier = null }
+          else { offerNone = false; tier = cp.tiers.find((t) => t.id === gameResult!.prize) || null }
         }
         const eff = effectiveDiscount(cp, tier)
         rewardTierKey = eff.tierKey
@@ -1558,6 +1602,9 @@ export async function POST(
       // dela). O runtime encaixa no bloco de cupom da etapa de sucesso e,
       // com auto_apply, grava na sessão do carrinho da Shopify.
       coupon: issuedCoupon,
+      // Resultado do jogo (null sem roleta/raspadinha). O runtime só anima
+      // até o segmento — o prêmio já está decidido e gravado.
+      game: gameResult ? { type: gameResult.type, segment: gameResult.segment, segment_id: gameResult.segmentId, label: gameResult.label, prize: gameResult.prize, replay: gameReplay } : null,
       // True when a double-opt-in confirmation email was just dispatched.
       // The popup script can swap the success copy to "check your inbox".
       double_optin_sent: doubleOptInSent,

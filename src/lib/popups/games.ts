@@ -90,12 +90,44 @@ export function pickSegment(segments: GameSegment[], rand: number): number {
 }
 
 export function secureRandom(): number {
-  try {
-    const { randomInt } = require('crypto') as typeof import('crypto')
-    return randomInt(0, 1_000_000) / 1_000_000
-  } catch {
-    return Math.random()
+  // Web Crypto existe no Node 18+ e em qualquer navegador — sem require.
+  const c: any = (globalThis as any).crypto
+  if (c && typeof c.getRandomValues === 'function') {
+    const a = new Uint32Array(1)
+    c.getRandomValues(a)
+    return a[0] / 4294967296
   }
+  return Math.random()
+}
+
+// ---------------------------------------------------------------------------
+// Geometria da roleta — a mesma no editor (SVG em React) e no runtime (SVG
+// em string). Os setores começam às 12h e seguem no sentido horário; o
+// ponteiro fica fixo em cima e a roleta gira até o centro do setor sorteado.
+// ---------------------------------------------------------------------------
+export const WHEEL_R = 140
+export const WHEEL_C = 150
+
+export function wheelSectorPath(i: number, n: number, r = WHEEL_R, c = WHEEL_C): string {
+  const step = 360 / Math.max(2, n)
+  const a0 = (i * step - 90) * Math.PI / 180
+  // Dois setores = arcos de 180°: um pingo a menos evita o arco ambíguo.
+  const a1 = ((i + 1) * step - 90 - (n === 2 ? 0.01 : 0)) * Math.PI / 180
+  const f = (v: number) => v.toFixed(2)
+  return `M${c} ${c} L${f(c + r * Math.cos(a0))} ${f(c + r * Math.sin(a0))} A${r} ${r} 0 0 1 ${f(c + r * Math.cos(a1))} ${f(c + r * Math.sin(a1))} Z`
+}
+
+export function wheelLabelPos(i: number, n: number, r = WHEEL_R, c = WHEEL_C): { x: number; y: number; angle: number } {
+  const step = 360 / Math.max(2, n)
+  const angle = (i + 0.5) * step - 90
+  const rad = angle * Math.PI / 180
+  return { x: Number((c + r * 0.62 * Math.cos(rad)).toFixed(2)), y: Number((c + r * 0.62 * Math.sin(rad)).toFixed(2)), angle: Number(angle.toFixed(2)) }
+}
+
+/** Rotação (graus, sentido horário) que leva o centro do setor i ao ponteiro, com cinco voltas antes. */
+export function wheelTargetRotation(i: number, n: number, jitter = 0): number {
+  const step = 360 / Math.max(2, n)
+  return 360 * 5 - (i + 0.5) * step + Math.max(-0.25, Math.min(0.25, jitter)) * step
 }
 
 export interface GameResult {

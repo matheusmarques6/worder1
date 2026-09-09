@@ -49,13 +49,13 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   }
 
   const since = new Date(Date.now() - days * 86400000).toISOString()
-  const fixed = ['created_at', 'email', 'phone', 'first_name', 'last_name', 'device', 'country', 'traffic_type', 'page_kind', 'page_url', 'coupon_code', 'reward_tier', 'intent', 'offer_bucket', 'offer_tier', 'variant_id', 'propensity_score', 'converted_at', 'conversion_value', 'converted_order_id']
+  const fixed = ['created_at', 'email', 'phone', 'first_name', 'last_name', 'device', 'country', 'traffic_type', 'page_kind', 'page_url', 'coupon_code', 'reward_tier', 'intent', 'offer_bucket', 'offer_tier', 'game_prize', 'variant_id', 'propensity_score', 'converted_at', 'conversion_value', 'converted_order_id']
   const rows: any[] = []
   const PAGE = 1000
   for (let offset = 0; offset < 50000; offset += PAGE) {
     const { data, error } = await admin
       .from('crm_form_submissions')
-      .select('created_at, answers, device, country, traffic_type, page_kind, page_url, coupon_code, reward_tier, intent, offer_bucket, offer_tier, variant_id, propensity_score, converted_at, conversion_value, converted_order_id, contact:contacts(email, phone, first_name, last_name)')
+      .select('created_at, answers, device, country, traffic_type, page_kind, page_url, coupon_code, reward_tier, intent, offer_bucket, offer_tier, game_prize, variant_id, propensity_score, converted_at, conversion_value, converted_order_id, contact:contacts(email, phone, first_name, last_name)')
       .eq('organization_id', orgId)
       .eq('form_id', params.id)
       .gte('created_at', since)
@@ -75,7 +75,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const a = r.answers || {}
     const base = [
       r.created_at, c?.email || a.email || '', c?.phone || a.phone || a.whatsapp || '', c?.first_name || a.first_name || '', c?.last_name || a.last_name || '',
-      r.device, r.country, r.traffic_type, r.page_kind, r.page_url, r.coupon_code, r.reward_tier, r.intent, r.offer_bucket, r.offer_tier, r.variant_id, r.propensity_score, r.converted_at, r.conversion_value, r.converted_order_id,
+      r.device, r.country, r.traffic_type, r.page_kind, r.page_url, r.coupon_code, r.reward_tier, r.intent, r.offer_bucket, r.offer_tier, r.game_prize && typeof r.game_prize === 'object' ? r.game_prize.label : null, r.variant_id, r.propensity_score, r.converted_at, r.conversion_value, r.converted_order_id,
     ]
     lines.push([...base, ...extra.map((k) => a[k])].map(csv).join(','))
   }

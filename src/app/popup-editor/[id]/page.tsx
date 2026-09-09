@@ -6,6 +6,7 @@ import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type D
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { TRAFFIC_TYPES, PAGE_TEMPLATES } from '@/lib/popups/targeting'
+import { wheelSectorPath, wheelLabelPos } from '@/lib/popups/games'
 import {
   ArrowLeft, Save, Loader2, Monitor, Smartphone, Plus, Trash2, X, Undo2, Redo2, Copy,
   ChevronDown, ChevronRight, GripVertical, Users, CalendarDays, Target, Power,
@@ -13,7 +14,7 @@ import {
   CircleDot, CheckSquare, Type, MousePointerClick, ImageIcon, Minus,
   GripHorizontal, Tag, Clock, Eye, Settings, Palette, Upload, LayoutGrid,
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
-  Bold, Italic, Underline, Link2, ExternalLink, Sparkles,
+  Bold, Italic, Underline, Link2, ExternalLink, Sparkles, Disc3, Eraser, Gift,
   SlidersHorizontal, Layers, Square, Sun, CornerDownRight,
   MoveHorizontal, MoveVertical, Check, MoreHorizontal, Pencil,
   AlertTriangle,
@@ -219,6 +220,13 @@ const BLOCK_CATEGORIES: Array<{ name: string; items: Array<{ type: string; label
     ],
   },
   {
+    name: 'Jogos',
+    items: [
+      { type: 'wheel', label: 'Roleta', icon: Disc3 },
+      { type: 'scratch', label: 'Raspadinha', icon: Eraser },
+    ],
+  },
+  {
     name: 'Campos',
     items: [
       { type: 'email', label: 'Email', icon: AtSign },
@@ -313,6 +321,27 @@ const defaultProps: Record<string, Record<string, any>> = {
   line: { color: '#E5E7EB', thickness: 1, style: 'solid', width: 100 },
   coupon: { code: 'DESCONTO10', description: 'Seu cupom de desconto:', bgColor: '#FFF7ED', borderColor: '#F97316', borderStyle: 'dashed', fontSize: 20 },
   countdown: { endDate: '', style: 'dark', numberColor: '#FFFFFF', labelColor: '#9CA3AF', boxColor: '#1F2937', fontSize: 28, labels: { days: 'DIAS', hours: 'HORAS', minutes: 'MIN', seconds: 'SEG' } },
+  // Jogos: o prêmio de cada segmento aponta para a oferta do bloco de cupom
+  // (base, um nível progressivo ou nada). Rótulos iguais em segmentos
+  // diferentes são normais — a roleta fica mais cheia sem inventar prêmio.
+  wheel: {
+    segments: [
+      { id: 's1', label: '10% OFF', prize: 'base', weight: 35, color: '#F97316' },
+      { id: 's2', label: 'Quase!', prize: 'none', weight: 15, color: '#111827' },
+      { id: 's3', label: '10% OFF', prize: 'base', weight: 35, color: '#FDBA74' },
+      { id: 's4', label: 'Tente de novo', prize: 'none', weight: 15, color: '#374151' },
+    ],
+    buttonText: 'Girar a roleta', size: 300, labelSize: 12, labelColor: '#FFFFFF', strokeColor: '#FFFFFF', pointerColor: '#111827',
+    bgColor: '#F97316', textColor: '#FFFFFF', fontSize: 15, borderRadius: 8, fullWidth: false,
+  },
+  scratch: {
+    segments: [
+      { id: 's1', label: '10% OFF', prize: 'base', weight: 80, color: '#F97316' },
+      { id: 's2', label: 'Não foi dessa vez', prize: 'none', weight: 20, color: '#111827' },
+    ],
+    buttonText: 'Raspar', width: 300, height: 150, coverColor: '#9CA3AF', coverText: 'Raspe aqui', coverTextColor: '#FFFFFF', prizeBg: '#FFF7ED', prizeColor: '#F97316', prizeSize: 24, cardRadius: 12,
+    bgColor: '#F97316', textColor: '#FFFFFF', fontSize: 15, borderRadius: 8, fullWidth: false,
+  },
 }
 
 const defaultDesign: PopupDesign = {
@@ -890,12 +919,30 @@ function designOfferLabel(steps: Step[]): string {
   for (const st of steps) for (const b of st.blocks) if (b.type === 'coupon') return offerLabelOf(b.props)
   return ''
 }
-function applyOfferPreview(text: string, label: string | undefined): string {
+function applyOfferPreview(text: string, label: string | undefined, prize?: string): string {
   if (label === undefined) return text
-  return String(text || '').replace(/\{\{\s*offer\s*\}\}/g, label)
+  return String(text || '').replace(/\{\{\s*offer\s*\}\}/g, label).replace(/\{\{\s*prize\s*\}\}/g, prize || '')
+}
+// O rótulo do primeiro segmento do primeiro jogo: é o que a visualização
+// mostra onde o lojista escreveu {{prize}}.
+function designPrizeLabel(steps: Step[]): string {
+  for (const st of steps) for (const b of st.blocks) if (b.type === 'wheel' || b.type === 'scratch') return String(b.props?.segments?.[0]?.label || '')
+  return ''
+}
+const GAME_PALETTE = ['#F97316', '#111827', '#FDBA74', '#374151', '#FB923C', '#1F2937', '#FED7AA', '#4B5563']
+function gameSegments(p: any): Array<{ id: string; label: string; prize: string; weight: number; color: string; textColor?: string }> {
+  const list: any[] = Array.isArray(p?.segments) ? p.segments.slice(0, 12) : []
+  return list.map((s, i) => ({
+    id: String(s?.id || `s${i + 1}`), label: String(s?.label || `Prêmio ${i + 1}`).slice(0, 40), prize: String(s?.prize || 'base'),
+    weight: Math.max(0, Number(s?.weight) || 0), color: /^#[0-9a-fA-F]{6}$/.test(String(s?.color || '')) ? s.color : GAME_PALETTE[i % GAME_PALETTE.length],
+    textColor: /^#[0-9a-fA-F]{6}$/.test(String(s?.textColor || '')) ? s.textColor : undefined,
+  }))
+}
+function GameButtonPreview({ p, fallback }: { p: any; fallback: string }) {
+  return <button type="button" style={{ marginTop: 14, padding: `${p.paddingV || 14}px ${p.paddingH || 28}px`, background: p.bgColor || '#F97316', color: p.textColor || '#fff', fontSize: p.fontSize || 15, fontWeight: 700, border: 'none', borderRadius: p.borderRadius ?? 8, cursor: 'pointer', display: p.fullWidth ? 'block' : 'inline-block', width: p.fullWidth ? '100%' : 'auto' }}>{p.buttonText || fallback}</button>
 }
 
-function BlockPreview({ block, selected, onContentChange, onSelect, offerLabel }: { block: Block; selected?: boolean; onContentChange?: (key: string, value: string) => void; onSelect?: () => void; offerLabel?: string }) {
+function BlockPreview({ block, selected, onContentChange, onSelect, offerLabel, prizeLabel }: { block: Block; selected?: boolean; onContentChange?: (key: string, value: string) => void; onSelect?: () => void; offerLabel?: string; prizeLabel?: string }) {
   const p = block.props
   const blockStyle: React.CSSProperties = {
     marginTop: p.marginTop || 0, marginBottom: p.marginBottom ?? 8,
@@ -947,7 +994,7 @@ function BlockPreview({ block, selected, onContentChange, onSelect, offerLabel }
           />
         )
       }
-      return <Tag style={textStyle}>{applyOfferPreview(p.content, offerLabel)}</Tag>
+      return <Tag style={textStyle}>{applyOfferPreview(p.content, offerLabel, prizeLabel)}</Tag>
     }
     case 'email':
       return <InputBlockPreview block={block}><><InputPreviewStyles /><input readOnly placeholder={p.placeholder || 'Seu email'} className="worder-input" style={{ ...buildInputStyle(p), ...phCssVar }} /></></InputBlockPreview>
@@ -992,7 +1039,7 @@ function BlockPreview({ block, selected, onContentChange, onSelect, offerLabel }
           <button
             onMouseEnter={e => { if (p.hoverColor) (e.currentTarget as HTMLButtonElement).style.backgroundColor = p.hoverColor }}
             onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = p.bgColor || '#F97316' }}
-            style={btnStyle}>{applyOfferPreview(p.text, offerLabel) || 'Enviar'}</button>
+            style={btnStyle}>{applyOfferPreview(p.text, offerLabel, prizeLabel) || 'Enviar'}</button>
         )}
       </div>
     }
@@ -1026,6 +1073,39 @@ function BlockPreview({ block, selected, onContentChange, onSelect, offerLabel }
             {Array.isArray(p.tiers) && p.tiers.length > 0 && <p style={{ fontSize: 10, color: '#9CA3AF', margin: '4px 0 0' }}>+{p.tiers.length} {p.tiers.length === 1 ? 'nível progressivo' : 'níveis progressivos'}</p>}
           </>
         )}
+      </div>
+    }
+    case 'wheel': {
+      const segs = gameSegments(p)
+      const size = Math.max(180, Math.min(440, Number(p.size) || 300))
+      if (segs.length < 2) return <div style={{ ...blockStyle, padding: 16, textAlign: 'center', border: '1px dashed #FCA5A5', borderRadius: 8, color: '#B91C1C', fontSize: 12 }}>A roleta precisa de pelo menos dois segmentos.</div>
+      return <div style={{ ...blockStyle, textAlign: 'center' }}>
+        <div style={{ position: 'relative', display: 'inline-block', width: size, maxWidth: '100%' }}>
+          <div style={{ position: 'absolute', left: '50%', top: -4, transform: 'translateX(-50%)', width: 0, height: 0, borderLeft: '11px solid transparent', borderRight: '11px solid transparent', borderTop: `24px solid ${p.pointerColor || '#111827'}`, zIndex: 2, filter: 'drop-shadow(0 2px 2px rgba(0,0,0,.25))' }} />
+          <svg viewBox="0 0 300 300" role="img" aria-label="Roleta de prêmios" style={{ width: '100%', height: 'auto', display: 'block' }}>
+            {segs.map((sg, i) => {
+              const lp = wheelLabelPos(i, segs.length)
+              return <g key={sg.id + i}>
+                <path d={wheelSectorPath(i, segs.length)} fill={sg.color} stroke={p.strokeColor || '#FFFFFF'} strokeWidth={2} />
+                <text x={lp.x} y={lp.y} transform={`rotate(${lp.angle} ${lp.x} ${lp.y})`} textAnchor="middle" dominantBaseline="middle" fontSize={p.labelSize || 12} fontWeight={700} fill={sg.textColor || p.labelColor || '#FFFFFF'}>{sg.label}</text>
+              </g>
+            })}
+            <circle cx={150} cy={150} r={16} fill={p.strokeColor || '#FFFFFF'} stroke={p.pointerColor || '#111827'} strokeWidth={3} />
+          </svg>
+        </div>
+        <GameButtonPreview p={p} fallback="Girar" />
+      </div>
+    }
+    case 'scratch': {
+      const segs = gameSegments(p)
+      const w = Math.max(160, Math.min(480, Number(p.width) || 300)), h = Math.max(80, Math.min(320, Number(p.height) || 150))
+      return <div style={{ ...blockStyle, textAlign: 'center' }}>
+        <div style={{ position: 'relative', display: 'inline-block', width: w, maxWidth: '100%', height: h, borderRadius: p.cardRadius ?? 12, overflow: 'hidden', background: p.prizeBg || '#FFF7ED', boxShadow: '0 4px 14px rgba(0,0,0,.12)' }}>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12, fontSize: p.prizeSize || 24, fontWeight: 800, color: p.prizeColor || '#F97316', lineHeight: 1.2 }}>{segs[0]?.label || '?'}</div>
+          {/* A cobertura, "meio raspada" para o lojista ver os dois lados. */}
+          <div style={{ position: 'absolute', inset: 0, background: p.coverColor || '#9CA3AF', clipPath: 'polygon(0 0, 100% 0, 100% 62%, 78% 74%, 60% 52%, 38% 72%, 20% 58%, 0 70%)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: h * 0.22, color: p.coverTextColor || '#FFFFFF', fontWeight: 700, fontSize: 16 }}>{p.coverText || 'Raspe aqui'}</div>
+        </div>
+        <GameButtonPreview p={p} fallback="Raspar" />
       </div>
     }
     case 'countdown': {
@@ -1326,6 +1406,99 @@ function SmartOfferEditor({ p, up }: { p: any; up: (k: string, v: any) => void }
   )
 }
 
+// Roleta e raspadinha: segmentos com rótulo, prêmio (oferta base, nível
+// progressivo ou nada) e peso. O sorteio é do servidor no envio; aqui só
+// se descreve o que pode sair e com que chance.
+function GameEditor({ type, p, up, hints }: { type: string; p: any; up: (k: string, v: any) => void; hints: { hasCoupon: boolean; couponTiers: any[]; baseOfferLabel: string; gameBlocks: number } }) {
+  const isWheel = type === 'wheel'
+  const segs: any[] = Array.isArray(p.segments) ? p.segments : []
+  const total = segs.reduce((a, s) => a + Math.max(0, Number(s?.weight) || 0), 0)
+  const minSegs = isWheel ? 2 : 1
+  const setSeg = (i: number, patch: Record<string, any>) => up('segments', segs.map((s, j) => (j === i ? { ...s, ...patch } : s)))
+  const addSeg = () => up('segments', [...segs, { id: 's' + Math.random().toString(36).slice(2, 8), label: hints.baseOfferLabel || 'Prêmio', prize: 'base', weight: 10, color: GAME_PALETTE[segs.length % GAME_PALETTE.length] }])
+  const tierText = (t: any) => t.discountType === 'free_shipping' ? 'Frete grátis' : `${t.discountValue ?? 0}${t.discountType === 'fixed_amount' ? '' : '%'} OFF`
+  const Warn = ({ children }: { children: React.ReactNode }) => (
+    <div className="flex items-start gap-2 p-2.5 rounded-lg bg-amber-50 border border-amber-100">
+      <AlertTriangle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
+      <p className="text-[11px] text-amber-800 leading-snug">{children}</p>
+    </div>
+  )
+  return <div className="space-y-5">
+    <div className="space-y-3">
+      <SectionHeader title={isWheel ? 'Roleta' : 'Raspadinha'} icon={<Gift className="w-3 h-3" />} />
+      <p className="text-[11px] text-gray-500 leading-snug bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
+        O visitante preenche, clica em "{p.buttonText || (isWheel ? 'Girar' : 'Raspar')}" e o servidor sorteia pelo peso — {isWheel ? 'a roleta para' : 'a raspadinha revela'} no prêmio decidido. O cupom sai pelo bloco de cupom, no nível escolhido aqui. Na etapa de sucesso, <code className="px-1 bg-white border border-gray-200 rounded text-[10px]">{'{{prize}}'}</code> vira o prêmio sorteado.
+      </p>
+      {!hints.hasCoupon && <Warn>Sem bloco de cupom neste popup: o jogo mostra o prêmio, mas nenhum código é emitido. Adicione um bloco de cupom na etapa de sucesso.</Warn>}
+      {hints.gameBlocks > 1 && <Warn>Há {hints.gameBlocks} jogos neste popup. Só o primeiro sorteia; os outros ficam decorativos.</Warn>}
+      {segs.length < minSegs && <Warn>{isWheel ? 'A roleta precisa de pelo menos dois segmentos.' : 'A raspadinha precisa de pelo menos um prêmio.'}</Warn>}
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] font-bold text-gray-500 uppercase tracking-[0.08em]">Segmentos</p>
+        <button type="button" onClick={addSeg} disabled={segs.length >= 12} className="text-[11px] font-semibold text-zinc-900 underline underline-offset-2 disabled:opacity-40">Adicionar</button>
+      </div>
+      <div className="space-y-2">
+        {segs.map((sg, i) => {
+          const w = Math.max(0, Number(sg?.weight) || 0)
+          const chance = total > 0 ? Math.round((w / total) * 100) : Math.round(100 / Math.max(1, segs.length))
+          return (
+            <div key={sg?.id || i} className="rounded-lg border border-gray-200 p-2.5 space-y-2">
+              <div className="flex items-center gap-2">
+                <input type="color" value={sg?.color || GAME_PALETTE[i % GAME_PALETTE.length]} onChange={e => setSeg(i, { color: e.target.value })} className="w-7 h-7 rounded border border-gray-200 p-0 cursor-pointer flex-shrink-0" aria-label={`Cor do segmento ${i + 1}`} />
+                <input className={inp + ' flex-1'} value={sg?.label || ''} onChange={e => setSeg(i, { label: e.target.value.slice(0, 40) })} placeholder="O que o visitante lê" aria-label={`Rótulo do segmento ${i + 1}`} />
+                <button type="button" onClick={() => up('segments', segs.filter((_, j) => j !== i))} disabled={segs.length <= minSegs} className="p-1.5 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-30 flex-shrink-0" title="Remover segmento"><Trash2 className="w-3.5 h-3.5" /></button>
+              </div>
+              <div className="grid grid-cols-[1fr_96px] gap-2">
+                <select className={sel} value={sg?.prize || 'base'} onChange={e => setSeg(i, { prize: e.target.value })} aria-label={`Prêmio do segmento ${i + 1}`}>
+                  <option value="base">Oferta base{hints.baseOfferLabel ? ` · ${hints.baseOfferLabel}` : ''}</option>
+                  {hints.couponTiers.map((t: any) => <option key={t.id} value={t.id}>{t.label || 'Nível'} · {tierText(t)}</option>)}
+                  {sg?.prize && sg.prize !== 'base' && sg.prize !== 'none' && !hints.couponTiers.some((t: any) => t.id === sg.prize) && <option value={sg.prize}>Nível removido (vira oferta base)</option>}
+                  <option value="none">Nada (só a inscrição)</option>
+                </select>
+                <div className="relative">
+                  <input type="number" min={0} max={1000} className={inp + ' pr-9 text-right tabular-nums'} value={sg?.weight ?? 0} onChange={e => setSeg(i, { weight: Math.max(0, Math.min(1000, Math.round(Number(e.target.value) || 0))) })} aria-label={`Peso do segmento ${i + 1}`} />
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 tabular-nums">{chance}%</span>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <p className="text-[11px] text-gray-400 leading-snug">O peso define a chance de cada segmento (a porcentagem ao lado). Mantenha o rótulo coerente com o prêmio: quem lê "15% OFF" e recebe 10% não volta.</p>
+    </div>
+    <div className="pt-4 border-t border-gray-100 space-y-3">
+      <SectionHeader title="Botão" icon={<MousePointerClick className="w-3 h-3" />} />
+      <LabeledField label="Texto">
+        <input className={inp} value={p.buttonText || ''} onChange={e => up('buttonText', e.target.value.slice(0, 40))} placeholder={isWheel ? 'Girar a roleta' : 'Raspar'} />
+      </LabeledField>
+      <ColorRow label="Fundo" value={p.bgColor || '#F97316'} onChange={v => up('bgColor', v)} />
+      <ColorRow label="Texto" value={p.textColor || '#FFFFFF'} onChange={v => up('textColor', v)} />
+      <Toggle label="Largura total" checked={!!p.fullWidth} onChange={v => up('fullWidth', v)} />
+    </div>
+    <div className="pt-4 border-t border-gray-100 space-y-3">
+      <SectionHeader title="Aparência" icon={<Palette className="w-3 h-3" />} />
+      {isWheel ? (
+        <>
+          <LabeledField label="Tamanho"><Slider value={p.size || 300} onChange={v => up('size', v)} min={180} max={440} unit="px" /></LabeledField>
+          <LabeledField label="Texto dos segmentos"><Slider value={p.labelSize || 12} onChange={v => up('labelSize', v)} min={8} max={20} unit="px" /></LabeledField>
+          <ColorRow label="Cor do texto" value={p.labelColor || '#FFFFFF'} onChange={v => up('labelColor', v)} />
+          <ColorRow label="Ponteiro" value={p.pointerColor || '#111827'} onChange={v => up('pointerColor', v)} />
+          <ColorRow label="Divisórias" value={p.strokeColor || '#FFFFFF'} onChange={v => up('strokeColor', v)} />
+        </>
+      ) : (
+        <>
+          <LabeledField label="Altura"><Slider value={p.height || 150} onChange={v => up('height', v)} min={80} max={320} unit="px" /></LabeledField>
+          <LabeledField label="Texto da cobertura"><input className={inp} value={p.coverText || ''} onChange={e => up('coverText', e.target.value.slice(0, 40))} placeholder="Raspe aqui" /></LabeledField>
+          <ColorRow label="Cobertura" value={p.coverColor || '#9CA3AF'} onChange={v => up('coverColor', v)} />
+          <ColorRow label="Texto da cobertura" value={p.coverTextColor || '#FFFFFF'} onChange={v => up('coverTextColor', v)} />
+          <ColorRow label="Fundo do prêmio" value={p.prizeBg || '#FFF7ED'} onChange={v => up('prizeBg', v)} />
+          <ColorRow label="Texto do prêmio" value={p.prizeColor || '#F97316'} onChange={v => up('prizeColor', v)} />
+          <LabeledField label="Tamanho do prêmio"><Slider value={p.prizeSize || 24} onChange={v => up('prizeSize', v)} min={14} max={40} unit="px" /></LabeledField>
+        </>
+      )}
+    </div>
+  </div>
+}
+
 function RewardTiersEditor({ p, up, steps }: { p: any; up: (k: string, v: any) => void; steps: Array<{ id: string; name: string }> }) {
   const tiers: any[] = Array.isArray(p.tiers) ? p.tiers : []
   const setTier = (i: number, patch: Record<string, any>) => up('tiers', tiers.map((t, j) => (j === i ? { ...t, ...patch } : t)))
@@ -1462,7 +1635,7 @@ function CouponPoolPanel({ dirty = false }: { dirty?: boolean }) {
 }
 
 // ── Block Props Editor (Klaviyo-style per-block panels) ──────────────────────
-function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInputs, steps = [], dirty = false, couponBlocks = 1 }: { block: Block; onChange: (b: Block) => void; onDelete: () => void; onOpenMedia?: (cb: (url: string) => void) => void; onApplyToAllInputs?: (b: Block) => void; steps?: Array<{ id: string; name: string }>; dirty?: boolean; couponBlocks?: number }) {
+function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInputs, steps = [], dirty = false, couponBlocks = 1, hints }: { block: Block; onChange: (b: Block) => void; onDelete: () => void; onOpenMedia?: (cb: (url: string) => void) => void; onApplyToAllInputs?: (b: Block) => void; steps?: Array<{ id: string; name: string }>; dirty?: boolean; couponBlocks?: number; hints?: { hasCoupon: boolean; couponTiers: any[]; baseOfferLabel: string; gameBlocks: number } }) {
   const up = (key: string, val: any) => onChange(mergeBlockProps(block, { [key]: val }))
   // Multi-key updates MUST go through a single onChange — two `up()` calls in
   // a row both spread the same stale block.props and the 2nd reverts the 1st.
@@ -2319,6 +2492,9 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
           </div>
         </div>
 
+      case 'wheel':
+      case 'scratch':
+        return <GameEditor type={block.type} p={p} up={up} hints={hints || { hasCoupon: true, couponTiers: [], baseOfferLabel: '', gameBlocks: 1 }} />
       case 'countdown':
         return <div className="space-y-5">
           <div className="space-y-3">
@@ -3611,6 +3787,19 @@ export default function PopupEditorPage() {
   const selectedBlock = activeStep?.blocks.find(b => b.id === selectedBlockId) ?? null
   // No modo de visualização, {{offer}} vira a oferta base (o runtime troca pela oferta escolhida).
   const previewOfferLabel = useMemo(() => designOfferLabel([...design.steps, design.successStep].filter(Boolean) as Step[]), [design.steps, design.successStep])
+  const previewPrizeLabel = useMemo(() => designPrizeLabel(design.steps), [design.steps])
+  // O que o editor de blocos precisa saber do popup inteiro: o bloco de
+  // cupom (níveis e oferta base, para os prêmios do jogo) e quantos jogos há.
+  const designHints = useMemo(() => {
+    const all = [...design.steps, design.successStep].filter(Boolean).flatMap(st => st.blocks || [])
+    const cp = all.find(b => b.type === 'coupon')
+    return {
+      hasCoupon: !!cp,
+      couponTiers: (Array.isArray(cp?.props?.tiers) ? cp!.props.tiers : []) as any[],
+      baseOfferLabel: cp ? offerLabelOf(cp.props) : '',
+      gameBlocks: all.filter(b => b.type === 'wheel' || b.type === 'scratch').length,
+    }
+  }, [design.steps, design.successStep])
 
   // Drop-zone state for HTML5-drag from the block palette. dropIndicatorIdx
   // is the insertion index inside the active step (0 = before first block,
@@ -4191,7 +4380,7 @@ export default function PopupEditorPage() {
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto">
-                <BlockEditor block={selectedBlock} onChange={updateBlock} onDelete={() => deleteBlock(selectedBlock.id)} onOpenMedia={openMediaLibrary} onApplyToAllInputs={applyStylesToAllInputs} steps={design.steps.map(s => ({ id: s.id, name: s.name }))} dirty={dirty} couponBlocks={[...design.steps, design.successStep].reduce((n, st) => n + (st?.blocks || []).filter(b => b.type === 'coupon').length, 0)} />
+                <BlockEditor block={selectedBlock} onChange={updateBlock} onDelete={() => deleteBlock(selectedBlock.id)} onOpenMedia={openMediaLibrary} onApplyToAllInputs={applyStylesToAllInputs} steps={design.steps.map(s => ({ id: s.id, name: s.name }))} dirty={dirty} couponBlocks={[...design.steps, design.successStep].reduce((n, st) => n + (st?.blocks || []).filter(b => b.type === 'coupon').length, 0)} hints={designHints} />
               </div>
             </>
           ) : (
@@ -4518,7 +4707,7 @@ export default function PopupEditorPage() {
                   </div>
                 )}
                 <div style={{ backgroundColor: s.backgroundColor, paddingTop: s.paddingTop ?? s.padding ?? 32, paddingRight: s.paddingRight ?? s.padding ?? 32, paddingBottom: s.paddingBottom ?? s.padding ?? 32, paddingLeft: s.paddingLeft ?? s.padding ?? 32, fontFamily: s.fontFamily, flex: 1, flexBasis: 0, minWidth: 0, minHeight: (isBannerFt || isFlyoutFt) ? undefined : (s.minHeight ?? 500), display: 'flex', flexDirection: 'column', justifyContent: contentVCenter ? 'center' : 'flex-start' }}>
-                  {activeStep.blocks.map(block => <BlockPreview key={block.id} block={block} offerLabel={previewOfferLabel} />)}
+                  {activeStep.blocks.map(block => <BlockPreview key={block.id} block={block} offerLabel={previewOfferLabel} prizeLabel={previewPrizeLabel} />)}
                 </div>
                 {s.sideImage.enabled && s.sideImage.position === 'right' && s.sideImage.src && sideAllowed && (
                   <div style={{ flex: 1, flexBasis: 0, minWidth: 0 }} className="overflow-hidden">

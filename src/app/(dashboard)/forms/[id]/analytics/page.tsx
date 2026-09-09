@@ -51,6 +51,7 @@ interface Analytics {
   }
   devices: { mobile: number; desktop: number; tablet: number; unknown: number }
   offers: null | Record<'smart' | 'control', { submissions: number; orders: number; revenue: number; no_offer: number }>
+  games?: null | { plays: number; prizes: Array<{ label: string; prize: string; count: number; orders: number }> }
   avg_propensity: number | null
   holdout: {
     configured: boolean
@@ -305,6 +306,28 @@ export default function FormAnalyticsPage() {
             })}
           </div>
           {data.avg_propensity != null && <p className="text-[11px] text-gray-400 mt-3">Intenção média dos inscritos no período: {data.avg_propensity} de 100.</p>}
+        </div>
+      )}
+
+      {/* Jogo: prêmios sorteados */}
+      {data.games && data.games.plays > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <div className="mb-4">
+            <h3 className="text-sm font-semibold text-gray-900">Prêmios sorteados</h3>
+            <p className="text-xs text-gray-500 mt-0.5">{int(data.games.plays)} {data.games.plays === 1 ? 'jogada' : 'jogadas'} no período. O sorteio é do servidor, pelo peso de cada segmento; a coluna de pedidos diz se o prêmio virou compra.</p>
+          </div>
+          <div className="space-y-2">
+            {data.games.prizes.map((pz, i) => {
+              const share = data.games!.plays > 0 ? pz.count / data.games!.plays : 0
+              return (
+                <div key={i} className="flex items-center gap-3">
+                  <div className="w-40 truncate text-[12px] text-gray-800" title={pz.label}>{pz.label}{pz.prize === 'none' && <span className="text-gray-400"> · sem cupom</span>}</div>
+                  <div className="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden"><div className={`h-full rounded-full ${pz.prize === 'none' ? 'bg-gray-300' : 'bg-orange-500'}`} style={{ width: `${Math.max(2, share * 100)}%` }} /></div>
+                  <div className="w-36 text-right text-[11px] text-gray-500 tabular-nums">{pct(share)} · {int(pz.count)} · {int(pz.orders)} {pz.orders === 1 ? 'pedido' : 'pedidos'}</div>
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
 
