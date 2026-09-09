@@ -2729,7 +2729,7 @@ class FakeCLI:
         self.reset_returncode = 0
         self.replacement_change = None
         self.stop_called = False
-        self.multiple_containers = False
+        self.other_container = None
         self.empty_rls = False
         self.commit = "e" * 40
         self.dirty = ""
@@ -2778,11 +2778,8 @@ class FakeCLI:
             "docker", "ps", "-a", "--no-trunc", "--filter",
             "label=com.supabase.cli.project=" + PROJECT, "--format", "{{.ID}}",
         ]:
-            output = "\n".join(
-                [self.container["Id"], "d" * 64]
-                if self.started and self.multiple_containers
-                else [self.container["Id"]] if self.started else []
-            )
+            containers = [self.container, *([self.other_container] if self.other_container else [])]
+            output = "\n".join(container["Id"] for container in containers) if self.started else ""
         elif argv == ["docker", "volume", "ls", "--format", "{{.Name}}"]:
             output = "pre-existing\n" + ("supabase_db_" + PROJECT if self.started else "")
         elif argv == [
@@ -2810,12 +2807,7 @@ class FakeCLI:
             ["docker", "inspect", self.db_container_id],
         ):
             assert self.started
-            records = [self.container]
-            if self.multiple_containers:
-                other = copy.deepcopy(self.container)
-                other["Id"] = "d" * 64
-                records.append(other)
-            output = json.dumps(records)
+            output = json.dumps([self.container])
         elif argv == [
             "docker", "exec", "-i", self.db_container_id, "psql", "-X", "-v", "ON_ERROR_STOP=1",
             "-U", "postgres", "-d", "postgres", "-At",
@@ -2866,7 +2858,8 @@ class FakeCLI:
                 elif self.replacement_change == "loopback":
                     self.loopback_sid = "9999999999999999999"
                 elif self.replacement_change == "multiple":
-                    self.multiple_containers = True
+                    self.other_container = copy.deepcopy(self.container)
+                    self.other_container.update(Id="d" * 64, Name="/supabase_db_other")
                 return ex.subprocess.CompletedProcess(argv, self.reset_returncode, "", "")
             elif self.fail == "migration-up":
                 code = 18

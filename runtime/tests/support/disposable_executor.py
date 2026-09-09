@@ -787,6 +787,13 @@ class Executor:
             json.loads(result.stdout), self.project, before, self.identity,
             allow_container_replacement=allow_container_replacement,
         )
+        if allow_container_replacement:
+            candidates = self.command(
+                "docker", "ps", "-a", "--no-trunc", "--filter",
+                "label=com.supabase.cli.project=" + self.project,
+                "--format", "{{.ID}}", timeout=30,
+            ).stdout.splitlines()
+            require(candidates == [physical["containerId"]], "DB container not unique")
         direct = self.psql(physical["containerId"], SID_SQL)
         require(re.fullmatch(r"[0-9]+", direct), "invalid direct system identifier")
         require(read_system_identifier(DSN) == direct, "loopback identity mismatch")
