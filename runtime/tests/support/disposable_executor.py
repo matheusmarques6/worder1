@@ -34,6 +34,12 @@ SID_SQL = "select system_identifier::text from pg_control_system()"
 HISTORY_SQL = "select version from supabase_migrations.schema_migrations order by version"
 TOKEN_RE = r"[0-9a-f]{64}"
 NAME_RE = r"([0-9]{8}|[0-9]{14})_[A-Za-z0-9_]+\.sql"
+FRESH_BOOTSTRAP = "20260812000005_app_baseline_prereqs.sql"
+FRESH_BOOTSTRAP_SHA256 = "BA1F7E7837BD6B1F95B7F2FAD2DFE6B34F13F94EC998E9B81C558784ACB4D686"
+LEGACY_FIXTURE = Path("runtime/tests/db/fixtures/app_baseline_legacy.sql")
+LEGACY_FIXTURE_SHA256 = "F6EAE8B32C0AF6130EB3C1E4063CD3EB108E56C910991FBADFFC874429248172"
+LEGACY_PREFIX_END = "20260812000004"
+LEGACY_HISTORY_END = "20260909140000"
 EXPECTED = {
     "project_id": "worder1",
     "api": {
@@ -230,6 +236,17 @@ def inventory(folder, through=None):
         require(through in {row["version"] for row in rows}, "unknown migration limit")
         rows = [row for row in rows if row["version"] <= through]
     return manifest_shape(rows)
+
+
+def upgrade_inventory(repo):
+    rows = inventory(Path(repo) / "supabase/migrations")
+    bootstrap = [row for row in rows if row["filename"] == FRESH_BOOTSTRAP]
+    require(len(bootstrap) == 1, "fresh bootstrap missing or duplicate")
+    require(
+        bootstrap[0]["sha256"] == FRESH_BOOTSTRAP_SHA256,
+        "fresh bootstrap changed",
+    )
+    return manifest_shape([row for row in rows if row["filename"] != FRESH_BOOTSTRAP])
 
 
 def prospective(old, current):
@@ -824,17 +841,20 @@ class Executor:
         actual = self.psql(self.identity["containerId"], HISTORY_SQL).splitlines()
         require(actual == [row["version"] for row in expected], "migration history mismatch")
 
-    def preflight(self):
+    def preflight(self, *, check_reset=True):
         self.local_context_proven = False
         self.gate["stage"] = "preflight"
         version = self.command("supabase", "--version", timeout=30).stdout.strip()
         require(version == "2.111.0", "Supabase CLI version must be 2.111.0")
-        for arguments, flags in [
+        checks = [
             (("start", "--help"), ("--exclude", "--workdir")),
             (("db", "reset", "--help"), ("--local", "--no-seed", "--workdir")),
             (("migration", "up", "--help"), ("--local", "--workdir")),
             (("stop", "--help"), ("--no-backup", "--workdir")),
-        ]:
+        ]
+        if not check_reset:
+            del checks[1]
+        for arguments, flags in checks:
             help_text = self.command("supabase", *arguments, timeout=30).stdout
             require(all(flag in help_text for flag in flags), "CLI flags do not match pin")
         context = self.command(
@@ -857,8 +877,8 @@ class Executor:
         )
         self.local_context_proven = True
 
-    def prepare(self, through=None):
-        self.preflight()
+    def prepare(self, through=None, *, check_reset=True):
+        self.preflight(check_reset=check_reset)
         source_config = self.repo / "supabase/config.toml"
         no_links(source_config)
         text = config_text(
@@ -941,6 +961,9 @@ class Executor:
             self.gate["stage"] = "reset"
             raise reset_error
         require(self.files() == approved, "migration set changed after reset")
+        self.seal(approved)
+
+    def seal(self, approved):
         sentinel = secrets.token_hex(32)
         require(re.fullmatch(TOKEN_RE, sentinel), "invalid sentinel")
         sql = (
@@ -962,6 +985,75 @@ class Executor:
         self.gate["state"] = "ready"
         self.save()
 
+    def prepare_upgrade(self):
+        projected = upgrade_inventory(self.repo)
+        prefix = [row for row in projected if row["version"] <= LEGACY_PREFIX_END]
+        legacy = [row for row in projected if row["version"] <= LEGACY_HISTORY_END]
+        require(prefix and prefix[-1]["version"] == LEGACY_PREFIX_END, "legacy prefix end missing")
+        require(
+            legacy and legacy[-1]["version"] == LEGACY_HISTORY_END,
+            "legacy history end missing",
+        )
+        require(legacy[: len(prefix)] == prefix, "legacy history is not an immutable prefix")
+
+        fixture = self.repo / LEGACY_FIXTURE
+        no_links(fixture)
+        require(
+            fixture.is_file()
+            and fixture.resolve().is_relative_to(self.repo.resolve()),
+            "legacy fixture escaped repository",
+        )
+        fixture_bytes = fixture.read_bytes()
+        require(
+            hashlib.sha256(fixture_bytes).hexdigest().upper() == LEGACY_FIXTURE_SHA256,
+            "legacy fixture changed",
+        )
+        fixture_sql = fixture_bytes.decode("utf-8")
+
+        self.prepare(LEGACY_PREFIX_END, check_reset=False)
+        self.gate.update(state="upgrading", stage="legacy-prefix")
+        self.config(True)
+        self.save()
+        self.local("migration", "up", "--local")
+        self.history(prefix)
+
+        self.gate["stage"] = "legacy-fixture"
+        self.save()
+        self.psql(self.identity["containerId"], fixture_sql)
+        no_links(fixture)
+        require(fixture.read_bytes() == fixture_bytes, "legacy fixture changed during execution")
+
+        for row in legacy[len(prefix) :]:
+            destination = self.run / "supabase/migrations" / row["filename"]
+            no_links(destination)
+            require(not destination.exists(), "legacy migration already exists")
+            shutil.copyfile(
+                self.repo / "supabase/migrations" / row["filename"], destination
+            )
+        self.files(legacy)
+        self.history(prefix)
+        self.gate["stage"] = "legacy-history"
+        self.save()
+        self.local("migration", "up", "--local")
+
+        self.gate["stage"] = "upgrade-prepare-verification"
+        self.files(legacy)
+        self.history(legacy)
+        require(upgrade_inventory(self.repo) == projected, "upgrade source changed")
+        write_json(self.run / "manifest.json", legacy)
+        write_json(self.run / "upgrade-baseline.json", projected)
+        self.seal(legacy)
+
+    def upgrade_baseline(self):
+        marker = self.run / "upgrade-baseline.json"
+        no_links(marker)
+        if not marker.exists():
+            return None
+        require(marker.is_file(), "invalid upgrade baseline marker")
+        baseline = manifest_shape(read_json(marker))
+        require(baseline == upgrade_inventory(self.repo), "upgrade baseline changed")
+        return baseline
+
     def upgrade(self, through=None) -> None:
         require(self.gate["state"] == "ready", "Upgrade requires ready state")
         require(
@@ -978,8 +1070,13 @@ class Executor:
                 through >= old[-1]["version"],
                 "migration limit precedes applied history",
             )
+        baseline = self.upgrade_baseline()
+        require(baseline is None or through is None, "sealed Upgrade refuses migration limit")
         new = prospective(
-            old, inventory(self.repo / "supabase/migrations", through)
+            old,
+            baseline if baseline is not None else inventory(
+                self.repo / "supabase/migrations", through
+            ),
         )
         write_json(self.run / "manifest.prospective.json", new)
         if new != old:
@@ -1006,7 +1103,7 @@ class Executor:
 
     def source(self, focal):
         approved = self.files()
-        current = inventory(self.repo / "supabase/migrations")
+        current = self.upgrade_baseline() or inventory(self.repo / "supabase/migrations")
         if focal:
             prospective(approved, current)
         else:
@@ -1126,7 +1223,8 @@ class Executor:
         self.local_context_proven = False
         test_targets = [] if test_targets is None else test_targets
         require(
-            isinstance(action, str) and action in {"Prepare", "Replay", "Upgrade", "Test", "Stop"},
+            isinstance(action, str)
+            and action in {"Prepare", "PrepareUpgrade", "Replay", "Upgrade", "Test", "Stop"},
             "invalid Action",
         )
         require(
@@ -1155,8 +1253,8 @@ class Executor:
         try:
             with handle:
                 handle.write(str(os.getpid()))
-            if action == "Prepare":
-                require(not self.run.exists(), "Prepare requires a new directory")
+            if action in {"Prepare", "PrepareUpgrade"}:
+                require(not self.run.exists(), action + " requires a new directory")
                 self.run.mkdir()
             else:
                 self.gate = gate_shape(read_json(self.run / "gates.json"))
@@ -1172,7 +1270,7 @@ class Executor:
             try:
                 self.save()
                 self.gate["stage"] = "preflight"
-                if action != "Prepare":
+                if action not in {"Prepare", "PrepareUpgrade"}:
                     self.identity = identity_shape(
                         read_json(self.run / "identity.json"), self.project
                     )
@@ -1187,6 +1285,8 @@ class Executor:
                 self.gate["commit"] = commit
                 if action == "Prepare":
                     self.prepare(through)
+                elif action == "PrepareUpgrade":
+                    self.prepare_upgrade()
                 elif action == "Replay":
                     self.replay()
                 elif action == "Upgrade":

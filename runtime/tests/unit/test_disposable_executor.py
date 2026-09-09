@@ -161,6 +161,78 @@ def test_inventory_rejects_empty_unexpected_or_duplicate_entries(tmp_path, names
         ex.inventory(tmp_path)
 
 
+def upgrade_repo(tmp_path):
+    repo = tmp_path / "repo"
+    migrations = repo / "supabase/migrations"
+    migrations.mkdir(parents=True)
+    files = {
+        "20260621_phase0_foundations.sql": b"select 1;\n",
+        "20260812000001_agents_baseline_prereqs.sql": b"select 2;\n",
+        "20260812000004_engine_functions.sql": b"select 3;\n",
+        "20260812000005_app_baseline_prereqs.sql": (
+            REPO / "supabase/migrations/20260812000005_app_baseline_prereqs.sql"
+        ).read_bytes(),
+        "20260813000001_ai_missions.sql": b"select 4;\n",
+        "20260909140000_definer_search_path.sql": b"select 5;\n",
+        "20260909230000_app_baseline_forward_compat.sql": b"select 6;\n",
+    }
+    for name, content in files.items():
+        (migrations / name).write_bytes(content)
+    return repo
+
+
+def test_upgrade_projection_excludes_only_fixed_bootstrap_and_keeps_hashes(tmp_path):
+    repo = upgrade_repo(tmp_path)
+    current = ex.inventory(repo / "supabase/migrations")
+
+    projected = ex.upgrade_inventory(repo)
+
+    assert projected == [
+        row for row in current
+        if row["filename"] != "20260812000005_app_baseline_prereqs.sql"
+    ]
+
+
+@pytest.mark.parametrize("mutation", ["missing", "duplicate", "changed"])
+def test_upgrade_projection_rejects_invalid_fixed_bootstrap(tmp_path, monkeypatch, mutation):
+    repo = upgrade_repo(tmp_path)
+    bootstrap = repo / "supabase/migrations/20260812000005_app_baseline_prereqs.sql"
+    if mutation == "missing":
+        bootstrap.unlink()
+    elif mutation == "changed":
+        bootstrap.write_bytes(b"select 'changed';\n")
+    else:
+        rows = ex.inventory(repo / "supabase/migrations")
+        bootstrap_row = next(
+            row for row in rows if row["filename"] == bootstrap.name
+        )
+        monkeypatch.setattr(ex, "inventory", lambda *_args, **_kwargs: [
+            *rows, copy.deepcopy(bootstrap_row),
+        ])
+
+    with pytest.raises(ValueError, match="bootstrap"):
+        ex.upgrade_inventory(repo)
+
+
+def test_upgrade_projection_rejects_linked_or_reparse_bootstrap(tmp_path, monkeypatch):
+    repo = upgrade_repo(tmp_path)
+    bootstrap = repo / "supabase/migrations/20260812000005_app_baseline_prereqs.sql"
+    original = Path.lstat
+
+    def lstat(path, *args, **kwargs):
+        info = original(path, *args, **kwargs)
+        if path == bootstrap:
+            return SimpleNamespace(
+                st_mode=info.st_mode,
+                st_file_attributes=ex.stat.FILE_ATTRIBUTE_REPARSE_POINT,
+            )
+        return info
+
+    monkeypatch.setattr(Path, "lstat", lstat)
+    with pytest.raises(ValueError, match="linked path refused"):
+        ex.upgrade_inventory(repo)
+
+
 def test_prospective_is_suffix_only_and_does_not_mutate_approved():
     first = {
         "filename": "20260812000001_a.sql",
@@ -2081,7 +2153,7 @@ def lifecycle_run(tmp_path):
     return executor
 
 
-@pytest.mark.parametrize("action", ["Replay", "Upgrade", "Test", "Prepare"])
+@pytest.mark.parametrize("action", ["Replay", "Upgrade", "Test", "Prepare", "PrepareUpgrade"])
 def test_stopped_run_refuses_reuse_without_processes(tmp_path, action):
     executor = lifecycle_run(tmp_path)
     executor.gate["state"] = "stopped"
@@ -2723,6 +2795,11 @@ class FakeCLI:
         self.loopback_sid = None
         self.sentinel = None
         self.applied = []
+        self.migration_histories = []
+        self.operational_calls = []
+        self.upgrade_fixture = None
+        self.fixture_loaded = False
+        self.migration_ups = 0
         self.calls, self.pytest_calls = [], []
         self.connections = self.closed_connections = 0
         self.fail = None
@@ -2802,6 +2879,7 @@ class FakeCLI:
             branches.mkdir()
             (branches / "_current_branch").write_bytes(b"main")
             self.started = True
+            self.operational_calls.append(argv.copy())
         elif argv in (
             ["docker", "inspect", "supabase_db_" + PROJECT],
             ["docker", "inspect", self.db_container_id],
@@ -2820,6 +2898,11 @@ class FakeCLI:
                 "select version from supabase_migrations.schema_migrations order by version"
             ):
                 output = "\n".join(self.applied)
+            elif self.upgrade_fixture is not None and sql == self.upgrade_fixture.strip():
+                self.fixture_loaded = True
+                self.operational_calls.append(argv.copy())
+                if self.fail == "fixture":
+                    code = 22
             else:
                 token = re.search(r"values \('([0-9a-f]{64})'\)", sql)
                 if not token or "create table testing.disposable_identity" not in sql:
@@ -2865,7 +2948,15 @@ class FakeCLI:
                 code = 18
             else:
                 # Model CLI filename order independently of the executor's inventory parser.
-                self.applied = applied
+                self.migration_ups += 1
+                self.operational_calls.append(argv.copy())
+                if self.fail == "prefix-up" and self.migration_ups == 1:
+                    code = 21
+                elif self.fail == "history-up" and self.migration_ups == 2:
+                    code = 23
+                else:
+                    self.applied = applied
+                    self.migration_histories.append(applied)
         elif argv == ["supabase", "stop", "--no-backup", "--workdir", str(self.run)]:
             assert self.started
             self.stop_called = True
@@ -2933,6 +3024,229 @@ def fake_environment(tmp_path, monkeypatch):
     monkeypatch.setattr(ex.subprocess, "Popen", lambda *_a, **_k: pytest.fail("real process"))
     monkeypatch.setattr(ex.socket, "socket", lambda *_a, **_k: pytest.fail("real socket"))
     return ex.Executor(repo, run, runner=cli), cli
+
+
+def upgrade_environment(tmp_path, monkeypatch):
+    executor, cli = fake_environment(tmp_path, monkeypatch)
+    migrations = executor.repo / "supabase/migrations"
+    for migration in migrations.iterdir():
+        migration.unlink()
+    source = upgrade_repo(tmp_path / "source")
+    for migration in (source / "supabase/migrations").iterdir():
+        (migrations / migration.name).write_bytes(migration.read_bytes())
+    fixture = executor.repo / "runtime/tests/db/fixtures/app_baseline_legacy.sql"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_bytes((REPO / "runtime/tests/db/fixtures/app_baseline_legacy.sql").read_bytes())
+    cli.upgrade_fixture = fixture.read_text(encoding="utf-8")
+    return executor, cli
+
+
+def test_prepare_upgrade_accepts_no_caller_selected_inputs(tmp_path, monkeypatch):
+    executor, cli = upgrade_environment(tmp_path, monkeypatch)
+
+    assert executor.execute("PrepareUpgrade") == 0, executor.gate["failure"]
+    assert cli.started
+    assert executor.gate["state"] == "ready"
+
+
+@pytest.mark.parametrize("action", ["prepareupgrade", "UpgradePrepare", "Prepare-Legacy"])
+def test_unknown_upgrade_actions_are_refused(action, tmp_path, monkeypatch):
+    executor, cli = upgrade_environment(tmp_path, monkeypatch)
+
+    with pytest.raises(ValueError, match="invalid Action"):
+        executor.execute(action)
+
+    assert not cli.started
+
+
+@pytest.mark.parametrize(
+    ("targets", "through"),
+    [(["tests/db/test_case.py"], None), ([], "20260909140000")],
+)
+def test_prepare_upgrade_rejects_existing_caller_controls_before_start(
+    tmp_path, monkeypatch, targets, through,
+):
+    executor, cli = upgrade_environment(tmp_path, monkeypatch)
+
+    with pytest.raises(ValueError):
+        executor.execute("PrepareUpgrade", targets, through)
+
+    assert not cli.started
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {"SqlPath": "legacy.sql"},
+        {"MigrationDirectory": "other"},
+        {"Exclusions": ["bootstrap.sql"]},
+        {"Linked": True},
+        {"DatabaseUrl": "postgresql://remote.invalid/db"},
+        {"Seed": "seed.sql"},
+        {"DockerHost": "tcp://remote.invalid:2375"},
+    ],
+)
+def test_main_rejects_prepare_upgrade_caller_selected_or_remote_keys(
+    tmp_path, monkeypatch, extra,
+):
+    request = {
+        "Action": "PrepareUpgrade",
+        "RunDirectory": str(tmp_path),
+        "TestTargets": [],
+        "MigrationThrough": None,
+        **extra,
+    }
+    monkeypatch.setattr(ex.sys, "stdin", io.StringIO(json.dumps(request)))
+    monkeypatch.setattr(ex.Executor, "execute", lambda *_args: pytest.fail("executor started"))
+
+    assert ex.main() == 2
+
+
+def test_prepare_upgrade_uses_exact_two_phase_history_and_fixed_fixture(
+    tmp_path, monkeypatch,
+):
+    executor, cli = upgrade_environment(tmp_path, monkeypatch)
+
+    assert executor.execute("PrepareUpgrade") == 0, executor.gate["failure"]
+
+    fixture_argv = [
+        "docker", "exec", "-i", OLD_DB_ID, "psql", "-X", "-v", "ON_ERROR_STOP=1",
+        "-U", "postgres", "-d", "postgres", "-At",
+    ]
+    assert cli.operational_calls == [
+        ["supabase", "start", "-x", ex.EXCLUDED, "--workdir", str(executor.run)],
+        ["supabase", "migration", "up", "--local", "--workdir", str(executor.run)],
+        fixture_argv,
+        ["supabase", "migration", "up", "--local", "--workdir", str(executor.run)],
+    ]
+    assert cli.fixture_loaded
+    assert cli.migration_histories[0][-1] == "20260812000004"
+    assert cli.migration_histories[1][-1] == "20260909140000"
+    for version in ("20260812000005", "20260909230000"):
+        assert version not in cli.migration_histories[1]
+    forbidden = {"db reset", "--include-all", "repair", "--linked", "--db-url",
+                 "--seed", "--no-seed"}
+    rendered = [" ".join(call) for call in cli.calls]
+    assert not any(token in command for token in forbidden for command in rendered)
+    assert ex.read_json(executor.run / "manifest.json") == [
+        row for row in ex.upgrade_inventory(executor.repo)
+        if row["version"] <= "20260909140000"
+    ]
+    assert ex.read_json(executor.run / "upgrade-baseline.json") == ex.upgrade_inventory(
+        executor.repo
+    )
+
+
+@pytest.mark.parametrize("kind", ["linked", "reparse"])
+def test_prepare_upgrade_refuses_linked_fixture_before_start(tmp_path, monkeypatch, kind):
+    executor, cli = upgrade_environment(tmp_path, monkeypatch)
+    fixture = executor.repo / "runtime/tests/db/fixtures/app_baseline_legacy.sql"
+    original = Path.lstat
+
+    def lstat(path, *args, **kwargs):
+        info = original(path, *args, **kwargs)
+        if path == fixture:
+            return SimpleNamespace(
+                st_mode=ex.stat.S_IFLNK if kind == "linked" else info.st_mode,
+                st_file_attributes=(
+                    ex.stat.FILE_ATTRIBUTE_REPARSE_POINT if kind == "reparse" else 0
+                ),
+            )
+        return info
+
+    monkeypatch.setattr(Path, "lstat", lstat)
+    assert executor.execute("PrepareUpgrade") == 2
+    assert not cli.started
+
+
+def test_prepare_upgrade_refuses_fixture_change_during_execution(tmp_path, monkeypatch):
+    executor, cli = upgrade_environment(tmp_path, monkeypatch)
+    fixture = executor.repo / "runtime/tests/db/fixtures/app_baseline_legacy.sql"
+
+    def runner(argv, **kwargs):
+        result = cli(argv, **kwargs)
+        if cli.fixture_loaded:
+            fixture.write_bytes(b"select 'changed';\n")
+        return result
+
+    executor.runner = runner
+    assert executor.execute("PrepareUpgrade") == 2
+    assert cli.stop_called
+    assert executor.gate["failure"] == {
+        "stage": "legacy-fixture", "kind": "ValueError", "exitCode": 2,
+    }
+    assert not (executor.run / "upgrade-baseline.json").exists()
+
+
+def test_prepare_upgrade_rechecks_source_before_sealing(tmp_path, monkeypatch):
+    executor, cli = upgrade_environment(tmp_path, monkeypatch)
+    forward = executor.repo / "supabase/migrations/20260909230000_app_baseline_forward_compat.sql"
+
+    def runner(argv, **kwargs):
+        result = cli(argv, **kwargs)
+        if cli.migration_ups == 2:
+            forward.write_bytes(b"select 'changed';\n")
+        return result
+
+    executor.runner = runner
+    assert executor.execute("PrepareUpgrade") == 2
+    assert cli.stop_called
+    assert executor.gate["failure"] == {
+        "stage": "upgrade-prepare-verification", "kind": "ValueError", "exitCode": 2,
+    }
+    assert not (executor.run / "upgrade-baseline.json").exists()
+
+
+@pytest.mark.parametrize(
+    ("failure", "code", "stage"),
+    [
+        ("prefix-up", 21, "legacy-prefix"),
+        ("fixture", 22, "legacy-fixture"),
+        ("history-up", 23, "legacy-history"),
+    ],
+)
+def test_prepare_upgrade_failure_preserves_stage_code_and_safely_stops(
+    tmp_path, monkeypatch, failure, code, stage,
+):
+    executor, cli = upgrade_environment(tmp_path, monkeypatch)
+    cli.fail = failure
+
+    assert executor.execute("PrepareUpgrade") == code
+
+    assert cli.stop_called and not cli.started
+    assert executor.gate["failure"] == {
+        "stage": stage, "kind": "CommandFailure", "exitCode": code,
+    }
+    assert executor.gate["state"] == "stopped"
+    assert not (executor.run / "upgrade-baseline.json").exists()
+
+
+def test_sealed_upgrade_uses_marker_and_never_promotes_manifest_on_failure(
+    tmp_path, monkeypatch,
+):
+    executor, cli = upgrade_environment(tmp_path, monkeypatch)
+    assert executor.execute("PrepareUpgrade") == 0
+    approved = ex.read_json(executor.run / "manifest.json")
+    cli.fail = "migration-up"
+    executor = ex.Executor(executor.repo, executor.run, runner=cli)
+
+    assert executor.execute("Upgrade") == 18
+
+    assert ex.read_json(executor.run / "manifest.json") == approved
+    assert executor.gate["failure"] == {
+        "stage": "migration-up", "kind": "CommandFailure", "exitCode": 18,
+    }
+    assert executor.gate["state"] == "stopped"
+
+
+def test_prepare_upgrade_without_full_identity_proof_never_stops(tmp_path, monkeypatch):
+    executor, cli = upgrade_environment(tmp_path, monkeypatch)
+    cli.loopback_sid = "9999999999999999999"
+
+    assert executor.execute("PrepareUpgrade") == 2
+
+    assert executor.gate["state"] == "unproven"
+    assert cli.started and not cli.stop_called
 
 
 def test_real_legacy_migration_keeps_its_eight_digit_version():
@@ -3678,7 +3992,7 @@ $selector = $dispatch[0].Condition.Find({ param($node)
 }, $true)
 if ($selector.VariablePath.UserPath -ne 'Action') { throw 'wrong dispatch selector' }
 if (($dispatch[0].Clauses | ForEach-Object { $_.Item1.Value }) -join ',' -ne
-    'Prepare,Replay,Upgrade,Test,Stop') { throw 'missing action branch' }
+    'Prepare,PrepareUpgrade,Replay,Upgrade,Test,Stop') { throw 'missing action branch' }
 foreach ($clause in $dispatch[0].Clauses) {
     $calls = @($clause.Item2.FindAll({ param($node)
         $node -is [Management.Automation.Language.CommandAst]

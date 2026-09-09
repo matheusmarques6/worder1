@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)]
-    [ValidateSet('Prepare', 'Replay', 'Upgrade', 'Test', 'Stop')]
+    [ValidateSet('Prepare', 'PrepareUpgrade', 'Replay', 'Upgrade', 'Test', 'Stop')]
     [string]$Action,
     [Parameter(Mandatory)][string]$RunDirectory,
     [string[]]$TestTargets = @(),
@@ -43,10 +43,11 @@ function Invoke-Executor([string]$SelectedAction) {
 }
 
 switch ($Action) {
-    'Prepare' { Invoke-Executor 'Prepare' }
-    'Replay'  { Invoke-Executor 'Replay' }
-    'Upgrade' { Invoke-Executor 'Upgrade' }
-    'Test'    { Invoke-Executor 'Test' }
-    'Stop'    { Invoke-Executor 'Stop' }
+    'Prepare'        { Invoke-Executor 'Prepare' }
+    'PrepareUpgrade' { Invoke-Executor 'PrepareUpgrade' }
+    'Replay'         { Invoke-Executor 'Replay' }
+    'Upgrade'        { Invoke-Executor 'Upgrade' }
+    'Test'           { Invoke-Executor 'Test' }
+    'Stop'           { Invoke-Executor 'Stop' }
     default   { throw 'invalid Action' }
 }
