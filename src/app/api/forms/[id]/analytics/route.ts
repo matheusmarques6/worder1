@@ -44,7 +44,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     .maybeSingle()
   if (!form) return NextResponse.json({ error: 'Formulário não encontrado' }, { status: 404 })
 
-  const [daily, subs, consents, holdout] = await Promise.all([
+  const [daily, subs, driven, consents, holdout] = await Promise.all([
     admin.rpc('popup_daily_stats', { p_organization_id: orgId, p_form_id: formId, p_days: days, p_tz: tz }),
     admin.rpc('popup_holdout_report', { p_organization_id: orgId, p_form_id: formId, p_days: days }),
     admin
@@ -55,6 +55,13 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       .gte('created_at', since)
       .order('created_at', { ascending: false })
       .limit(500),
+    admin
+      .from('popup_driven_orders')
+      .select('submission_id, revenue, order_at')
+      .eq('organization_id', orgId)
+      .eq('form_id', formId)
+      .gte('order_at', since)
+      .limit(20000),
     admin
       .from('consent_records')
       .select('channel, action, submission_id, contact_id')
@@ -69,7 +76,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   const missingMigration = daily.error && (daily.error.code === '42883' || /does not exist/i.test(daily.error.message || ''))
   // A assinatura com fuso (p_tz) veio numa migration posterior à fundação.
   const missingMigrationName = /p_tz|text\)/i.test(daily.error?.message || '') ? '20260910160000_popup_review_fixes' : '20260910100000_popup_foundation'
-  for (const [name, r] of [['série', daily], ['inscrições', subs], ['consentimentos', consents], ['grupo de controle', holdout]] as const) {
+  for (const [name, r] of [['série', daily], ['inscrições', subs], ['pedidos com cupom', driven], ['consentimentos', consents], ['grupo de controle', holdout]] as const) {
     const err = (r as any)?.error
     if (err && !(name === 'série' && missingMigration) && !(name === 'grupo de controle' && err.code === '42883')) {
       return NextResponse.json({ error: `Não foi possível carregar ${name}: ${err.message}` }, { status: 500 })
@@ -145,12 +152,26 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     smart: { submissions: 0, orders: 0, revenue: 0, no_offer: 0 },
     control: { submissions: 0, orders: 0, revenue: 0, no_offer: 0 },
   }
+  // Comprou depois de se inscrever? Duas provas, e vale qualquer uma:
+  // `converted_at` só é gravado quando o popup GANHA o crédito único da
+  // atribuição — quem abre o e-mail de boas-vindas antes de comprar dá o
+  // crédito ao e-mail, e some daqui. `popup_driven_orders` é o pedido que
+  // usou o cupom do popup, prova direta e independente. Contar só a
+  // primeira subestimava exatamente os pedidos que o popup trouxe.
+  const drivenBySubmission = new Map<string, { revenue: number; at: string }>()
+  for (const d of ((driven.data || []) as any[])) {
+    if (!d.submission_id) continue
+    drivenBySubmission.set(d.submission_id, { revenue: Number(d.revenue) || 0, at: d.order_at })
+  }
+  const boughtAt = (s: any): string | null => s.converted_at || drivenBySubmission.get(s.id)?.at || null
+  const boughtValue = (s: any): number => Number(s.conversion_value) || drivenBySubmission.get(s.id)?.revenue || 0
+
   for (const s of submissions) {
     const b: 'smart' | 'control' | null = s.offer_bucket === 'smart' ? 'smart' : s.offer_bucket === 'control' ? 'control' : null
     if (!b) continue
     offers[b].submissions++
     if (s.offer_tier === 'none') offers[b].no_offer++
-    if (s.converted_at) { offers[b].orders++; offers[b].revenue += Number(s.conversion_value) || 0 }
+    if (boughtAt(s)) { offers[b].orders++; offers[b].revenue += boughtValue(s) }
   }
   // Jogo: quantas vezes cada prêmio saiu e quantos desses compraram — a
   // roleta que só dá "tente de novo" aparece aqui antes de virar reclamação.
@@ -165,16 +186,16 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const key = `${g.segment_id || g.segment}|${g.label || ''}`
     const row = prizeMap.get(key) || { label: String(g.label || '—'), prize: String(g.prize || 'base'), count: 0, orders: 0 }
     row.count++
-    if (s.converted_at) row.orders++
+    if (boughtAt(s)) row.orders++
     prizeMap.set(key, row)
   }
   const games = plays > 0 ? { plays, prizes: [...prizeMap.values()].sort((a, b) => b.count - a.count) } : null
   const propScores = submissions.map((s) => Number(s.propensity_score)).filter((n) => Number.isFinite(n))
   const avgPropensity = propScores.length ? Math.round(propScores.reduce((a, b) => a + b, 0) / propScores.length) : null
 
-  const converted = submissions.filter((s) => s.converted_at)
+  const converted = submissions.filter((s) => boughtAt(s))
   const timeToPurchaseHours = converted
-    .map((s) => (new Date(s.converted_at).getTime() - new Date(s.created_at).getTime()) / 3600000)
+    .map((s) => (new Date(boughtAt(s) as string).getTime() - new Date(s.created_at).getTime()) / 3600000)
     .filter((h) => Number.isFinite(h) && h >= 0)
     .sort((a, b) => a - b)
   const medianHours = timeToPurchaseHours.length

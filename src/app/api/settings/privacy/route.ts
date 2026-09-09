@@ -28,6 +28,10 @@ export async function GET() {
     const pol = (r: string) => (policies || []).find((p: any) => p.resource === r && p.enabled)
     const contacts = pol('contacts_inactive')
     const events = pol('contact_events')
+    // Popups: exibições (a tabela que mais cresce) e inscrições, cujo
+    // conteúdo pessoal é anonimizado sem derrubar os números da loja.
+    const popupEvents = pol('popup_events')
+    const popupSubs = pol('popup_submissions')
     return NextResponse.json({
       consent: {
         double_opt_in: !!privacy.double_opt_in,
@@ -36,6 +40,8 @@ export async function GET() {
       retention: {
         contacts_months: contacts ? DAYS_TO_MONTHS(contacts.retention_days) : null,
         events_months: events ? DAYS_TO_MONTHS(events.retention_days) : null,
+        popup_events_months: popupEvents ? DAYS_TO_MONTHS(popupEvents.retention_days) : null,
+        popup_submissions_months: popupSubs ? DAYS_TO_MONTHS(popupSubs.retention_days) : null,
       },
       requests: requests || [],
       consents: consents || [],
@@ -77,6 +83,10 @@ export async function PATCH(request: NextRequest) {
         await upsert('contact_events', body.retention.events_months, true)
         await upsert('email_sends', body.retention.events_months, true)
       }
+      // Exibições de popup são apagadas mesmo (a série diária já está
+      // agregada); inscrições são anonimizadas para os números ficarem.
+      if ('popup_events_months' in body.retention) await upsert('popup_events', body.retention.popup_events_months, false)
+      if ('popup_submissions_months' in body.retention) await upsert('popup_submissions', body.retention.popup_submissions_months, true)
     }
     return NextResponse.json({ ok: true })
   } catch (e: any) {

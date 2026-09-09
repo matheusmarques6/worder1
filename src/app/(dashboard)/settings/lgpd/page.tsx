@@ -12,7 +12,7 @@ import { useApi, useSave, useAction } from '@/components/settings/hooks'
 
 interface Req { id: string; requester_email: string; request_type: string; status: string; created_at: string; verified_at: string | null; processed_at: string | null }
 interface Consent { id: string; consent_type: string; granted: boolean; source: string | null; granted_at: string | null; revoked_at: string | null }
-interface Resp { consent: { double_opt_in: boolean; dpo_email: string }; retention: { contacts_months: number | null; events_months: number | null }; requests: Req[]; consents: Consent[]; consents_total: number }
+interface Resp { consent: { double_opt_in: boolean; dpo_email: string }; retention: { contacts_months: number | null; events_months: number | null; popup_events_months?: number | null; popup_submissions_months?: number | null }; requests: Req[]; consents: Consent[]; consents_total: number }
 
 const TYPE: Record<string, string> = { export: 'Exportação', portability: 'Portabilidade', delete: 'Exclusão', rectification: 'Correção', object: 'Oposição', restrict: 'Restrição' }
 const CONSENT: Record<string, string> = { marketing: 'E-mail marketing', tracking: 'Rastreamento', analytics: 'Análises', cookies: 'Cookies', profiling: 'Personalização', data_sharing: 'Compartilhamento', sms: 'SMS', whatsapp: 'WhatsApp' }
@@ -95,12 +95,12 @@ function ConsentCard({ c, onSaved }: { c: Resp['consent']; onSaved: () => void }
 }
 
 function RetentionCard({ r, onSaved }: { r: Resp['retention']; onSaved: () => void }) {
-  const f = useForm<{ contacts: number | null; events: number | null }>({ contacts: r.contacts_months, events: r.events_months ?? 24 })
-  useEffect(() => { f.reset({ contacts: r.contacts_months, events: r.events_months ?? 24 }) }, [JSON.stringify(r)]) // eslint-disable-line react-hooks/exhaustive-deps
+  const f = useForm<{ contacts: number | null; events: number | null; popupEvents: number | null; popupSubs: number | null }>({ contacts: r.contacts_months, events: r.events_months ?? 24, popupEvents: r.popup_events_months ?? null, popupSubs: r.popup_submissions_months ?? null })
+  useEffect(() => { f.reset({ contacts: r.contacts_months, events: r.events_months ?? 24, popupEvents: r.popup_events_months ?? null, popupSubs: r.popup_submissions_months ?? null }) }, [JSON.stringify(r)]) // eslint-disable-line react-hooks/exhaustive-deps
   const { saving, error, save } = useSave()
   const v = f.val!
   return (
-    <Card title="Retenção" foot={<SaveBar dirty={f.dirty} saving={saving} error={error} onSave={() => save(async () => { await api('/api/settings/privacy', { method: 'PATCH', json: { retention: { contacts_months: v.contacts, events_months: v.events } } }); onSaved() }, 'Retenção salva')} onCancel={f.cancel} />}>
+    <Card title="Retenção" foot={<SaveBar dirty={f.dirty} saving={saving} error={error} onSave={() => save(async () => { await api('/api/settings/privacy', { method: 'PATCH', json: { retention: { contacts_months: v.contacts, events_months: v.events, popup_events_months: v.popupEvents, popup_submissions_months: v.popupSubs } } }); onSaved() }, 'Retenção salva')} onCancel={f.cancel} />}>
       <Row label="Contatos inativos" help="Excluir automaticamente contatos sem interação após:">
         <select className="in" style={{ maxWidth: 240 }} value={v.contacts ?? 'never'} onChange={(e) => f.set('contacts', e.target.value === 'never' ? null : Number(e.target.value))} aria-label="Contatos inativos">
           <option value="never">Nunca excluir</option><option value={12}>12 meses</option><option value={24}>24 meses</option><option value={36}>36 meses</option>
@@ -108,6 +108,16 @@ function RetentionCard({ r, onSaved }: { r: Resp['retention']; onSaved: () => vo
       </Row>
       <Row label="Eventos e logs" help="Eventos de comportamento e registros de envio mais antigos são apagados todo dia às 3h.">
         <select className="in" style={{ maxWidth: 240 }} value={v.events ?? 'never'} onChange={(e) => f.set('events', e.target.value === 'never' ? null : Number(e.target.value))} aria-label="Eventos e logs">
+          <option value={12}>12 meses</option><option value={24}>24 meses</option><option value={36}>36 meses</option><option value="never">Manter para sempre</option>
+        </select>
+      </Row>
+      <Row label="Exibições de popup" help="É a tabela que mais cresce: uma linha por exibição, em toda página da loja. Os números por dia já estão somados e não dependem dela.">
+        <select className="in" style={{ maxWidth: 240 }} value={v.popupEvents ?? 'never'} onChange={(e) => f.set('popupEvents', e.target.value === 'never' ? null : Number(e.target.value))} aria-label="Exibições de popup">
+          <option value={3}>3 meses</option><option value={6}>6 meses</option><option value={12}>12 meses</option><option value={24}>24 meses</option><option value="never">Manter para sempre</option>
+        </select>
+      </Row>
+      <Row label="Respostas de popup" help="Anonimiza as respostas digitadas (e-mail, telefone, quiz) sem apagar a inscrição: a contagem e a receita atribuída continuam de pé.">
+        <select className="in" style={{ maxWidth: 240 }} value={v.popupSubs ?? 'never'} onChange={(e) => f.set('popupSubs', e.target.value === 'never' ? null : Number(e.target.value))} aria-label="Respostas de popup">
           <option value={12}>12 meses</option><option value={24}>24 meses</option><option value={36}>36 meses</option><option value="never">Manter para sempre</option>
         </select>
       </Row>
