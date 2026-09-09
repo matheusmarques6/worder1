@@ -10,7 +10,7 @@ from tests.support.disposable_db import (
     validate_dsn,
 )
 
-DSN = "postgresql://postgres:postgres@127.0.0.1:55322/postgres"
+DSN = "postgresql://postgres:postgres@127.0.0.1:45322/postgres"
 SID = "1234567890123456789"
 TOKEN = "a" * 64
 
@@ -18,13 +18,14 @@ TOKEN = "a" * 64
 @pytest.mark.parametrize(
     "dsn",
     [
-        "postgresql://postgres:postgres@db.example.test:55322/postgres",
+        "postgresql://postgres:postgres@db.example.test:45322/postgres",
         "postgresql://postgres:postgres@127.0.0.1:54322/postgres",
-        "host=127.0.0.1 hostaddr=10.0.0.1 port=55322 dbname=postgres",
-        "host=127.0.0.1,db.example.test port=55322 dbname=postgres",
+        "postgresql://postgres:postgres@127.0.0.1:55322/postgres",
+        "host=127.0.0.1 hostaddr=10.0.0.1 port=45322 dbname=postgres",
+        "host=127.0.0.1,db.example.test port=45322 dbname=postgres",
         "service=production",
-        "host=localhost port=55322 dbname=postgres",
-        "host=127.0.0.1 port=55322 dbname=other",
+        "host=localhost port=45322 dbname=postgres",
+        "host=127.0.0.1 port=45322 dbname=other",
     ],
 )
 def test_rejects_unproven_target(dsn):
@@ -33,7 +34,7 @@ def test_rejects_unproven_target(dsn):
 
 
 def test_accepts_explicit_disposable_loopback():
-    assert validate_dsn(DSN)["port"] == "55322"
+    assert validate_dsn(DSN)["port"] == "45322"
 
 
 @pytest.mark.parametrize(
@@ -88,7 +89,8 @@ def test_missing_env_never_connects(missing):
 @pytest.mark.parametrize(
     "dsn,ambient",
     [
-        ("postgresql://postgres:postgres@db.example.test:55322/postgres", {}),
+        ("postgresql://postgres:postgres@db.example.test:45322/postgres", {}),
+        ("postgresql://postgres:postgres@127.0.0.1:55322/postgres", {}),
         (DSN, {"PGSERVICE": "production"}),
         (DSN, {"PGHOSTADDR": "10.0.0.1"}),
         (DSN, {"PGSERVICEFILE": "untrusted.conf"}),

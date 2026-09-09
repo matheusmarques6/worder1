@@ -19,7 +19,7 @@ def validate_dsn(dsn: str) -> dict[str, str]:
         raise ValueError("unsupported test DSN parameters")
     if values.get("host") != "127.0.0.1":
         raise ValueError("test database must use explicit loopback")
-    if values.get("port") != "55322" or values.get("dbname") != "postgres":
+    if values.get("port") != "45322" or values.get("dbname") != "postgres":
         raise ValueError("test database must use the disposable port and database")
     return values
 

@@ -29,7 +29,7 @@ EXCLUDED = (
     "realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,"
     "studio,edge-runtime,logflare,vector,supavisor"
 )
-DSN = "postgresql://postgres:postgres@127.0.0.1:55322/postgres"
+DSN = "postgresql://postgres:postgres@127.0.0.1:45322/postgres"
 SID_SQL = "select system_identifier::text from pg_control_system()"
 HISTORY_SQL = "select version from supabase_migrations.schema_migrations order by version"
 TOKEN_RE = r"[0-9a-f]{64}"
@@ -137,9 +137,9 @@ def config_text(text, project, enabled, *, source=False):
     actual = tomllib.loads(text)
     desired = copy.deepcopy(EXPECTED)
     desired["project_id"] = project
-    desired["api"]["port"] = 55321
-    desired["db"]["port"] = 55322
-    desired["db"]["shadow_port"] = 55320
+    desired["api"]["port"] = 45321
+    desired["db"]["port"] = 45322
+    desired["db"]["shadow_port"] = 45320
     desired["db"]["migrations"]["enabled"] = enabled
     before = copy.deepcopy(EXPECTED if source else desired)
     if not source:
@@ -153,9 +153,9 @@ def config_text(text, project, enabled, *, source=False):
     require(same_typed_value(actual, before), "unexpected config schema or value")
     edits = {
         ("", "project_id"): json.dumps(project),
-        ("api", "port"): "55321",
-        ("db", "port"): "55322",
-        ("db", "shadow_port"): "55320",
+        ("api", "port"): "45321",
+        ("db", "port"): "45322",
+        ("db", "shadow_port"): "45320",
         ("db.migrations", "enabled"): str(enabled).lower(),
         ("db.seed", "enabled"): "false",
         ("storage", "enabled"): "false",
@@ -399,7 +399,7 @@ def inspect_record(data, project, before, prior=None):
         require(
             isinstance(mapping, list)
             and len(mapping) == 1
-            and mapping[0]["HostPort"] == "55322"
+            and mapping[0]["HostPort"] == "45322"
             and mapping[0]["HostIp"] in {"127.0.0.1", "0.0.0.0"},
             "port mapping mismatch",
         )
@@ -430,7 +430,7 @@ def inspect_record(data, project, before, prior=None):
         "containerId": db["Id"],
         "imageId": db["Image"],
         "volumeName": volume,
-        "port": 55322,
+        "port": 45322,
     }
     if prior is not None:
         require(
@@ -460,7 +460,7 @@ def identity_shape(value, project):
         type(value["projectId"]) is str
         and value["projectId"] == project
         and type(value["port"]) is int
-        and value["port"] == 55322,
+        and value["port"] == 45322,
         "identity target mismatch",
     )
     require(
@@ -570,7 +570,7 @@ def gate_shape(gate):
 def free_ports():
     listeners = []
     try:
-        for port in (55320, 55321, 55322):
+        for port in (45320, 45321, 45322):
             listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             listeners.append(listener)
             if os.name == "nt":

@@ -20,11 +20,24 @@ def test_config_changes_only_closed_fields():
     source = (REPO / "supabase/config.toml").read_text(encoding="utf-8")
     rendered = ex.config_text(source, PROJECT, False, source=True)
     assert f'project_id = "{PROJECT}"' in rendered
-    assert "port = 55322" in rendered
-    assert ex.tomllib.loads(rendered)["db"]["migrations"]["enabled"] is False
+    config = tomllib.loads(rendered)
+    assert (config["db"]["shadow_port"], config["api"]["port"], config["db"]["port"]) == (
+        45320, 45321, 45322,
+    )
+    assert config["db"]["migrations"]["enabled"] is False
     assert ex.tomllib.loads(ex.config_text(rendered, PROJECT, True))["db"]["seed"][
         "enabled"
     ] is False
+
+
+@pytest.mark.parametrize("port", [45320, 45321, 45322])
+def test_config_rejects_retired_disposable_ports(port):
+    source = (REPO / "supabase/config.toml").read_text(encoding="utf-8")
+    rendered = ex.config_text(source, PROJECT, False, source=True)
+    retired = rendered.replace(str(port), str(port + 10000))
+
+    with pytest.raises(ValueError, match="unexpected config schema or value"):
+        ex.config_text(retired, PROJECT, True)
 
 
 @pytest.mark.parametrize(
@@ -220,7 +233,7 @@ def container_record():
             "Labels": {"com.supabase.cli.project": PROJECT},
         },
         "NetworkSettings": {
-            "Ports": {"5432/tcp": [{"HostPort": "55322", "HostIp": "127.0.0.1"}]}
+            "Ports": {"5432/tcp": [{"HostPort": "45322", "HostIp": "127.0.0.1"}]}
         },
         "Mounts": [
             {
@@ -238,7 +251,7 @@ def valid_identity():
         "containerId": "a" * 64,
         "imageId": "sha256:" + "b" * 64,
         "volumeName": "supabase_db_" + PROJECT,
-        "port": 55322,
+        "port": 45322,
         "systemIdentifier": "123456",
         "sentinel": "c" * 64,
     }
@@ -255,6 +268,13 @@ def valid_gate():
         "stage": "preflight",
         "failure": None,
     }
+
+
+def test_container_mapping_matches_persisted_disposable_port():
+    physical = ex.inspect_record([container_record()], PROJECT, [])
+    assert physical["port"] == 45322
+    identity = {**physical, "systemIdentifier": "123456", "sentinel": "c" * 64}
+    assert ex.identity_shape(identity, PROJECT) == valid_identity()
 
 
 def executor_run(tmp_path):
@@ -483,7 +503,7 @@ def test_child_env_is_allowlisted_and_does_not_mutate_parent(monkeypatch):
         "TEMP": "temp",
         "PYTHONUTF8": "1",
         "NO_COLOR": "1",
-        "SUPABASE_DB_URL": ex.DSN,
+        "SUPABASE_DB_URL": "postgresql://postgres:postgres@127.0.0.1:45322/postgres",
         "WORDER_TEST_DB_SYSTEM_IDENTIFIER": "123456",
         "WORDER_TEST_DB_SENTINEL": "c" * 64,
     }
@@ -505,9 +525,10 @@ def test_child_env_is_allowlisted_and_does_not_mutate_parent(monkeypatch):
         lambda d: d["Config"].update(Image="postgres:17"),
         lambda d: d.update(Image="sha256:short"),
         lambda d: d["NetworkSettings"]["Ports"]["5432/tcp"][0].update(HostPort="54322"),
+        lambda d: d["NetworkSettings"]["Ports"]["5432/tcp"][0].update(HostPort="55322"),
         lambda d: d["NetworkSettings"]["Ports"]["5432/tcp"][0].update(HostIp="10.0.0.1"),
         lambda d: d["NetworkSettings"]["Ports"]["5432/tcp"].append(
-            {"HostPort": "55322", "HostIp": "::"}
+            {"HostPort": "45322", "HostIp": "::"}
         ),
         lambda d: d["Mounts"][0].update(Type="bind"),
         lambda d: d["Mounts"][0].update(Destination="/elsewhere"),
@@ -556,6 +577,7 @@ def test_inspect_record_rejects_malformed_container_data(data):
         lambda d: d.update(imageId=None),
         lambda d: d.update(volumeName="bad/name"),
         lambda d: d.update(port=True),
+        lambda d: d.update(port=55322),
         lambda d: d.update(systemIdentifier=123456),
         lambda d: d.update(sentinel="short"),
     ],
@@ -1375,9 +1397,9 @@ def test_free_ports_binds_and_closes_all_disposable_listeners(monkeypatch):
     ex.free_ports()
 
     assert [listener.bind.call_args.args[0] for listener in listeners] == [
-        ("0.0.0.0", 55320),
-        ("0.0.0.0", 55321),
-        ("0.0.0.0", 55322),
+        ("0.0.0.0", 45320),
+        ("0.0.0.0", 45321),
+        ("0.0.0.0", 45322),
     ]
     for listener in listeners:
         listener.close.assert_called_once_with()
@@ -2630,7 +2652,7 @@ class FakeCLI:
 
     def connect(self, dsn, **kwargs):
         assert self.started
-        assert dsn == "postgresql://postgres:postgres@127.0.0.1:55322/postgres"
+        assert dsn == "postgresql://postgres:postgres@127.0.0.1:45322/postgres"
         assert kwargs == {"connect_timeout": 3, "options": "-c statement_timeout=3000"}
         self.connections += 1
         return FakeConnection(self)
@@ -2722,7 +2744,7 @@ class FakeCLI:
         elif argv[:5] == ["uv", "run", "--directory", str(self.repo / "runtime"), "pytest"]:
             assert self.started
             assert env["SUPABASE_DB_URL"] == (
-                "postgresql://postgres:postgres@127.0.0.1:55322/postgres"
+                "postgresql://postgres:postgres@127.0.0.1:45322/postgres"
             )
             assert env["WORDER_TEST_DB_SYSTEM_IDENTIFIER"] == self.sid
             assert env["WORDER_TEST_DB_SENTINEL"] == self.sentinel
@@ -2801,7 +2823,7 @@ def test_prepare_replay_full_test_and_stop_with_fake_cli(tmp_path, monkeypatch):
     prepared = json.loads((executor.run / "identity.json").read_text("utf-8"))
     assert prepared == {
         "projectId": PROJECT, "containerId": "a" * 64, "imageId": "sha256:" + "b" * 64,
-        "volumeName": "supabase_db_" + PROJECT, "port": 55322,
+        "volumeName": "supabase_db_" + PROJECT, "port": 45322,
         "systemIdentifier": "1234567890123456789", "sentinel": None,
     }
     assert json.loads((executor.run / "manifest.json").read_text("utf-8")) == [
