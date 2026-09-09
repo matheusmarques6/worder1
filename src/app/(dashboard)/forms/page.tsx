@@ -22,7 +22,7 @@ interface Form {
   name: string
   slug: string
   description: string | null
-  status: 'draft' | 'published' | 'archived'
+  status: 'draft' | 'published' | 'paused' | 'archived'
   form_type?: string | null
   store_id?: string | null
   submissions_count: number
@@ -40,6 +40,7 @@ type FormType = 'all' | 'popup' | 'embedded' | 'landing'
 const statusLabels: Record<string, { label: string; color: string; icon: React.ElementType }> = {
   draft: { label: 'Rascunho', color: 'text-yellow-600 bg-yellow-50', icon: Clock },
   published: { label: 'Ativo', color: 'text-green-600 bg-green-50', icon: CheckCircle },
+  paused: { label: 'Pausado', color: 'text-orange-600 bg-orange-50', icon: Clock },
   archived: { label: 'Arquivado', color: 'text-gray-500 bg-gray-100', icon: Archive },
 }
 
@@ -303,7 +304,8 @@ export default function FormsPage() {
   }
 
   const toggleStatus = async (form: Form) => {
-    const newStatus: Form['status'] = form.status === 'published' ? 'draft' : 'published'
+    // Mesmo estado da lista nova (/site/forms): pausar não volta a rascunho.
+    const newStatus: Form['status'] = form.status === 'published' ? 'paused' : 'published'
     setTogglingStatus(form.id)
 
     // Optimistic update so the merchant sees the badge flip the moment

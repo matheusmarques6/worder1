@@ -324,6 +324,9 @@ export async function stopExperiment(admin: SupabaseClient, orgId: string, formI
 export async function applyWinner(admin: SupabaseClient, orgId: string, formId: string, winnerId: string, reason = 'manual_apply'): Promise<ExperimentRow | null> {
   const cur = await loadExperiment(admin, orgId, formId)
   if (!cur) throw new Error('Sem experimento para este popup.')
+  // Aplicar de novo trocaria os designs outra vez, devolvendo a perdedora
+  // ao ar (dois cliques, ou o cron aplicando junto com o lojista).
+  if (cur.status === 'ended') throw new Error('Experimento já encerrado — a vencedora já está no ar.')
   if (winnerId !== formId) {
     const { data: v, error } = await admin
       .from('crm_forms')
@@ -337,9 +340,15 @@ export async function applyWinner(admin: SupabaseClient, orgId: string, formId: 
     // O design do pai não some: fica guardado na própria variante como
     // "era assim antes" para quem quiser voltar.
     const { data: parent } = await admin.from('crm_forms').select('design_json').eq('id', formId).maybeSingle()
+    // As regras de exibição são do popup principal — a variante só muda o
+    // que aparece. O design vencedor entra com o behavior do pai.
+    const parentBehavior = (parent?.design_json as any)?.behavior
+    const winnerDesign = parentBehavior && v.design_json && typeof v.design_json === 'object'
+      ? { ...(v.design_json as any), behavior: parentBehavior }
+      : v.design_json
     const { error: upErr } = await admin
       .from('crm_forms')
-      .update({ design_json: v.design_json, updated_at: new Date().toISOString() })
+      .update({ design_json: winnerDesign, updated_at: new Date().toISOString() })
       .eq('id', formId)
       .eq('organization_id', orgId)
     if (upErr) throw new Error(upErr.message)

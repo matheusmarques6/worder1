@@ -299,6 +299,17 @@ async function getStoreConfig(shopDomain: string): Promise<ShopifyStoreConfig | 
 // Shopify sends in the header (canonical, alias, custom domain, even
 // a typo'd one), the URL itself unambiguously identifies the store.
 // Adapted from the AdTracked pattern.
+/** O store_id da URL só vale se a loja for mesmo a do domínio assinado. */
+function storeMatchesDomain(store: any, domain: string): boolean {
+  const d = String(domain || '').toLowerCase();
+  if (!d) return false;
+  const aliases: string[] = Array.isArray(store?.shop_domain_aliases) ? store.shop_domain_aliases : [];
+  return [store?.shop_domain, store?.primary_domain, ...aliases]
+    .filter(Boolean)
+    .map((x: string) => String(x).toLowerCase())
+    .includes(d);
+}
+
 async function getStoreConfigById(storeId: string): Promise<ShopifyStoreConfig | null> {
   try {
     const supabase = getSupabase();
@@ -2685,6 +2696,14 @@ export async function POST(request: NextRequest) {
     // registered before this URL pattern shipped.
     const queryStoreId = request.nextUrl.searchParams.get('store_id');
     let store = queryStoreId ? await getStoreConfigById(queryStoreId) : null;
+    // O ?store_id= é conveniência, não credencial: com o segredo do app
+    // compartilhado entre lojas, uma entrega legítima da loja B reenviada
+    // com o id da loja A seria processada na organização errada. O domínio
+    // do cabeçalho (que a assinatura cobre) tem de bater.
+    if (store && shopDomain && !storeMatchesDomain(store, shopDomain)) {
+      console.warn('[Shopify Webhook] store_id da URL não corresponde ao domínio assinado — usando o domínio', { shopDomain });
+      store = null;
+    }
     if (!store) store = await getStoreConfig(shopDomain);
     if (!store) {
       // Orphan webhook subscription — typically from a store that was

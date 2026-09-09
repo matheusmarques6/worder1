@@ -822,3 +822,50 @@ describe('gamificação: roleta e raspadinha', () => {
     }
   })
 })
+
+describe('formatos: embed e banner não são modais', () => {
+  function freshPage() {
+    for (const k of Object.keys(window)) if (k.startsWith('__wf')) delete (window as any)[k]
+  }
+
+  it('embed: o formulário fica na página depois do sucesso, sem fechar sozinho', async () => {
+    freshPage()
+    const id = nextId()
+    // O container do lojista traz o id do formulário no atributo.
+    const host = document.createElement('div')
+    host.setAttribute('data-worder-form', id)
+    document.body.appendChild(host)
+    const d = design({ formType: 'embed', postSubmit: { action: 'show-success', redirectUrl: '', closeDelay: 1 } })
+    run(d, behavior({ display: { timeEnabled: true, delay: 0 } }), id)
+    await vi.advanceTimersByTimeAsync(200)
+    const form = formEl(id)!
+    expect(form).toBeTruthy()
+    ;(form.querySelector('input[name="email"]') as HTMLInputElement).value = 'ana@example.com'
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await vi.advanceTimersByTimeAsync(50)
+    expect(root(id)!.textContent).toContain('Obrigado')
+    // O closeDelay não pode apagar o conteúdo de dentro da página do lojista.
+    await vi.advanceTimersByTimeAsync(4000)
+    expect(root(id)).toBeTruthy()
+    expect(root(id)!.textContent).toContain('Obrigado')
+  })
+
+  it('banner não é modal: sem aria-modal e sem prender o Tab', async () => {
+    freshPage()
+    const id = run(design({ formType: 'banner' }), behavior())
+    await vi.advanceTimersByTimeAsync(1500)
+    const pop = root(id)!.querySelector('[id^="wf-pop-"]') as HTMLElement
+    expect(pop).toBeTruthy()
+    expect(pop.getAttribute('aria-modal')).toBeNull()
+    expect(pop.getAttribute('role')).toBe('region')
+  })
+
+  it('popup segue modal, com aria-modal e diálogo', async () => {
+    freshPage()
+    const id = run(design(), behavior())
+    await vi.advanceTimersByTimeAsync(1500)
+    const pop = root(id)!.querySelector('[id^="wf-pop-"]') as HTMLElement
+    expect(pop.getAttribute('aria-modal')).toBe('true')
+    expect(pop.getAttribute('role')).toBe('dialog')
+  })
+})

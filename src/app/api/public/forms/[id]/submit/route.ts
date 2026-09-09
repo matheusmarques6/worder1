@@ -593,7 +593,8 @@ export async function POST(
     let contactId: string | null = null
     const hasContactData = contactData.email || contactData.phone || contactData.first_name
 
-    console.log('[Form Submit] Contact data extracted:', contactData)
+    // Só os campos preenchidos — o valor é PII e o log não é lugar de PII.
+    console.log('[Form Submit] Contact data extracted:', Object.keys(contactData))
     console.log('[Form Submit] Pipeline ID:', form.pipeline_id)
 
     // Update an existing contact merging custom_fields (new keys win)
@@ -1020,12 +1021,10 @@ export async function POST(
       }, proofs)
     }
 
-    // Bump the form's submissions_count + views_count so the /forms
-    // dashboard card reflects reality. Atomic via RPC (fire-and-forget —
-    // a failure here mustn't break the submit response). views_count is
-    // also bumped because the impression beacon can drop on slow
-    // connections; this guarantees views >= submits.
-    await bumpFormCounters(supabase, formId, ['submissions_count', 'views_count']).catch(() => {})
+    // Contador legado do card em /forms. Só submissions_count: views_count
+    // já sobe no beacon de impressão — somar aqui de novo contava cada
+    // inscrito duas vezes como visualização e derrubava a taxa.
+    await bumpFormCounters(supabase, formId, ['submissions_count']).catch(() => {})
 
     // 7. Processar eventos de ads
     const eventsFired: any[] = []
@@ -1535,7 +1534,9 @@ export async function POST(
             .eq('form_id', formId)
             .eq('store_id', form.store_id)
             .eq('tier_key', eff.tierKey)
-            .eq('status', 'active')
+            // 'error' é pool que falhou a última reposição: os códigos já
+            // criados continuam válidos e devem sair antes do estático.
+            .in('status', ['active', 'error'])
             .maybeSingle()
           poolId = pool?.id || null
           if (!poolId) console.warn('[Form Submit] popup em modo único sem pool ativo — caindo no código estático', { formId, tier: eff.tierKey })
@@ -1657,6 +1658,13 @@ export async function POST(
       }
     }
 
+    // Código estático (pool vazio, erro do ledger ou visitante sem contato)
+    // também é um código entregue: sem isto o analytics contava menos
+    // cupons do que o popup realmente mostrou.
+    if (issuedCoupon && !submissionPatch.coupon_code) {
+      submissionPatch.coupon_code = issuedCoupon.code
+      submissionPatch.coupon_kind = issuedCoupon.kind
+    }
     if (stepPath.length) submissionPatch.step_path = stepPath
     if (rewardTierKey) submissionPatch.reward_tier = rewardTierKey
     if (Object.keys(submissionPatch).length) {

@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthClient, authError } from '@/lib/api-utils'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
+import { startOfDayInTz } from '@/lib/popups/period'
 
 export const dynamic = 'force-dynamic'
 
@@ -66,6 +67,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   // Erro de consulta vira erro de verdade — zeros com HTTP 200 parecem
   // um popup que ninguém viu.
   const missingMigration = daily.error && (daily.error.code === '42883' || /does not exist/i.test(daily.error.message || ''))
+  // A assinatura com fuso (p_tz) veio numa migration posterior à fundação.
+  const missingMigrationName = /p_tz|text\)/i.test(daily.error?.message || '') ? '20260910160000_popup_review_fixes' : '20260910100000_popup_foundation'
   for (const [name, r] of [['série', daily], ['inscrições', subs], ['consentimentos', consents], ['grupo de controle', holdout]] as const) {
     const err = (r as any)?.error
     if (err && !(name === 'série' && missingMigration) && !(name === 'grupo de controle' && err.code === '42883')) {
@@ -187,7 +190,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       status: form.status,
       created_at: form.created_at,
     },
-    missing_migration: missingMigration ? '20260910100000_popup_foundation' : null,
+    missing_migration: missingMigration ? missingMigrationName : null,
     series,
     totals: {
       ...totals,
@@ -232,20 +235,6 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 }
 
 // Meia-noite de N-1 dias atrás no fuso pedido, em UTC.
-function startOfDayInTz(days: number, tz: string): Date {
-  try {
-    const now = new Date()
-    const parts = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now)
-    const get = (t: string) => Number(parts.find((p) => p.type === t)?.value)
-    const localMidnightUtc = Date.UTC(get('year'), get('month') - 1, get('day'))
-    // Diferença entre o "agora" local e o UTC diz o offset do fuso.
-    const localNow = new Date(now.toLocaleString('en-US', { timeZone: tz })).getTime()
-    const offset = localNow - now.getTime()
-    return new Date(localMidnightUtc - offset - (days - 1) * 86400000)
-  } catch {
-    return new Date(Date.now() - days * 86400000)
-  }
-}
 
 function guessDevice(ua: string | null | undefined): 'mobile' | 'tablet' | 'desktop' | null {
   if (!ua) return null

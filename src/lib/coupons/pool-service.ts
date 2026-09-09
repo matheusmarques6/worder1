@@ -503,7 +503,10 @@ export async function listPoolsNeedingStock(limit = 20): Promise<CouponPoolRow[]
   const { data: pools } = await admin
     .from('coupon_pools')
     .select('*')
-    .eq('status', 'active')
+    // 'error' entra junto: um 5xx da Shopify parava o pool para sempre,
+    // e todo inscrito passava a receber o código estático em silêncio.
+    // A ordem por last_replenished_at já espaça as novas tentativas.
+    .in('status', ['active', 'error'])
     .not('form_id', 'is', null)
     .order('last_replenished_at', { ascending: true, nullsFirst: true })
     .limit(limit * 3)

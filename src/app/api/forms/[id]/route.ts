@@ -95,8 +95,10 @@ export async function PUT(
     if (name !== undefined) updates.name = name
     if (description !== undefined) updates.description = description
     if (status !== undefined) updates.status = status
-    if (pipeline_id !== undefined) updates.pipeline_id = pipeline_id
-    if (stage_id !== undefined) updates.stage_id = stage_id
+    // pipeline/stage entram no negócio criado a partir da inscrição: um id
+    // de outra org apontaria o deal para o funil do vizinho.
+    if (pipeline_id !== undefined) updates.pipeline_id = pipeline_id || null
+    if (stage_id !== undefined) updates.stage_id = stage_id || null
     if (theme !== undefined) updates.theme = theme
     if (logo_url !== undefined) updates.logo_url = logo_url
     if (success_message !== undefined) updates.success_message = success_message
@@ -130,6 +132,32 @@ export async function PUT(
           { error: 'Loja inválida: selecione uma loja da sua organização.' },
           { status: 400 }
         )
+      }
+    }
+
+    // Funil e etapa também são da org: o negócio criado a partir de uma
+    // inscrição não pode cair no pipeline de outro cliente. `pipelines`
+    // não tem organization_id — pertence a uma loja, e a loja à org.
+    const orgStoreIds = async (): Promise<string[]> => {
+      const { data } = await admin.from('shopify_stores').select('id').eq('organization_id', user.organization_id)
+      return (data || []).map((r: any) => r.id as string)
+    }
+    if (pipeline_id || stage_id) {
+      const storeIds = await orgStoreIds()
+      let pipeId: string | null = pipeline_id || null
+      if (stage_id) {
+        const { data: stageRow } = await admin.from('pipeline_stages').select('id, pipeline_id').eq('id', stage_id).maybeSingle()
+        if (!stageRow) return NextResponse.json({ error: 'Etapa inválida: escolha uma etapa da sua organização.' }, { status: 400 })
+        if (pipeId && stageRow.pipeline_id !== pipeId) {
+          return NextResponse.json({ error: 'A etapa escolhida não pertence a esse funil.' }, { status: 400 })
+        }
+        pipeId = pipeId || (stageRow.pipeline_id as string)
+      }
+      if (pipeId) {
+        const { data: pipeRow } = await admin.from('pipelines').select('id, store_id').eq('id', pipeId).maybeSingle()
+        if (!pipeRow || !pipeRow.store_id || !storeIds.includes(pipeRow.store_id as string)) {
+          return NextResponse.json({ error: 'Funil inválido: escolha um funil da sua organização.' }, { status: 400 })
+        }
       }
     }
 

@@ -436,7 +436,7 @@ function ToggleRow({ label, checked, onChange, hint }: { label: string; checked:
         <p className="text-[13px] text-gray-800 leading-tight">{label}</p>
         {hint && <p className="text-[11px] text-gray-400 mt-0.5 leading-snug">{hint}</p>}
       </div>
-      <button type="button" onClick={() => onChange(!checked)}
+      <button type="button" role="switch" aria-checked={checked} aria-label={label} onClick={() => onChange(!checked)}
         className={`relative w-9 h-5 rounded-full flex-shrink-0 transition-colors ${checked ? 'bg-zinc-900' : 'bg-gray-200'}`}>
         <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
       </button>
@@ -483,6 +483,13 @@ function ExperimentDrawer({ formId, formName, formStatus, dirty, onClose, onOpen
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', onKey); return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
+  // Foco entra no botão de fechar e volta para onde estava ao sair.
+  const closeRef = useRef<HTMLButtonElement | null>(null)
+  useEffect(() => {
+    const prev = document.activeElement as HTMLElement | null
+    closeRef.current?.focus()
+    return () => { try { prev?.focus() } catch { /* elemento pode ter sumido */ } }
+  }, [])
   const act = async (action: string, extra: Record<string, any> = {}) => {
     setBusy(action)
     try {
@@ -518,7 +525,7 @@ function ExperimentDrawer({ formId, formName, formStatus, dirty, onClose, onOpen
               {!exp ? 'Sem experimento. Crie uma variante para começar.' : running ? `Em andamento desde ${exp.started_at ? new Date(exp.started_at).toLocaleDateString('pt-BR') : 'hoje'} · KPI ${KPI_LABEL[exp.kpi]}` : ended ? `Encerrado · ${END_REASON[exp.end_reason || ''] || exp.end_reason}${winnerName ? ` · vencedora ${winnerName}` : ''}` : 'Rascunho — configure e inicie.'}
             </p>
           </div>
-          <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500" aria-label="Fechar"><X className="w-4 h-4" /></button>
+          <button ref={closeRef} onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500" aria-label="Fechar"><X className="w-4 h-4" /></button>
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
           {error && <p className="text-[12px] text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
@@ -923,6 +930,20 @@ function applyOfferPreview(text: string, label: string | undefined, prize?: stri
   if (label === undefined) return text
   return String(text || '').replace(/\{\{\s*offer\s*\}\}/g, label).replace(/\{\{\s*prize\s*\}\}/g, prize || '')
 }
+// O que impede publicar: erros que o visitante veria como popup quebrado.
+function publishProblems(design: PopupDesign): string[] {
+  const out: string[] = []
+  const all = [...design.steps, design.successStep].filter(Boolean).flatMap(st => st.blocks || [])
+  const hasCoupon = all.some(b => b.type === 'coupon')
+  for (const b of all) {
+    const segs = gameSegments(b.props)
+    if (b.type === 'wheel' && segs.length < 2) out.push('A roleta precisa de pelo menos dois segmentos para ir ao ar.')
+    if (b.type === 'scratch' && segs.length < 1) out.push('A raspadinha precisa de pelo menos um prêmio para ir ao ar.')
+    if ((b.type === 'wheel' || b.type === 'scratch') && !hasCoupon) out.push('O jogo promete um prêmio, mas não há bloco de cupom na etapa de sucesso.')
+    if (b.type === 'countdown' && !b.props?.endDate) out.push('A contagem regressiva está sem data final — ficaria zerada na loja.')
+  }
+  return Array.from(new Set(out))
+}
 // O rótulo do primeiro segmento do primeiro jogo: é o que a visualização
 // mostra onde o lojista escreveu {{prize}}.
 function designPrizeLabel(steps: Step[]): string {
@@ -942,14 +963,19 @@ function GameButtonPreview({ p, fallback }: { p: any; fallback: string }) {
   return <button type="button" style={{ marginTop: 14, padding: `${p.paddingV || 14}px ${p.paddingH || 28}px`, background: p.bgColor || '#F97316', color: p.textColor || '#fff', fontSize: p.fontSize || 15, fontWeight: 700, border: 'none', borderRadius: p.borderRadius ?? 8, cursor: 'pointer', display: p.fullWidth ? 'block' : 'inline-block', width: p.fullWidth ? '100%' : 'auto' }}>{p.buttonText || fallback}</button>
 }
 
+const NO_LAYOUT_BORDER = new Set(['email', 'phone', 'name-input', 'text-input', 'date-input', 'dropdown', 'radio', 'checkbox', 'legal-consent', 'coupon', 'countdown', 'wheel', 'scratch'])
+const NO_LAYOUT_SHADOW = new Set(['wheel', 'scratch', 'image'])
+
 function BlockPreview({ block, selected, onContentChange, onSelect, offerLabel, prizeLabel }: { block: Block; selected?: boolean; onContentChange?: (key: string, value: string) => void; onSelect?: () => void; offerLabel?: string; prizeLabel?: string }) {
   const p = block.props
   const blockStyle: React.CSSProperties = {
     marginTop: p.marginTop || 0, marginBottom: p.marginBottom ?? 8,
     padding: p.blockPadding || 0, backgroundColor: p.blockBg || undefined,
     borderRadius: p.blockRadius || 0,
-    border: p.borderWidth && !['email','phone','name-input','text-input','date-input'].includes(block.type) ? `${p.borderWidth}px ${p.borderStyle || 'solid'} ${p.borderColor || '#E5E7EB'}` : undefined,
-    boxShadow: p.shadow || undefined,
+    // Mesmas exceções do runtime (blockStyleStr com noBorder/noShadow):
+    // blocos com moldura própria não recebem a borda do layout.
+    border: p.borderWidth && !NO_LAYOUT_BORDER.has(block.type) ? `${p.borderWidth}px ${p.borderStyle || 'solid'} ${p.borderColor || '#E5E7EB'}` : undefined,
+    boxShadow: p.shadow && !NO_LAYOUT_SHADOW.has(block.type) ? p.shadow : undefined,
     opacity: p.opacity != null ? p.opacity / 100 : undefined,
   }
   const inputStyle = "w-full border border-gray-200 rounded-lg px-4 py-3 text-sm bg-white placeholder-gray-400 outline-none"
@@ -1129,21 +1155,21 @@ function BlockPreview({ block, selected, onContentChange, onSelect, offerLabel, 
         {p.showLabel !== false && p.label && <label className="block text-[13px] font-medium text-gray-700 mb-1">{p.label}</label>}
         <select className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm bg-white text-gray-600 outline-none">
           <option>{p.placeholder || 'Escolha...'}</option>
-          {(p.options || []).map((o: string) => <option key={o}>{o}</option>)}
+          {(p.options || []).map((o: string, i: number) => <option key={i}>{o}</option>)}
         </select>
       </div>
     case 'radio':
       return <div style={blockStyle}>
         {p.showLabel !== false && p.label && <label className="block text-[13px] font-medium text-gray-700 mb-1.5">{p.label}</label>}
         <div style={{ display: 'flex', flexDirection: p.layout === 'horizontal' ? 'row' : 'column', gap: p.layout === 'horizontal' ? 12 : 8 }}>
-          {(p.options || []).map((o: string) => <label key={o} className="flex items-center gap-2.5 text-[13px] text-gray-700 cursor-pointer"><input type="radio" name={block.id} className="accent-orange-500" />{o}</label>)}
+          {(p.options || []).map((o: string, i: number) => <label key={i} className="flex items-center gap-2.5 text-[13px] text-gray-700 cursor-pointer"><input type="radio" name={block.id} className="accent-orange-500" />{o}</label>)}
         </div>
       </div>
     case 'checkbox':
       return <div style={blockStyle}>
         {p.showLabel !== false && p.label && <label className="block text-[13px] font-medium text-gray-700 mb-1.5">{p.label}</label>}
         <div className="space-y-2">
-          {(p.options || []).map((o: string) => <label key={o} className="flex items-center gap-2.5 text-[13px] text-gray-700 cursor-pointer"><input type="checkbox" className="rounded accent-orange-500" />{o}</label>)}
+          {(p.options || []).map((o: string, i: number) => <label key={i} className="flex items-center gap-2.5 text-[13px] text-gray-700 cursor-pointer"><input type="checkbox" className="rounded accent-orange-500" />{o}</label>)}
         </div>
       </div>
     default: return <div className="text-xs text-gray-400 p-2">[{block.type}]</div>
@@ -1183,7 +1209,7 @@ const Toggle = ({ label, checked, onChange: oc, hint }: { label: string; checked
       <p className="text-[13px] text-gray-800 leading-tight">{label}</p>
       {hint && <p className="text-[11px] text-gray-400 mt-0.5 leading-snug">{hint}</p>}
     </div>
-    <button type="button" onClick={() => oc(!checked)}
+    <button type="button" role="switch" aria-checked={checked} aria-label={label} onClick={() => oc(!checked)}
       className={`relative w-9 h-5 rounded-full flex-shrink-0 transition-colors ${checked ? 'bg-zinc-900' : 'bg-gray-200'}`}>
       <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
     </button>
@@ -1366,29 +1392,33 @@ const BorderStyleControl = ({ p, up, def = 'solid' }: { p: any; up: (k: string, 
 // Smart Offers: a oferta segue a intenção medida na hora de mostrar. Cada
 // faixa (baixa / média / alta) recebe a base, um nível progressivo ou
 // nenhuma oferta; uma fatia de controle recebe sempre a base.
-function SmartOfferEditor({ p, up }: { p: any; up: (k: string, v: any) => void }) {
-  const so = { enabled: false, lowMax: 35, highMin: 70, lowTier: 'base', midTier: 'base', highTier: 'base', controlPercent: 20, ...(p.smartOffer || {}) }
-  const set = (patch: Record<string, any>) => up('smartOffer', { ...so, ...patch })
-  const tiers: any[] = Array.isArray(p.tiers) ? p.tiers : []
-  const baseLabel = p.discountType === 'free_shipping' ? 'Frete grátis' : p.discountType === 'fixed_amount' ? `R$ ${p.discountValue ?? 0} OFF` : `${p.discountValue ?? 10}% OFF`
-  const OfferSelect = ({ k, label, hint }: { k: 'lowTier' | 'midTier' | 'highTier'; label: string; hint: string }) => (
+// Fora do editor para não remontar (e perder o foco) a cada render.
+function OfferSelectField({ value, onChange, label, hint, baseLabel, tiers }: { value: string; onChange: (v: string) => void; label: string; hint: string; baseLabel: string; tiers: any[] }) {
+  return (
     <LabeledField label={label} hint={hint}>
-      <select className={sel} value={so[k]} onChange={e => set({ [k]: e.target.value })}>
+      <select className={sel} value={value} onChange={e => onChange(e.target.value)}>
         <option value="base">Oferta base · {baseLabel}</option>
         {tiers.map((t: any) => <option key={t.id} value={t.id}>{t.label || 'Nível'} · {t.discountType === 'free_shipping' ? 'Frete grátis' : `${t.discountValue ?? 0}${t.discountType === 'fixed_amount' ? '' : '%'} OFF`}</option>)}
         <option value="none">Sem desconto (só a inscrição)</option>
       </select>
     </LabeledField>
   )
+}
+
+function SmartOfferEditor({ p, up }: { p: any; up: (k: string, v: any) => void }) {
+  const so = { enabled: false, lowMax: 35, highMin: 70, lowTier: 'base', midTier: 'base', highTier: 'base', controlPercent: 20, ...(p.smartOffer || {}) }
+  const set = (patch: Record<string, any>) => up('smartOffer', { ...so, ...patch })
+  const tiers: any[] = Array.isArray(p.tiers) ? p.tiers : []
+  const baseLabel = p.discountType === 'free_shipping' ? 'Frete grátis' : p.discountType === 'fixed_amount' ? `R$ ${p.discountValue ?? 0} OFF` : `${p.discountValue ?? 10}% OFF`
   return (
     <div className="pt-3 border-t border-gray-100 space-y-2">
       <Toggle label="Oferta por intenção" hint="Quem está quase comprando não precisa do desconto inteiro; quem chegou frio precisa de mais. A intenção é medida na hora de mostrar (rolagem, permanência, páginas, carrinho)." checked={!!so.enabled} onChange={v => set({ enabled: v })} />
       {so.enabled && (
         <div className="space-y-2">
           <p className="text-[11px] text-gray-500 leading-snug bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">Escreva <code className="px-1 bg-white border border-gray-200 rounded text-[10px]">{'{{offer}}'}</code> no texto ou no botão e a oferta escolhida aparece no lugar (ex.: "Ganhe {'{{offer}}'} agora"). Com "sem desconto", o bloco de cupom some.</p>
-          <OfferSelect k="lowTier" label={`Intenção baixa (score < ${so.lowMax})`} hint="Chegou frio: aqui cabe o empurrão maior." />
-          <OfferSelect k="midTier" label={`Intenção média (${so.lowMax}–${so.highMin - 1})`} hint="O padrão." />
-          <OfferSelect k="highTier" label={`Intenção alta (score ≥ ${so.highMin})`} hint="Já ia comprar: dá para segurar margem." />
+          <OfferSelectField value={so.lowTier} onChange={v => set({ lowTier: v })} baseLabel={baseLabel} tiers={tiers} label={`Intenção baixa (score < ${so.lowMax})`} hint="Chegou frio: aqui cabe o empurrão maior." />
+          <OfferSelectField value={so.midTier} onChange={v => set({ midTier: v })} baseLabel={baseLabel} tiers={tiers} label={`Intenção média (${so.lowMax}–${so.highMin - 1})`} hint="O padrão." />
+          <OfferSelectField value={so.highTier} onChange={v => set({ highTier: v })} baseLabel={baseLabel} tiers={tiers} label={`Intenção alta (score ≥ ${so.highMin})`} hint="Já ia comprar: dá para segurar margem." />
           <div className="grid grid-cols-2 gap-2">
             <LabeledField label="Baixa até">
               <div className="relative"><input type="number" min={5} max={90} className={inp + ' pr-6'} value={so.lowMax} onChange={e => set({ lowMax: Math.max(5, Math.min(90, +e.target.value || 35)) })} /><span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">pts</span></div>
@@ -1648,7 +1678,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
     email: 'Email', phone: 'Telefone', 'name-input': 'Nome', 'text-input': 'Campo',
     'date-input': 'Data', dropdown: 'Dropdown', radio: 'Radio', checkbox: 'Checkbox',
     'legal-consent': 'Consentimento', text: 'Conteúdo', button: 'Botão', image: 'Imagem',
-    spacer: 'Espaçador', line: 'Linha', coupon: 'Cupom', countdown: 'Contagem',
+    spacer: 'Espaçador', line: 'Linha', coupon: 'Cupom', countdown: 'Contagem', wheel: 'Roleta', scratch: 'Raspadinha',
   }
 
   // Unified input "Input" tab renderer (Omnisend-style clean sections)
@@ -3826,6 +3856,8 @@ export default function PopupEditorPage() {
   const [formStatus, setFormStatus] = useState<'draft' | 'published' | 'paused'>('draft')
   // Variante de experimento: edita o design, mas quem vai ao ar é o pai.
   const [abParent, setAbParent] = useState<{ id: string; name: string; label: string } | null>(null)
+  // Loja do popup como veio do servidor: salvar só liga uma loja quando não há nenhuma.
+  const [formStoreId, setFormStoreId] = useState<string | null>(null)
   const [showExperiment, setShowExperiment] = useState(false)
   const [formName, setFormName] = useState('Popup sem título')
   // Tracking pixel IDs live on the crm_forms row (not in design_json) so
@@ -3946,10 +3978,15 @@ export default function PopupEditorPage() {
       const data = await r.json()
       const form = data.form || data
       if (form.name) setFormName(form.name)
+      setFormStoreId(form.store_id || null)
       let nextDesign: PopupDesign = defaultDesign
       if (form.design_json && Object.keys(form.design_json).length > 0) {
         // Deep-merge to preserve new default fields (styles/behavior sub-objects)
-        const saved = form.design_json
+        // O runtime lê a coluna behavior antes do design_json.behavior; o
+        // editor precisa partir do mesmo lugar, senão "aplicar a vencedora"
+        // (que só copia design_json) faria o próximo salvar reverter regras.
+        const colBehavior = form.behavior && typeof form.behavior === 'object' && Object.keys(form.behavior).length ? form.behavior : null
+        const saved = colBehavior ? { ...form.design_json, behavior: colBehavior } : form.design_json
         const merged: PopupDesign = {
           ...defaultDesign,
           ...saved,
@@ -4089,7 +4126,7 @@ export default function PopupEditorPage() {
           // the form was created with store_id=NULL because currentStore was still
           // hydrating when the merchant clicked Create — without this, the popup
           // is invisible in the per-store list and stuck as orphan forever.
-          ...(currentStore?.id ? { store_id: currentStore.id } : {}),
+          ...(!formStoreId && currentStore?.id ? { store_id: currentStore.id } : {}),
         }),
       })
       if (!res.ok) {
@@ -4102,13 +4139,14 @@ export default function PopupEditorPage() {
         return false
       }
       setDirty(false)
+      if (!formStoreId && currentStore?.id) setFormStoreId(currentStore.id)
       showToast('Alterações salvas', 'success')
       return true
     } catch {
       showToast('Não foi possível salvar — tente novamente', 'error')
       return false
     } finally { setSaving(false) }
-  }, [formId, design, formStatus, formName, currentStore?.id, trackingIds, designLoaded, showToast])
+  }, [formId, design, formStatus, formName, currentStore?.id, formStoreId, trackingIds, designLoaded, showToast])
 
   // Publish/unpublish — optimistic toggle WITH rollback: awaits the response
   // and reverts + toasts on failure (e.g. the server pack's 400 when a visual
@@ -4118,6 +4156,14 @@ export default function PopupEditorPage() {
     const prevStatus = formStatus
     // Desativar um popup que já esteve no ar é pausar, não voltar a rascunho.
     const newStatus: 'draft' | 'published' | 'paused' = prevStatus === 'published' ? 'paused' : 'published'
+    if (newStatus === 'published') {
+      // O que quebraria na loja não vai ao ar: roleta sem setores, contagem
+      // sem data, jogo sem cupom.
+      const problems = publishProblems(design)
+      if (problems.length) { showToast(problems[0], 'error'); return }
+      // Ativar publica o que está salvo — nome, pixels e design incluídos.
+      if (dirty) { const ok = await handleSave(); if (!ok) return }
+    }
     setFormStatus(newStatus)
     setPublishing(true)
     try {
@@ -4126,10 +4172,7 @@ export default function PopupEditorPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           status: newStatus,
-          design_json: design,
-          form_type: design.formType,
-          behavior: design.behavior,
-          ...(currentStore?.id ? { store_id: currentStore.id } : {}),
+          ...(!formStoreId && currentStore?.id ? { store_id: currentStore.id } : {}),
         }),
       })
       if (!res.ok) {
@@ -4144,12 +4187,13 @@ export default function PopupEditorPage() {
         showToast(msg, 'error')
         return
       }
+      if (!formStoreId && currentStore?.id) setFormStoreId(currentStore.id)
       showToast(newStatus === 'published' ? 'Popup ativado' : 'Popup pausado', 'success')
     } catch {
       setFormStatus(prevStatus)
       showToast('Não foi possível atualizar o status — tente novamente', 'error')
     } finally { setPublishing(false) }
-  }, [formId, design, formStatus, currentStore?.id, designLoaded, publishing, showToast])
+  }, [formId, design, formStatus, currentStore?.id, formStoreId, designLoaded, publishing, dirty, handleSave, showToast])
 
   const updateBlocks = (blocks: Block[]) => {
     commitDesign(d => {
@@ -4233,8 +4277,12 @@ export default function PopupEditorPage() {
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo() }
-      if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); handleSave() }
+      const key = e.key.toLowerCase()
+      const t = e.target as HTMLElement | null
+      const typing = !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)
+      // Dentro de um campo, Ctrl+Z é o desfazer do próprio campo.
+      if ((e.metaKey || e.ctrlKey) && key === 'z' && !typing) { e.preventDefault(); e.shiftKey ? redo() : undo() }
+      if ((e.metaKey || e.ctrlKey) && key === 's') { e.preventDefault(); handleSave() }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
@@ -4416,11 +4464,11 @@ export default function PopupEditorPage() {
       {abParent && (
         <div className="flex items-center justify-between gap-3 px-4 py-2 bg-violet-50 border-b border-violet-200 text-[12px] text-violet-900">
           <span>Você está editando a <strong>variante {abParent.label}</strong> de <strong>{abParent.name || 'um popup'}</strong>. Ela só aparece na loja pela fatia do experimento — as regras de exibição e o cupom são os do popup principal.</span>
-          <button onClick={() => router.push(`/popup-editor/${abParent.id}`)} className="flex-shrink-0 font-semibold underline underline-offset-2 hover:text-violet-700">Voltar ao popup principal</button>
+          <button onClick={() => { if (!dirty || window.confirm('Você tem alterações não salvas. Sair mesmo assim?')) router.push(`/popup-editor/${abParent.id}`) }} className="flex-shrink-0 font-semibold underline underline-offset-2 hover:text-violet-700">Voltar ao popup principal</button>
         </div>
       )}
       {showExperiment && !abParent && (
-        <ExperimentDrawer formId={formId} formName={formName} formStatus={formStatus} dirty={dirty} onClose={() => setShowExperiment(false)} onOpenVariant={id => router.push(`/popup-editor/${id}`)} onApplied={() => { setShowExperiment(false); loadForm() }} />
+        <ExperimentDrawer formId={formId} formName={formName} formStatus={formStatus} dirty={dirty} onClose={() => setShowExperiment(false)} onOpenVariant={id => { if (!dirty || window.confirm('Você tem alterações não salvas. Sair mesmo assim?')) router.push(`/popup-editor/${id}`) }} onApplied={() => { setShowExperiment(false); loadForm() }} />
       )}
 
       <div className="flex flex-1 overflow-hidden">
@@ -4443,7 +4491,7 @@ export default function PopupEditorPage() {
                         'text-input': 'Campo de texto', 'date-input': 'Data',
                         dropdown: 'Dropdown', radio: 'Radio', checkbox: 'Checkbox',
                         'legal-consent': 'Consentimento', text: 'Texto', button: 'Botão', image: 'Imagem',
-                        spacer: 'Espaçador', line: 'Linha', coupon: 'Cupom', countdown: 'Contagem',
+                        spacer: 'Espaçador', line: 'Linha', coupon: 'Cupom', countdown: 'Contagem', wheel: 'Roleta', scratch: 'Raspadinha',
                       }
                       return labels[selectedBlock.type] || selectedBlock.type
                     })()}
@@ -4714,7 +4762,7 @@ export default function PopupEditorPage() {
             onCloneStep={i => {
               const step = design.steps[i]
               if (!step) return
-              const clone: Step = { ...step, id: uid(), name: `${step.name} (cópia)`, blocks: JSON.parse(JSON.stringify(step.blocks)) }
+              const clone: Step = { ...step, id: uid(), name: `${step.name} (cópia)`, blocks: (JSON.parse(JSON.stringify(step.blocks)) as Block[]).map(b => ({ ...b, id: uid() })) }
               commitDesign(d => { const next = [...d.steps]; next.splice(i + 1, 0, clone); return { ...d, steps: next } })
               setActiveStepIdx(i + 1)
             }}
@@ -4733,7 +4781,7 @@ export default function PopupEditorPage() {
 
       {/* Preview Mode Overlay */}
       {showPreview && (
-        <div className="fixed inset-0 z-50 flex flex-col">
+        <div className="fixed inset-0 z-50 flex flex-col" role="dialog" aria-modal="true" aria-label="Visualização do popup" onKeyDown={e => { if (e.key === 'Escape') setShowPreview(false) }}>
           {/* Preview toolbar */}
           <div className="flex items-center justify-between px-6 py-3 bg-gray-900 shrink-0">
             <span className="text-sm font-medium text-white">Preview Mode</span>
@@ -4747,7 +4795,7 @@ export default function PopupEditorPage() {
                 </button>
               </div>
             </div>
-            <button onClick={() => setShowPreview(false)} className="flex items-center gap-2 px-4 py-1.5 bg-white text-gray-900 rounded-lg text-sm font-medium hover:bg-gray-100">
+            <button autoFocus onClick={() => setShowPreview(false)} className="flex items-center gap-2 px-4 py-1.5 bg-white text-gray-900 rounded-lg text-sm font-medium hover:bg-gray-100">
               <X className="w-4 h-4" /> Fechar Preview
             </button>
           </div>
@@ -4783,7 +4831,7 @@ export default function PopupEditorPage() {
                   </div>
                 )}
                 <div style={{ backgroundColor: s.backgroundColor, paddingTop: s.paddingTop ?? s.padding ?? 32, paddingRight: s.paddingRight ?? s.padding ?? 32, paddingBottom: s.paddingBottom ?? s.padding ?? 32, paddingLeft: s.paddingLeft ?? s.padding ?? 32, fontFamily: s.fontFamily, flex: 1, flexBasis: 0, minWidth: 0, minHeight: (isBannerFt || isFlyoutFt) ? undefined : (s.minHeight ?? 500), display: 'flex', flexDirection: 'column', justifyContent: contentVCenter ? 'center' : 'flex-start' }}>
-                  {activeStep.blocks.map(block => <BlockPreview key={block.id} block={block} offerLabel={previewOfferLabel} prizeLabel={previewPrizeLabel} />)}
+                  {activeStep.blocks.filter(b => previewDevice === 'mobile' ? !b.props?.hideOnMobile : !b.props?.hideOnDesktop).map(block => <BlockPreview key={block.id} block={block} offerLabel={previewOfferLabel} prizeLabel={previewPrizeLabel} />)}
                 </div>
                 {s.sideImage.enabled && s.sideImage.position === 'right' && s.sideImage.src && sideAllowed && (
                   <div style={{ flex: 1, flexBasis: 0, minWidth: 0 }} className="overflow-hidden">

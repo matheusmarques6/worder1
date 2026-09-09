@@ -619,7 +619,10 @@ if(utmCfg.filterEnabled&&utmCfg.filters&&utmCfg.filters.length>0){
 // Page view count (R8): bump ONCE per pageview globally — N popups on the
 // page used to inflate the counter by N.
 function incPv(){
-  var n=parseInt(sessionStorage.getItem("_wf_pv")||"0",10);
+  // Com "bloquear todos os cookies" o getItem lança: sem o try, o bundle
+  // inteiro morria antes de qualquer popup rodar.
+  var n=0;
+  try{n=parseInt(sessionStorage.getItem("_wf_pv")||"0",10)||0}catch(e){n=0}
   if(!window.__wf_pv_bumped){
     window.__wf_pv_bumped=true;
     n=n+1;
@@ -916,8 +919,8 @@ function renderBlock(b){
       var scid=bid(b.id),SW=Math.max(160,Math.min(480,nv(p.width,300))),SH=Math.max(80,Math.min(320,nv(p.height,150)));
       h='<div data-game="scratch" data-game-id="'+scid+'" style="'+blockStyleStr(p,true,true)+'text-align:center">'
         +'<div id="wf-scr-'+scid+'" style="position:relative;display:inline-block;width:'+SW+'px;max-width:100%;height:'+SH+'px;border-radius:'+nv(p.cardRadius,12)+'px;overflow:hidden;background:'+sv(p.prizeBg,"#FFF7ED")+';box-shadow:0 4px 14px rgba(0,0,0,.12)">'
-        +'<div id="wf-scr-p-'+scid+'" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:12px;font-size:'+nv(p.prizeSize,24)+'px;font-weight:800;color:'+sv(p.prizeColor,"#F97316")+';text-align:center;line-height:1.2">?</div>'
-        +'<canvas id="wf-scr-c-'+scid+'" width="'+SW+'" height="'+SH+'" aria-hidden="true" style="position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:not-allowed"></canvas>'
+        +'<div id="wf-scr-p-'+scid+'" style="position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;padding:12px;font-size:'+nv(p.prizeSize,24)+'px;font-weight:800;color:'+sv(p.prizeColor,"#F97316")+';text-align:center;line-height:1.2">?</div>'
+        +'<canvas id="wf-scr-c-'+scid+'" width="'+SW+'" height="'+SH+'" aria-hidden="true" style="position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;touch-action:none;cursor:not-allowed"></canvas>'
         +'</div>'
         +'<div id="wf-scr-h-'+scid+'" style="display:none;margin-top:8px;font-size:12px;color:#6B7280"><a href="#" style="color:inherit;text-decoration:underline">'+esc(p.revealText||"Revelar pr\\u00eamio")+'</a></div>'
         +gameBtn(p,"Raspar")+'</div>';
@@ -945,7 +948,8 @@ function renderBlock(b){
             var eh=$(cdId+"_h");if(eh)eh.textContent=String(hh).padStart(2,"0");
             var em=$(cdId+"_m");if(em)em.textContent=String(mm).padStart(2,"0");
             var es=$(cdId+"_s");if(es)es.textContent=String(ss).padStart(2,"0");
-            if(diff>0)setTimeout(tick,1000);
+            // Popup fechado: os elementos somem e o tique para.
+            if(diff>0&&ed)setTimeout(tick,1000);
           }
           tick();
         },100);
@@ -1037,9 +1041,9 @@ function show(){
   } else if(formType==="banner"){
     ovStyle+="top:0;left:0;right:0;bottom:auto;display:flex;justify-content:center;background:transparent;";
   } else if(formType==="fullpage"){
-    ovStyle+="inset:0;display:flex;align-items:center;justify-content:center;background:"+(ovOn?ovBgStr:sv(st.backgroundColor,"#fff"))+";";
+    ovStyle+="top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;background:"+(ovOn?ovBgStr:sv(st.backgroundColor,"#fff"))+";";
   } else {
-    ovStyle+="inset:0;display:flex;align-items:center;justify-content:center;background:"+ovBgStr+";";
+    ovStyle+="top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;background:"+ovBgStr+";";
   }
   ov.style.cssText=ovStyle;
   var cox=B.clickOutsideClose||{desktop:true,mobile:true};
@@ -1123,11 +1127,16 @@ function show(){
     sideEl.style.display=hasSideAt(mob())?"block":"none";
   }
   if(isEmbed){
-    if(!embedHost){shown=false;regState("blocked");blockedBy("embed container [data-worder-form] missing");return}
+    if(!embedHost){shown=false;regState("blocked");blockedBy("embed container [data-worder-form] missing");if(_cleanupSize){_cleanupSize();_cleanupSize=null}return}
     embedHost.innerHTML="";
     mountRoot(embedHost).appendChild(pop);
   } else {
-    pop.setAttribute("role","dialog");pop.setAttribute("aria-modal","true");pop.setAttribute("aria-label",FNAME||"Popup");
+    // Banner e flyout convivem com a página: marcá-los como modal prendia
+    // o Tab dentro deles e roubava o foco de quem estava navegando.
+    var isModal=formType==="popup"||formType==="fullpage";
+    pop.setAttribute("role",isModal?"dialog":"region");
+    if(isModal)pop.setAttribute("aria-modal","true");
+    pop.setAttribute("aria-label",FNAME||"Popup");
     ov.appendChild(pop);
     mountRoot(document.body).appendChild(ov);
     // Teclado: ESC fecha, Tab circula dentro do popup, e o foco volta para
@@ -1135,7 +1144,7 @@ function show(){
     _prevFocus=document.activeElement;
     _keyHandler=function(e){
       if(e.key==="Escape"){e.preventDefault();close(true);return}
-      if(e.key!=="Tab")return;
+      if(e.key!=="Tab"||!isModal)return;
       var fs=focusables();if(!fs.length)return;
       var first=fs[0],last=fs[fs.length-1],cur=(ROOT&&ROOT.activeElement)||document.activeElement;
       if(e.shiftKey&&cur===first){e.preventDefault();last.focus()}
@@ -1472,7 +1481,9 @@ function show(){
     }catch(err){}
     var act=postSubmit.action||"show-success";
     // R7: redirect target must pass the scheme whitelist, else the action drops.
-    var redirectUrl=safeUrl((res&&res.redirect_url)||postSubmit.redirectUrl||"");
+    // O que o editor configurou vence a coluna legada redirect_url (que só
+    // a tela de formulários clássicos edita e costuma estar desatualizada).
+    var redirectUrl=safeUrl(postSubmit.redirectUrl||(res&&res.redirect_url)||"");
     // Inscrição e cupom valem para QUALQUER ação pós-envio: quem redireciona
     // para o carrinho é justamente quem mais precisa do auto-apply.
     wfEmit("signup",{
@@ -1513,12 +1524,23 @@ function show(){
       window.location.href=redirectUrl;
       return;
     }
-    if(act==="close"){
+    if(act==="close"&&!isEmbed){
       close(false);
       return;
     }
     // R10: success content carries the same vertical-centering wrapper.
     content.innerHTML='<div id="wf-succ-'+FID+'" style="margin:auto 0;width:100%">'+renderStep(-1)+'</div>';
+    if(res&&res.whatsapp_optin_sent){
+      var wan=document.createElement("div");
+      wan.style.cssText="margin:0 0 12px;padding:12px 14px;background:#ECFDF5;border:1px solid #A7F3D0;border-radius:8px;font-size:13px;color:#065F46;line-height:1.45;text-align:center;";
+      var waMsg=D.whatsappOptInMessage||B.whatsappOptInMessage||"";
+      if(waMsg){wan.textContent=String(waMsg)}
+      else{wan.innerHTML="<strong>Confirme no WhatsApp.</strong> Mandamos uma mensagem para voc\\u00ea responder e liberar as novidades por l\\u00e1."}
+      var wsw=$("wf-succ-"+FID);
+      if(wsw&&wsw.firstChild)wsw.insertBefore(wan,wsw.firstChild);
+      else if(wsw)wsw.appendChild(wan);
+      else content.insertBefore(wan,content.firstChild);
+    }
     if(res&&res.double_optin_sent){
       // S9: attach the DOI notice to the success container (the old lookup
       // targeted a form id that no longer exists after the success render).
@@ -1532,8 +1554,10 @@ function show(){
       else if(sw)sw.appendChild(doi);
       else content.insertBefore(doi,content.firstChild);
     }
+    // O embed vive dentro da página do lojista: sumir com ele deixaria um
+    // buraco onde estava o formulário.
     var delay=postSubmit.closeDelay!=null?nv(postSubmit.closeDelay,4):4;
-    if(delay>0)setTimeout(function(){close(false)},delay*1000);
+    if(delay>0&&!isEmbed)setTimeout(function(){close(false)},delay*1000);
     }
     // Jogo: o servidor já sorteou. A roleta gira (ou a raspadinha abre) até
     // o prêmio, e só então entra a etapa de sucesso — que pode mostrar

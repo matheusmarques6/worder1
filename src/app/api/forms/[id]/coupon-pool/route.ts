@@ -53,7 +53,7 @@ async function ownedForm(orgId: string, formId: string) {
   const admin = getSupabaseAdmin()
   const { data } = await admin
     .from('crm_forms')
-    .select('id, organization_id, store_id, name, design_json')
+    .select('id, organization_id, store_id, name, status, design_json')
     .eq('id', formId)
     .eq('organization_id', orgId)
     .maybeSingle()

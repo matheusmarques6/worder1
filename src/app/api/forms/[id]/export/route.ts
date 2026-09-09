@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthClient, authError } from '@/lib/api-utils'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
+import { safeTz, startOfDayInTz } from '@/lib/popups/period'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
@@ -36,7 +37,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const days = clampDays(searchParams.get('days'))
   const kind = searchParams.get('kind') === 'daily' ? 'daily' : 'submissions'
   const tzRaw = String(searchParams.get('tz') || '')
-  const tz = /^[A-Za-z_]+(?:\/[A-Za-z0-9_+-]+){0,3}$/.test(tzRaw) && tzRaw.length <= 64 ? tzRaw : 'America/Sao_Paulo'
+  const tz = safeTz(tzRaw)
 
   const { data: form } = await admin.from('crm_forms').select('id, name').eq('id', params.id).eq('organization_id', orgId).maybeSingle()
   if (!form) return NextResponse.json({ error: 'Popup não encontrado' }, { status: 404 })
@@ -51,7 +52,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     return new NextResponse('﻿' + lines.join('\n'), { headers: { ...headers, 'Content-Disposition': `attachment; filename="${slug}-por-dia-${days}d.csv"` } })
   }
 
-  const since = new Date(Date.now() - days * 86400000).toISOString()
+  // Mesma janela do analytics: N dias de calendário no fuso do lojista.
+  const since = startOfDayInTz(days, tz).toISOString()
   const fixed = ['created_at', 'email', 'phone', 'first_name', 'last_name', 'device', 'country', 'traffic_type', 'page_kind', 'page_url', 'coupon_code', 'reward_tier', 'intent', 'offer_bucket', 'offer_tier', 'game_prize', 'variant_id', 'propensity_score', 'converted_at', 'conversion_value', 'converted_order_id']
   const rows: any[] = []
   const PAGE = 1000

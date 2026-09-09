@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthClient, authError } from '@/lib/api-utils'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
+import { safeTz } from '@/lib/popups/period'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,13 +42,15 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const days = clampDays(searchParams.get('days'))
   const storeId = searchParams.get('storeId') || searchParams.get('store_id')
+  // Mesmos dias de calendário do analytics: janela no fuso do lojista.
+  const tz = safeTz(searchParams.get('tz'))
 
   const admin = getSupabaseAdmin()
 
   // A função só devolve formulários da org; o filtro de loja é o mesmo da
   // lista (loja do popup ou popup sem loja).
   const [{ data: rows, error }, { data: forms }] = await Promise.all([
-    admin.rpc('popup_forms_summary', { p_organization_id: orgId, p_days: days }),
+    admin.rpc('popup_forms_summary', { p_organization_id: orgId, p_days: days, p_tz: tz }),
     admin.from('crm_forms').select('id, store_id').eq('organization_id', orgId),
   ])
 

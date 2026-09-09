@@ -153,7 +153,8 @@ describe('buildPopupScript (generated string)', () => {
     expect(js).toContain('sv(p.bgColor,"#F97316")')
     expect(js).toContain('safeUrl(p.url)')
     expect(js).toContain('safeUrl(btn.dataset.url)')
-    expect(js).toContain('safeUrl((res&&res.redirect_url)||postSubmit.redirectUrl||"")')
+    // O destino do editor vence a coluna legada redirect_url.
+    expect(js).toContain('safeUrl(postSubmit.redirectUrl||(res&&res.redirect_url)||"")')
     expect(js).toContain('legalHtml(')
   })
 

@@ -137,6 +137,7 @@ export default function SiteFormsPage() {
       if (currentStore?.id) params.set('storeId', currentStore.id)
       const statsParams = new URLSearchParams(params)
       statsParams.set('days', String(days))
+      try { statsParams.set('tz', Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Sao_Paulo') } catch { statsParams.set('tz', 'America/Sao_Paulo') }
       const [listRes, statsRes] = await Promise.all([
         fetch(`/api/forms?${params}`, { cache: 'no-store' }),
         fetch(`/api/forms/stats?${statsParams}`, { cache: 'no-store' }),
@@ -228,6 +229,8 @@ export default function SiteFormsPage() {
       }
       setShowCreate(false)
       router.push(`/popup-editor/${data.form.id}`)
+    } catch (e: any) {
+      toast.error('Não foi possível criar o popup', e?.message || 'Falha de rede. Tente novamente.')
     } finally {
       setCreating(false)
     }
@@ -240,7 +243,10 @@ export default function SiteFormsPage() {
       const res = await fetch(`/api/forms/${f.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: next, ...(currentStore?.id ? { store_id: currentStore.id } : {}) }),
+        // A loja só vai junto ao publicar um popup que ainda não tem loja
+        // (o cupom único precisa dela). Pausar não pode rebindar um popup
+        // global para a loja de onde o lojista clicou.
+        body: JSON.stringify({ status: next, ...(next === 'published' && !f.store_id && currentStore?.id ? { store_id: currentStore.id } : {}) }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
@@ -304,6 +310,8 @@ export default function SiteFormsPage() {
       }
       setForms((prev) => prev.filter((x) => x.id !== f.id))
       toast.success('Popup excluído')
+    } catch (e: any) {
+      toast.error('Não foi possível excluir', e?.message || 'Falha de rede. Tente novamente.')
     } finally {
       setBusyId(null)
     }
