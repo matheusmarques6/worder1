@@ -55,16 +55,19 @@ export async function POST(req: NextRequest) {
   if (campaignId) {
     const { data: camp } = await supabaseAdmin
       .from('email_campaigns')
-      .select('id, name, subject, preheader, html, organization_id, store_id, settings')
+      .select('id, name, subject, preview_text, html_content, organization_id, store_id, settings')
       .eq('id', campaignId)
       .eq('organization_id', auth.user.organization_id)
       .maybeSingle()
     if (!camp) {
       return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
     }
-    finalHtml = camp.html || rawHtml || ''
+    // As colunas são html_content e preview_text; pedir `html` e
+    // `preheader` fazia o PostgREST recusar a consulta inteira, e a
+    // prévia caía no que o corpo da requisição trouxesse.
+    finalHtml = camp.html_content || rawHtml || ''
     finalSubject = camp.subject || subject || ''
-    finalPreheader = camp.preheader || preheader || ''
+    finalPreheader = camp.preview_text || preheader || ''
     campaignStoreId = camp.store_id || null
     campaignName = camp.name || null
     campaignUtmRaw = (camp as any).settings?.utm ?? null

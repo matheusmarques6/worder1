@@ -1989,12 +1989,28 @@ const actionExecutors: Record<string, NodeExecutor> = {
         return { status: 'error', output: null, error: 'Nenhuma lista selecionada no nó' };
       }
       try {
+        // A lista tem de ser desta organização. O id vem da configuração
+        // do nó, que o lojista edita: um uuid copiado de outro inquilino
+        // colocaria o contato na lista dele.
+        const { data: lista } = await supabase
+          .from('contact_lists')
+          .select('id')
+          .eq('id', config.listId)
+          .eq('organization_id', organizationId)
+          .maybeSingle();
+        if (!lista) {
+          return { status: 'error', output: null, error: 'A lista escolhida não é desta organização' };
+        }
         // Supabase não lança — sem checar o error, FK quebrada ou lista
         // apagada viravam "success" sem gravar nada.
+        //
+        // A tabela não tem organization_id: o vínculo com a organização
+        // vem da lista (é assim que o RLS dela funciona). Mandar a coluna
+        // fazia o PostgREST recusar a linha inteira — ninguém entrava em
+        // lista nenhuma por automação.
         const { error } = await supabase.from('contact_list_members').upsert({
           list_id: config.listId,
           contact_id: contactId,
-          organization_id: organizationId,
         }, { onConflict: 'list_id,contact_id' });
         if (error) {
           return { status: 'error', output: null, error: `Falha ao adicionar à lista: ${error.message}` };
