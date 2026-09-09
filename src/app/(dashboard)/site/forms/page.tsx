@@ -15,6 +15,7 @@ import {
   ArrowLeft, Plus, MagnifyingGlass, Eye, PencilSimple, Trash, Copy, ChartLineUp,
   FileText, Layout, ChatCircle, Desktop, Megaphone, Power, X, WarningCircle,
   Gift, ShoppingCart, WhatsappLogo, EnvelopeSimple, Lightning, UserPlus,
+  Confetti, Ticket, Question,
 } from '@phosphor-icons/react'
 import { useToast } from '@/components/ui/Toast'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
@@ -92,6 +93,9 @@ const templateIcon: Record<string, React.ComponentType<any>> = {
   'newsletter-embed': EnvelopeSimple,
   'promo-banner': Lightning,
   'launch-fullpage': UserPlus,
+  'quiz-reward': Question,
+  'spin-to-win': Confetti,
+  'scratch-card': Ticket,
   blank: FileText,
 }
 

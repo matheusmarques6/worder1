@@ -1249,8 +1249,9 @@ export async function POST(
       try {
         let storeName: string | null = null
         if ((form as any).store_id) {
-          const { data: st } = await supabase.from('shopify_stores').select('name').eq('id', (form as any).store_id).maybeSingle()
-          storeName = (st as any)?.name || null
+          // A coluna é shop_name — 'name' não existe e a consulta falhava em silêncio.
+          const { data: st } = await supabase.from('shopify_stores').select('shop_name').eq('id', (form as any).store_id).maybeSingle()
+          storeName = (st as any)?.shop_name || null
         }
         const r = await startWhatsAppDoubleOptIn(supabase, {
           organizationId: form.organization_id,
@@ -1580,6 +1581,80 @@ export async function POST(
       }
     } catch (e: any) {
       console.warn('[Form Submit] coupon issuance errored:', e?.message)
+    }
+
+    // 8.6. Webhooks de saída (popup.signup / popup.reward) para quem assinou
+    // na loja do popup. Sem loja não há assinatura possível. Só enfileira:
+    // a entrega tem retry próprio. Falha aqui não derruba a inscrição.
+    if (form.store_id) {
+      try {
+        const { data: storeRow } = await supabase.from('shopify_stores').select('id, shop_domain, shop_name').eq('id', form.store_id).eq('organization_id', form.organization_id).maybeSingle()
+        if (storeRow?.shop_domain) {
+          const { dispatchToOutbound } = await import('@/lib/webhooks/outbound-dispatcher')
+          const storeInfo = { id: String(storeRow.id), shop_domain: String(storeRow.shop_domain), name: String((storeRow as any).shop_name || storeRow.shop_domain) }
+          const cleanAnswers: Record<string, any> = {}
+          for (const [k, v] of Object.entries(answers || {})) {
+            if (k === '_wf_hp' || k === 'consent' || k.startsWith('consent__')) continue
+            cleanAnswers[k] = v
+          }
+          // Mesma leitura por canal que vai na resposta ao runtime.
+          const consentOut = {
+            email: !contactData.email ? null : marketingConsentDenied ? 'denied' : doubleOptInEnabled ? 'pending' : 'granted',
+            whatsapp: !contactPhone || !whatsappDecision ? null : !whatsappDecision.checked ? 'denied' : whatsappDoubleOptIn && !whatsappAlreadyOptedIn ? 'pending' : 'granted',
+            sms: !contactPhone || !smsDecision ? null : (smsDecision.checked ? 'granted' : 'denied'),
+          }
+          await dispatchToOutbound({
+            eventType: 'popup.signup',
+            organizationId: form.organization_id,
+            storeId: form.store_id,
+            sourceEventId: submission.id,
+            source: 'popup',
+            store: storeInfo,
+            data: {
+              submission_id: submission.id,
+              form_id: formId,
+              form_name: form.name || null,
+              contact_id: contactId,
+              email: contactData.email || null,
+              phone: contactPhone || null,
+              first_name: contactData.first_name || null,
+              last_name: contactData.last_name || null,
+              answers: cleanAnswers,
+              consent: consentOut,
+              device: submissionContext.device || null,
+              country: submissionContext.country || null,
+              page_url: submissionContext.page_url || null,
+              traffic_type: submissionContext.traffic_type || null,
+              page_kind: submissionContext.page_kind || null,
+              variant_id: submissionContext.variant_id || null,
+              utm: { source: utm_source || null, medium: utm_medium || null, campaign: utm_campaign || null, term: utm_term || null, content: utm_content || null },
+              created_at: new Date().toISOString(),
+            },
+          })
+          if (issuedCoupon) {
+            await dispatchToOutbound({
+              eventType: 'popup.reward',
+              organizationId: form.organization_id,
+              storeId: form.store_id,
+              sourceEventId: `${submission.id}:reward`,
+              source: 'popup',
+              store: storeInfo,
+              data: {
+                submission_id: submission.id,
+                form_id: formId,
+                form_name: form.name || null,
+                contact_id: contactId,
+                email: contactData.email || null,
+                coupon: { code: issuedCoupon.code, kind: issuedCoupon.kind, value: issuedCoupon.value, ends_at: issuedCoupon.ends_at, tier: issuedCoupon.tier, source: issuedCoupon.source },
+                game: gameResult ? { type: gameResult.type, segment: gameResult.segment, label: gameResult.label, prize: gameResult.prize } : null,
+                created_at: new Date().toISOString(),
+              },
+            })
+          }
+        }
+      } catch (e: any) {
+        console.warn('[Form Submit] outbound webhook dispatch failed:', e?.message)
+      }
     }
 
     if (stepPath.length) submissionPatch.step_path = stepPath

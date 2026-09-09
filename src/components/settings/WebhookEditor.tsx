@@ -17,6 +17,7 @@ export const WEBHOOK_EVENT_GROUPS: Array<{ label: string; events: Array<[string,
   { label: 'Checkout e pagamento', events: [['checkout.abandoned', 'Checkout abandonado'], ['payment.pix.abandoned', 'Pix não pago'], ['payment.boleto.abandoned', 'Boleto não pago']] },
   { label: 'Cliente e comportamento', events: [['customer.created', 'Cliente criado'], ['browse.abandoned', 'Navegação abandonada']] },
   { label: 'Logística', events: [['shipment.tracking_created', 'Rastreio criado']] },
+  { label: 'Popups', events: [['popup.signup', 'Inscrição no popup'], ['popup.reward', 'Cupom emitido pelo popup']] },
 ]
 
 export default function WebhookEditor({ initial }: { initial?: WebhookSub }) {

@@ -13,7 +13,7 @@ export interface PopupTemplate {
   id: string
   name: string
   formType: PopupFormType
-  category: 'capture' | 'recovery' | 'whatsapp' | 'promo' | 'launch' | 'blank'
+  category: 'capture' | 'recovery' | 'whatsapp' | 'promo' | 'launch' | 'game' | 'blank'
   description: string
   /** design_json completo; vazio = o editor usa o padrão. */
   design: Record<string, any>
@@ -52,6 +52,20 @@ const coupon = (id: string, over: Record<string, any> = {}) => ({
   },
 })
 const spacer = (id: string, height = 8) => ({ id, type: 'spacer', props: { height } })
+const radio = (id: string, label: string, options: string[], over: Record<string, any> = {}) => ({
+  id, type: 'radio',
+  props: { label, options, layout: 'vertical', showLabel: true, required: true, mapTo: 'custom', mapToCustom: label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/(^_|_$)/g, '').slice(0, 30), ...over },
+})
+// Jogos: cada segmento aponta para a oferta do bloco de cupom (base, um
+// nível progressivo pelo id, ou nada). O sorteio é do servidor.
+const wheel = (id: string, segments: any[], over: Record<string, any> = {}) => ({
+  id, type: 'wheel',
+  props: { segments, buttonText: 'Girar a roleta', size: 280, labelSize: 12, labelColor: '#FFFFFF', strokeColor: '#FFFFFF', pointerColor: '#111827', bgColor: '#111827', textColor: '#FFFFFF', fontSize: 15, borderRadius: 8, fullWidth: true, ...over },
+})
+const scratch = (id: string, segments: any[], over: Record<string, any> = {}) => ({
+  id, type: 'scratch',
+  props: { segments, buttonText: 'Raspar', width: 300, height: 150, coverColor: '#9CA3AF', coverText: 'Raspe aqui', coverTextColor: '#FFFFFF', prizeBg: '#FFF7ED', prizeColor: '#F97316', prizeSize: 24, cardRadius: 12, bgColor: '#111827', textColor: '#FFFFFF', fontSize: 15, borderRadius: 8, fullWidth: true, ...over },
+})
 
 const baseStyles = {
   width: 480, minHeight: 420, backgroundColor: '#FFFFFF', borderRadius: 16, padding: 32, fontFamily: 'Inter, sans-serif',
@@ -213,6 +227,94 @@ export const POPUP_TEMPLATES: PopupTemplate[] = [
     ),
   },
   {
+    id: 'quiz-reward',
+    name: 'Quiz com recompensa',
+    formType: 'popup',
+    category: 'capture',
+    description: 'Uma pergunta antes do e-mail. Quem responde ganha um nível a mais de desconto — e a resposta vira dado do contato.',
+    design: design('popup',
+      [
+        [
+          text('t1', 'Qual é o seu objetivo?'),
+          sub('t2', 'Uma pergunta rápida e o desconto sobe.'),
+          spacer('sp1'),
+          radio('q1', 'Objetivo', ['Hidratar', 'Controlar oleosidade', 'Reduzir manchas', 'Prevenir sinais']),
+          button('b1', 'Continuar', { action: 'next-step' }),
+        ],
+        [
+          text('t3', 'Seu desconto está pronto'),
+          sub('t4', 'Deixe o e-mail para receber o cupom de 15%.'),
+          spacer('sp2'),
+          email('e1'),
+          consent('c1', ['email'], EMAIL_CONSENT),
+          button('b2', 'Quero 15% OFF'),
+        ],
+      ],
+      [
+        text('s1', 'Pronto! 15% na primeira compra'),
+        sub('s2', 'Já está aplicado no seu carrinho e vale por 7 dias.'),
+        coupon('k1', { code: 'QUIZ15', codePrefix: 'QUIZ', tiers: [{ id: 't-quiz', label: '15% por responder o quiz', afterStepId: 'step-2', discountType: 'percentage', discountValue: 15, code: 'QUIZ15' }] }),
+      ],
+    ),
+  },
+  {
+    id: 'spin-to-win',
+    name: 'Roleta de prêmios',
+    formType: 'popup',
+    category: 'game',
+    description: 'E-mail para girar. O servidor sorteia entre 10%, frete grátis e "tente de novo"; a roleta para no prêmio.',
+    design: design('popup',
+      [[
+        text('t1', 'Gire e ganhe'),
+        sub('t2', 'Deixe seu e-mail e gire a roleta. Todo mundo tem chance.'),
+        spacer('sp1'),
+        email('e1'),
+        consent('c1', ['email'], EMAIL_CONSENT),
+        wheel('w1', [
+          { id: 's1', label: '10% OFF', prize: 'base', weight: 35, color: '#F97316' },
+          { id: 's2', label: 'Quase!', prize: 'none', weight: 15, color: '#111827' },
+          { id: 's3', label: 'Frete grátis', prize: 't-frete', weight: 15, color: '#FDBA74' },
+          { id: 's4', label: '10% OFF', prize: 'base', weight: 20, color: '#374151' },
+          { id: 's5', label: 'Tente de novo', prize: 'none', weight: 5, color: '#FB923C' },
+          { id: 's6', label: '10% OFF', prize: 'base', weight: 10, color: '#1F2937' },
+        ]),
+      ]],
+      [
+        text('s1', 'Você ganhou {{prize}}'),
+        sub('s2', 'Seu cupom já está no carrinho e vale por 7 dias.'),
+        coupon('k1', { code: 'ROLETA10', codePrefix: 'ROLETA', tiers: [{ id: 't-frete', label: 'Frete grátis', afterStepId: '', discountType: 'free_shipping', discountValue: 0, code: 'FRETEGRATIS' }] }),
+      ],
+      { styles: { width: 460, minHeight: 0 } },
+    ),
+  },
+  {
+    id: 'scratch-card',
+    name: 'Raspadinha',
+    formType: 'popup',
+    category: 'game',
+    description: 'E-mail para raspar. Revela o prêmio sorteado no servidor — no celular, com o dedo.',
+    design: design('popup',
+      [[
+        text('t1', 'Raspe e descubra seu desconto'),
+        sub('t2', 'Deixe seu e-mail para liberar a raspadinha.'),
+        spacer('sp1'),
+        email('e1'),
+        consent('c1', ['email'], EMAIL_CONSENT),
+        scratch('sc1', [
+          { id: 's1', label: '10% OFF', prize: 'base', weight: 70, color: '#F97316' },
+          { id: 's2', label: 'Frete grátis', prize: 't-frete', weight: 20, color: '#FDBA74' },
+          { id: 's3', label: 'Não foi dessa vez', prize: 'none', weight: 10, color: '#111827' },
+        ]),
+      ]],
+      [
+        text('s1', 'Você ganhou {{prize}}'),
+        sub('s2', 'Seu cupom já está no carrinho e vale por 7 dias.'),
+        coupon('k1', { code: 'RASPOU10', codePrefix: 'RASPOU', tiers: [{ id: 't-frete', label: 'Frete grátis', afterStepId: '', discountType: 'free_shipping', discountValue: 0, code: 'FRETEGRATIS' }] }),
+      ],
+      { styles: { width: 460, minHeight: 0 } },
+    ),
+  },
+  {
     id: 'blank',
     name: 'Em branco',
     formType: 'popup',
@@ -229,6 +331,7 @@ export const TEMPLATE_CATEGORIES: Array<{ id: PopupTemplate['category'] | 'all';
   { id: 'whatsapp', label: 'WhatsApp' },
   { id: 'promo', label: 'Promoção' },
   { id: 'launch', label: 'Lançamento' },
+  { id: 'game', label: 'Jogos' },
 ]
 
 export function findTemplate(id: string): PopupTemplate | undefined {

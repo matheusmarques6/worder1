@@ -91,11 +91,12 @@ export default function FormAnalyticsPage() {
   const currency = currentStore?.currency
   const money = (v: number) => formatCurrency(v, currency)
 
+  // Fuso do navegador: a série diária e o CSV quebram os dias por ele.
+  const tz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Sao_Paulo' } catch { return 'America/Sao_Paulo' } })()
+
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    let tz = 'America/Sao_Paulo'
-    try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || tz } catch {}
     fetch(`/api/forms/${formId}/analytics?days=${days}&tz=${encodeURIComponent(tz)}`, { cache: 'no-store' })
       .then(async (r) => {
         const d = await r.json().catch(() => ({}))
@@ -150,12 +151,23 @@ export default function FormAnalyticsPage() {
             </p>
           </div>
         </div>
-        <select value={days} onChange={(e) => setDays(Number(e.target.value))}
-          className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-700 focus:outline-none" aria-label="Período">
-          <option value={7}>Últimos 7 dias</option>
-          <option value={30}>Últimos 30 dias</option>
-          <option value={90}>Últimos 90 dias</option>
-        </select>
+        <div className="flex items-center gap-2">
+          {/* CSV do período: inscrições (quem, quando, cupom, prêmio, pedido) e a série diária. */}
+          <a href={`/api/forms/${formId}/export?kind=submissions&days=${days}&tz=${encodeURIComponent(tz)}`}
+            className="hidden sm:inline-flex items-center px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50" title="Baixar as inscrições do período em CSV">
+            Exportar inscrições
+          </a>
+          <a href={`/api/forms/${formId}/export?kind=daily&days=${days}&tz=${encodeURIComponent(tz)}`}
+            className="hidden sm:inline-flex items-center px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50" title="Baixar a série diária em CSV">
+            Exportar por dia
+          </a>
+          <select value={days} onChange={(e) => setDays(Number(e.target.value))}
+            className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-700 focus:outline-none" aria-label="Período">
+            <option value={7}>Últimos 7 dias</option>
+            <option value={30}>Últimos 30 dias</option>
+            <option value={90}>Últimos 90 dias</option>
+          </select>
+        </div>
       </div>
 
       {data.missing_migration && (

@@ -2681,6 +2681,78 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
 }
 
 // ── Behavior Panel ─────────────────────────────────────────────────────────────
+// Aplica o patch de regras (vindo da IA) por cima do behavior atual: cada
+// grupo funde com o que já existe, e cart.contains funde um nível a mais.
+function mergeBehaviorPatch(beh: PopupDesign['behavior'], patch: Record<string, any>): PopupDesign['behavior'] {
+  const out: any = { ...beh }
+  for (const [k, v] of Object.entries(patch || {})) {
+    if (!v || typeof v !== 'object') continue
+    const cur = (out[k] && typeof out[k] === 'object') ? out[k] : {}
+    if (k === 'cart' && v.contains && typeof v.contains === 'object') {
+      out[k] = { ...cur, ...v, contains: { ...(cur.contains || {}), ...v.contains } }
+    } else {
+      out[k] = { ...cur, ...v }
+    }
+  }
+  return out
+}
+
+// "Descreva quem deve ver" → o servidor pede ao modelo um patch de regras,
+// devolve o resumo do que entendeu e o que não dá para fazer. Nada é salvo
+// até o lojista aplicar — e mesmo aí é só o design em memória.
+function AiTargetingBox({ formId, onApply }: { formId: string; onApply: (patch: Record<string, any>) => void }) {
+  const [prompt, setPrompt] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [result, setResult] = useState<{ patch: Record<string, any>; summary: string[]; unsupported: string[] } | null>(null)
+  const [applied, setApplied] = useState(false)
+  const ask = async () => {
+    if (!prompt.trim() || busy) return
+    setBusy(true); setError(null); setResult(null); setApplied(false)
+    try {
+      const r = await fetch(`/api/forms/${formId}/ai-targeting`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: prompt.trim() }) })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(d.error || 'Não foi possível gerar as regras')
+      setResult({ patch: d.patch || {}, summary: Array.isArray(d.summary) ? d.summary : [], unsupported: Array.isArray(d.unsupported) ? d.unsupported : [] })
+    } catch (e: any) { setError(e?.message || 'Não foi possível gerar as regras') }
+    finally { setBusy(false) }
+  }
+  const hasPatch = !!result && Object.keys(result.patch).length > 0
+  return (
+    <div className="space-y-2">
+      <p className="text-[11px] text-gray-500 leading-snug">Escreva em português quem deve ver este popup. Ex.: "só no celular, para quem chegou de anúncio, na página de produto, depois de 10 segundos, e nunca para inscritos".</p>
+      <textarea className={inp + ' resize-none'} rows={3} value={prompt} onChange={e => setPrompt(e.target.value.slice(0, 600))} placeholder="Quem deve ver e quando…"
+        onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') ask() }} />
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[10px] text-gray-400">{prompt.length}/600</span>
+        <button type="button" onClick={ask} disabled={busy || !prompt.trim()} className="px-3 py-1.5 text-[12px] font-semibold rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-40 inline-flex items-center gap-1.5">
+          {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}{busy ? 'Pensando…' : 'Sugerir regras'}
+        </button>
+      </div>
+      {error && <p className="text-[12px] text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
+      {result && (
+        <div className="rounded-lg border border-gray-200 p-3 space-y-2">
+          {result.summary.length > 0 ? (
+            <ul className="space-y-1">
+              {result.summary.map((line, i) => <li key={i} className="text-[12px] text-gray-800 flex gap-2"><span className="text-emerald-600 flex-shrink-0">✓</span><span>{line}</span></li>)}
+            </ul>
+          ) : <p className="text-[12px] text-gray-500">Não entendi uma regra aplicável nesse pedido.</p>}
+          {result.unsupported.length > 0 && (
+            <ul className="space-y-1 pt-1 border-t border-gray-100">
+              {result.unsupported.map((line, i) => <li key={i} className="text-[12px] text-amber-800 flex gap-2"><span className="flex-shrink-0">–</span><span>{line} <span className="text-gray-400">(não existe no produto)</span></span></li>)}
+            </ul>
+          )}
+          <div className="flex items-center justify-end gap-2 pt-1">
+            <button type="button" onClick={() => { setResult(null); setApplied(false) }} className="px-3 py-1.5 text-[12px] font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">Descartar</button>
+            <button type="button" disabled={!hasPatch || applied} onClick={() => { onApply(result.patch); setApplied(true) }} className="px-3 py-1.5 text-[12px] font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40">{applied ? 'Aplicado' : 'Aplicar regras'}</button>
+          </div>
+          {applied && <p className="text-[11px] text-gray-500">As seções abaixo já refletem as regras. Confira e salve o popup.</p>}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, successMessage, onSuccessMessageChange, errorMessage, onErrorMessageChange, trackingIds, onTrackingIdsChange }: {
   beh: PopupDesign['behavior']
   onChange: (b: PopupDesign['behavior']) => void
@@ -3141,6 +3213,9 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
         </div>
       ) : (
         <div>
+          <Section title="Descrever com IA" defaultOpen>
+            <AiTargetingBox formId={formId} onApply={patch => onChange(mergeBehaviorPatch(beh, patch))} />
+          </Section>
           <Section title="Visitantes" defaultOpen>
             <Field label="Quem deve ver o formulário">
               <select className={sel} value={vis.visitorType} onChange={e => setG('visibility', { visitorType: e.target.value as any })}>

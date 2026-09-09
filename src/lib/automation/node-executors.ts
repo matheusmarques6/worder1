@@ -2279,43 +2279,63 @@ const actionExecutors: Record<string, NodeExecutor> = {
 
   // Gerar cupom Shopify
   action_shopify_coupon: {
-    async execute({ config, context, credentials, isTest }) {
+    // Cupom de uso único via GraphQL (discountCodeBasicCreate /
+    // discountCodeFreeShippingCreate) — a REST price_rules que o serviço
+    // antigo usava está deprecada e não existe para apps novos. Cada
+    // código é o seu próprio desconto com usageLimit 1.
+    async execute({ config, context, credentials, isTest, organizationId }) {
+      const prefix = String(config.prefix || 'GIFT').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12) || 'GIFT';
       if (isTest) {
-        const code = (config.prefix || 'GIFT') + '-' + Math.random().toString(36).substr(2, 6).toUpperCase();
+        const code = prefix + '-' + Math.random().toString(36).substr(2, 6).toUpperCase();
         return { status: 'success', output: { code, test: true } };
       }
       try {
-        const { generateShopifyCoupon } = await import('@/lib/services/whatsapp/shopify-coupon-service');
+        const { createUniqueDiscount, generateCouponCode, isDuplicateCodeError } = await import('@/lib/coupons/shopify-discounts');
         // Sem credencial explícita, usa a loja da automação (o engine põe
-        // storeId no contexto) — antes o nó ia SEMPRE sem shopDomain/token.
-        let shopDomain: string | undefined = credentials?.shopDomain;
-        let accessToken: string | undefined = credentials?.accessToken;
-        if ((!shopDomain || !accessToken) && context.storeId) {
+        // storeId no contexto).
+        let store: { id: string; organization_id: string; shop_domain: string; access_token: string; currency?: string | null } | null = null;
+        if (credentials?.shopDomain && credentials?.accessToken) {
+          store = { id: context.storeId || '', organization_id: organizationId || context.organization_id || context.organizationId || '', shop_domain: credentials.shopDomain, access_token: credentials.accessToken, currency: null };
+        } else if (context.storeId) {
           const { supabaseAdmin } = await import('@/lib/supabase-admin');
-          const { data: store } = await supabaseAdmin
+          const { data: row } = await supabaseAdmin
             .from('shopify_stores')
-            .select('shop_domain, access_token')
+            .select('id, organization_id, shop_domain, access_token, currency')
             .eq('id', context.storeId)
             .eq('is_active', true)
             .maybeSingle();
-          shopDomain = shopDomain || store?.shop_domain;
-          accessToken = accessToken || store?.access_token;
+          if (row?.shop_domain && row?.access_token) store = row as any;
         }
-        if (!shopDomain || !accessToken) {
+        if (!store) {
           return { status: 'error', output: null, error: 'Sem loja Shopify conectada para gerar o cupom (automação sem loja e nó sem credencial)' };
         }
-        const result = await generateShopifyCoupon({
-          shopDomain,
-          accessToken,
-          discountType: config.discountType || 'percentage',
-          value: config.value || 10,
-          // O catálogo grava expiryDays; fluxos antigos, validityDays.
-          validityDays: config.validityDays || config.expiryDays || 7,
-          prefix: config.prefix || 'GIFT',
-          contactEmail: context.contact?.email,
-        });
-        if (result.error) return { status: 'error', output: null, error: result.error };
-        return { status: 'success', output: { code: result.data?.code } };
+        const kind = config.discountType === 'free_shipping' ? 'free_shipping'
+          : (config.discountType === 'fixed_amount' || config.discountType === 'fixed') ? 'fixed'
+          : 'percent';
+        const value = Math.max(0, Number(config.value) || (kind === 'percent' ? 10 : 0));
+        // O catálogo grava expiryDays; fluxos antigos, validityDays.
+        const days = Math.max(1, Math.min(365, Number(config.validityDays || config.expiryDays) || 7));
+        const endsAt = new Date(Date.now() + days * 86400000);
+        const who = context.contact?.email || context.contact?.phone || context.contact?.id || 'contato';
+        let lastErr: any = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const code = generateCouponCode(prefix);
+          try {
+            const res = await createUniqueDiscount(store, {
+              code,
+              title: `Automação · ${prefix} · ${who}`.slice(0, 255),
+              kind,
+              value,
+              currency: store.currency || 'BRL',
+              endsAt,
+            });
+            return { status: 'success', output: { code: res.code, discount_id: res.discountId, kind, value, ends_at: endsAt.toISOString(), validity_days: days } };
+          } catch (err: any) {
+            lastErr = err;
+            if (!isDuplicateCodeError(err)) break;
+          }
+        }
+        return { status: 'error', output: null, error: lastErr?.message || 'Não foi possível criar o cupom na Shopify' };
       } catch (error: any) {
         return { status: 'error', output: null, error: error.message };
       }

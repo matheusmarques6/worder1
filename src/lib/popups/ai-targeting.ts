@@ -118,7 +118,8 @@ export function normalizePatch(raw: any, ctx: TargetingContext): TargetingPatch 
   const u = r.urls || {}
   patch.urls = strip({ includeEnabled: bool(u.includeEnabled), includeUrls: strList(u.includeUrls, 30, 200), excludeEnabled: bool(u.excludeEnabled), excludeUrls: strList(u.excludeUrls, 30, 200) })
   const l = r.location || {}
-  const iso = (x: unknown) => strList(x, 30, 2)?.map((c) => c.toUpperCase()).filter((c) => /^[A-Z]{2}$/.test(c))
+  // ISO-2 de verdade: 'usa' é recusado, não cortado para 'US'.
+  const iso = (x: unknown) => strList(x, 30, 8)?.map((c) => c.trim().toUpperCase()).filter((c) => /^[A-Z]{2}$/.test(c))
   patch.location = strip({ includeEnabled: bool(l.includeEnabled), includeCountries: iso(l.includeCountries), excludeEnabled: bool(l.excludeEnabled), excludeCountries: iso(l.excludeCountries) })
   const p = r.page || {}
   const pageKeys = new Set(PAGE_TEMPLATES.map((t) => t.key as string))

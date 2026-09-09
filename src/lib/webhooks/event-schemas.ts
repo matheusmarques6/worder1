@@ -1,7 +1,8 @@
 export type WebhookEventType =
   | 'order.created' | 'order.paid' | 'order.fulfilled' | 'order.cancelled'
   | 'checkout.abandoned' | 'customer.created' | 'shipment.tracking_created'
-  | 'payment.pix.abandoned' | 'payment.boleto.abandoned' | 'browse.abandoned';
+  | 'payment.pix.abandoned' | 'payment.boleto.abandoned' | 'browse.abandoned'
+  | 'popup.signup' | 'popup.reward';
 
 export interface WebhookEnvelope<T = any> {
   id: string;
