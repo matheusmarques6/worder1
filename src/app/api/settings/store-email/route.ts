@@ -74,12 +74,26 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // Quanto resta da franquia do endereço temporário. Fora dele não há
+  // limite nosso, e o campo vem null.
+  let allowance: { used: number; allowance: number; remaining: number } | null = null;
+  if (isSharedDomainEmail(settings.default_sender_email)) {
+    try {
+      const { allowanceStatus } = await import('@/lib/email/shared-domain-allowance');
+      const st = await allowanceStatus(supabaseAdmin, orgId, store.id, settings.default_sender_email);
+      allowance = { used: st.used, allowance: st.allowance, remaining: st.remaining };
+    } catch (e) {
+      console.warn('[store-email GET] franquia indisponível:', (e as Error).message);
+    }
+  }
+
   return NextResponse.json({
     email_settings: settings,
     shared_domain: sharedSenderDomain(),
     is_shared_domain: isSharedDomainEmail(settings.default_sender_email),
     suggested_local_part: slugifyLocalPart(store.shop_name),
     allocated,
+    allowance,
   });
 }
 

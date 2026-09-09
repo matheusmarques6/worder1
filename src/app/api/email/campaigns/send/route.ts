@@ -107,6 +107,21 @@ export async function POST(request: NextRequest) {
       if (issues.length > 0) {
         console.log(`[SendCampaign] ${campaign_id} preflight warnings:`, issues.map(i => i.code).join(','))
       }
+
+      // Franquia do domínio compartilhado. Aqui só a checagem "já
+      // estourou": o número de destinatários ainda não é conhecido, e a
+      // conferência com ele acontece depois de resolver o público.
+      if (!isTestSend) {
+        const { allowanceStatus } = await import('@/lib/email/shared-domain-allowance')
+        const st = await allowanceStatus(supabaseAdmin, organizationId, campaign.store_id, fromEmail)
+        if (!st.allowed) {
+          return NextResponse.json({
+            error: st.reason,
+            code: 'SHARED_DOMAIN_ALLOWANCE',
+            allowance: { used: st.used, allowance: st.allowance, remaining: st.remaining },
+          }, { status: 422 })
+        }
+      }
     }
 
     // Bug fix: Atomic status transition to prevent race conditions.
@@ -276,6 +291,33 @@ export async function POST(request: NextRequest) {
         engagementSkipped,
         total: 0,
       });
+    }
+
+    // Agora que o público é conhecido, a franquia é conferida de novo: uma
+    // campanha para 5 mil pessoas não pode começar a sair e travar no
+    // meio. A campanha volta a rascunho para o lojista poder reenviar
+    // depois de verificar o domínio.
+    try {
+      const { evaluateSharedAllowance, sentInAllowanceWindow } = await import('@/lib/email/shared-domain-allowance')
+      const { resolveSendDomainVerification } = await import('@/lib/email/domain-verification')
+      const { fromEmail: resolvedFrom } = await resolveSendDomainVerification(organizationId, campaign.store_id, campaign.from_email)
+      const sentInWindow = await sentInAllowanceWindow(supabaseAdmin, organizationId, campaign.store_id)
+      const verdict = evaluateSharedAllowance({ fromEmail: resolvedFrom, sentInWindow, aboutToSend: contacts.length })
+      if (!verdict.allowed) {
+        await supabaseAdmin
+          .from('email_campaigns')
+          .update({ status: 'draft', sent_at: null })
+          .eq('id', campaign_id)
+        return NextResponse.json({
+          error: verdict.reason,
+          code: 'SHARED_DOMAIN_ALLOWANCE',
+          allowance: { used: verdict.used, allowance: verdict.allowance, remaining: verdict.remaining },
+          recipients: contacts.length,
+        }, { status: 422 })
+      }
+    } catch (e: any) {
+      // Falha de leitura não vira bloqueio: o envio segue.
+      console.warn('[SendCampaign] franquia do domínio compartilhado indisponível:', e?.message)
     }
 
     // ── Domain warm-up: cap daily volume for warming domains ──

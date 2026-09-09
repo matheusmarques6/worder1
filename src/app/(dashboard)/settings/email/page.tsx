@@ -15,7 +15,7 @@ import { useApi, useSave, useAction } from '@/components/settings/hooks'
 import { AddDomainModal, DomainWizard, recordsFor, type DomainRow } from '@/components/settings/DomainWizard'
 
 interface EmailSettings { default_sender_name?: string; default_sender_email?: string; default_reply_to?: string; tracking_domain?: string | null }
-interface StoreEmail { email_settings: EmailSettings; shared_domain: string; is_shared_domain: boolean; suggested_local_part: string; allocated?: boolean }
+interface StoreEmail { email_settings: EmailSettings; shared_domain: string; is_shared_domain: boolean; suggested_local_part: string; allocated?: boolean; allowance?: { used: number; allowance: number; remaining: number } | null }
 interface DmarcInfo { ok: boolean; state: string }
 
 export default function DomainsSettingsPage() {
@@ -136,6 +136,7 @@ export default function DomainsSettingsPage() {
           onAdd={() => { setAddErr(null); setAddOpen(true) }}
           onContinue={(d: DomainRow) => setWiz({ d, step: 2 })}
           onUseOwn={() => senderRef.current?.setDomain(domains.find((d) => d.status === 'verified')!.domain)}
+          allowance={se.data.allowance || null}
         />
       )}
 
@@ -209,7 +210,7 @@ function Ic({ v }: { v: number }) {
 // endereço os e-mails dele saem AGORA, e o que falta para sair do
 // endereço temporário. Enquanto isso não estiver claro, a lista de
 // domínios é só uma tabela de DNS sem propósito visível.
-function SendingAsCard({ senderName, email, isShared, hasVerifiedOwn, pendingDomain, onAdd, onContinue, onUseOwn }: {
+function SendingAsCard({ senderName, email, isShared, hasVerifiedOwn, pendingDomain, onAdd, onContinue, onUseOwn, allowance }: {
   senderName: string
   email: string
   isShared: boolean
@@ -218,7 +219,11 @@ function SendingAsCard({ senderName, email, isShared, hasVerifiedOwn, pendingDom
   onAdd: () => void
   onContinue: (d: DomainRow) => void
   onUseOwn: () => void
+  allowance: { used: number; allowance: number; remaining: number } | null
 }) {
+  const int = (n: number) => n.toLocaleString('pt-BR')
+  const esgotada = !!allowance && allowance.remaining <= 0
+  const acabando = !!allowance && !esgotada && allowance.remaining < allowance.allowance * 0.2
   return (
     <div className="dcard" style={{ marginBottom: 16 }}>
       <div className="dcard-h">
@@ -228,9 +233,29 @@ function SendingAsCard({ senderName, email, isShared, hasVerifiedOwn, pendingDom
           <div className="dm">{isShared ? 'Endereço temporário do Worder' : 'Seu domínio, autenticado'}</div>
         </div>
         <div className="acts">
-          {isShared ? <Badge k="warn">Temporário</Badge> : <Badge k="ok">Seu domínio</Badge>}
+          {isShared ? <Badge k={esgotada ? 'err' : 'warn'}>Temporário</Badge> : <Badge k="ok">Seu domínio</Badge>}
         </div>
       </div>
+      {isShared && allowance && (
+        <div className="auth" style={{ gridTemplateColumns: '1fr' }}>
+          <div style={{ display: 'block' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 13 }}>
+              <span>Campanhas pelo endereço temporário</span>
+              <span className="mono" style={{ color: esgotada ? 'var(--neg)' : acabando ? 'var(--warn)' : 'var(--text-2)' }}>
+                {int(allowance.used)} de {int(allowance.allowance)} · 30 dias
+              </span>
+            </div>
+            <div style={{ height: 6, borderRadius: 999, background: 'var(--line)', marginTop: 8, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${Math.min(100, (allowance.used / Math.max(1, allowance.allowance)) * 100)}%`, background: esgotada ? 'var(--neg)' : acabando ? 'var(--warn)' : 'var(--acc)' }} />
+            </div>
+            <div style={{ fontSize: 12.5, color: 'var(--text-3)', marginTop: 8 }}>
+              {esgotada
+                ? 'A franquia acabou: novas campanhas exigem o seu domínio. Automações e e-mails transacionais continuam saindo.'
+                : 'A reputação do endereço temporário é dividida entre todas as lojas, por isso o limite. Com o seu domínio não há limite nosso.'}
+            </div>
+          </div>
+        </div>
+      )}
       {isShared && (
         <div className="warnbar">
           <I n="alert" s={16} />
