@@ -163,8 +163,11 @@ def test_second_enabled_handle_new_user_trigger_aborts_migration_without_change(
         """create constraint trigger on_auth_user_created after insert on auth.users
              deferrable initially immediate for each row
              execute function public.handle_new_user()""",
+        """create trigger on_auth_user_created after insert on auth.users
+             referencing new table as inserted for each row
+             execute function public.handle_new_user()""",
     ),
-    ids=("arguments", "when", "constraint"),
+    ids=("arguments", "when", "constraint", "new-table"),
 )
 def test_noncanonical_homonym_aborts_migration_without_change(admin, ddl):
     admin.execute("drop trigger on_auth_user_created on auth.users")

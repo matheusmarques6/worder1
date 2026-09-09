@@ -116,6 +116,8 @@ BEGIN
          AND t.tgnargs = 0
          AND t.tgqual IS NULL
          AND t.tgconstraint = 0
+         AND t.tgoldtable IS NULL
+         AND t.tgnewtable IS NULL
          AND p.oid = handle_new_user_oid
          AND pn.nspname = 'public'
        )
