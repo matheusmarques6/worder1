@@ -402,7 +402,7 @@ begin
 
     if actual_default is distinct from r.default_sql
        and not (r.table_name = 'email_sends' and r.column_name = 'status'
-                and actual_default = '''pending''::text')
+                and actual_default is not distinct from '''pending''::text')
        and not (r.table_name = 'automations' and r.column_name = 'frequency_config'
                 and actual_default is null) then
       raise exception 'app baseline incompatible: %.%.default', r.table_name, r.column_name;
@@ -855,6 +855,19 @@ $$;
 do $$
 begin
   if exists (
+    select 1 from app_baseline_constraints e
+     where (
+       select count(*)
+         from pg_constraint k
+        where k.conrelid = to_regclass('public.' || e.table_name)
+          and k.contype in ('p', 'f', 'u', 'c')
+          and pg_get_constraintdef(k.oid, true) = e.definition
+     ) > 1
+  ) then
+    raise exception 'app baseline incompatible: scoped_constraints.multiplicity';
+  end if;
+
+  if exists (
     select 1
       from pg_constraint k
       join pg_class c on c.oid = k.conrelid
@@ -938,6 +951,7 @@ begin
          and pg_get_expr(i.indpred, i.indrelid) is not distinct from r.predicate
          and am.amname = 'btree' and i.indisvalid and i.indisready
          and not i.indnullsnotdistinct and i.indnkeyatts = cardinality(r.keys)
+         and not exists (select 1 from pg_constraint k where k.conindid = i.indexrelid)
     ) then
       continue;
     end if;
@@ -966,6 +980,30 @@ begin
                    case when r.is_unique then 'unique' else '' end,
                    r.index_name, r.table_name, key_sql, predicate_sql);
   end loop;
+
+  if exists (
+    select 1 from app_baseline_indexes e
+     where (
+       select count(*)
+         from pg_index i
+         join pg_class c on c.oid = i.indrelid
+         join pg_namespace n on n.oid = c.relnamespace
+         join pg_class idx on idx.oid = i.indexrelid
+         join pg_am am on am.oid = idx.relam
+        where n.nspname = 'public' and c.relname = e.table_name
+          and array(
+            select pg_get_indexdef(i.indexrelid, pos, true)
+              from generate_series(1, i.indnatts) pos
+          ) = e.keys
+          and i.indisunique = e.is_unique
+          and pg_get_expr(i.indpred, i.indrelid) is not distinct from e.predicate
+          and am.amname = 'btree' and i.indisvalid and i.indisready
+          and not i.indnullsnotdistinct and i.indnkeyatts = cardinality(e.keys)
+          and not exists (select 1 from pg_constraint k where k.conindid = i.indexrelid)
+     ) > 1
+  ) then
+    raise exception 'app baseline incompatible: scoped_indexes.multiplicity';
+  end if;
 
   if exists (
     select 1
@@ -1035,8 +1073,10 @@ begin
          select 1 from app_baseline_policies e
           where e.table_name = p.tablename and e.command = p.cmd
             and e.roles = p.roles and e.permissive = p.permissive
-            and e.using_expression is not distinct from p.qual
-            and e.check_expression is not distinct from p.with_check
+            and e.using_expression is not distinct from
+                btrim(regexp_replace(p.qual, '[[:space:]]+', ' ', 'g'))
+            and e.check_expression is not distinct from
+                btrim(regexp_replace(p.with_check, '[[:space:]]+', ' ', 'g'))
        )
   ) then
     raise exception 'app baseline incompatible: scoped_policies.unknown';
@@ -1062,8 +1102,10 @@ begin
        where p.schemaname = 'public' and p.tablename = r.table_name
          and p.cmd = 'ALL' and p.roles = array['authenticated']::name[]
          and p.permissive = 'PERMISSIVE'
-         and p.qual = '(organization_id = get_user_organization_id())'
-         and p.with_check = '(organization_id = get_user_organization_id())'
+         and btrim(regexp_replace(p.qual, '[[:space:]]+', ' ', 'g'))
+               = '(organization_id = get_user_organization_id())'
+         and btrim(regexp_replace(p.with_check, '[[:space:]]+', ' ', 'g'))
+               = '(organization_id = get_user_organization_id())'
     ) then
       execute format(
         'create policy app_baseline_org_isolation on public.%I '
@@ -1080,8 +1122,10 @@ begin
      where p.schemaname = 'public' and p.tablename = 'pipelines'
        and p.cmd = 'ALL' and p.roles = array['authenticated']::name[]
        and p.permissive = 'PERMISSIVE'
-       and p.qual = '(store_id IN ( SELECT s.id FROM shopify_stores s WHERE (s.organization_id = get_user_organization_id())))'
-       and p.with_check = '(store_id IN ( SELECT s.id FROM shopify_stores s WHERE (s.organization_id = get_user_organization_id())))'
+       and btrim(regexp_replace(p.qual, '[[:space:]]+', ' ', 'g'))
+             = '(store_id IN ( SELECT s.id FROM shopify_stores s WHERE (s.organization_id = get_user_organization_id())))'
+       and btrim(regexp_replace(p.with_check, '[[:space:]]+', ' ', 'g'))
+             = '(store_id IN ( SELECT s.id FROM shopify_stores s WHERE (s.organization_id = get_user_organization_id())))'
   ) then
     create policy app_baseline_org_via_store on public.pipelines
       as permissive for all to authenticated
@@ -1100,8 +1144,10 @@ begin
      where p.schemaname = 'public' and p.tablename = 'pipeline_stages'
        and p.cmd = 'ALL' and p.roles = array['authenticated']::name[]
        and p.permissive = 'PERMISSIVE'
-       and p.qual = '(EXISTS ( SELECT 1 FROM pipelines p WHERE ((p.id)::text = (pipeline_stages.pipeline_id)::text)))'
-       and p.with_check = '(EXISTS ( SELECT 1 FROM pipelines p WHERE ((p.id)::text = (pipeline_stages.pipeline_id)::text)))'
+       and btrim(regexp_replace(p.qual, '[[:space:]]+', ' ', 'g'))
+             = '(EXISTS ( SELECT 1 FROM pipelines p WHERE ((p.id)::text = (pipeline_stages.pipeline_id)::text)))'
+       and btrim(regexp_replace(p.with_check, '[[:space:]]+', ' ', 'g'))
+             = '(EXISTS ( SELECT 1 FROM pipelines p WHERE ((p.id)::text = (pipeline_stages.pipeline_id)::text)))'
   ) then
     create policy app_baseline_org_via_parent on public.pipeline_stages
       as permissive for all to authenticated
@@ -1115,12 +1161,29 @@ begin
 
   if exists (
     select 1 from app_baseline_policies e
+     where (
+       select count(*) from pg_policies p
+        where p.schemaname = 'public' and p.tablename = e.table_name
+          and p.cmd = e.command and p.roles = e.roles and p.permissive = e.permissive
+          and btrim(regexp_replace(p.qual, '[[:space:]]+', ' ', 'g'))
+                is not distinct from e.using_expression
+          and btrim(regexp_replace(p.with_check, '[[:space:]]+', ' ', 'g'))
+                is not distinct from e.check_expression
+     ) > 1
+  ) then
+    raise exception 'app baseline incompatible: scoped_policies.multiplicity';
+  end if;
+
+  if exists (
+    select 1 from app_baseline_policies e
      where not exists (
        select 1 from pg_policies p
         where p.schemaname = 'public' and p.tablename = e.table_name
           and p.cmd = e.command and p.roles = e.roles and p.permissive = e.permissive
-          and p.qual is not distinct from e.using_expression
-          and p.with_check is not distinct from e.check_expression
+          and btrim(regexp_replace(p.qual, '[[:space:]]+', ' ', 'g'))
+                is not distinct from e.using_expression
+          and btrim(regexp_replace(p.with_check, '[[:space:]]+', ' ', 'g'))
+                is not distinct from e.check_expression
      )
   ) then
     raise exception 'app baseline incompatible: scoped_policies.definition';

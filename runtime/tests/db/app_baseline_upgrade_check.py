@@ -150,10 +150,13 @@ def preservation_rows(admin):
     }
 
 
-def execute_compensation_against_unknown_status_inside_transaction(admin):
+def _compensation_body():
     sql = COMPENSATION_PATH.read_text(encoding="utf-8").strip()
     assert sql.startswith("begin;") and sql.endswith("commit;")
-    body = sql.removeprefix("begin;").removesuffix("commit;")
+    return sql.removeprefix("begin;").removesuffix("commit;")
+
+
+def execute_compensation_against_unknown_status_inside_transaction(admin):
     with admin.transaction(force_rollback=True):
         admin.execute(
             "alter table public.email_sends drop constraint email_sends_status_check"
@@ -163,7 +166,7 @@ def execute_compensation_against_unknown_status_inside_transaction(admin):
             "values (%s, %s, %s, %s)",
             (UNKNOWN_EMAIL_SEND_ID, _id(1), "unknown@example.test", "unknown-status"),
         )
-        admin.execute(body)
+        admin.execute(_compensation_body())
 
 
 def test_upgrade_preserves_fixture_primary_keys_and_values(admin):
@@ -191,3 +194,65 @@ def test_incompatible_legacy_state_aborts_without_partial_changes(admin):
         execute_compensation_against_unknown_status_inside_transaction(admin)
     assert preservation_rows(admin) == before_rows
     assert constraint_definitions(admin, "email_sends") == before_checks
+
+
+def test_compensation_replay_accepts_canonical_policy_deparse(admin):
+    before = scoped_catalog(admin)
+    with admin.transaction(force_rollback=True):
+        admin.execute(_compensation_body())
+    assert scoped_catalog(admin) == before == expected_scoped_catalog()
+
+
+def test_email_status_without_default_is_rejected_and_rolled_back(admin):
+    query = (
+        "select column_default from information_schema.columns "
+        "where table_schema='public' and table_name='email_sends' and column_name='status'"
+    )
+    before = admin.execute(query).fetchone()[0]
+    with admin.transaction(force_rollback=True):
+        admin.execute("alter table public.email_sends alter column status drop default")
+        with pytest.raises(
+            psycopg.errors.RaiseException,
+            match=r"email_sends\.status\.default",
+        ):
+            with admin.transaction():
+                admin.execute(_compensation_body())
+        assert admin.execute(query).fetchone()[0] is None
+    assert admin.execute(query).fetchone()[0] == before
+
+
+@pytest.mark.parametrize(("ddl", "message"), (
+    (
+        "alter table public.email_sends add constraint task3_duplicate_check "
+        "check (status in ('queued', 'pending', 'sent', 'delivered', 'opened', "
+        "'clicked', 'bounced', 'failed', 'unsubscribed', 'complained'))",
+        r"scoped_constraints\.multiplicity",
+    ),
+    (
+        "alter table public.email_sends add constraint task3_duplicate_fk "
+        "foreign key (organization_id) references public.organizations(id) on delete cascade",
+        r"scoped_constraints\.multiplicity",
+    ),
+    (
+        "create index task3_duplicate_index on public.email_sends (store_id) "
+        "where store_id is not null",
+        r"scoped_indexes\.multiplicity",
+    ),
+    (
+        "create policy task3_duplicate_policy on public.organization_members "
+        "as permissive for all to authenticated "
+        "using (organization_id = public.get_user_organization_id()) "
+        "with check (organization_id = public.get_user_organization_id())",
+        r"scoped_policies\.multiplicity",
+    ),
+), ids=("check", "foreign-key", "index", "policy"))
+def test_semantic_duplicates_abort_and_are_rolled_back(admin, ddl, message):
+    before = scoped_catalog(admin)
+    with admin.transaction(force_rollback=True):
+        admin.execute(ddl)
+        incompatible = scoped_catalog(admin)
+        with pytest.raises(psycopg.errors.RaiseException, match=message):
+            with admin.transaction():
+                admin.execute(_compensation_body())
+        assert scoped_catalog(admin) == incompatible
+    assert scoped_catalog(admin) == before == expected_scoped_catalog()
