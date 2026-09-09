@@ -534,7 +534,9 @@ def test_product_feeds_final_contract(admin):
                         regexp_replace(qual, 'profiles\\.', '', 'g'), '\\s+', '', 'g'
                       ),
                       regexp_replace(
-                        regexp_replace(with_check, 'profiles\\.', '', 'g'), '\\s+', '', 'g'
+                        regexp_replace(
+                          coalesce(with_check, qual), 'profiles\\.', '', 'g'
+                        ), '\\s+', '', 'g'
                       )
                  from pg_policies
                 where schemaname='public' and tablename='product_feeds'
