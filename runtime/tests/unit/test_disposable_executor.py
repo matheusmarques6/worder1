@@ -2695,6 +2695,9 @@ class FakeCLI:
             assert config["db"]["migrations"]["enabled"] is False
             assert config["db"]["seed"]["enabled"] is False
             assert not (self.run / "supabase/seed.sql").exists()
+            branches = self.run / "supabase/.branches"
+            branches.mkdir()
+            (branches / "_current_branch").write_bytes(b"main")
             self.started = True
         elif argv in (
             ["docker", "inspect", "supabase_db_" + PROJECT],
@@ -2811,6 +2814,146 @@ def test_real_legacy_migration_keeps_its_eight_digit_version():
     assert rows[0]["filename"] == "20260621_phase0_foundations.sql"
     assert rows[0]["version"] == "20260621"
     assert rows[1]["version"] == "20260812000001"
+
+
+def test_prepare_accepts_cli_owned_current_branch_after_start(tmp_path, monkeypatch):
+    executor, cli = fake_environment(tmp_path, monkeypatch)
+
+    code = executor.execute("Prepare")
+
+    assert (executor.run / "supabase/.branches/_current_branch").read_bytes() == b"main"
+    assert code == 0, executor.gate["failure"]
+    assert executor.gate["failure"] is None
+    assert executor.gate["state"] == "prepared"
+    assert ["docker", "inspect", "supabase_db_" + PROJECT] in cli.calls
+    assert json.loads((executor.run / "identity.json").read_text("utf-8")) == {
+        **valid_identity(), "systemIdentifier": "1234567890123456789", "sentinel": None,
+    }
+
+
+@pytest.mark.parametrize("point", ["preflight", "volume-inventory"])
+@pytest.mark.parametrize("kind", ["empty-directory", "marker", "file"])
+def test_prepare_refuses_branches_present_before_start(tmp_path, monkeypatch, point, kind):
+    executor, cli = fake_environment(tmp_path, monkeypatch)
+    trigger = (
+        ["docker", "context", "inspect", "--format", "{{json .Endpoints.docker.Host}}"]
+        if point == "preflight" else ["docker", "volume", "ls", "--format", "{{.Name}}"]
+    )
+
+    def runner(argv, **kwargs):
+        result = cli(argv, **kwargs)
+        if argv == trigger:
+            branches = executor.run / "supabase/.branches"
+            branches.parent.mkdir(exist_ok=True)
+            if kind == "file":
+                branches.write_bytes(b"main")
+            else:
+                branches.mkdir()
+                if kind == "marker":
+                    (branches / "_current_branch").write_bytes(b"main")
+        return result
+
+    executor.runner = runner
+    code = executor.execute("Prepare")
+    assert not any(c[:2] == ["supabase", "start"] and "--workdir" in c for c in cli.calls)
+    assert code == 2
+    assert not any(c[:2] == ["docker", "inspect"] for c in cli.calls)
+    assert cli.connections == 0
+    assert not (executor.run / "identity.json").exists()
+
+
+@pytest.mark.parametrize("change", [
+    b"", b"feature", b"main\n", b"main\r\n", b"main\0",
+    "missing-marker", "marker-directory", "branches-file", "extra-file", "extra-directory",
+])
+def test_prepare_refuses_nonexact_cli_branch_state_after_start(tmp_path, monkeypatch, change):
+    executor, cli = fake_environment(tmp_path, monkeypatch)
+
+    def runner(argv, **kwargs):
+        result = cli(argv, **kwargs)
+        if argv[:2] == ["supabase", "start"] and "--workdir" in argv:
+            branches = executor.run / "supabase/.branches"
+            marker = branches / "_current_branch"
+            if isinstance(change, bytes):
+                marker.write_bytes(change)
+            elif change in {"missing-marker", "marker-directory", "branches-file"}:
+                marker.unlink()
+                if change == "marker-directory":
+                    marker.mkdir()
+                elif change == "branches-file":
+                    branches.rmdir()
+                    branches.write_bytes(b"main")
+            elif change == "extra-file":
+                (branches / "other").write_bytes(b"main")
+            else:
+                (branches / "other").mkdir()
+        return result
+
+    executor.runner = runner
+    assert executor.execute("Prepare") == 2
+    assert executor.gate["failure"] == {
+        "stage": "prepare-identity", "kind": "ValueError", "exitCode": 2,
+    }
+    assert not any(c[:2] == ["docker", "inspect"] for c in cli.calls)
+    assert cli.connections == 0
+    assert not (executor.run / "identity.json").exists()
+
+
+@pytest.mark.parametrize("name", [".branches", ".branches/_current_branch"])
+@pytest.mark.parametrize("kind", ["symlink", "reparse"])
+def test_prepare_refuses_linked_cli_branch_state(tmp_path, monkeypatch, name, kind):
+    executor, cli = fake_environment(tmp_path, monkeypatch)
+    target = executor.run / "supabase" / name
+    original = Path.lstat
+
+    def lstat(path, *args, **kwargs):
+        info = original(path, *args, **kwargs)
+        if path == target:
+            return SimpleNamespace(
+                st_mode=ex.stat.S_IFLNK if kind == "symlink" else info.st_mode,
+                st_file_attributes=(
+                    ex.stat.FILE_ATTRIBUTE_REPARSE_POINT if kind == "reparse" else 0
+                ),
+            )
+        return info
+
+    def runner(argv, **kwargs):
+        result = cli(argv, **kwargs)
+        if argv[:2] == ["supabase", "start"] and "--workdir" in argv:
+            monkeypatch.setattr(Path, "lstat", lstat)
+        return result
+
+    executor.runner = runner
+    assert executor.execute("Prepare") == 2
+    assert executor.gate["failure"] == {
+        "stage": "prepare-identity", "kind": "ValueError", "exitCode": 2,
+    }
+    assert not any(c[:2] == ["docker", "inspect"] for c in cli.calls)
+    assert cli.connections == 0
+
+
+@pytest.mark.parametrize("name", [
+    ".env", "supabase/.env", "supabase/seed.sql", "supabase/roles.sql",
+    "supabase/.temp/project-ref",
+])
+def test_cli_branch_marker_does_not_allow_other_project_inputs(tmp_path, monkeypatch, name):
+    executor, cli = fake_environment(tmp_path, monkeypatch)
+
+    def runner(argv, **kwargs):
+        result = cli(argv, **kwargs)
+        if argv[:2] == ["supabase", "start"] and "--workdir" in argv:
+            forbidden = executor.run / name
+            forbidden.parent.mkdir(parents=True, exist_ok=True)
+            forbidden.write_bytes(b"forbidden")
+        return result
+
+    executor.runner = runner
+    assert executor.execute("Prepare") == 2
+    assert executor.gate["failure"] == {
+        "stage": "prepare-identity", "kind": "ValueError", "exitCode": 2,
+    }
+    assert not any(c[:2] == ["docker", "inspect"] for c in cli.calls)
+    assert cli.connections == 0
 
 
 def test_prepare_replay_full_test_and_stop_with_fake_cli(tmp_path, monkeypatch):

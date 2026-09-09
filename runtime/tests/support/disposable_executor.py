@@ -728,9 +728,23 @@ class Executor:
             "supabase/seed.sql",
             "supabase/roles.sql",
             "supabase/.temp/project-ref",
-            "supabase/.branches",
         ):
             require(not (self.run / name).exists(), "unexpected project input")
+        branches = self.run / "supabase/.branches"
+        no_links(branches)
+        if branches.exists():
+            require(
+                branches.is_dir() and [entry.name for entry in branches.iterdir()] == [
+                    "_current_branch"
+                ],
+                "unexpected project input",
+            )
+            marker = branches / "_current_branch"
+            no_links(marker)
+            require(
+                marker.is_file() and marker.read_bytes() == b"main",
+                "unexpected project input",
+            )
 
     def files(self, expected=None):
         self.config()
@@ -861,6 +875,9 @@ class Executor:
         ).stdout.splitlines()
         write_json(self.run / "volumes-before.json", before)
         self.gate["stage"] = "start"
+        branches = self.run / "supabase/.branches"
+        no_links(branches)
+        require(not branches.exists(), "unexpected project input")
         self.local("start", "-x", EXCLUDED)
         self.gate["stage"] = "prepare-identity"
         self.identity = self.physical()
