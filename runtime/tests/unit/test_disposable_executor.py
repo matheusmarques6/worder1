@@ -14,6 +14,8 @@ from tests.support import disposable_executor as ex
 
 REPO = Path(__file__).resolve().parents[3]
 PROJECT = "waudit-" + "a" * 32
+OLD_DB_ID = "a" * 64
+NEW_DB_ID = "c" * 64
 
 
 def test_generated_project_preserves_full_nonce_within_cli_limit(tmp_path):
@@ -254,7 +256,10 @@ def container_record():
         "State": {"Running": True},
         "Config": {
             "Image": "public.ecr.aws/supabase/postgres:17.6.1.054",
-            "Labels": {"com.supabase.cli.project": PROJECT},
+            "Labels": {
+                "com.docker.compose.project": PROJECT,
+                "com.supabase.cli.project": PROJECT,
+            },
         },
         "NetworkSettings": {
             "Ports": {"5432/tcp": [{"HostPort": "45322", "HostIp": "127.0.0.1"}]}
@@ -1157,7 +1162,7 @@ def test_replay_rejects_changed_files_after_reset_before_sentinel(monkeypatch, t
         return ex.subprocess.CompletedProcess(argv, 0, stdout, "")
 
     monkeypatch.setattr(executor, "files", lambda: next(observed))
-    monkeypatch.setattr(executor, "physical", lambda: None)
+    monkeypatch.setattr(executor, "physical", lambda **_kwargs: copy.deepcopy(executor.identity))
     executor.runner = runner
 
     with pytest.raises(ValueError, match="migration set changed after reset"):
@@ -1202,8 +1207,8 @@ def test_replay_proves_reset_sentinel_history_before_ready(monkeypatch, tmp_path
         events.append("files")
         return approved
 
-    def physical():
-        events.append("physical")
+    def physical(*, allow_container_replacement=False):
+        events.append("readopt" if allow_container_replacement else "physical")
         return copy.deepcopy(prepared)
 
     def token_hex(size):
@@ -1258,7 +1263,7 @@ def test_replay_proves_reset_sentinel_history_before_ready(monkeypatch, tmp_path
         "files",
         "physical",
         "reset",
-        "physical",
+        "readopt",
         "files",
         "sentinel",
         "proof",
@@ -1349,7 +1354,7 @@ def test_replay_verification_failure_does_not_persist_identity_or_ready(
             raise RuntimeError(f"{step} failed")
 
     monkeypatch.setattr(executor, "files", lambda: approved)
-    monkeypatch.setattr(executor, "physical", lambda: None)
+    monkeypatch.setattr(executor, "physical", lambda **_kwargs: copy.deepcopy(prepared))
     monkeypatch.setattr(executor, "proof", lambda: verify("proof"))
     monkeypatch.setattr(executor, "history", lambda _expected: verify("history"))
     monkeypatch.setattr(ex.secrets, "token_hex", lambda _size: "d" * 64)
@@ -2721,15 +2726,24 @@ class FakeCLI:
         self.calls, self.pytest_calls = [], []
         self.connections = self.closed_connections = 0
         self.fail = None
+        self.reset_returncode = 0
+        self.replacement_change = None
+        self.stop_called = False
+        self.multiple_containers = False
         self.empty_rls = False
         self.commit = "e" * 40
         self.dirty = ""
         self.container = container_record()
+        self.db_container_id = OLD_DB_ID
+        self.container["Id"] = self.db_container_id
         self.container["NetworkSettings"]["Ports"]["5432/tcp"] = [
             {"HostIp": "0.0.0.0", "HostPort": "45322"},
             {"HostIp": "::", "HostPort": "45322"},
         ]
         _, self.preflight = preflight_double()
+
+    def change_replacement(self, changed):
+        self.replacement_change = changed
 
     def connect(self, dsn, **kwargs):
         assert self.started
@@ -2764,7 +2778,11 @@ class FakeCLI:
             "docker", "ps", "-a", "--no-trunc", "--filter",
             "label=com.supabase.cli.project=" + PROJECT, "--format", "{{.ID}}",
         ]:
-            output = self.container["Id"] if self.started else ""
+            output = "\n".join(
+                [self.container["Id"], "d" * 64]
+                if self.started and self.multiple_containers
+                else [self.container["Id"]] if self.started else []
+            )
         elif argv == ["docker", "volume", "ls", "--format", "{{.Name}}"]:
             output = "pre-existing\n" + ("supabase_db_" + PROJECT if self.started else "")
         elif argv == [
@@ -2789,12 +2807,17 @@ class FakeCLI:
             self.started = True
         elif argv in (
             ["docker", "inspect", "supabase_db_" + PROJECT],
-            ["docker", "inspect", "a" * 64],
+            ["docker", "inspect", self.db_container_id],
         ):
             assert self.started
-            output = json.dumps([self.container])
+            records = [self.container]
+            if self.multiple_containers:
+                other = copy.deepcopy(self.container)
+                other["Id"] = "d" * 64
+                records.append(other)
+            output = json.dumps(records)
         elif argv == [
-            "docker", "exec", "-i", "a" * 64, "psql", "-X", "-v", "ON_ERROR_STOP=1",
+            "docker", "exec", "-i", self.db_container_id, "psql", "-X", "-v", "ON_ERROR_STOP=1",
             "-U", "postgres", "-d", "postgres", "-At",
         ]:
             assert self.started
@@ -2819,18 +2842,40 @@ class FakeCLI:
             assert self.started
             config = tomllib.loads((self.run / "supabase/config.toml").read_text("utf-8"))
             assert config["db"]["migrations"]["enabled"] is True
-            if self.fail == "migration-up" and argv[1] == "migration":
+            applied = [
+                file.name.split("_", 1)[0]
+                for file in sorted((self.run / "supabase/migrations").iterdir())
+            ]
+            if argv[1] == "db":
+                self.applied = applied
+                self.sentinel = None
+                self.db_container_id = NEW_DB_ID
+                self.container["Id"] = self.db_container_id
+                if self.replacement_change == "image":
+                    self.container["Image"] = "sha256:" + "d" * 64
+                elif self.replacement_change == "project":
+                    self.container["Config"]["Labels"]["com.supabase.cli.project"] = "other"
+                elif self.replacement_change == "workdir":
+                    self.container["Config"]["Labels"]["com.docker.compose.project"] = "other"
+                elif self.replacement_change == "volume":
+                    self.container["Mounts"][0]["Name"] = "other"
+                elif self.replacement_change == "port":
+                    self.container["NetworkSettings"]["Ports"]["5432/tcp"][0]["HostPort"] = "45323"
+                elif self.replacement_change == "sid":
+                    self.sid = "9999999999999999999"
+                elif self.replacement_change == "loopback":
+                    self.loopback_sid = "9999999999999999999"
+                elif self.replacement_change == "multiple":
+                    self.multiple_containers = True
+                return ex.subprocess.CompletedProcess(argv, self.reset_returncode, "", "")
+            elif self.fail == "migration-up":
                 code = 18
             else:
                 # Model CLI filename order independently of the executor's inventory parser.
-                self.applied = [
-                    file.name.split("_", 1)[0]
-                    for file in sorted((self.run / "supabase/migrations").iterdir())
-                ]
-                if argv[1] == "db":
-                    self.sentinel = None
+                self.applied = applied
         elif argv == ["supabase", "stop", "--no-backup", "--workdir", str(self.run)]:
             assert self.started
+            self.stop_called = True
             self.started = False
         elif argv[:5] == ["uv", "run", "--directory", str(self.repo / "runtime"), "pytest"]:
             assert self.started
@@ -3082,7 +3127,7 @@ def test_prepare_replay_full_test_and_stop_with_fake_cli(tmp_path, monkeypatch):
     assert executor.gate["state"] == "ready" and cli.started
     assert cli.applied == ["20260621", "20260812000001"]
     ready = json.loads((executor.run / "identity.json").read_text("utf-8"))
-    assert ready | {"sentinel": None} == prepared
+    assert ready | {"sentinel": None, "containerId": OLD_DB_ID} == prepared
     assert re.fullmatch(r"[0-9a-f]{64}", ready["sentinel"])
     executor = ex.Executor(executor.repo, executor.run, runner=cli)
     assert executor.execute("Test") == 0
@@ -3109,6 +3154,46 @@ def test_prepare_replay_full_test_and_stop_with_fake_cli(tmp_path, monkeypatch):
     executor = ex.Executor(executor.repo, executor.run, runner=cli)
     assert executor.execute("Stop") == 0
     assert len(cli.calls) == count
+
+
+def test_replay_readopts_reset_replacement_after_all_invariants_match(tmp_path, monkeypatch):
+    executor, _cli = fake_environment(tmp_path, monkeypatch)
+    assert executor.execute("Prepare") == 0
+    assert executor.execute("Replay") == 0
+    identity = json.loads((executor.run / "identity.json").read_text("utf-8"))
+    assert identity["containerId"] == NEW_DB_ID
+    assert identity["systemIdentifier"] == "1234567890123456789"
+
+
+def test_failed_reset_readopts_for_cleanup_and_keeps_reset_failure(tmp_path, monkeypatch):
+    executor, cli = fake_environment(tmp_path, monkeypatch)
+    assert executor.execute("Prepare") == 0
+    cli.reset_returncode = 19
+    assert executor.execute("Replay") == 19
+    gate = json.loads((executor.run / "gates.json").read_text("utf-8"))
+    assert gate["failure"] == {
+        "stage": "reset", "kind": "CommandFailure", "exitCode": 19,
+    }
+    assert gate["state"] == "stopped"
+    assert not cli.started
+
+
+@pytest.mark.parametrize(
+    "changed", ["image", "project", "workdir", "volume", "port", "sid", "loopback", "multiple"],
+)
+def test_reset_replacement_with_changed_invariant_is_never_adopted(
+    tmp_path, monkeypatch, changed,
+):
+    executor, cli = fake_environment(tmp_path, monkeypatch)
+    assert executor.execute("Prepare") == 0
+    cli.change_replacement(changed)
+    assert executor.execute("Replay") == 2
+    assert executor.gate["state"] == "unproven"
+    assert json.loads((executor.run / "unproven.json").read_text("utf-8")) == {
+        "projectId": PROJECT,
+        "containerIds": [NEW_DB_ID, "d" * 64] if changed == "multiple" else [NEW_DB_ID],
+    }
+    assert not cli.stop_called
 
 
 @pytest.mark.parametrize("failure,expected,stages", [

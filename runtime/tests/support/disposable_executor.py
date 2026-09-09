@@ -370,7 +370,7 @@ def run_process(argv, *, cwd, env, input=None, timeout=600):
     return subprocess.CompletedProcess(argv, 128 - code if code < 0 else code, stdout, stderr)
 
 
-def inspect_record(data, project, before, prior=None):
+def inspect_record(data, project, before, prior=None, *, allow_container_replacement=False):
     try:
         require(isinstance(data, list) and len(data) == 1, "DB container not unique")
         db = data[0]
@@ -384,6 +384,10 @@ def inspect_record(data, project, before, prior=None):
         require(
             db["Config"]["Labels"].get("com.supabase.cli.project") == project,
             "project label mismatch",
+        )
+        require(
+            db["Config"]["Labels"].get("com.docker.compose.project") == project,
+            "workdir label mismatch",
         )
         require(
             isinstance(db["Config"]["Image"], str)
@@ -435,9 +439,10 @@ def inspect_record(data, project, before, prior=None):
         "port": 45322,
     }
     if prior is not None:
+        stable = result.keys() - ({"containerId"} if allow_container_replacement else set())
         require(
             isinstance(prior, dict)
-            and all(prior.get(key) == value for key, value in result.items()),
+            and all(prior.get(key) == result[key] for key in stable),
             "physical identity changed",
         )
     return result
@@ -765,17 +770,22 @@ class Executor:
         )
         return approved
 
-    def physical(self):
+    def physical(self, *, allow_container_replacement=False):
         self.config()
         before = read_json(self.run / "volumes-before.json")
         require(
             isinstance(before, list) and all(isinstance(volume, str) for volume in before),
             "invalid volume inventory",
         )
-        target = self.identity["containerId"] if self.identity else "supabase_db_" + self.project
+        target = (
+            "supabase_db_" + self.project
+            if allow_container_replacement or not self.identity
+            else self.identity["containerId"]
+        )
         result = self.command("docker", "inspect", target, timeout=30)
         physical = inspect_record(
-            json.loads(result.stdout), self.project, before, self.identity
+            json.loads(result.stdout), self.project, before, self.identity,
+            allow_container_replacement=allow_container_replacement,
         )
         direct = self.psql(physical["containerId"], SID_SQL)
         require(re.fullmatch(r"[0-9]+", direct), "invalid direct system identifier")
@@ -905,9 +915,24 @@ class Executor:
         self.config(True)
         self.gate["stage"] = "reset"
         self.save()
-        self.local("db", "reset", "--local", "--no-seed")
+        reset_error = None
+        try:
+            self.local("db", "reset", "--local", "--no-seed")
+        except (Exception, KeyboardInterrupt) as error:
+            reset_error = error
         self.gate["stage"] = "replay-identity"
-        self.physical()
+        try:
+            self.identity = self.physical(allow_container_replacement=True)
+            write_json(
+                self.run / "identity.json", identity_shape(self.identity, self.project)
+            )
+        except (Exception, KeyboardInterrupt):
+            self.identity = None
+            self.unproven()
+            raise
+        if reset_error is not None:
+            self.gate["stage"] = "reset"
+            raise reset_error
         require(self.files() == approved, "migration set changed after reset")
         sentinel = secrets.token_hex(32)
         require(re.fullmatch(TOKEN_RE, sentinel), "invalid sentinel")
