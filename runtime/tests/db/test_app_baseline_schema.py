@@ -260,36 +260,50 @@ INDEXES = (
     ("email_campaigns", ("status", "scheduled_at"), False, "(status = 'scheduled'::text)"),
 )
 
-# Reviewed active definitions, with only whitespace collapsed before SHA-256.
+# Reviewed active definitions: normalize line endings and outer whitespace only.
 # The literals include the pg_get_functiondef header: signature, defaults,
 # return shape, volatility, security and search_path as well as the entire body.
 # No expected value reads a migration, invokes the reader or writes a golden.
 FUNCTIONS = (
     ("attribution_candidates", "uuid, uuid, timestamp with time zone, uuid, integer, integer, "
      "integer, boolean, boolean, text",
-     "44651fd02eacc7868faee9c56acf4c9ed73f6fc9a7882169d1fe2ce459968592"),
+     "aa53f47dac5dd5d2b5605406aa11024275203d5868a9d40d0d75b723b767f8db"),
     ("attribute_order", "uuid, text, uuid, timestamp with time zone, numeric, numeric, text, uuid, "
      "integer, integer, integer, boolean, boolean, text",
-     "95abb1542efa4fc815e64a11e9afebf8af5ddf8fbec8e70b94665079c873021e"),
+     "d4f2b84261fc4c58b2bcbc7bb5dd07d71266a9700eca09715ff11c24fdb2312a"),
     ("refund_order_attribution", "uuid, text, numeric",
-     "abc18a57a7c245f97089f4ffa7118d013d0668e4423bd5bafdd50490b8773426"),
+     "991c3286b50f383753c8de92cd4dcc187fee452ac52994bdaa9b702c03992ed5"),
     ("revoke_order_attribution", "uuid, text",
-     "76b6bd534d17f0ce69356d5d86c97178e92930cfcf4d545f2e50d9ca9acad53a"),
+     "53a1ff90617ce3367cfe9a17677f9ef7e54395d7b432bb1b2a2946773ee272b0"),
     ("refresh_attribution_totals", "uuid",
-     "3871b4585c80f310311abe856b0606a7b41be61266f2c5be5a26eedd3338517e"),
+     "23d4c90679e53d4d8798359e0ebf4fe4e7ab3cae1ef5486737a8e76f36d2b439"),
     ("automation_email_stats", "uuid, uuid, timestamp with time zone",
-     "dccdc96174c5ac1223062d3b3b22d67ae4970f6c65387a9e3af6c18fcd0dec3c"),
+     "3a6e1228af81bdf7047747e319d7cdb292929bd4d0ddd64064698572efcd82c7"),
     ("campaign_email_stats", "uuid, uuid",
-     "b97c08c35f185e2acccf97720af802f17d33c1fbe0945deaf9b70b581d363785"),
+     "e0ae9c29e336f0a69d7f222c266727ef2647ee08d9e61f9f7a65b0f8b119cf29"),
     ("bump_email_send_open", "uuid, boolean",
-     "7da559f03b628871c5781d3cb20fd2f5c5409b44603e53e8265514809b9c6662"),
+     "3da0aa4b1e62191094f2aa6c0883c8cd78288a7b7695a3c61d4282bad5893c41"),
     ("bump_email_send_click", "uuid",
-     "17cf6ade6f7dfa28e20af706530f80bf13f6f9ff8c66995af12e756d5cb11458"),
+     "9b1abe0f38aa6de5be702cb69b37cab66b4af1c37c87503baf235efe83454f68"),
     ("get_user_organization_id", "",
-     "04552f61da10d78eae28137aaf58a8650df3313f1b8abd00823e42643f4cd19d"),
+     "75201ac93ee64426135de60415cbc8fe4eaeac23ff6488749037d23cafd9c3bc"),
     ("handle_new_user", "",
-     "f5819d2597172b52d1e52fec3c1b6e95a41ecd94a8558161ad1cffa30c5fa1d1"),
+     "84ace8fc631dd633ce872a87742119e12a57fb4d24e975c82e8165b98ef4b0b0"),
 )
+
+
+def function_definition_digest(definition):
+    definition = definition.replace("\r\n", "\n").replace("\r", "\n").strip()
+    return hashlib.sha256(definition.encode()).hexdigest()
+
+
+@pytest.mark.parametrize("original,changed", (
+    ("SELECT 'Sales Pipeline';", "SELECT 'Sales  Pipeline';"),
+    ("SELECT 1 WHERE true -- tenant filter\nAND false;",
+     "SELECT 1 WHERE true -- tenant filter AND false;"),
+))
+def test_function_digest_preserves_sql_content(original, changed):
+    assert function_definition_digest(original) != function_definition_digest(changed)
 
 
 def scoped_catalog(admin):
@@ -362,7 +376,7 @@ def scoped_catalog(admin):
                  from pg_proc p join pg_namespace n on n.oid=p.pronamespace
                 where n.nspname='public' and p.proname=any(%s)""", (functions,),
         ).fetchall():
-            digest = hashlib.sha256(" ".join(definition.split()).encode()).hexdigest()
+            digest = function_definition_digest(definition)
             rows.append(("function", "public", name, signature, definer,
                          tuple(sorted(config or ())), digest))
         for schema, table, definition, enabled in admin.execute(
