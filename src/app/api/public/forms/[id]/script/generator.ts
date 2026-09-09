@@ -153,26 +153,27 @@ export function compactScript(js: string): string {
     .join('\n')
 }
 
-export function buildPopupScript(form: PopupFormRecord, baseUrl: string): string {
-  const design = form.design_json || {}
-  const beh = form.behavior || design.behavior || {}
+// Inline the pure helpers. Bound via `var <name>=(<fn>)` so internal
+// (possibly minified) function names never matter.
+const helpers = [
+  'var esc=' + escHtml.toString() + ';',
+  'var sv=' + sv.toString() + ';',
+  'var safeUrl=' + safeUrl.toString() + ';',
+  'var safeImg=' + safeImgUrl.toString() + ';',
+  'var legalHtml=' + legalConsentHtml.toString() + ';',
+  'var parseVEnv=' + parseVisitorEnvelope.toString() + ';',
+  'var normPhone=' + normalizePhoneValue.toString() + ';',
+].join('\n')
 
-  // Inline the pure helpers. Bound via `var <name>=(<fn>)` so internal
-  // (possibly minified) function names never matter.
-  const helpers = [
-    'var esc=' + escHtml.toString() + ';',
-    'var sv=' + sv.toString() + ';',
-    'var safeUrl=' + safeUrl.toString() + ';',
-    'var safeImg=' + safeImgUrl.toString() + ';',
-    'var legalHtml=' + legalConsentHtml.toString() + ';',
-    'var parseVEnv=' + parseVisitorEnvelope.toString() + ';',
-    'var normPhone=' + normalizePhoneValue.toString() + ';',
-  ].join('\n')
-
-  return `(function(){
-"use strict";
-var FID=${JSON.stringify(String(form.id))},FNAME=${JSON.stringify(String(form.name || ''))},BU=${JSON.stringify(baseUrl)},D=${JSON.stringify(design)},B=${JSON.stringify(beh)},EXP=${JSON.stringify(form.experiment || null)},VARIANT_ID=${JSON.stringify(String(form.id))};
-var PD=D;// design do popup principal: o cupom (e a oferta por intenção) é sempre dele
+// ---------------------------------------------------------------------------
+// O runtime é IGUAL para todos os popups: só os dados mudam. Ele é emitido
+// uma vez por bundle como uma função global, e cada popup vira uma chamada
+// com os seus dados. Antes o bundle repetia ~69 KB por popup publicado.
+//
+// Nada aqui dentro pode depender do formulário — o que varia entra pelos
+// parâmetros (FID, FNAME, BU, D, B, EXP, VARIANT_ID, SMSG).
+// ---------------------------------------------------------------------------
+const RUNTIME_BODY = `var PD=D;// design do popup principal: o cupom (e a oferta por intenção) é sempre dele
 // Guard against double injection (Theme App Embed + ScriptTag loader).
 if(window["__wf_ran_"+FID])return;
 window["__wf_ran_"+FID]=true;
@@ -664,7 +665,7 @@ var st=D.styles||{};
 var steps=D.steps||[];
 var successStep=D.successStep||{blocks:[{id:"s1",type:"text",props:{content:"Obrigado!",fontSize:24,color:"#111827",fontWeight:"bold",align:"center",tag:"h2"}},{id:"s2",type:"text",props:{content:"Sua inscrição foi confirmada.",fontSize:15,color:"#6B7280",align:"center",tag:"p"}}]};
 var hasSuccessBlocks=!!(D.successStep&&D.successStep.blocks&&D.successStep.blocks.length);
-var successMsg=D.successMessage||${JSON.stringify(String(form.success_message || ''))};
+var successMsg=D.successMessage||SMSG;
 var postSubmit=D.postSubmit||{action:"show-success",redirectUrl:"",closeDelay:4};
 var curStep=0;
 var allData={};
@@ -1420,7 +1421,7 @@ function show(){
       if(fn)idData.firstName=fn;
       if(ln)idData.lastName=ln;
       idData.source="popup_form";
-      idData.properties={form_id:FID,form_name:${JSON.stringify(String(form.name || ''))}};
+      idData.properties={form_id:FID,form_name:FNAME};
       if(idData.email||idData.phone){
         if(window.worder&&typeof window.worder.identify==="function"){
           window.worder.identify(idData);
@@ -1846,5 +1847,55 @@ runCartGate(function(cartOk){
   });
 });
 });
+`
+
+/** Id do runtime na janela: muda quando o código muda, para versões conviverem. */
+function runtimeKey(src: string): string {
+  let h = 2166136261
+  for (let i = 0; i < src.length; i++) { h ^= src.charCodeAt(i); h = Math.imul(h, 16777619) }
+  return 'wfRT' + (h >>> 0).toString(36)
+}
+
+const RUNTIME_SRC = `(function(){
+"use strict";
+${helpers}
+window[${JSON.stringify('__RTKEY__')}]=function(FID,FNAME,BU,D,B,EXP,VARIANT_ID,SMSG){
+${RUNTIME_BODY}
+};
 })();`
+
+const RUNTIME_ID = runtimeKey(RUNTIME_SRC)
+
+/** Versão do runtime: entra no ETag do bundle para um deploy invalidar o cache. */
+export const RUNTIME_VERSION = RUNTIME_ID
+
+/**
+ * O runtime, uma vez. Idempotente: se já estiver na página (outro bundle,
+ * o script individual de um popup), a segunda cópia não faz nada.
+ */
+export function buildRuntimeScript(): string {
+  const src = RUNTIME_SRC.replace('__RTKEY__', RUNTIME_ID)
+  return `if(!window[${JSON.stringify(RUNTIME_ID)}]){${src}}`
+}
+
+/** A chamada de um popup: só os dados dele. */
+export function buildPopupCall(form: PopupFormRecord, baseUrl: string): string {
+  const design = form.design_json || {}
+  const beh = form.behavior || design.behavior || {}
+  const args = [
+    JSON.stringify(String(form.id)),
+    JSON.stringify(String(form.name || '')),
+    JSON.stringify(baseUrl),
+    JSON.stringify(design),
+    JSON.stringify(beh),
+    JSON.stringify(form.experiment || null),
+    JSON.stringify(String(form.id)),
+    JSON.stringify(String(form.success_message || '')),
+  ].join(',')
+  return `window[${JSON.stringify(RUNTIME_ID)}](${args});`
+}
+
+/** Runtime + chamada: o script individual de um popup, autossuficiente. */
+export function buildPopupScript(form: PopupFormRecord, baseUrl: string): string {
+  return buildRuntimeScript() + '\n' + buildPopupCall(form, baseUrl)
 }

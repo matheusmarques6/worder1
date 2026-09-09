@@ -16,7 +16,7 @@ import { NextRequest } from 'next/server'
 import { createHash } from 'crypto'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { sanitizeDomain, isVisualPopupForm } from '@/lib/forms/submit-utils'
-import { buildPopupScript, compactScript } from '@/app/api/public/forms/[id]/script/generator'
+import { buildRuntimeScript, buildPopupCall, compactScript, RUNTIME_VERSION } from '@/app/api/public/forms/[id]/script/generator'
 import { attachExperiments } from '@/lib/popups/experiment-service'
 
 export const dynamic = 'force-dynamic'
@@ -69,7 +69,7 @@ export async function GET(req: NextRequest) {
     forms.sort((a: any, b: any) => (Number(b.behavior?.priority) || 0) - (Number(a.behavior?.priority) || 0))
 
     const etag = '"' + createHash('sha1')
-      .update(forms.map((f: any) => `${f.id}:${f.updated_at}:${f.experiment ? f.experiment.id + ':' + f.experiment.version + ':' + JSON.stringify(f.experiment.split) + ':' + JSON.stringify(f.experiment.bandit || null) : ''}`).join('|') + '|v5|' + BUILD_ID)
+      .update(forms.map((f: any) => `${f.id}:${f.updated_at}:${f.experiment ? f.experiment.id + ':' + f.experiment.version + ':' + JSON.stringify(f.experiment.split) + ':' + JSON.stringify(f.experiment.bandit || null) : ''}`).join('|') + '|v6|' + RUNTIME_VERSION + '|' + BUILD_ID)
       .digest('hex').slice(0, 20) + '"'
 
     const cache = { 'Cache-Control': 'public, max-age=60, s-maxage=60, stale-while-revalidate=600', ETag: etag }
@@ -81,9 +81,13 @@ export async function GET(req: NextRequest) {
     if (forms.length === 0) return js('/* worder: nenhum popup publicado */', cache)
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://worder1.vercel.app'
-    // Cada popup isolado: um erro num deles não derruba os outros.
-    const parts = forms.map((f: any) => 'try{' + compactScript(buildPopupScript(f, baseUrl)) + '}catch(e){try{console.warn("[worder popup]",e)}catch(_){}}')
-    const body = `/* worder popups · ${forms.length} · ${etag} */\n` + parts.join('\n')
+    // O runtime vem UMA vez; cada popup é só a chamada com os dados dele.
+    // Antes o bundle repetia o runtime inteiro por popup publicado.
+    // Cada chamada isolada: um erro num popup não derruba os outros.
+    const parts = forms.map((f: any) => 'try{' + buildPopupCall(f, baseUrl) + '}catch(e){try{console.warn("[worder popup]",e)}catch(_){}}')
+    const body = `/* worder popups · ${forms.length} · ${etag} */\n`
+      + compactScript(buildRuntimeScript()) + '\n'
+      + parts.join('\n')
     return js(body, cache)
   } catch (e: any) {
     console.error('[popups/bundle] falhou:', e?.message)

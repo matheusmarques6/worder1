@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   buildPopupScript,
+  buildRuntimeScript,
+  buildPopupCall,
   compactScript,
   escHtml,
   sv,
@@ -295,5 +297,48 @@ describe('runtime helpers (inlined into the script)', () => {
     expect(normalizePhoneValue('0123456', '+44')).toBe('+44123456')
     expect(normalizePhoneValue('123456', '')).toBe('123456')
     expect(normalizePhoneValue('', '+55')).toBe('')
+  })
+})
+
+describe('runtime compartilhado (um por bundle)', () => {
+  const form = (id: string, name: string) => ({
+    id, name,
+    design_json: { formType: 'popup', styles: { width: 480 }, steps: [{ blocks: [{ id: 'b', type: 'email', props: {} }] }], successStep: { blocks: [] } },
+    behavior: { display: { timeEnabled: true, delay: 1 } },
+    success_message: `obrigado ${name}`,
+  })
+
+  it('a chamada de um popup não carrega o runtime: só os dados dele', () => {
+    const call = buildPopupCall(form('id-a', 'A') as any, 'https://app.test')
+    expect(call).not.toContain('function mountRoot')
+    expect(call).not.toContain('BASE_CSS')
+    expect(call).toContain('"id-a"')
+    expect(call).toContain('"obrigado A"')
+    // Uma linha só: a chamada da função global do runtime.
+    expect(call.trim().split('\n')).toHaveLength(1)
+  })
+
+  it('o script individual continua autossuficiente: runtime + chamada', () => {
+    const js = buildPopupScript(form('id-a', 'A') as any, 'https://app.test')
+    expect(js).toContain('function mountRoot')
+    expect(js).toContain(buildPopupCall(form('id-a', 'A') as any, 'https://app.test'))
+    // Emitir duas vezes na mesma página não redefine o runtime.
+    expect(js).toContain('if(!window[')
+  })
+
+  it('dois popups compartilham o mesmo runtime, e o bundle encolhe', () => {
+    const a = buildPopupCall(form('id-a', 'A') as any, 'https://app.test')
+    const b = buildPopupCall(form('id-b', 'B') as any, 'https://app.test')
+    const runtime = buildRuntimeScript()
+    const antes = buildPopupScript(form('id-a', 'A') as any, 'https://app.test').length
+      + buildPopupScript(form('id-b', 'B') as any, 'https://app.test').length
+    const depois = runtime.length + a.length + b.length
+    expect(depois).toBeLessThan(antes)
+    // O ganho é praticamente um runtime inteiro.
+    expect(antes - depois).toBeGreaterThan(runtime.length * 0.9)
+    // As duas chamadas usam a mesma função global.
+    const key = runtime.match(/window\["(wfRT[a-z0-9]+)"\]/)![1]
+    expect(a).toContain(key)
+    expect(b).toContain(key)
   })
 })
