@@ -632,7 +632,7 @@ export default function DashboardPage() {
               ) : chartRows.every((p) => p.campanhas + p.automacoes + p.fora === 0) ? (
                 <div className="h-full w-full flex flex-col items-center justify-center text-[13px] text-[#A1A1AA] gap-2">
                   <span>Nenhuma venda registrada no período.</span>
-                  <Link href="/campaigns/new" className="text-[#52525B] hover:text-[#18181B] underline underline-offset-2">
+                  <Link href="/campaigns/create" className="text-[#52525B] hover:text-[#18181B] underline underline-offset-2">
                     Criar primeira campanha
                   </Link>
                 </div>
@@ -698,7 +698,7 @@ export default function DashboardPage() {
               `${c.sends.toLocaleString('pt-BR')} envios · Abertura ${formatPct(c.openRate)} · Clique ${formatPct(c.clickRate)}`
             }
             emptyLabel="Ainda sem campanhas enviadas."
-            emptyHref="/campaigns/new"
+            emptyHref="/campaigns/create"
             emptyAction="Criar campanha"
           />
           <RankingCard

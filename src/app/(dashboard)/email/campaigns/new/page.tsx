@@ -245,7 +245,7 @@ export default function NewCampaignPage() {
           throw new Error(d.error || 'Erro ao enviar')
         }
       }
-      router.push('/email/campaigns')
+      router.push('/campaigns')
     } catch (err: any) {
       setError(err.message || 'Erro ao criar campanha')
     } finally { setSaving(false) }
@@ -304,7 +304,7 @@ export default function NewCampaignPage() {
         </nav>
         <button
           type="button"
-          onClick={() => router.push('/email/campaigns')}
+          onClick={() => router.push('/campaigns')}
           className="ml-4 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
         >
           <X className="w-5 h-5" />
@@ -779,7 +779,7 @@ export default function NewCampaignPage() {
                   })
                 } catch {}
               }
-              router.push('/email/campaigns')
+              router.push('/campaigns')
             }}
             className="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
           >

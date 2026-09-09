@@ -73,7 +73,10 @@ export default function BrandSettingsPage() {
       setData(r); setB((o) => (o ? { ...o, logo_url: r.brand.logo_url, logo_light_url: r.brand.logo_light_url, icon_url: r.brand.icon_url } : r.brand))
       toast.success('Imagem enviada')
     } catch (e: any) { toast.error('Não foi possível enviar', e.message) } finally { setUploading(null) }
-  }, [setData, toast])
+    // Idem: o toast não pode estar nas dependências de uma busca, senão
+    // cada aviso dispara uma nova.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setData])
   const removeSlot = async (slot: Slot) => {
     if (!(await confirm.confirm({ title: 'Remover imagem?', confirmLabel: 'Remover', destructive: true }))) return
     try {

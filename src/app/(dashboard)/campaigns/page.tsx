@@ -23,6 +23,7 @@ import {
 } from '@phosphor-icons/react'
 import { useStoreStore } from '@/stores/storeStore'
 import { useToast } from '@/components/ui/Toast'
+import { SendingHealthPanel } from '@/components/shared/SendingHealthPanel'
 
 interface Campaign {
   id: string
@@ -39,7 +40,29 @@ interface Campaign {
   total_opened?: number
   total_clicked?: number
   attributed_revenue?: number
+  /** Motivo da última falha de envio, quando houve. */
+  error_message?: string | null
   created_at: string
+  /**
+   * Números que a rota calcula de email_sends. As colunas total_opened /
+   * total_clicked da linha só são preenchidas em alguns caminhos, então
+   * elas ficam como reserva: quem manda é o que foi contado nos envios.
+   */
+  stats?: {
+    total: number
+    opened: number
+    clicked: number
+    open_rate: string
+    click_rate: string
+  }
+}
+
+/** Envios, aberturas e cliques de uma campanha, com a reserva da linha. */
+function numeros(c: Campaign) {
+  const sent = c.stats?.total ?? c.total_sent ?? 0
+  const opened = c.stats?.opened ?? c.total_opened ?? 0
+  const clicked = c.stats?.clicked ?? c.total_clicked ?? 0
+  return { sent, opened, clicked, revenue: c.attributed_revenue || 0 }
 }
 
 const channelIcons: Record<string, React.ReactNode> = {
@@ -89,11 +112,15 @@ export default function CampaignsPage() {
   const [loadError, setLoadError] = useState<string | null>(null)
 
   const fetchCampaigns = useCallback(async () => {
-    if (!currentStore?.id) return
+    // Antes esta função voltava sem fazer nada quando não havia loja
+    // escolhida, e como o "carregando" começa ligado, quem ainda não
+    // conectou uma loja ficava olhando o spinner para sempre.
     try {
       setLoading(true)
       setLoadError(null)
-      const url = `/api/email/campaigns?storeId=${currentStore.id}`
+      const url = currentStore?.id
+        ? `/api/email/campaigns?storeId=${currentStore.id}`
+        : '/api/email/campaigns'
       const res = await fetch(url)
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
@@ -115,7 +142,11 @@ export default function CampaignsPage() {
     } finally {
       setLoading(false)
     }
-  }, [currentStore?.id, toast])
+    // O provedor de toast recria as funções a cada aviso: com `toast` aqui,
+    // uma falha de rede mostrava o aviso, o aviso mudava a identidade da
+    // função, e a busca rodava de novo — em loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStore?.id])
 
   useEffect(() => {
     if (!hasHydrated) return
@@ -123,9 +154,9 @@ export default function CampaignsPage() {
   }, [fetchCampaigns, hasHydrated])
 
   const activeCampaigns = campaigns.filter(c => c.status === 'active' || c.status === 'sending').length
-  const totalSent = campaigns.reduce((sum, c) => sum + (c.total_sent || 0), 0)
-  const totalOpened = campaigns.reduce((sum, c) => sum + (c.total_opened || 0), 0)
-  const totalRevenue = campaigns.reduce((sum, c) => sum + (c.attributed_revenue || 0), 0)
+  const totalSent = campaigns.reduce((sum, c) => sum + numeros(c).sent, 0)
+  const totalOpened = campaigns.reduce((sum, c) => sum + numeros(c).opened, 0)
+  const totalRevenue = campaigns.reduce((sum, c) => sum + numeros(c).revenue, 0)
   const openRate = totalSent > 0 ? ((totalOpened / totalSent) * 100).toFixed(1) : '0'
 
   const kpis = [
@@ -146,6 +177,11 @@ export default function CampaignsPage() {
     <div className="space-y-6">
       {/* 10.8 — o momento comercial ativo, visível onde a campanha nasce */}
       <MomentBanner />
+
+      {/* O que impede as mensagens de chegar, na tela que o menu abre.
+          Domínio caído, franquia estourada, token de WhatsApp vencendo:
+          antes do disparo, não depois. */}
+      <SendingHealthPanel />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -260,7 +296,7 @@ export default function CampaignsPage() {
           <h3 className="text-lg font-semibold text-gray-900 mb-1">Nenhuma campanha encontrada</h3>
           <p className="text-sm text-gray-500 mb-5">Crie sua primeira campanha para começar.</p>
           <Link
-            href="/campaigns/new"
+            href="/campaigns/create"
             className="inline-flex items-center gap-1.5 px-4 py-2 text-[13px] font-semibold text-white bg-[#F26B2A] hover:bg-[#E55A1A] rounded-lg transition-colors"
           >
             <Plus className="w-4 h-4" />
@@ -292,10 +328,7 @@ export default function CampaignsPage() {
             </thead>
             <tbody>
               {filteredCampaigns.map((campaign) => {
-                const sent = campaign.total_sent || 0
-                const opened = campaign.total_opened || 0
-                const clicked = campaign.total_clicked || 0
-                const revenue = campaign.attributed_revenue || 0
+                const { sent, opened, clicked, revenue } = numeros(campaign)
                 const openRatePct = sent > 0 ? `${((opened / sent) * 100).toFixed(1)}%` : '-'
                 const clickRatePct = sent > 0 ? `${((clicked / sent) * 100).toFixed(1)}%` : '-'
                 const channel = campaign.channel || 'email'
@@ -306,7 +339,14 @@ export default function CampaignsPage() {
 
                 return (
                   <tr key={campaign.id} className="border-t border-gray-200 hover:bg-gray-50 transition-colors">
-                    <td onClick={() => window.location.href = `/campaigns/${campaign.id}`} className="px-3 sm:px-5 py-4 text-sm font-medium text-gray-900 cursor-pointer">{campaign.name}</td>
+                    <td onClick={() => window.location.href = `/campaigns/${campaign.id}`} className="px-3 sm:px-5 py-4 text-sm font-medium text-gray-900 cursor-pointer">
+                      {campaign.name}
+                      {/* O motivo, onde ele importa: antes a tela dizia
+                          "Falhou" e mais nada. */}
+                      {campaign.error_message && (campaign.status === 'failed' || campaign.status === 'sending') && (
+                        <span className="block text-xs font-normal text-red-600 mt-1 max-w-md leading-snug">{campaign.error_message}</span>
+                      )}
+                    </td>
                     <td className="hidden md:table-cell px-5 py-4">{channelIcons[channel] || channelIcons.email}</td>
                     <td className="px-3 sm:px-5 py-4">
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${statusColor}`}>
