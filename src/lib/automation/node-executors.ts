@@ -1056,6 +1056,17 @@ const actionExecutors: Record<string, NodeExecutor> = {
             if (v == null || typeof v === 'object') continue;
             if (!mergeData[`event.${k}`]) mergeData[`event.${k}`] = String(v);
           }
+          // As respostas do popup (quiz, campos livres) ficavam presas
+          // dentro de um objeto e nenhuma mensagem conseguia usá-las.
+          const answers = (triggerData as any).answers;
+          if (answers && typeof answers === 'object' && !Array.isArray(answers)) {
+            for (const [k, v] of Object.entries(answers)) {
+              if (v == null || typeof v === 'object') continue;
+              if (k === '_wf_hp' || k === 'consent' || k.startsWith('consent__')) continue;
+              const key = `event.answers.${k}`;
+              if (!mergeData[key]) mergeData[key] = String(v);
+            }
+          }
         }
         // Checkout URL for cart recovery emails
         mergeData['checkout_url'] = triggerProps.CheckoutURL || triggerProps.checkout_url || '';
@@ -1980,7 +1991,7 @@ const actionExecutors: Record<string, NodeExecutor> = {
       try {
         // Supabase não lança — sem checar o error, FK quebrada ou lista
         // apagada viravam "success" sem gravar nada.
-        const { error } = await supabase.from('list_contacts').upsert({
+        const { error } = await supabase.from('contact_list_members').upsert({
           list_id: config.listId,
           contact_id: contactId,
           organization_id: organizationId,
@@ -2383,7 +2394,7 @@ const actionExecutors: Record<string, NodeExecutor> = {
       }
       try {
         const { error } = await supabase
-          .from('list_contacts')
+          .from('contact_list_members')
           .delete()
           .eq('list_id', config.listId)
           .eq('contact_id', contactId)

@@ -163,6 +163,29 @@ export async function POST(request: NextRequest) {
         )
       }
     }
+    // Funil e etapa: o negócio criado a partir de uma inscrição não pode
+    // cair no pipeline de outro cliente. `pipelines` pertence a uma loja,
+    // e a loja à organização.
+    if (pipeline_id || stage_id) {
+      const { data: orgStores } = await admin.from('shopify_stores').select('id').eq('organization_id', user.organization_id)
+      const storeIds = (orgStores || []).map((r: any) => r.id as string)
+      let pipeId: string | null = pipeline_id || null
+      if (stage_id) {
+        const { data: stageRow } = await admin.from('pipeline_stages').select('id, pipeline_id').eq('id', stage_id).maybeSingle()
+        if (!stageRow) return NextResponse.json({ error: 'Etapa inválida: escolha uma etapa da sua organização.' }, { status: 400 })
+        if (pipeId && stageRow.pipeline_id !== pipeId) {
+          return NextResponse.json({ error: 'A etapa escolhida não pertence a esse funil.' }, { status: 400 })
+        }
+        pipeId = pipeId || (stageRow.pipeline_id as string)
+      }
+      if (pipeId) {
+        const { data: pipeRow } = await admin.from('pipelines').select('id, store_id').eq('id', pipeId).maybeSingle()
+        if (!pipeRow || !pipeRow.store_id || !storeIds.includes(pipeRow.store_id as string)) {
+          return NextResponse.json({ error: 'Funil inválido: escolha um funil da sua organização.' }, { status: 400 })
+        }
+      }
+    }
+
     const { data: form, error } = await admin
       .from('crm_forms')
       .insert({

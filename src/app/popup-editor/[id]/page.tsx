@@ -15,6 +15,7 @@ import {
   GripHorizontal, Tag, Clock, Eye, Settings, Palette, Upload, LayoutGrid,
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
   Bold, Italic, Underline, Link2, ExternalLink, Sparkles, Disc3, Eraser, Gift,
+  BarChart3,
   SlidersHorizontal, Layers, Square, Sun, CornerDownRight,
   MoveHorizontal, MoveVertical, Check, MoreHorizontal, Pencil,
   AlertTriangle,
@@ -4447,6 +4448,11 @@ export default function PopupEditorPage() {
             <Eye className="w-4 h-4" /> Preview
           </button>
           {!abParent && (
+            <button onClick={() => { if (!dirty || window.confirm('Você tem alterações não salvas. Sair mesmo assim?')) router.push(`/forms/${formId}/analytics`) }} className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-zinc-300 hover:text-white hover:bg-zinc-700 rounded-lg transition-colors" title="Resultados do popup">
+              <BarChart3 className="w-4 h-4" /> Resultados
+            </button>
+          )}
+          {!abParent && (
             <button onClick={() => setShowExperiment(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-zinc-300 hover:text-white hover:bg-zinc-700 rounded-lg transition-colors" title="Teste A/B">
               <span className="font-mono text-[11px] font-bold tracking-wider">A/B</span> Experimento
             </button>
@@ -4461,6 +4467,12 @@ export default function PopupEditorPage() {
           )}
         </div>
       </header>
+      {formStoreId && currentStore?.id && currentStore.id !== formStoreId && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 border-b border-amber-200 text-[12px] text-amber-900">
+          <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+          <span>Este popup é de outra loja, não da loja selecionada agora ({currentStore.name || currentStore.domain}). As alterações valem para a loja dele.</span>
+        </div>
+      )}
       {abParent && (
         <div className="flex items-center justify-between gap-3 px-4 py-2 bg-violet-50 border-b border-violet-200 text-[12px] text-violet-900">
           <span>Você está editando a <strong>variante {abParent.label}</strong> de <strong>{abParent.name || 'um popup'}</strong>. Ela só aparece na loja pela fatia do experimento — as regras de exibição e o cupom são os do popup principal.</span>

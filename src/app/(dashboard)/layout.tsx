@@ -128,7 +128,7 @@ const navigation: NavSection[] = [
       { name: 'Contatos', href: '/contacts', icon: Users },
       { name: 'Listas', href: '/contacts/lists', icon: ListIcon },
       { name: 'Segmentos', href: '/segments', icon: Target },
-      { name: 'Formulários', href: '/forms', icon: FileText },
+      { name: 'Popups e formulários', href: '/site/forms', icon: FileText },
     ],
   },
   {

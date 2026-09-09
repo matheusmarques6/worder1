@@ -270,6 +270,10 @@ export async function GET(request: NextRequest) {
     const emailAttr = byChannel('email');
     const whatsappAttr = byChannel('whatsapp');
     const smsAttr = byChannel('sms');
+    // Popup é canal de primeira classe na atribuição desde a Fase 1; sem
+    // esta linha a receita que ele trouxe não aparecia em lugar nenhum
+    // fora da tela do próprio popup.
+    const popupAttr = byChannel('popup');
     const allAttr = attrRows.filter((r: any) => r.classification === 'attributed');
 
     const campaignsRevenue = sumNet(emailAttr);
@@ -278,6 +282,7 @@ export async function GET(request: NextRequest) {
     const whatsappOrders = whatsappAttr.length;
     const smsRevenue = sumNet(smsAttr);
     const smsOrders = smsAttr.length;
+    const popupRevenue = sumNet(popupAttr);
     // Automações e campanhas dividem o mesmo canal (e-mail); o razão
     // separa por automation_id/campaign_id, então aqui a quebra por
     // canal já é exaustiva e não há como somar o mesmo pedido duas vezes.
@@ -331,6 +336,7 @@ export async function GET(request: NextRequest) {
       email: campaignsRevenue,
       whatsapp: whatsappRevenue,
       sms: smsRevenue,
+      popup: popupRevenue,
     };
 
     // ── Time series (stacked bars) ──

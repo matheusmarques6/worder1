@@ -5,6 +5,7 @@
 import { NextRequest } from 'next/server'
 import { getSupabaseClient } from '@/lib/api-utils'
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit'
+import { checkPopupOrigin } from '@/lib/forms/origin-gate'
 import { META_BASE_URL } from '@/lib/whatsapp/api-version'
 import { corsJson, corsError, corsPreflight } from '@/lib/forms/public-cors'
 import {
@@ -471,6 +472,16 @@ export async function POST(
       return corsError('Formulário não encontrado ou não publicado', 404, 'not_found')
     }
 
+    // De onde veio? O id do popup sai no bundle de toda loja; sem esta
+    // régua, quem o lesse podia inscrever gente na organização alheia e,
+    // pior, drenar o pool de cupons dela (cada e-mail novo reserva um
+    // código de verdade na Shopify do lojista).
+    const originVerdict = await checkPopupOrigin(supabase, request.headers, form as any, (body as any)?.domain)
+    if (!originVerdict.ok) {
+      console.warn('[Form Submit] origem recusada', { formId, reason: originVerdict.reason })
+      return corsError('Formulário não encontrado ou não publicado', 404, 'not_found')
+    }
+
     // Honeypot: the storefront renders an off-screen _wf_hp field that only
     // bots fill. A non-empty value → drop the submission silently: create
     // no contact, no deal, fire no automation, apply no audience. Return a
@@ -779,6 +790,8 @@ export async function POST(
     const whatsappOptIn = readWhatsAppOptInConfig(popupBehavior)
     const whatsappDoubleOptIn = !!(whatsappDecision?.checked && contactPhone && whatsappOptIn.doubleOptIn)
     let whatsappOptInSent = false
+    // Pedido de confirmação que falhou: o canal fica negado, não pendente.
+    let whatsappOptInFailed = false
     let whatsappAlreadyOptedIn = false
     if (contactId && contactPhone) {
       if (whatsappDecision && !whatsappDoubleOptIn) {
@@ -1275,7 +1288,17 @@ export async function POST(
             source: 'popup_form', sourceRef: form.id, pageUrl, ipAddress: requestIp, userAgent: requestUserAgent, locale: visitorLocale,
           }, [{ channel: 'whatsapp', action: 'granted', text: waBlock?.text || null, version: waBlock?.version || null }])
         } else {
+          // Pedido de confirmação não saiu (sem conta, template reprovado,
+          // falha de envio). A prova não pode continuar dizendo 'pending':
+          // não existe linha em whatsapp_opt_status, então a guarda de
+          // envio deixaria marketing passar para quem nunca confirmou.
           console.warn('[Form Submit] whatsapp double opt-in not sent:', r.reason, r.error || '')
+          whatsappOptInFailed = true
+          const waBlockFail = consentDecisions.find((d) => d.channel === 'whatsapp')?.block
+          await recordConsent(supabase, {
+            organizationId: form.organization_id, contactId, submissionId: submission.id,
+            source: 'popup_form', sourceRef: form.id, pageUrl, ipAddress: requestIp, userAgent: requestUserAgent, locale: visitorLocale,
+          }, [{ channel: 'whatsapp', action: 'denied', text: waBlockFail?.text || null, version: waBlockFail?.version || null }])
         }
       } catch (e: any) {
         console.warn('[Form Submit] whatsapp double opt-in failed:', e?.message)
@@ -1338,100 +1361,6 @@ export async function POST(
     // window; resubmits beyond 24h still re-enroll (frequency_config on
     // the automation governs from there).
     const dispatchContactKey = contactId || contactData.email || submission.id
-
-    // 8.6. Disparar automações com trigger_form_submitted
-    try {
-      const { dispatchTrigger } = await import('@/lib/automation/trigger-dispatcher')
-      await dispatchTrigger({
-        organizationId: form.organization_id,
-        // Propagar store_id da popup pra que o trigger dispatcher
-        // marque contatos órfãos com a loja correta (era criados com
-        // NULL antes, sumindo de views store-scoped).
-        storeId: (form as any).store_id || null,
-        triggerType: 'trigger_form_submitted',
-        contactId: contactId || null,
-        dealId: dealId || null,
-        triggerData: {
-          form_id: formId,
-          form_name: form.name,
-          submission_id: submission.id,
-          answers,
-          utm_source,
-          utm_medium,
-          utm_campaign,
-          utm_term,
-          utm_content,
-        },
-        matchConfig: (cfg) => {
-          // Se automação define form_id específico, filtra
-          if (cfg?.form_id && cfg.form_id !== formId) return false
-          return true
-        },
-        idempotencyKey: `form_submit:${formId}:${dispatchContactKey}`,
-      })
-    } catch (e: any) {
-      console.warn('[Form Submit] automation dispatch failed:', e?.message)
-    }
-
-    // 8.6b. trigger_popup_subscribed — popup-specific welcome trigger.
-    // Klaviyo/Omnisend distinguish between "any form submit" and
-    // "subscribed via popup" so merchants can run a welcome flow that
-    // ONLY fires for popup signups (and not for the embedded contact
-    // form, landing page, etc.). Mirrors the form_submitted dispatch
-    // but with a different triggerType the editor can match against.
-    const isVisualFormType = ['popup', 'flyout', 'banner', 'fullpage'].includes(form.form_type || 'popup')
-    // Gated on !marketingConsentDenied: this trigger's contract is
-    // "subscribed via popup". A visitor who left the consent box unchecked
-    // did NOT subscribe, so the welcome flow must not fire for them.
-    // (trigger_form_submitted above stays ungated on purpose — it drives
-    // non-marketing CRM automations too, and the persisted 'denied'
-    // consent already blocks any email node inside those flows.)
-    //
-    // Also deferred when doubleOptInEnabled: the contact is parked at
-    // 'pending' here, so the welcome flow's email node would just skip
-    // (and never re-run). For DOI popups the welcome trigger fires from
-    // /api/public/confirm-opt-in AFTER the subscriber confirms — that's
-    // the moment they actually subscribed, and consent is now granted so
-    // the email sends. Firing here too would double-enroll them.
-    if (isVisualFormType && contactId && !marketingConsentDenied && !doubleOptInEnabled) {
-      try {
-        const { dispatchTrigger } = await import('@/lib/automation/trigger-dispatcher')
-        await dispatchTrigger({
-          organizationId: form.organization_id,
-          storeId: (form as any).store_id || null,
-          triggerType: 'trigger_popup_subscribed',
-          contactId,
-          triggerData: {
-            form_id: formId,
-            form_name: form.name,
-            form_type: form.form_type,
-            submission_id: submission.id,
-            email: contactData.email || null,
-            phone: contactData.phone || null,
-            first_name: contactData.first_name || null,
-            last_name: contactData.last_name || null,
-            answers,
-            utm_source,
-            utm_medium,
-            utm_campaign,
-            utm_term,
-            utm_content,
-          },
-          matchConfig: (cfg) => {
-            // Editor can scope a flow to one specific popup via form_id.
-            // Unset = match every popup in the org.
-            if (cfg?.form_id && cfg.form_id !== formId) return false
-            return true
-          },
-          // Per form+contact so the same lead resubmitting the popup
-          // doesn't kick off the welcome flow twice within the
-          // dispatcher's 24h dedup window.
-          idempotencyKey: `popup_subscribed:${formId}:${dispatchContactKey}`,
-        })
-      } catch (e: any) {
-        console.warn('[Form Submit] popup_subscribed dispatch failed:', e?.message)
-      }
-    }
 
     // 8.5. Cupom — sempre pelo ledger de incentivos. Nada é criado na
     // Shopify aqui: o pool já tem códigos únicos prontos (cron), e
@@ -1520,7 +1449,17 @@ export async function POST(
         if (gameResult) {
           if (gameResult.prize === 'none') offerNone = true
           else if (gameResult.prize === 'base') { offerNone = false; tier = null }
-          else { offerNone = false; tier = cp.tiers.find((t) => t.id === gameResult!.prize) || null }
+          else {
+            const found = cp.tiers.find((t) => t.id === gameResult!.prize)
+            // O jogo pode estar numa variante e o cupom é sempre do pai:
+            // um nível que só existe na variante não tem pool nem valor.
+            // Cair na oferta base entregaria menos do que a roleta
+            // prometeu — melhor não prometer desconto nenhum.
+            if (!found) {
+              console.warn('[Form Submit] prêmio do jogo aponta para um nível inexistente no cupom', { formId, prize: gameResult.prize })
+              offerNone = true
+            } else { offerNone = false; tier = found }
+          }
         }
         const eff = effectiveDiscount(cp, tier)
         rewardTierKey = eff.tierKey
@@ -1584,7 +1523,111 @@ export async function POST(
       console.warn('[Form Submit] coupon issuance errored:', e?.message)
     }
 
-    // 8.6. Webhooks de saída (popup.signup / popup.reward) para quem assinou
+    // 8.7. Automações. Vêm DEPOIS do cupom de propósito: um fluxo de
+    // boas-vindas que manda "seu código é {{coupon_code}}" precisa do
+    // código já emitido — antes o e-mail saía com o campo vazio.
+    try {
+      const { dispatchTrigger } = await import('@/lib/automation/trigger-dispatcher')
+      await dispatchTrigger({
+        organizationId: form.organization_id,
+        // Propagar store_id da popup pra que o trigger dispatcher
+        // marque contatos órfãos com a loja correta (era criados com
+        // NULL antes, sumindo de views store-scoped).
+        storeId: (form as any).store_id || null,
+        triggerType: 'trigger_form_submitted',
+        contactId: contactId || null,
+        dealId: dealId || null,
+        triggerData: {
+          form_id: formId,
+          form_name: form.name,
+          submission_id: submission.id,
+          answers,
+          utm_source,
+          utm_medium,
+          utm_campaign,
+          utm_term,
+          utm_content,
+        },
+        matchConfig: (cfg) => {
+          // Se automação define form_id específico, filtra
+          if (cfg?.form_id && cfg.form_id !== formId) return false
+          return true
+        },
+        idempotencyKey: `form_submit:${formId}:${dispatchContactKey}`,
+      })
+    } catch (e: any) {
+      console.warn('[Form Submit] automation dispatch failed:', e?.message)
+    }
+
+    // 8.6b. trigger_popup_subscribed — popup-specific welcome trigger.
+    // Klaviyo/Omnisend distinguish between "any form submit" and
+    // "subscribed via popup" so merchants can run a welcome flow that
+    // ONLY fires for popup signups (and not for the embedded contact
+    // form, landing page, etc.). Mirrors the form_submitted dispatch
+    // but with a different triggerType the editor can match against.
+    const isVisualFormType = ['popup', 'flyout', 'banner', 'fullpage'].includes(form.form_type || 'popup')
+    // Gated on !marketingConsentDenied: this trigger's contract is
+    // "subscribed via popup". A visitor who left the consent box unchecked
+    // did NOT subscribe, so the welcome flow must not fire for them.
+    // (trigger_form_submitted above stays ungated on purpose — it drives
+    // non-marketing CRM automations too, and the persisted 'denied'
+    // consent already blocks any email node inside those flows.)
+    //
+    // Also deferred when doubleOptInEnabled: the contact is parked at
+    // 'pending' here, so the welcome flow's email node would just skip
+    // (and never re-run). For DOI popups the welcome trigger fires from
+    // /api/public/confirm-opt-in AFTER the subscriber confirms — that's
+    // the moment they actually subscribed, and consent is now granted so
+    // the email sends. Firing here too would double-enroll them.
+    if (isVisualFormType && contactId && !marketingConsentDenied && !doubleOptInEnabled) {
+      try {
+        const { dispatchTrigger } = await import('@/lib/automation/trigger-dispatcher')
+        await dispatchTrigger({
+          organizationId: form.organization_id,
+          storeId: (form as any).store_id || null,
+          triggerType: 'trigger_popup_subscribed',
+          contactId,
+          triggerData: {
+            form_id: formId,
+            form_name: form.name,
+            form_type: form.form_type,
+            submission_id: submission.id,
+            email: contactData.email || null,
+            phone: contactData.phone || null,
+            first_name: contactData.first_name || null,
+            last_name: contactData.last_name || null,
+            answers,
+            // O que o popup entregou: o fluxo usa no texto da mensagem.
+            coupon_code: issuedCoupon?.code || null,
+            coupon_kind: issuedCoupon?.kind || null,
+            coupon_value: issuedCoupon?.value ?? null,
+            coupon_ends_at: issuedCoupon?.ends_at || null,
+            reward_tier: rewardTierKey,
+            game_prize: gameResult?.label || null,
+            utm_source,
+            utm_medium,
+            utm_campaign,
+            utm_term,
+            utm_content,
+          },
+          matchConfig: (cfg) => {
+            // Editor can scope a flow to one specific popup via form_id.
+            // Unset = match every popup in the org.
+            if (cfg?.form_id && cfg.form_id !== formId) return false
+            return true
+          },
+          // Per form+contact so the same lead resubmitting the popup
+          // doesn't kick off the welcome flow twice within the
+          // dispatcher's 24h dedup window.
+          idempotencyKey: `popup_subscribed:${formId}:${dispatchContactKey}`,
+        })
+      } catch (e: any) {
+        console.warn('[Form Submit] popup_subscribed dispatch failed:', e?.message)
+      }
+    }
+
+
+    // 8.8. Webhooks de saída (popup.signup / popup.reward) para quem assinou
     // na loja do popup. Sem loja não há assinatura possível. Só enfileira:
     // a entrega tem retry próprio. Falha aqui não derruba a inscrição.
     if (form.store_id) {
@@ -1601,7 +1644,7 @@ export async function POST(
           // Mesma leitura por canal que vai na resposta ao runtime.
           const consentOut = {
             email: !contactData.email ? null : marketingConsentDenied ? 'denied' : doubleOptInEnabled ? 'pending' : 'granted',
-            whatsapp: !contactPhone || !whatsappDecision ? null : !whatsappDecision.checked ? 'denied' : whatsappDoubleOptIn && !whatsappAlreadyOptedIn ? 'pending' : 'granted',
+            whatsapp: !contactPhone || !whatsappDecision ? null : !whatsappDecision.checked ? 'denied' : whatsappOptInFailed ? 'denied' : whatsappDoubleOptIn && !whatsappAlreadyOptedIn ? 'pending' : 'granted',
             sms: !contactPhone || !smsDecision ? null : (smsDecision.checked ? 'granted' : 'denied'),
           }
           await dispatchToOutbound({
@@ -1702,6 +1745,7 @@ export async function POST(
           : doubleOptInEnabled ? 'pending' : 'granted',
         whatsapp: !contactPhone || !whatsappDecision ? null
           : !whatsappDecision.checked ? 'denied'
+          : whatsappOptInFailed ? 'denied'
           : whatsappDoubleOptIn && !whatsappAlreadyOptedIn ? 'pending' : 'granted',
         sms: !contactPhone || !smsDecision ? null : (smsDecision.checked ? 'granted' : 'denied'),
       },

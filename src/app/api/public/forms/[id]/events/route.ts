@@ -26,6 +26,7 @@
 
 import { NextRequest } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { checkPopupOrigin } from '@/lib/forms/origin-gate';
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
 import { corsJson, corsError, corsPreflight } from '@/lib/forms/public-cors';
 import { trafficTypeOrNull, pageKindOrNull } from '@/lib/popups/targeting';
@@ -82,13 +83,22 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     // the form exists and is published. Popups live in crm_forms.
     const { data: form } = await supabaseAdmin
       .from('crm_forms')
-      .select('id, organization_id, status')
+      .select('id, organization_id, status, store_id')
       .eq('id', params.id)
       .maybeSingle();
 
     if (!form || form.status !== 'published') {
       // Don't 404 — just acknowledge so the beacon doesn't retry.
       return corsJson({ received: true, ignored: 'form not published' });
+    }
+
+    // De onde veio? Sem isto, quem lesse o id do popup no bundle de uma
+    // loja podia injetar impressões e "holdout" na organização alheia —
+    // contadores inflados e grupo de controle fabricado, que inverte a
+    // leitura do teste. Reconhecemos o beacon sem gravar nada.
+    const origin = await checkPopupOrigin(supabaseAdmin, req.headers, form as any, body.domain);
+    if (!origin.ok) {
+      return corsJson({ received: true, ignored: origin.reason });
     }
 
     const occurredAt = new Date().toISOString();

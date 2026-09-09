@@ -262,7 +262,6 @@ function wfEmit(n,d){
     window.dispatchEvent(new CustomEvent("worder:"+n,{detail:det}));
   }catch(e){}
 }
-${helpers}
 function nv(x,d){var n=parseFloat(x);return isFinite(n)?n:d}
 function bid(x){return String(x==null?"":x).replace(/[^a-zA-Z0-9_-]/g,"")}
 function looksUuid(s){return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(String(s||""))}
@@ -289,6 +288,9 @@ function getSessionId(){try{return sessionStorage.getItem("_worder_sid")||sessio
 // silêncio. O servidor aceita e faz o parse do texto.
 function beacon(type,extra){
   var body={type:type};
+  // O servidor confere de onde veio: sem isto ele depende só do cabeçalho
+  // Origin, que nem todo navegador antigo manda no sendBeacon.
+  try{body.domain=location.hostname}catch(e){}
   var vid=getVisitorId();if(vid)body.visitor_id=vid;
   var sid=getSessionId();if(sid)body.session_id=sid;
   if(EXP)body.variant_id=VARIANT_ID;
@@ -887,9 +889,13 @@ function renderBlock(b){
     case"line":h='<div style="'+blockStyleStr(p)+'"><hr style="border:none;border-top:'+nv(p.thickness,1)+'px '+sv(p.style,"solid")+' '+sv(p.color,"#E5E7EB")+';margin:0 auto;width:'+Math.min(Math.max(nv(p.width!=null?p.width:p.widthPct,100),1),100)+'%" /></div>';break;
     case"coupon":{
       if(OFFER.tier==="none"||(GAME.result&&GAME.result.prize==="none")){h="";break}
-      var couponCode=p.code||"CODIGO";
       var dyn=window.__wfDynCoupon&&window.__wfDynCoupon[FID];
-      if(dyn&&dyn.code)couponCode=dyn.code;
+      // Depois do envio, o código é o que o servidor emitiu. Se ele não
+      // emitiu nada (a pessoa já usou o dela, pool vazio sem reserva), o
+      // bloco some: mostrar o código de exemplo do editor entregava um
+      // cupom que o checkout recusa, sem ninguém ficar sabendo.
+      if(submitted&&!(dyn&&dyn.code)){h="";break}
+      var couponCode=(dyn&&dyn.code)||p.code||"CODIGO";
       var boxCss=blockStyleStr(p,true)+'padding:12px 16px;border:2px '+sv(p.borderStyle,"dashed")+' '+sv(p.borderColor,"#F97316")+';border-radius:'+nv(p.borderRadius,8)+'px;text-align:center;background:'+sv(p.bgColor,"#FFF7ED");
       if(dyn&&dyn.show_code===false&&dyn.auto_apply!==false&&window.Shopify){
         // Aplicado sozinho no checkout: mostrar o código só confunde.
@@ -1375,7 +1381,7 @@ function show(){
       if(vid)payload.visitor_id=vid;
       var sid=getSessionId();
       if(sid)payload.session_id=sid;
-      try{payload.page_url=location.href}catch(e){}
+      try{payload.page_url=location.href;payload.domain=location.hostname}catch(e){}
       if(stepPath.length)payload.step_path=stepPath.slice(0,30);
       payload.traffic_type=TRAFFIC;payload.page_kind=PAGE.kind;
       if(EXP)payload.variant_id=VARIANT_ID;
@@ -1881,7 +1887,9 @@ export function buildRuntimeScript(): string {
 /** A chamada de um popup: só os dados dele. */
 export function buildPopupCall(form: PopupFormRecord, baseUrl: string): string {
   const design = form.design_json || {}
-  const beh = form.behavior || design.behavior || {}
+  // Coluna vazia ({}) não é "sem regras": é popup criado sem esse campo.
+  // Nesse caso valem as regras do design, como o editor também faz.
+  const beh = form.behavior && Object.keys(form.behavior).length ? form.behavior : (design.behavior || {})
   const args = [
     JSON.stringify(String(form.id)),
     JSON.stringify(String(form.name || '')),

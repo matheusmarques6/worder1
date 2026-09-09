@@ -65,6 +65,7 @@ const TRIGGER_TO_EVENT_TYPES: Record<string, string[]> = {
   trigger_added_to_cart: ['added_to_cart'],
   trigger_signup: ['profile_created', 'customer_created', 'contact_created', 'subscribed_email'],
   trigger_form_submitted: ['form_submitted'],
+  trigger_popup_subscribed: ['form_submitted'],
 };
 
 function resolveEventTypes(triggerType: string | undefined): string[] {

@@ -353,7 +353,15 @@ export async function replenishPool(
 
   const store = await loadStoreForPool(pool)
   if (!store) {
-    await admin.from('coupon_pools').update({ status: 'error', last_error: 'loja sem token de acesso' }).eq('id', pool.id)
+    // Marca a tentativa e solta a trava: sem isto o pool voltava ao topo
+    // da fila a cada dois minutos (ordem por last_replenished_at) e
+    // empurrava os pools saudáveis para fora do lote.
+    await admin.from('coupon_pools').update({
+      status: 'error',
+      last_error: 'loja sem token de acesso',
+      last_replenished_at: new Date().toISOString(),
+      replenish_lock_at: null,
+    }).eq('id', pool.id)
     return { created: 0, usable: 0, stopped: 'error', error: 'loja sem token de acesso' }
   }
 

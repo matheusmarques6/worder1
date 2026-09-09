@@ -2180,10 +2180,11 @@ async function processRefundCreated(store: ShopifyStoreConfig, refund: any) {
         .eq('store_id', store.id)
         .eq('shopify_order_id', String(refund.order_id))
         .maybeSingle();
-      const totalRefunded = Math.max(
-        refundAmount,
-        parseFloat((acumulado as any)?.total_refunded || '0') || 0
-      );
+      // SOMA, não máximo: dois reembolsos parciais de 30 e 40 num pedido
+      // de 100 dão 70. Com Math.max ficava 40, e a receita atribuída (e a
+      // "com cupom" do popup) seguia inflada para sempre.
+      const jaReembolsado = parseFloat((acumulado as any)?.total_refunded || '0') || 0;
+      const totalRefunded = Math.round((jaReembolsado + refundAmount) * 100) / 100;
       // Mantém a coluna em dia: até aqui só o full sync a escrevia, e o
       // cálculo líquido do painel depende dela.
       await supabase

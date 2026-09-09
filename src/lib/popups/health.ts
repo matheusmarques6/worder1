@@ -51,8 +51,11 @@ export function buildHealthIssues(input: HealthInput): HealthIssue[] {
   const issues: HealthIssue[] = []
 
   for (const p of input.pools) {
-    // Pool de popup despublicado fica pausado de propósito.
+    // Pool de popup despublicado fica pausado de propósito. E enquanto o
+    // cron não o pausa, o popup não está na lista de publicados: sem nome
+    // e sem "Abrir", o aviso não ajudaria ninguém.
     if (p.status === 'paused') continue
+    if (p.form_id && !nameOf.has(p.form_id)) continue
     const formName = p.form_id ? nameOf.get(p.form_id) || null : null
     const stock = Math.max(0, Number(p.usable) || 0)
     if (p.status === 'error') {

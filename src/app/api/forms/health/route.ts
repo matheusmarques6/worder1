@@ -55,19 +55,19 @@ export async function GET() {
   ])
 
   // Estoque pronto por pool: um código só conta se ainda cobre a validade.
+  // Contagem no banco, um count por pool — trazer as linhas e contar aqui
+  // errava para menos quando a org passava do teto da consulta.
   const poolRows = (pools || []) as any[]
   const usable = new Map<string, number>()
-  const poolIds = poolRows.map((p) => p.id as string)
-  if (poolIds.length) {
-    const { data: codes } = await admin
+  await Promise.all(poolRows.map(async (p: any) => {
+    const { count } = await admin
       .from('coupon_codes')
-      .select('pool_id')
-      .in('pool_id', poolIds)
+      .select('id', { count: 'exact', head: true })
+      .eq('pool_id', p.id)
       .eq('status', 'free')
       .gt('expires_at', nowIso)
-      .limit(20000)
-    for (const c of (codes || []) as any[]) usable.set(c.pool_id, (usable.get(c.pool_id) || 0) + 1)
-  }
+    usable.set(p.id as string, count || 0)
+  }))
 
   const issues = buildHealthIssues({
     forms: (forms || []) as any[],

@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
 
     const { data: rows } = await supabaseAdmin
       .from('crm_forms')
-      .select('id, name, status, design_json, behavior, form_type, success_message, redirect_url, store_id, updated_at, ab_parent_id')
+      .select('id, organization_id, name, status, design_json, behavior, form_type, success_message, redirect_url, store_id, updated_at, ab_parent_id')
       .eq('organization_id', store.organization_id)
       .eq('status', 'published')
       .order('created_at', { ascending: true })

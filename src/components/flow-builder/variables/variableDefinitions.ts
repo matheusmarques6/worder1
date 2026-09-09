@@ -105,6 +105,24 @@ export const SIGNUP_VARIABLES: Variable[] = [
   { key: 'event.tags', label: 'Tags Iniciais', description: 'Tags adicionadas no cadastro', example: 'lead, newsletter', category: 'event' },
 ];
 
+// O que os gatilhos de formulário/popup realmente enviam (ver o
+// triggerData em src/app/api/public/forms/[id]/submit/route.ts). As
+// variáveis genéricas de cadastro prometiam campos que nunca chegavam.
+export const POPUP_SIGNUP_VARIABLES: Variable[] = [
+  { key: 'event.form_name', label: 'Nome do popup', description: 'Nome do popup preenchido', example: 'Boas-vindas 10%', category: 'event' },
+  { key: 'event.form_id', label: 'ID do popup', description: 'Identificador do popup', example: 'a1b2c3d4', category: 'event' },
+  { key: 'event.email', label: 'E-mail', description: 'E-mail informado na inscrição', example: 'ana@exemplo.com', category: 'event' },
+  { key: 'event.phone', label: 'Telefone', description: 'Telefone informado na inscrição', example: '+5511999999999', category: 'event' },
+  { key: 'event.first_name', label: 'Nome', description: 'Primeiro nome informado', example: 'Ana', category: 'event' },
+  { key: 'event.last_name', label: 'Sobrenome', description: 'Sobrenome informado', example: 'Silva', category: 'event' },
+  { key: 'event.coupon_code', label: 'Cupom', description: 'Código entregue pelo popup', example: 'POPUP-8FJ2KD1P', category: 'event' },
+  { key: 'event.coupon_kind', label: 'Tipo do cupom', description: 'percent, fixed ou free_shipping', example: 'percent', category: 'event' },
+  { key: 'event.reward_tier', label: 'Nível da recompensa', description: 'Nível progressivo alcançado', example: 'base', category: 'event' },
+  { key: 'event.game_prize', label: 'Prêmio sorteado', description: 'Rótulo do prêmio na roleta ou raspadinha', example: 'Frete grátis', category: 'event' },
+  { key: 'event.utm_source', label: 'UTM source', description: 'Origem da visita', example: 'instagram', category: 'event' },
+  { key: 'event.utm_campaign', label: 'UTM campaign', description: 'Campanha da visita', example: 'lancamento', category: 'event' },
+];
+
 export const TAG_VARIABLES: Variable[] = [
   { key: 'event.tag_name', label: 'Nome da Tag', description: 'Nome da tag adicionada/removida', example: 'VIP', category: 'event' },
   { key: 'event.tag_id', label: 'ID da Tag', description: 'Identificador da tag', example: 'tag_123', category: 'event' },
@@ -305,14 +323,11 @@ export function getVariablesByTriggerType(triggerType: string): VariableCategory
       eventLabel = 'Pedido Cancelado';
       break;
     case 'trigger_form_submitted':
-      eventVariables = SIGNUP_VARIABLES;
+      eventVariables = POPUP_SIGNUP_VARIABLES;
       eventLabel = 'Formulario Enviado';
       break;
     case 'trigger_popup_subscribed':
-      // Same variables as form_submitted — both surface email / phone /
-      // first_name / last_name / utm_* through {{ trigger.* }} in the
-      // welcome email.
-      eventVariables = SIGNUP_VARIABLES;
+      eventVariables = POPUP_SIGNUP_VARIABLES;
       eventLabel = 'Inscrito via Popup';
       break;
     case 'trigger_whatsapp_optin':

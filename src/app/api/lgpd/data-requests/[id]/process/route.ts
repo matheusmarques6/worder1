@@ -142,11 +142,23 @@ async function exportData(request: any) {
     .select('consent_type, granted, granted_at, revoked_at, source')
     .eq('contact_id', request.contact_id)
 
+  // Popups e formulários do site: respostas digitadas, prova do
+  // consentimento, cupons e o rastro do navegador. Sem isto a exportação
+  // dizia "não temos mais nada" enquanto tinha.
+  let popup: any = null
+  try {
+    const { exportPopupData } = await import('@/lib/popups/lgpd')
+    popup = await exportPopupData(supabaseAdmin, request.organization_id, request.contact_id)
+  } catch (e: any) {
+    popup = { error: e?.message || 'falha ao exportar os dados de popup' }
+  }
+
   return {
     contact,
     events: events || [],
     orders: orders || [],
     consents: consents || [],
+    popup,
     exported_at: new Date().toISOString(),
   }
 }
@@ -184,7 +196,18 @@ async function deleteData(request: any) {
     })
     .eq('contact_id', request.contact_id)
 
-  return { deleted: true, anonymized_id: request.contact_id }
+  // Popups: as respostas do formulário guardam o que a pessoa digitou
+  // (e-mail, telefone, quiz) fora da ficha do contato. A prova do
+  // consentimento fica, sem IP nem user agent.
+  let popup: any = null
+  try {
+    const { erasePopupData } = await import('@/lib/popups/lgpd')
+    popup = await erasePopupData(supabaseAdmin, request.organization_id, request.contact_id)
+  } catch (e: any) {
+    popup = { error: e?.message || 'falha ao apagar os dados de popup' }
+  }
+
+  return { deleted: true, anonymized_id: request.contact_id, popup }
 }
 
 async function rectifyData(request: any) {
