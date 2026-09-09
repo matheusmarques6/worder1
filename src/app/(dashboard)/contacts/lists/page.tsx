@@ -331,7 +331,7 @@ function EmptyState({ hasAny, onNew }: { hasAny: boolean; onNew: () => void }) {
             <p className="text-xs text-gray-500 mt-1">Upload de planilha com contatos</p>
           </button>
           <Link
-            href="/forms"
+            href="/site/forms"
             className="border border-gray-200 rounded-xl p-5 hover:border-brand-500 hover:bg-brand-50 transition-colors text-left group block"
           >
             <FileText size={20} className="text-gray-400 group-hover:text-brand-500 mb-2" />

@@ -7,6 +7,12 @@
 // de /api/forms/stats (últimos N dias, agregados por popup). A versão
 // anterior desta tela exibia oito popups e R$ 12.800 de receita
 // inventados como "exemplo" — para um cliente, era mentira.
+//
+// Esta é a ÚNICA lista de popups. Havia uma segunda em /forms, com as
+// mesmas ações e números diferentes: o lojista pausava um popup numa e
+// via o outro estado na outra. /forms agora redireciona para cá, e o que
+// só existia lá veio junto — o aviso de ativação do embed na Shopify, o
+// código de instalação para sites fora da Shopify e as inscrições.
 // =============================================
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -15,11 +21,13 @@ import {
   ArrowLeft, Plus, MagnifyingGlass, Eye, PencilSimple, Trash, Copy, ChartLineUp,
   FileText, Layout, ChatCircle, Desktop, Megaphone, Power, X, WarningCircle,
   Gift, ShoppingCart, WhatsappLogo, EnvelopeSimple, Lightning, UserPlus,
-  Confetti, Ticket, Question,
+  Confetti, Ticket, Question, Code, Users, DotsThreeVertical, Check,
 } from '@phosphor-icons/react'
 import { useToast } from '@/components/ui/Toast'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { useStoreStore } from '@/stores'
+import { EmbedActivationBanner } from '@/components/store/EmbedActivationBanner'
+import { fireConfetti } from '@/lib/confetti'
 import { formatCurrency } from '@/lib/utils/formatters'
 import { POPUP_TEMPLATES, TEMPLATE_CATEGORIES, type PopupTemplate, type PopupFormType } from '@/lib/popups/templates'
 
@@ -145,6 +153,10 @@ export default function SiteFormsPage() {
   const [templateCategory, setTemplateCategory] = useState<string>('all')
   const [creating, setCreating] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
+  // Menu de ações da linha. Posição fixa medida no clique: dentro da
+  // tabela (que rola na horizontal) um menu absoluto seria cortado.
+  const [menu, setMenu] = useState<{ id: string; top: number; right: number } | null>(null)
+  const [copiedId, setCopiedId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     // A loja atual vem do localStorage (zustand). Antes de hidratar, um
@@ -201,6 +213,22 @@ export default function SiteFormsPage() {
     return () => { cancelled = true }
   }, [])
 
+  // O menu é medido no clique: se a página rolar ou mudar de tamanho, ele
+  // ficaria apontando para a linha errada. Fecha.
+  useEffect(() => {
+    if (!menu) return
+    const close = () => setMenu(null)
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenu(null) }
+    window.addEventListener('scroll', close, true)
+    window.addEventListener('resize', close)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('scroll', close, true)
+      window.removeEventListener('resize', close)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [menu])
+
   const statOf = (id: string): FormStats => stats[id] || { form_id: id, ...EMPTY_STATS }
 
   // ── KPIs do período ──
@@ -234,6 +262,33 @@ export default function SiteFormsPage() {
 
   // ── Ações ──
   const editorPath = (f: FormRow) => (f.has_design ? `/popup-editor/${f.id}` : `/forms/${f.id}`)
+
+  /**
+   * Código para colar num site fora da Shopify. Na Shopify quem carrega
+   * é o app embed (o aviso lá em cima cuida disso); aqui o lojista leva
+   * a mesma coisa na mão. O `?domain=` amarra o bundle à loja certa —
+   * sem ele o servidor não sabe de qual loja é a página que pediu.
+   */
+  const installSnippet = (f: FormRow) => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : ''
+    const dom = (currentStore as any)?.domain || (currentStore as any)?.shop_domain || ''
+    const tag = `<script src="${origin}/api/public/forms/${f.id}/script${dom ? `?domain=${encodeURIComponent(dom)}` : ''}" async></script>`
+    // O inline precisa do lugar onde vai aparecer; os outros se posicionam sozinhos.
+    return f.form_type === 'embed' ? `<div data-worder-form="${f.id}"></div>\n${tag}` : tag
+  }
+
+  const copyInstall = async (f: FormRow) => {
+    try {
+      await navigator.clipboard.writeText(installSnippet(f))
+      setCopiedId(f.id)
+      setTimeout(() => setCopiedId((c) => (c === f.id ? null : c)), 2000)
+      toast.success('Código copiado', f.form_type === 'embed'
+        ? 'Cole no lugar da página onde o formulário deve aparecer.'
+        : 'Cole antes de </body> nas páginas onde o popup deve aparecer.')
+    } catch {
+      toast.error('Não consegui copiar', 'Seu navegador bloqueou a área de transferência.')
+    }
+  }
 
   const createFromTemplate = async (t: PopupTemplate) => {
     if (creating) return
@@ -282,6 +337,7 @@ export default function SiteFormsPage() {
         return
       }
       setForms((prev) => prev.map((x) => (x.id === f.id ? { ...x, status: next } : x)))
+      if (next === 'published') fireConfetti()
       toast.success(next === 'published' ? 'Popup ativado' : 'Popup pausado', next === 'published' ? undefined : 'Ele some da loja em até um minuto e volta quando você ativar.')
     } finally {
       setBusyId(null)
@@ -379,6 +435,11 @@ export default function SiteFormsPage() {
           </button>
         </div>
       </div>
+
+      {/* Sem o carregador na vitrine nenhum popup aparece, por mais "ativo"
+          que o status diga. Este aviso era a única coisa que fechava essa
+          lacuna, e vivia na tela antiga. */}
+      <EmbedActivationBanner />
 
       {missingMigration && (
         <div className="flex items-center gap-2 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3">
@@ -541,12 +602,22 @@ export default function SiteFormsPage() {
                       )}
                     </td>
                     <td className="p-4">
-                      <div className="flex items-center gap-1 justify-end md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100 transition-opacity">
+                      <div className={`flex items-center gap-1 justify-end transition-opacity ${menu?.id === f.id ? '' : 'md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100'}`}>
                         <IconBtn title="Editar" onClick={() => router.push(editorPath(f))}><PencilSimple size={14} /></IconBtn>
+                        <IconBtn title="Inscrições" onClick={() => router.push(`/forms/${f.id}/submissions`)}><Users size={14} /></IconBtn>
                         <IconBtn title="Analytics" onClick={() => router.push(`/forms/${f.id}/analytics`)}><ChartLineUp size={14} /></IconBtn>
                         <IconBtn title={f.status === 'published' ? 'Pausar' : 'Ativar'} onClick={() => toggleStatus(f)} disabled={busy}><Power size={14} /></IconBtn>
-                        <IconBtn title="Duplicar" onClick={() => duplicate(f)} disabled={busy}><Copy size={14} /></IconBtn>
-                        <IconBtn title="Excluir" onClick={() => remove(f)} disabled={busy} danger><Trash size={14} /></IconBtn>
+                        <IconBtn
+                          title="Mais ações"
+                          expanded={menu?.id === f.id}
+                          onClick={(e) => {
+                            if (menu?.id === f.id) { setMenu(null); return }
+                            const r = e.currentTarget.getBoundingClientRect()
+                            setMenu({ id: f.id, top: r.bottom + 6, right: window.innerWidth - r.right })
+                          }}
+                        >
+                          <DotsThreeVertical size={16} weight="bold" />
+                        </IconBtn>
                       </div>
                     </td>
                   </tr>
@@ -575,6 +646,33 @@ export default function SiteFormsPage() {
           <div className="py-12 text-center text-sm text-gray-400">Carregando…</div>
         )}
       </div>
+
+      {/* Mais ações da linha */}
+      {menu && (() => {
+        const f = forms.find((x) => x.id === menu.id)
+        if (!f) return null
+        const busy = busyId === f.id
+        return (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setMenu(null)} aria-hidden />
+            <div role="menu" aria-label={`Ações de ${f.name}`}
+              style={{ top: menu.top, right: Math.max(8, menu.right) }}
+              className="fixed z-50 w-60 bg-white border border-gray-200 rounded-xl shadow-lg py-1 overflow-hidden">
+              <MenuItem onClick={() => { setMenu(null); duplicate(f) }} disabled={busy}>
+                <Copy size={15} /> Duplicar
+              </MenuItem>
+              <MenuItem onClick={() => { setMenu(null); copyInstall(f) }}>
+                {copiedId === f.id ? <Check size={15} className="text-emerald-600" /> : <Code size={15} />}
+                Copiar código de instalação
+              </MenuItem>
+              <div className="my-1 border-t border-gray-100" />
+              <MenuItem onClick={() => { setMenu(null); remove(f) }} disabled={busy} danger>
+                <Trash size={15} /> Excluir
+              </MenuItem>
+            </div>
+          </>
+        )
+      })()}
 
       {/* Criar */}
       {showCreate && (
@@ -630,10 +728,28 @@ function FilterChip({ active, onClick, children, muted, first }: { active: boole
   )
 }
 
-function IconBtn({ title, onClick, children, disabled, danger }: { title: string; onClick: () => void; children: React.ReactNode; disabled?: boolean; danger?: boolean }) {
+function IconBtn({ title, onClick, children, disabled, danger, expanded }: {
+  title: string
+  onClick: (e: React.MouseEvent<HTMLButtonElement>) => void
+  children: React.ReactNode
+  disabled?: boolean
+  danger?: boolean
+  /** Só para o botão que abre menu: conta ao leitor de tela o estado. */
+  expanded?: boolean
+}) {
   return (
     <button onClick={onClick} title={title} aria-label={title} disabled={disabled}
-      className={`p-1.5 rounded transition-colors text-gray-500 disabled:opacity-40 ${danger ? 'hover:bg-red-50 hover:text-red-600' : 'hover:bg-gray-100 hover:text-gray-800'}`}>
+      {...(expanded === undefined ? {} : { 'aria-haspopup': 'menu' as const, 'aria-expanded': expanded })}
+      className={`p-1.5 rounded transition-colors text-gray-500 disabled:opacity-40 ${danger ? 'hover:bg-red-50 hover:text-red-600' : 'hover:bg-gray-100 hover:text-gray-800'} ${expanded ? 'bg-gray-100 text-gray-800' : ''}`}>
+      {children}
+    </button>
+  )
+}
+
+function MenuItem({ onClick, children, disabled, danger }: { onClick: () => void; children: React.ReactNode; disabled?: boolean; danger?: boolean }) {
+  return (
+    <button role="menuitem" onClick={onClick} disabled={disabled}
+      className={`w-full flex items-center gap-2.5 px-3 py-2 text-[13px] text-left transition-colors disabled:opacity-40 ${danger ? 'text-red-600 hover:bg-red-50' : 'text-gray-700 hover:bg-gray-50'}`}>
       {children}
     </button>
   )

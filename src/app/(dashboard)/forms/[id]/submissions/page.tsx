@@ -78,7 +78,7 @@ export default function FormSubmissionsPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <button onClick={() => router.push(`/forms/${formId}`)} className="p-2 rounded-lg hover:bg-white text-gray-500 hover:text-white transition-colors">
+        <button onClick={() => router.push('/site/forms')} aria-label="Voltar para os popups" className="p-2 rounded-lg hover:bg-white text-gray-500 hover:text-white transition-colors">
           <ArrowLeft className="w-5 h-5" />
         </button>
         <div>

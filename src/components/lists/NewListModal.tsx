@@ -125,7 +125,7 @@ export function NewListModal({ open, onClose, onCreated }: Props) {
               </button>
 
               <a
-                href="/forms"
+                href="/site/forms"
                 className="border border-gray-200 rounded-xl p-4 hover:border-brand-500 hover:bg-brand-50 transition-colors text-left flex items-start gap-3"
               >
                 <div className="w-9 h-9 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0">

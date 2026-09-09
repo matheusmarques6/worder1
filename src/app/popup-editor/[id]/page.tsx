@@ -7,6 +7,7 @@ import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } 
 import { CSS } from '@dnd-kit/utilities'
 import { TRAFFIC_TYPES, PAGE_TEMPLATES } from '@/lib/popups/targeting'
 import { wheelSectorPath, wheelLabelPos } from '@/lib/popups/games'
+import { splitLines } from '@/lib/popups/lines'
 import {
   ArrowLeft, Save, Loader2, Monitor, Smartphone, Plus, Trash2, X, Undo2, Redo2, Copy,
   ChevronDown, ChevronRight, GripVertical, Users, CalendarDays, Target, Power,
@@ -662,11 +663,6 @@ function CheckList({ items, selected, onToggle }: { items: Array<{ id: string; n
   )
 }
 
-// Uma linha por item. Guarda o texto cru enquanto a pessoa digita (senão o
-// Enter some: "a\n" vira ['a'] e o React devolve "a") e entrega a lista limpa.
-export function splitLines(v: string, transform?: (s: string) => string): string[] {
-  return v.split('\n').map(x => (transform ? transform(x.trim()) : x.trim())).filter(Boolean)
-}
 function LinesTextarea({ value, onChange, rows = 2, className, placeholder, transform }: {
   value: string[]; onChange: (lines: string[]) => void; rows?: number; className?: string; placeholder?: string; transform?: (s: string) => string
 }) {

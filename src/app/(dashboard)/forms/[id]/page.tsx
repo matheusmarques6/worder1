@@ -324,7 +324,7 @@ export default function FormBuilderPage() {
       <div className="flex flex-col items-center justify-center py-20">
         <AlertCircle className="w-12 h-12 text-red-400 mb-4" />
         <h3 className="text-lg font-semibold text-gray-900">Formulario nao encontrado</h3>
-        <button onClick={() => router.push('/forms')} className="mt-4 text-brand-600 hover:text-brand-500">
+        <button onClick={() => router.push('/site/forms')} className="mt-4 text-brand-600 hover:text-brand-500">
           Voltar para formularios
         </button>
       </div>
@@ -336,7 +336,7 @@ export default function FormBuilderPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-4">
-          <button onClick={() => router.push('/forms')} className="p-2 rounded-lg hover:bg-white text-gray-500 hover:text-white transition-colors">
+          <button onClick={() => router.push('/site/forms')} className="p-2 rounded-lg hover:bg-white text-gray-500 hover:text-white transition-colors">
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
