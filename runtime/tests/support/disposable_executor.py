@@ -1278,7 +1278,9 @@ class Executor:
                     )
                     marker = self.run / "upgrade-baseline.json"
                     no_links(marker)
-                    self.preflight(check_reset=not marker.is_file())
+                    self.preflight(
+                        check_reset=action not in {"Upgrade", "Test"} or not marker.is_file()
+                    )
                 commit = self.command("git", "rev-parse", "HEAD", timeout=30).stdout.strip()
                 require(re.fullmatch(r"[0-9a-f]{40}", commit), "invalid checkout commit")
                 if action == "Test":

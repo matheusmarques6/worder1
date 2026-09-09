@@ -3205,6 +3205,30 @@ def test_sealed_cycle_never_checks_or_executes_db_reset(tmp_path, monkeypatch):
     ] == []
 
 
+def test_replay_with_arbitrary_upgrade_marker_still_checks_reset_capability(
+    tmp_path, monkeypatch,
+):
+    executor, cli = fake_environment(tmp_path, monkeypatch)
+    assert executor.execute("Prepare") == 0
+    (executor.run / "upgrade-baseline.json").write_text("{}\n", encoding="ascii")
+    cli.calls.clear()
+    reset_help = ["supabase", "db", "reset", "--help"]
+
+    def runner(argv, **kwargs):
+        result = cli(argv, **kwargs)
+        if argv == reset_help:
+            return ex.subprocess.CompletedProcess(argv, 0, "--local --workdir", "")
+        return result
+
+    executor = ex.Executor(executor.repo, executor.run, runner=runner)
+    assert executor.execute("Replay") == 2
+    assert reset_help in cli.calls
+    assert [
+        call for call in cli.calls
+        if call[:3] == ["supabase", "db", "reset"] and "--workdir" in call
+    ] == []
+
+
 @pytest.mark.parametrize("kind", ["linked", "reparse"])
 def test_prepare_upgrade_refuses_linked_fixture_before_start(tmp_path, monkeypatch, kind):
     executor, cli = upgrade_environment(tmp_path, monkeypatch)
