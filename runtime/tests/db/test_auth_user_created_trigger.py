@@ -150,3 +150,38 @@ def test_second_enabled_handle_new_user_trigger_aborts_migration_without_change(
         assert _auth_trigger_definitions(admin) == before
     finally:
         admin.execute(f"drop trigger if exists {duplicate} on auth.users")
+
+
+@pytest.mark.parametrize(
+    "ddl",
+    (
+        """create trigger on_auth_user_created after insert on auth.users
+             for each row execute function public.handle_new_user('unexpected')""",
+        """create trigger on_auth_user_created after insert on auth.users
+             for each row when (new.id is not null)
+             execute function public.handle_new_user()""",
+        """create constraint trigger on_auth_user_created after insert on auth.users
+             deferrable initially immediate for each row
+             execute function public.handle_new_user()""",
+    ),
+    ids=("arguments", "when", "constraint"),
+)
+def test_noncanonical_homonym_aborts_migration_without_change(admin, ddl):
+    admin.execute("drop trigger on_auth_user_created on auth.users")
+    admin.execute(ddl)
+    before = _auth_trigger_definitions(admin)
+
+    try:
+        with pytest.raises(
+            psycopg.errors.RaiseException,
+            match="auth trigger conflict: on_auth_user_created definition",
+        ):
+            with admin.transaction():
+                admin.execute(MIGRATION_PATH.read_text(encoding="utf-8"))
+        assert _auth_trigger_definitions(admin) == before
+    finally:
+        admin.execute("drop trigger if exists on_auth_user_created on auth.users")
+        admin.execute(
+            """create trigger on_auth_user_created after insert on auth.users
+                 for each row execute function public.handle_new_user()"""
+        )

@@ -113,6 +113,9 @@ BEGIN
          NOT t.tgisinternal
          AND t.tgenabled = 'O'
          AND t.tgtype = 5
+         AND t.tgnargs = 0
+         AND t.tgqual IS NULL
+         AND t.tgconstraint = 0
          AND p.oid = handle_new_user_oid
          AND pn.nspname = 'public'
        )
