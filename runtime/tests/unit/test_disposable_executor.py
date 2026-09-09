@@ -362,7 +362,9 @@ def test_run_process_normalizes_signal_return_code(monkeypatch):
 
 
 @pytest.mark.parametrize("interrupted", [False, True])
-@pytest.mark.parametrize("helper_failure", ["missing", "timeout", "nonzero", None])
+@pytest.mark.parametrize(
+    "helper_failure", ["missing", "timeout", "wait-error", "kill-error", "nonzero", None],
+)
 @pytest.mark.parametrize("drain_failure", ["pipe-open", "wait", None])
 def test_run_process_reports_unproven_reap_without_unbounded_waits(
     monkeypatch, interrupted, helper_failure, drain_failure,
@@ -370,6 +372,7 @@ def test_run_process_reports_unproven_reap_without_unbounded_waits(
     events = []
     expected_code = 130 if interrupted else 124
     initial_error = KeyboardInterrupt() if interrupted else ex.subprocess.TimeoutExpired("tool", 1)
+    filtered_env = {"PATH": "safe-bin", "NO_COLOR": "1"}
 
     class Process:
         pid = 321
@@ -393,42 +396,71 @@ def test_run_process_reports_unproven_reap_without_unbounded_waits(
             if drain_failure == "wait":
                 raise ex.subprocess.TimeoutExpired("tool", timeout)
 
-    def taskkill(argv, **kwargs):
+    class Helper:
+        def wait(self, *, timeout=None):
+            events.append(("taskkill-wait", timeout))
+            assert timeout == 30, "helper wait must be bounded"
+            if helper_failure in {"timeout", "kill-error"}:
+                raise ex.subprocess.TimeoutExpired("taskkill", timeout)
+            if helper_failure == "wait-error":
+                raise OSError("taskkill wait failed")
+            return 1 if helper_failure == "nonzero" else 0
+
+        def kill(self):
+            events.append(("taskkill-kill",))
+            if helper_failure == "kill-error":
+                raise OSError("taskkill kill failed")
+
+    helper = Helper()
+
+    def popen(argv, **kwargs):
+        if argv[0] != "taskkill.exe":
+            assert argv == ["C:/bin/tool.exe"]
+            return process
         events.append(("taskkill", argv, kwargs))
+        assert kwargs == {
+            "cwd": REPO, "env": filtered_env, "shell": False,
+            "stdin": ex.subprocess.DEVNULL, "stdout": ex.subprocess.DEVNULL,
+            "stderr": ex.subprocess.DEVNULL,
+        }
         if helper_failure == "missing":
             raise OSError("taskkill missing")
-        if helper_failure == "timeout":
-            raise ex.subprocess.TimeoutExpired("taskkill", 30)
-        return ex.subprocess.CompletedProcess(argv, 1 if helper_failure == "nonzero" else 0)
+        return helper
 
     process = Process()
     monkeypatch.setattr(ex, "os", SimpleNamespace(name="nt"))
     monkeypatch.setattr(ex.subprocess, "CREATE_NEW_PROCESS_GROUP", 512, raising=False)
     monkeypatch.setattr(ex.shutil, "which", lambda _: "C:/bin/tool.exe")
-    monkeypatch.setattr(ex.subprocess, "Popen", lambda *_args, **_kwargs: process)
-    monkeypatch.setattr(ex.subprocess, "run", taskkill)
+    monkeypatch.setattr(ex.subprocess, "Popen", popen)
 
     if helper_failure or drain_failure:
         with pytest.raises(ex.CommandFailure) as failure:
-            ex.run_process(["tool"], cwd=REPO, env={}, input="sql", timeout=1)
+            ex.run_process(["tool"], cwd=REPO, env=filtered_env, input="sql", timeout=1)
         assert type(failure.value).__name__ == "ProcessReapFailure"
         assert failure.value.code == expected_code and failure.value.process is process
+        assert failure.value.helper is (None if helper_failure == "missing" else helper)
     else:
-        result = ex.run_process(["tool"], cwd=REPO, env={}, input="sql", timeout=1)
+        result = ex.run_process(["tool"], cwd=REPO, env=filtered_env, input="sql", timeout=1)
         assert (result.returncode, result.stdout, result.stderr) == (
             expected_code, "after", "cleanup",
         )
-    assert events[:3] == [
+    helper_events = [] if helper_failure == "missing" else [("taskkill-wait", 30)]
+    if helper_failure and helper_failure != "missing":
+        helper_events.append(("taskkill-kill",))
+    assert events == [
         ("communicate", "sql", 1),
         (
             "taskkill",
             ["taskkill.exe", "/PID", "321", "/T", "/F"],
-            {"capture_output": True, "check": False, "timeout": 30, "shell": False},
+            {"cwd": REPO, "env": filtered_env, "shell": False,
+             "stdin": ex.subprocess.DEVNULL, "stdout": ex.subprocess.DEVNULL,
+             "stderr": ex.subprocess.DEVNULL},
         ),
+        *helper_events,
         ("kill",),
+        ("communicate", None, 30),
+        ("wait", 30),
     ]
-    assert events[3] == ("communicate", None, 30)
-    assert events[4:] == [("wait", 30)]
 
 
 def test_child_env_is_allowlisted_and_does_not_mutate_parent(monkeypatch):
@@ -3062,7 +3094,7 @@ def test_cleanup_requires_local_context_proof_even_when_called_directly(
 
 @pytest.mark.parametrize("stage", ["preflight", "db", "stop"])
 @pytest.mark.parametrize("interrupted", [False, True])
-@pytest.mark.parametrize("unproven", ["tree", "pipe-open", None])
+@pytest.mark.parametrize("unproven", ["tree", "pipe-open", "helper-timeout", None])
 def test_unproven_process_reap_blocks_lifecycle_until_inspection(
     tmp_path, monkeypatch, stage, interrupted, unproven,
 ):
@@ -3092,6 +3124,20 @@ def test_unproven_process_reap_blocks_lifecycle_until_inspection(
             events.append(("wait", timeout))
 
     process = Process()
+    helper_events = []
+
+    class Helper:
+        def wait(self, *, timeout):
+            helper_events.append(("wait", timeout))
+            assert timeout == 30
+            if unproven == "helper-timeout":
+                raise ex.subprocess.TimeoutExpired("taskkill", timeout)
+            return 1 if unproven == "tree" else 0
+
+        def kill(self):
+            helper_events.append(("kill",))
+
+    helper = Helper()
 
     def runner(argv, **kwargs):
         nonlocal blocked
@@ -3106,9 +3152,8 @@ def test_unproven_process_reap_blocks_lifecycle_until_inspection(
                 patch.setattr(ex, "os", SimpleNamespace(name="nt"))
                 patch.setattr(ex.shutil, "which", lambda _: "tool.exe")
                 patch.setattr(ex.subprocess, "CREATE_NEW_PROCESS_GROUP", 512, raising=False)
-                patch.setattr(ex.subprocess, "Popen", lambda *_a, **_k: process)
-                patch.setattr(ex.subprocess, "run", lambda *a, **k:
-                              ex.subprocess.CompletedProcess(a[0], 1 if unproven == "tree" else 0))
+                patch.setattr(ex.subprocess, "Popen", lambda args, **kw:
+                              helper if args[0] == "taskkill.exe" else process)
                 return ex.run_process(argv, **kwargs)
         return cli(argv, **kwargs)
 
@@ -3116,6 +3161,9 @@ def test_unproven_process_reap_blocks_lifecycle_until_inspection(
     assert executor.execute("Test") == expected_code
     assert events == [("communicate", 30 if stage == "preflight" else 600),
                       ("kill",), ("communicate", 30), ("wait", 30)]
+    assert helper_events == [("wait", 30)] + (
+        [("kill",)] if unproven in {"tree", "helper-timeout"} else []
+    )
     gate = ex.read_json(executor.run / "gates.json")
     assert gate["failure"] == {
         "stage": stage, "kind": "ProcessReapFailure" if unproven else "CommandFailure",
@@ -3125,6 +3173,7 @@ def test_unproven_process_reap_blocks_lifecycle_until_inspection(
     assert gate["state"] == ("failed" if unproven or stage != "db" else "stopped")
     lock = executor.run.parent / ".executor.lock"
     if unproven:
+        assert executor.reap_failure.helper is helper
         assert lock.read_text("utf-8") == str(os.getpid())
         assert cli.started
         assert not (executor.run / "unproven.json").exists()
@@ -3162,12 +3211,23 @@ def test_run_process_timeout_and_interrupt_kill_tree_drain_and_reap(
         def wait(self, *, timeout):
             events.append(("wait", timeout))
 
-    def taskkill(argv, **kwargs):
+    class Helper:
+        def wait(self, *, timeout):
+            assert timeout == 30
+            events.append(("taskkill-wait",))
+            return 0
+
+    def popen_process(argv, **kwargs):
+        if argv[0] != "taskkill.exe":
+            return process
         assert platform == "nt", "POSIX must not invoke the Windows taskkill backend"
         assert argv == ["taskkill.exe", "/PID", "31337", "/T", "/F"]
-        assert kwargs == {"capture_output": True, "check": False, "timeout": 30, "shell": False}
+        assert kwargs == {
+            "cwd": REPO, "env": {}, "shell": False, "stdin": ex.subprocess.DEVNULL,
+            "stdout": ex.subprocess.DEVNULL, "stderr": ex.subprocess.DEVNULL,
+        }
         events.append(("taskkill",))
-        return ex.subprocess.CompletedProcess(argv, 0, "", "")
+        return Helper()
 
     def killpg(pid, signal):
         assert platform == "posix", "Windows must not invoke the POSIX killpg backend"
@@ -3176,12 +3236,12 @@ def test_run_process_timeout_and_interrupt_kill_tree_drain_and_reap(
         if group_missing:
             raise ProcessLookupError()
 
-    popen = MagicMock(return_value=Process())
+    process = Process()
+    popen = MagicMock(side_effect=popen_process)
     monkeypatch.setattr(ex, "os", SimpleNamespace(name=platform, killpg=killpg))
     monkeypatch.setattr(ex, "signal", SimpleNamespace(SIGKILL=9))
     monkeypatch.setattr(ex.shutil, "which", lambda _: "tool.exe")
     monkeypatch.setattr(ex.subprocess, "Popen", popen)
-    monkeypatch.setattr(ex.subprocess, "run", taskkill)
     monkeypatch.setattr(ex.subprocess, "CREATE_NEW_PROCESS_GROUP", 512, raising=False)
     result = ex.run_process(["uv", "run", "pytest"], cwd=REPO, env={}, input="sql", timeout=1)
     assert (result.returncode, result.stdout, result.stderr) == (
@@ -3190,13 +3250,16 @@ def test_run_process_timeout_and_interrupt_kill_tree_drain_and_reap(
     assert events == [
         ("communicate", "sql", 1),
         ("taskkill",) if platform == "nt" else ("killpg", group_missing),
+        *([("taskkill-wait",)] if platform == "nt" else []),
         ("kill",),
         ("communicate", None, 30), ("wait", 30),
     ]
-    assert popen.call_args.args == (["tool.exe", "run", "pytest"],)
-    assert popen.call_args.kwargs["shell"] is False
-    assert popen.call_args.kwargs["start_new_session"] is (platform == "posix")
-    assert popen.call_args.kwargs["creationflags"] == (512 if platform == "nt" else 0)
+    assert popen.call_count == (2 if platform == "nt" else 1)
+    main_call = popen.call_args_list[0]
+    assert main_call.args == (["tool.exe", "run", "pytest"],)
+    assert main_call.kwargs["shell"] is False
+    assert main_call.kwargs["start_new_session"] is (platform == "posix")
+    assert main_call.kwargs["creationflags"] == (512 if platform == "nt" else 0)
 
 
 @pytest.mark.parametrize("bad", [

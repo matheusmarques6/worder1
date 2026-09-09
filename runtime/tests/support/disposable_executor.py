@@ -271,11 +271,12 @@ class CommandFailure(RuntimeError):
 
 
 class ProcessReapFailure(CommandFailure):
-    def __init__(self, code, process):
+    def __init__(self, code, process, helper=None):
         super().__init__(code)
         # Pipe reader/writer threads may own IO locks. Retain and abandon the
         # process rather than block in close(); the executor lock requires inspection.
         self.process = process
+        self.helper = helper
 
 
 def child_env(identity=None):
@@ -332,20 +333,27 @@ def run_process(argv, *, cwd, env, input=None, timeout=600):
     except (subprocess.TimeoutExpired, KeyboardInterrupt) as error:
         code = 130 if isinstance(error, KeyboardInterrupt) else 124
         tree_killed = True
+        helper = None
         try:
             if os.name == "nt":
-                tree_killed = subprocess.run(
+                helper = subprocess.Popen(
                     ["taskkill.exe", "/PID", str(process.pid), "/T", "/F"],
-                    capture_output=True,
-                    check=False,
-                    timeout=30,
+                    cwd=cwd,
+                    env=env,
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
                     shell=False,
-                ).returncode == 0
+                )
+                tree_killed = helper.wait(timeout=30) == 0
             else:
                 with contextlib.suppress(ProcessLookupError):
                     os.killpg(process.pid, signal.SIGKILL)
         except (OSError, subprocess.TimeoutExpired, KeyboardInterrupt):
             tree_killed = False
+        if helper is not None and not tree_killed:
+            with contextlib.suppress(OSError, KeyboardInterrupt):
+                helper.kill()
         try:
             process.kill()
         except (OSError, KeyboardInterrupt):
@@ -356,9 +364,9 @@ def run_process(argv, *, cwd, env, input=None, timeout=600):
             finally:
                 process.wait(timeout=30)
         except (OSError, subprocess.TimeoutExpired, KeyboardInterrupt):
-            raise ProcessReapFailure(code, process) from None
+            raise ProcessReapFailure(code, process, helper) from None
         if not tree_killed:
-            raise ProcessReapFailure(code, process) from None
+            raise ProcessReapFailure(code, process, helper) from None
     return subprocess.CompletedProcess(argv, 128 - code if code < 0 else code, stdout, stderr)
 
 
