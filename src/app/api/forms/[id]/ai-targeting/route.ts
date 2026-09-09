@@ -6,6 +6,8 @@
 // para o editor mostrar e o lojista aplicar (nada é salvo aqui).
 // =============================================
 import { NextRequest, NextResponse } from 'next/server'
+import { Ratelimit } from '@upstash/ratelimit'
+import { Redis } from '@upstash/redis'
 import { getAuthClient, authError } from '@/lib/api-utils'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { generateTargeting } from '@/lib/popups/ai-targeting'
@@ -13,10 +15,28 @@ import { generateTargeting } from '@/lib/popups/ai-targeting'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-const ORG_USAGE = new Map<string, { count: number; resetAt: number }>()
+// Limite diário por org. Com Upstash configurado o contador é compartilhado
+// entre instâncias; sem ele, vale por instância (best-effort em serverless).
 const DAILY_LIMIT = 100
+const ORG_USAGE = new Map<string, { count: number; resetAt: number }>()
+let upstash: Ratelimit | null | undefined
+function getRatelimit(): Ratelimit | null {
+  if (upstash !== undefined) return upstash
+  if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+    try {
+      upstash = new Ratelimit({ redis: Redis.fromEnv(), limiter: Ratelimit.fixedWindow(DAILY_LIMIT, '1 d'), prefix: 'rl:popup-ai' })
+      return upstash
+    } catch { /* cai no contador local */ }
+  }
+  upstash = null
+  return null
+}
 
-function checkRate(orgId: string): boolean {
+async function checkRate(orgId: string): Promise<boolean> {
+  const rl = getRatelimit()
+  if (rl) {
+    try { return (await rl.limit(orgId)).success } catch { /* Redis fora: não bloqueia o lojista */ }
+  }
   const now = Date.now()
   const e = ORG_USAGE.get(orgId)
   if (!e || e.resetAt < now) { ORG_USAGE.set(orgId, { count: 1, resetAt: now + 86400000 }); return true }
@@ -32,7 +52,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const body = await req.json().catch(() => ({}))
   const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : ''
   if (!prompt) return NextResponse.json({ error: 'Descreva quem deve ver o popup.' }, { status: 400 })
-  if (!checkRate(orgId)) return NextResponse.json({ error: 'Limite diário de sugestões da IA atingido.' }, { status: 429 })
+  if (!(await checkRate(orgId))) return NextResponse.json({ error: 'Limite diário de sugestões da IA atingido.' }, { status: 429 })
 
   const admin = getSupabaseAdmin()
   const { data: form } = await admin.from('crm_forms').select('id').eq('id', params.id).eq('organization_id', orgId).maybeSingle()

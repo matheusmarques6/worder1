@@ -156,6 +156,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   for (const s of submissions) {
     const g: any = s.game_prize
     if (!g || typeof g !== 'object') continue
+    // Reenvio devolve o mesmo resultado — não é uma jogada nova.
+    if (g.replay) continue
     plays++
     const key = `${g.segment_id || g.segment}|${g.label || ''}`
     const row = prizeMap.get(key) || { label: String(g.label || '—'), prize: String(g.prize || 'base'), count: 0, orders: 0 }

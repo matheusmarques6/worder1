@@ -3870,7 +3870,8 @@ export default function PopupEditorPage() {
     const cp = all.find(b => b.type === 'coupon')
     return {
       hasCoupon: !!cp,
-      couponTiers: (Array.isArray(cp?.props?.tiers) ? cp!.props.tiers : []) as any[],
+      // A mesma leitura do servidor: nível sem id não existe para o jogo.
+      couponTiers: (Array.isArray(cp?.props?.tiers) ? cp!.props.tiers.filter((t: any) => t && String(t.id || '').replace(/[^a-zA-Z0-9_-]/g, '')) : []) as any[],
       baseOfferLabel: cp ? offerLabelOf(cp.props) : '',
       gameBlocks: all.filter(b => b.type === 'wheel' || b.type === 'scratch').length,
     }

@@ -126,8 +126,11 @@ export function readRewardTiers(couponProps: any): RewardTier[] {
   for (const t of raw) {
     if (!t || typeof t !== 'object') continue
     const id = String(t.id || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32)
+    // Sem etapa o nível não se desbloqueia pelo caminho, mas continua
+    // existindo: a roleta/raspadinha e a oferta por intenção escolhem
+    // níveis pelo id, e o pool de códigos dele precisa ser criado.
     const afterStepId = String(t.afterStepId || '')
-    if (!id || !afterStepId) continue
+    if (!id) continue
     const kind: RewardTier['kind'] =
       t.discountType === 'free_shipping' ? 'free_shipping'
         : t.discountType === 'fixed_amount' || t.discountType === 'fixed' ? 'fixed'
@@ -152,7 +155,7 @@ export function readRewardTiers(couponProps: any): RewardTier[] {
 export function effectiveRewardTier(tiers: RewardTier[], stepPath: string[]): RewardTier | null {
   const visited = new Set(stepPath)
   let chosen: RewardTier | null = null
-  for (const t of tiers) if (visited.has(t.afterStepId)) chosen = t
+  for (const t of tiers) if (t.afterStepId && visited.has(t.afterStepId)) chosen = t
   return chosen
 }
 

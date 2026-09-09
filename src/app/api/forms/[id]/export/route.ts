@@ -14,7 +14,10 @@ export const maxDuration = 120
 
 function csv(v: unknown): string {
   if (v === null || v === undefined) return ''
-  const s = typeof v === 'object' ? JSON.stringify(v) : String(v)
+  let s = typeof v === 'object' ? JSON.stringify(v) : String(v)
+  // Respostas vêm do visitante: "=HYPERLINK(...)" numa célula viraria
+  // fórmula na planilha do lojista. Um apóstrofo na frente neutraliza.
+  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s
   return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 

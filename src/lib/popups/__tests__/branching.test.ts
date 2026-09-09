@@ -57,16 +57,19 @@ describe('recompensa progressiva', () => {
       { id: 't1', label: '15% após o quiz', afterStepId: 's2', discountType: 'percentage', discountValue: 15, code: 'quiz15' },
       { id: 't2', label: 'Frete grátis após a lição', afterStepId: 's3', discountType: 'free_shipping', discountValue: 999 },
       { id: '', afterStepId: 's2' },
-      { id: 'bad' },
+      // Sem etapa o nível existe (jogo e oferta por intenção o escolhem
+      // pelo id), mas nunca vale pelo caminho.
+      { id: 'game-only', label: 'Só pela roleta', discountType: 'percentage', discountValue: 20 },
       null,
     ],
   }
 
   it('lê só tiers válidos', () => {
     const tiers = readRewardTiers(props)
-    expect(tiers).toHaveLength(2)
+    expect(tiers).toHaveLength(3)
     expect(tiers[0]).toMatchObject({ id: 't1', kind: 'percent', value: 15, staticCode: 'QUIZ15' })
     expect(tiers[1]).toMatchObject({ id: 't2', kind: 'free_shipping', value: 0, staticCode: null })
+    expect(tiers[2]).toMatchObject({ id: 'game-only', afterStepId: '', value: 20 })
     expect(readRewardTiers({})).toEqual([])
   })
 
@@ -77,5 +80,7 @@ describe('recompensa progressiva', () => {
     expect(effectiveRewardTier(tiers, ['s1', 's2', 's3'])?.id).toBe('t2')
     // Pulou o quiz e foi direto à lição: vale o da lição (ordem do lojista, não do caminho).
     expect(effectiveRewardTier(tiers, ['s1', 's3'])?.id).toBe('t2')
+    // O nível sem etapa nunca vale pelo caminho — nem com um id vazio no path.
+    expect(effectiveRewardTier(tiers, ['s1', ''])).toBeNull()
   })
 })

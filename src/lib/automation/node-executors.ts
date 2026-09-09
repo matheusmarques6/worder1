@@ -2298,12 +2298,14 @@ const actionExecutors: Record<string, NodeExecutor> = {
           store = { id: context.storeId || '', organization_id: organizationId || context.organization_id || context.organizationId || '', shop_domain: credentials.shopDomain, access_token: credentials.accessToken, currency: null };
         } else if (context.storeId) {
           const { supabaseAdmin } = await import('@/lib/supabase-admin');
-          const { data: row } = await supabaseAdmin
+          let q = supabaseAdmin
             .from('shopify_stores')
             .select('id, organization_id, shop_domain, access_token, currency')
             .eq('id', context.storeId)
-            .eq('is_active', true)
-            .maybeSingle();
+            .eq('is_active', true);
+          const orgScope = organizationId || context.organization_id || context.organizationId;
+          if (orgScope) q = q.eq('organization_id', orgScope);
+          const { data: row } = await q.maybeSingle();
           if (row?.shop_domain && row?.access_token) store = row as any;
         }
         if (!store) {

@@ -724,7 +724,10 @@ function visibleBlocks(bs){
 function gameSegs(p){
   var l=Array.isArray(p.segments)?p.segments.slice(0,12):[],o=[],cols=["#F97316","#111827","#FDBA74","#374151","#FB923C","#1F2937","#FED7AA","#4B5563"];
   for(var i=0;i<l.length;i++){
-    var s=l[i]||{};
+    var s=l[i];
+    // Mesmo filtro do servidor: uma entrada inválida pulada aqui e lá
+    // mantém os índices alinhados com o segmento sorteado.
+    if(!s||typeof s!=="object")continue;
     o.push({label:String(s.label||("Pr\\u00eamio "+(i+1))).slice(0,40),color:/^#[0-9a-fA-F]{6}$/.test(String(s.color||""))?s.color:cols[i%cols.length],textColor:/^#[0-9a-fA-F]{6}$/.test(String(s.textColor||""))?s.textColor:null});
   }
   return o;
@@ -735,8 +738,8 @@ function gameBtn(p,def){
 // Depois do envio: gira a roleta (ou libera a raspadinha) até o segmento
 // que o servidor sorteou, e só então chama done() — a etapa de sucesso.
 function playGameAnim(el,g,done){
-  var type=el.getAttribute("data-game"),gid=el.getAttribute("data-game-id"),fin=false;
-  function end(ms){if(fin)return;fin=true;setTimeout(done,ms==null?900:ms)}
+  var type=el.getAttribute("data-game"),gid=el.getAttribute("data-game-id"),fin=false,cleanup=null;
+  function end(ms){if(fin)return;fin=true;if(cleanup){try{cleanup()}catch(e){}cleanup=null}setTimeout(done,ms==null?900:ms)}
   try{
     if(type==="wheel"){
       var svg=$("wf-wheel-"+gid),n=parseInt(el.getAttribute("data-n"),10)||0,i=Math.max(0,Math.min(n-1,parseInt(g.segment,10)||0));
@@ -763,14 +766,16 @@ function playGameAnim(el,g,done){
       function check(){try{var d=cx.getImageData(0,0,W,H).data,c=0,tot=0;for(var k=3;k<d.length;k+=64){tot++;if(d[k]===0)c++}if(tot&&c/tot>0.45)reveal()}catch(e){reveal()}}
       function scratch(ev){if(fin)return;if(ev.cancelable)ev.preventDefault();var q=pos(ev);cx.globalCompositeOperation="destination-out";cx.beginPath();cx.arc(q.x,q.y,Math.max(16,W/12),0,Math.PI*2);cx.fill();if(++strokes%6===0)check()}
       cv.style.cursor="grab";
+      function up(){down=false}
       cv.addEventListener("mousedown",function(e){down=true;scratch(e)});
       cv.addEventListener("mousemove",function(e){if(down)scratch(e)});
-      window.addEventListener("mouseup",function(){down=false});
+      window.addEventListener("mouseup",up);
       cv.addEventListener("touchstart",scratch,{passive:false});
       cv.addEventListener("touchmove",scratch,{passive:false});
       if(hint){hint.style.display="block";hint.addEventListener("click",function(e){e.preventDefault();reveal()})}
       // Quem não raspa em 20 s vê o prêmio mesmo assim.
-      setTimeout(reveal,20000);
+      var auto=setTimeout(reveal,20000);
+      cleanup=function(){clearTimeout(auto);window.removeEventListener("mouseup",up)};
       return;
     }
   }catch(e){}
@@ -1533,12 +1538,16 @@ function show(){
     // Jogo: o servidor já sorteou. A roleta gira (ou a raspadinha abre) até
     // o prêmio, e só então entra a etapa de sucesso — que pode mostrar
     // {{prize}} e o cupom daquele nível.
+    // O resultado vale mesmo se o jogo ficou numa etapa anterior: {{prize}}
+    // e o cupom escondido em "nada" dependem dele; só a animação precisa
+    // do elemento na tela.
     var gameEl=content.querySelector("[data-game]");
-    if(res&&res.game&&gameEl){
+    if(res&&res.game){
       GAME.result=res.game;
       wfEmit("gameResult",{game:res.game.type||null,segment:res.game.segment,label:res.game.label||null,prize:res.game.prize||null});
-      playGameAnim(gameEl,res.game,finish);
-    } else finish();
+    }
+    if(res&&res.game&&gameEl)playGameAnim(gameEl,res.game,finish);
+    else finish();
   }
   // Progressive profiling loads known fields before first render.
   loadKnownFields(function(){renderForm(renderStep(0))});
