@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { useWhatsAppConnection } from '@/hooks/useWhatsAppConnection'
 import { WhatsAppConnectionRequired, WhatsAppConnectionLoading, WhatsAppConnectionBanner } from '@/components/whatsapp/WhatsAppConnectionRequired'
+import { SendingHealthPanel } from '@/components/shared/SendingHealthPanel'
 
 interface Campaign {
   id: string
@@ -136,6 +137,10 @@ export default function CampaignsPage() {
           <Plus className="w-5 h-5" /> Nova Campanha
         </button>
       </div>
+
+      {/* Token vencendo, webhook caído, qualidade em queda: coisas que
+          fazem a campanha não sair e que ninguém vê até tentar. */}
+      <SendingHealthPanel channel="whatsapp" />
 
       {/* Metrics */}
       {metrics && (

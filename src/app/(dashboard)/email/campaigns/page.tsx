@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { useStoreStore } from '@/stores'
+import { SendingHealthPanel } from '@/components/shared/SendingHealthPanel'
 
 interface Campaign {
   id: string
@@ -136,6 +137,10 @@ export default function CampaignsPage() {
           Nova Campanha
         </Link>
       </div>
+
+      {/* O que impede as mensagens de chegar. Fica ANTES dos números: de
+          nada adianta a taxa de abertura se o domínio caiu. */}
+      <SendingHealthPanel channel="email" />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

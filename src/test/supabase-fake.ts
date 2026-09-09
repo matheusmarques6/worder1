@@ -70,11 +70,15 @@ export function fakeSupabase(options: FakeSupabaseOptions = {}): FakeSupabase {
       const q: RecordedQuery = { table, filters: [], operation: 'select' }
       queries.push(q)
 
+      // `head: true` pede só a contagem. O cliente real segue encadeável
+      // depois disso (.eq/.gte vêm DEPOIS do select), e o await no fim
+      // devolve `count` com `data: null`.
+      let headOnly = false
       const settle = () => {
         const err = options.errors?.[table]
         if (err) return { data: null, error: err, count: null }
         const rows = resolveRows(q)
-        return { data: rows, error: null, count: rows.length }
+        return { data: headOnly ? null : rows, error: null, count: rows.length }
       }
       const single = () => {
         const s = settle()
@@ -96,10 +100,7 @@ export function fakeSupabase(options: FakeSupabaseOptions = {}): FakeSupabase {
       const builder: any = {
         select(columns?: string, opts?: { count?: string; head?: boolean }) {
           if (q.operation === 'select') q.columns = columns
-          if (opts?.head) {
-            // count exato sem trazer linhas: a rota só lê `count`.
-            return Promise.resolve({ data: null, error: settle().error, count: settle().count })
-          }
+          if (opts?.head) headOnly = true
           return builder
         },
         insert(payload: any) { q.operation = 'insert'; q.written = payload; return builder },
