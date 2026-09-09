@@ -124,9 +124,13 @@ Run each action sequentially and stop at the first non-zero exit. `$freshNonce` 
 $freshNonce = [guid]::NewGuid().ToString('N')
 $freshRun = Join-Path $PWD ".superpowers/sdd/auditoria-ia-disposable/$freshNonce"
 & ./scripts/test-disposable-db.ps1 -Action Prepare -RunDirectory $freshRun
+if ($LASTEXITCODE -ne 0) { throw "Prepare failed with exit code $LASTEXITCODE" }
 & ./scripts/test-disposable-db.ps1 -Action Replay -RunDirectory $freshRun
+if ($LASTEXITCODE -ne 0) { throw "Replay failed with exit code $LASTEXITCODE" }
 & ./scripts/test-disposable-db.ps1 -Action Test -RunDirectory $freshRun
+if ($LASTEXITCODE -ne 0) { throw "Test failed with exit code $LASTEXITCODE" }
 & ./scripts/test-disposable-db.ps1 -Action Stop -RunDirectory $freshRun
+if ($LASTEXITCODE -ne 0) { throw "Stop failed with exit code $LASTEXITCODE" }
 ```
 
 An empty `TestTargets` value selects the executor's full serial proof: RLS collection, database tests, RLS tests, then pipeline tests. `Test` also proves cleanup in its failure path; the explicit `Stop` proves idempotence.
@@ -139,13 +143,17 @@ The upgrade lane is sealed: `PrepareUpgrade` builds the legacy prefix and marker
 $upgradeNonce = [guid]::NewGuid().ToString('N')
 $upgradeRun = Join-Path $PWD ".superpowers/sdd/auditoria-ia-disposable/$upgradeNonce"
 & ./scripts/test-disposable-db.ps1 -Action PrepareUpgrade -RunDirectory $upgradeRun
+if ($LASTEXITCODE -ne 0) { throw "PrepareUpgrade failed with exit code $LASTEXITCODE" }
 & ./scripts/test-disposable-db.ps1 -Action Upgrade -RunDirectory $upgradeRun
+if ($LASTEXITCODE -ne 0) { throw "Upgrade failed with exit code $LASTEXITCODE" }
 & ./scripts/test-disposable-db.ps1 -Action Test -RunDirectory $upgradeRun -TestTargets @(
   'tests/db/test_app_baseline_schema.py',
   'tests/db/app_baseline_upgrade_check.py',
   'tests/db/test_auth_user_created_trigger.py'
 )
+if ($LASTEXITCODE -ne 0) { throw "Test failed with exit code $LASTEXITCODE" }
 & ./scripts/test-disposable-db.ps1 -Action Stop -RunDirectory $upgradeRun
+if ($LASTEXITCODE -ne 0) { throw "Stop failed with exit code $LASTEXITCODE" }
 ```
 
 `TestTargets` is transported as a native PowerShell array with `&`. Never nest `pwsh -File` to pass that array; the launcher accepts the array directly and sends it to the executor as JSON.
