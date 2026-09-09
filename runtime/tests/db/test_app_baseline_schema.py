@@ -330,7 +330,11 @@ def scoped_catalog(admin):
                   and a.attnum>0 and not a.attisdropped""", (tables,),
         ).fetchall())
         rows.extend(admin.execute(
-            """select 'enum', t.typname, e.enumsortorder::integer, e.enumlabel
+            """select 'enum', t.typname,
+                      (row_number() over (
+                          partition by t.oid order by e.enumsortorder
+                      ))::integer,
+                      e.enumlabel
                  from pg_type t join pg_namespace n on n.oid=t.typnamespace
                  join pg_enum e on e.enumtypid=t.oid
                 where n.nspname='public' and t.typname='user_role'""",
@@ -417,8 +421,9 @@ def expected_scoped_catalog():
         for table, columns, pg_type, nullable, default in COLUMN_GROUPS
         for column in columns.split()
     ]
-    rows.extend(("enum", "user_role", order, role) for order, role in
-                ((1, "owner"), (2, "admin"), (3, "member"), (4, "agent")))
+    rows.extend(("enum", "user_role", order, role) for order, role in (
+        (1, "owner"), (2, "admin"), (3, "member"), (4, "agent"), (5, "analyst"),
+    ))
     rows.extend(("constraint", table, "PRIMARY KEY (id)") for table in RELATIONS)
     rows.append(("constraint", "organization_members", "UNIQUE (organization_id, user_id)"))
     for table, column, target, delete in FOREIGN_KEYS:
