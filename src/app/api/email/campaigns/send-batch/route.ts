@@ -228,6 +228,8 @@ export async function POST(req: NextRequest) {
     // ISP-aware: group by ISP, apply per-ISP throttle
     // ──────────────────────────────────────────
     let sent = 0;
+    // Envios que saíram e não conseguiram ser registrados no banco.
+    let naoRegistrados = 0;
     let failed = 0;
 
     // Group contacts by ISP for throttling
@@ -505,10 +507,14 @@ export async function POST(req: NextRequest) {
         }
 
         // Persistir variant no email_sends (pro relatório A/B)
-        await supabaseAdmin
+        const { error: variantError } = await supabaseAdmin
           .from('email_sends')
           .update({ ab_variant: variant })
           .eq('id', emailSend.id)
+          .eq('organization_id', organizationId)
+        // Sem a variante gravada, este envio some do relatório A/B e o
+        // teste decide com meia amostra.
+        if (variantError) console.error('[SendBatch] variante do A/B não gravada:', variantError.message)
 
         // Resolve dynamic product/cart blocks per contact — com a loja da
         // campanha, para que o catálogo e os links sejam DESTA loja e não
@@ -654,7 +660,7 @@ export async function POST(req: NextRequest) {
         for (let i = 0; i < prepped.length; i++) {
           const p = prepped[i];
           const resendId = resendIds[i] || null;
-          await supabaseAdmin
+          const { error: markError } = await supabaseAdmin
             .from('email_sends')
             .update({
               status: 'sent',
@@ -662,7 +668,16 @@ export async function POST(req: NextRequest) {
               resend_id: resendId,
               provider_message_id: resendId,
             })
-            .eq('id', p.emailSendId);
+            .eq('id', p.emailSendId)
+            .eq('organization_id', organizationId);
+          // A mensagem SAIU — isso é fato, e o contador reflete o fato.
+          // O que pode ter falhado é o registro dela. Sem essa linha
+          // atualizada, o relatório da campanha, a franquia e a régua de
+          // frequência passam a contar menos do que aconteceu de verdade.
+          if (markError) {
+            naoRegistrados++;
+            console.error(`[SendBatch] envio ${p.emailSendId} saiu mas não foi registrado:`, markError.message);
+          }
           sent++;
         }
       } catch (batchErr: any) {
@@ -670,10 +685,15 @@ export async function POST(req: NextRequest) {
         // Mark everything in this chunk as failed
         const err = batchErr?.message || 'Batch send error';
         for (const p of prepped) {
-          await supabaseAdmin
+          const { error: failError } = await supabaseAdmin
             .from('email_sends')
             .update({ status: 'failed', error_message: err })
-            .eq('id', p.emailSendId);
+            .eq('id', p.emailSendId)
+            .eq('organization_id', organizationId);
+          if (failError) {
+            naoRegistrados++;
+            console.error(`[SendBatch] envio ${p.emailSendId} falhou e a falha não foi registrada:`, failError.message);
+          }
           failed++;
         }
       }
@@ -718,11 +738,18 @@ export async function POST(req: NextRequest) {
 
     // If last batch, mark campaign as 'sent'
     if (batch_number === total_batches) {
-      await supabaseAdmin
+      const { error: finalError } = await supabaseAdmin
         .from('email_campaigns')
         .update({ status: 'sent' })
-        .eq('id', campaign_id);
-      console.log(`[SendBatch] Campaign ${campaign_id} marked as sent (final batch ${batch_number})`);
+        .eq('id', campaign_id)
+        .eq('organization_id', organizationId);
+      if (finalError) {
+        // A campanha fica presa em "sending" para sempre, com todos os
+        // e-mails já entregues. Quem olhar a tela vai achar que travou.
+        console.error(`[SendBatch] campanha ${campaign_id} presa em "sending": último lote saiu mas o status não foi gravado:`, finalError.message);
+      } else {
+        console.log(`[SendBatch] Campaign ${campaign_id} marked as sent (final batch ${batch_number})`);
+      }
     }
 
     return NextResponse.json({
@@ -730,6 +757,9 @@ export async function POST(req: NextRequest) {
       total_batches,
       sent,
       failed,
+      // Saíram, mas o registro no banco falhou. Zero é o esperado; qualquer
+      // outro número quer dizer que o relatório desta campanha está por baixo.
+      unrecorded: naoRegistrados,
     });
   } catch (error: any) {
     console.error('[SendBatch] Error:', error);

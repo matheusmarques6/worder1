@@ -228,13 +228,16 @@ export async function POST(request: NextRequest) {
         { field_type: 'phone', label: 'Telefone', placeholder: '(11) 99999-9999', required: true, position: 2, map_to_contact_field: 'phone' },
       ]
 
-      await admin
+      const { error: fieldsError } = await admin
         .from('crm_form_fields')
         .insert(defaultFields.map(f => ({ ...f, form_id: form.id })))
+      // O formulário existe; os campos, não. Sem isto ele abriria vazio e
+      // o lojista não teria como saber por quê.
+      if (fieldsError) console.error('[Forms] campos padrão não criados para', form.id, fieldsError.message)
     }
 
     // Criar evento padrão de Lead
-    await admin
+    const { error: eventError } = await admin
       .from('crm_form_events')
       .insert({
         form_id: form.id,
@@ -246,6 +249,7 @@ export async function POST(request: NextRequest) {
         is_active: true,
         position: 0,
       })
+    if (eventError) console.error('[Forms] evento Lead não criado para', form.id, eventError.message)
 
     return NextResponse.json({ form }, { status: 201 })
   } catch (error: any) {

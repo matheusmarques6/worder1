@@ -1125,10 +1125,11 @@ export async function POST(
 
     // 8. Atualizar submission com eventos disparados
     if (eventsFired.length > 0) {
-      await supabase
+      const { error: eventsError } = await supabase
         .from('crm_form_submissions')
         .update({ events_fired: eventsFired })
         .eq('id', submission.id)
+      if (eventsError) console.error('[Form Submit] eventos disparados não gravados na inscrição', submission.id, eventsError.message)
     }
 
     // 8.4. Aplicar audiencia (tags + listId) do formulario no contato.
@@ -1152,7 +1153,10 @@ export async function POST(
             .maybeSingle()
           const current: string[] = Array.isArray(existing?.tags) ? existing.tags : []
           const merged = Array.from(new Set([...current, ...audienceTags]))
-          await supabase.from('contacts').update({ tags: merged }).eq('id', contactId)
+          const { error: tagsError } = await supabase.from('contacts').update({ tags: merged }).eq('id', contactId)
+          // Sem as tags, a automação que dispara por tag nunca roda para
+          // este inscrito — e a falha não aparece em lugar nenhum.
+          if (tagsError) console.error('[Form Submit] tags do popup não aplicadas ao contato:', tagsError.message)
         }
 
         if (audienceListId) {
@@ -1174,11 +1178,15 @@ export async function POST(
             // never showed up under /contacts/lists/[id]. The
             // contact_list_members trigger maintains total_contacts
             // on the parent row automatically.
-            await supabase.from('contact_list_members').upsert({
+            const { error: memberError } = await supabase.from('contact_list_members').upsert({
               list_id: audienceListId,
               contact_id: contactId,
               source: 'form',
             }, { onConflict: 'list_id,contact_id', ignoreDuplicates: true })
+            // O contato existe, mas fora da lista: invisível para sempre em
+            // /contacts/lists. Um erro do PostgREST não vira exceção, então
+            // sem esta checagem a falha passaria calada pelo catch abaixo.
+            if (memberError) console.error(`[Form Submit] contato não entrou na lista ${audienceListId}:`, memberError.message)
           } else {
             console.warn('[Form Submit] audience.listId does not belong to this org, skipping:', audienceListId)
           }

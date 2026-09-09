@@ -89,11 +89,18 @@ export async function POST(req: NextRequest) {
         type === 'click' ? { clicked_at: new Date().toISOString() } :
         null
       if (updateField) {
-        await supabaseAdmin
+        // A campanha e o contato acima são conferidos contra o orgId; o
+        // sendId vinha do corpo e ia direto para um update por id só —
+        // um id de outra organização marcaria a abertura dela. Agora o
+        // registro tem de ser desta organização E desta campanha.
+        const { error: sendError } = await supabaseAdmin
           .from('email_sends')
           .update(updateField)
           .eq('id', sendId)
+          .eq('organization_id', orgId)
+          .eq('campaign_id', campaignId)
           .is(type === 'open' ? 'opened_at' : 'clicked_at', null)
+        if (sendError) console.warn('[TrackRecord] abertura/clique não gravado no envio:', sendError.message)
       }
     }
 

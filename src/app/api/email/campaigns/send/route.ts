@@ -15,6 +15,9 @@ const BATCH_SIZE = 50;
 const QUEUE_NAME = 'email-send-batch';
 
 export async function POST(request: NextRequest) {
+  // Guardada fora do try para a recuperação lá embaixo poder prender a
+  // escrita à organização certa.
+  let orgParaRecuperacao: string | null = null
   try {
     // Suporta chamada interna (cron): header X-Internal + Bearer CRON_SECRET + X-Org-Id
     const internalHeader = request.headers.get('x-internal');
@@ -34,11 +37,34 @@ export async function POST(request: NextRequest) {
       if (!auth) return authError();
       organizationId = auth.user.organization_id;
     }
+    orgParaRecuperacao = organizationId
 
     const { campaign_id } = await request.json();
 
     if (!campaign_id) {
       return NextResponse.json({ error: 'campaign_id is required' }, { status: 400 });
+    }
+
+    /**
+     * Muda o status da campanha e CONFERE. Uma escrita de status que
+     * falha em silêncio é o pior estado possível: a rota responde
+     * "failed" e a linha continua em "sending" para sempre, sem worker
+     * nenhum atrás dela — a campanha some sem ninguém saber.
+     *
+     * A organização entra no filtro por princípio: aqui o cliente é o de
+     * serviço, que passa por cima do RLS.
+     */
+    const setCampaignStatus = async (patch: Record<string, any>, motivo: string) => {
+      const { error } = await supabaseAdmin
+        .from('email_campaigns')
+        .update(patch)
+        .eq('id', campaign_id)
+        .eq('organization_id', organizationId)
+      if (error) {
+        console.error(`[SendCampaign] NÃO consegui gravar o status (${motivo}) da campanha ${campaign_id}:`, error.message)
+        return false
+      }
+      return true
     }
 
     // Get campaign with template
@@ -205,18 +231,12 @@ export async function POST(request: NextRequest) {
 
     if (contactsError) {
       console.error('[SendCampaign] Error fetching contacts:', contactsError);
-      await supabaseAdmin
-        .from('email_campaigns')
-        .update({ status: 'failed' })
-        .eq('id', campaign_id);
+      await setCampaignStatus({ status: 'failed' }, 'contatos não resolvidos');
       return NextResponse.json({ error: 'Failed to resolve contacts' }, { status: 500 });
     }
 
     if (!contacts || contacts.length === 0) {
-      await supabaseAdmin
-        .from('email_campaigns')
-        .update({ status: 'sent', total_sent: 0 })
-        .eq('id', campaign_id);
+      await setCampaignStatus({ status: 'sent', total_sent: 0 }, 'sem contatos');
       return NextResponse.json({ message: 'No contacts to send to', total: 0 });
     }
 
@@ -281,10 +301,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (contacts.length === 0) {
-      await supabaseAdmin
-        .from('email_campaigns')
-        .update({ status: 'sent', total_sent: 0 })
-        .eq('id', campaign_id);
+      await setCampaignStatus({ status: 'sent', total_sent: 0 }, 'todos os contatos filtrados');
       return NextResponse.json({
         message: 'All contacts filtered (smart sending / engagement)',
         smartSendingSkipped,
@@ -304,10 +321,7 @@ export async function POST(request: NextRequest) {
       const sentInWindow = await sentInAllowanceWindow(supabaseAdmin, organizationId, campaign.store_id)
       const verdict = evaluateSharedAllowance({ fromEmail: resolvedFrom, sentInWindow, aboutToSend: contacts.length })
       if (!verdict.allowed) {
-        await supabaseAdmin
-          .from('email_campaigns')
-          .update({ status: 'draft', sent_at: null })
-          .eq('id', campaign_id)
+        await setCampaignStatus({ status: 'draft', sent_at: null }, 'franquia do endereço temporário')
         return NextResponse.json({
           error: verdict.reason,
           code: 'SHARED_DOMAIN_ALLOWANCE',
@@ -340,10 +354,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Update total_recipients upfront
-    await supabaseAdmin
-      .from('email_campaigns')
-      .update({ total_recipients: contacts.length })
-      .eq('id', campaign_id);
+    await setCampaignStatus({ total_recipients: contacts.length }, 'total de destinatários');
 
     // Split contacts into batches, marcando A/B variant quando habilitado
     type ContactWithVariant = any & { ab_variant?: 'a' | 'b' }
@@ -522,15 +533,13 @@ export async function POST(request: NextRequest) {
       // All or partial batch dispatch failed — mark campaign as 'failed' to avoid
       // it being stuck in 'sending' forever with no workers processing it.
       console.error(`[SendCampaign] Batch dispatch failed for campaign ${campaign_id}:`, batchError);
-      await supabaseAdmin
-        .from('email_campaigns')
-        .update({
-          status: 'failed',
-          error_message: `Batch dispatch error: ${batchError instanceof Error ? batchError.message : String(batchError)}`,
-        })
-        .eq('id', campaign_id);
+      const marcou = await setCampaignStatus({
+        status: 'failed',
+        error_message: `Batch dispatch error: ${batchError instanceof Error ? batchError.message : String(batchError)}`,
+      }, 'lotes não despachados');
       return NextResponse.json(
-        { error: 'Failed to dispatch email batches', campaign_status: 'failed' },
+        // Se nem o "failed" foi gravado, a resposta não pode afirmar que foi.
+        { error: 'Failed to dispatch email batches', campaign_status: marcou ? 'failed' : 'sending' },
         { status: 500 }
       );
     }
@@ -553,16 +562,24 @@ export async function POST(request: NextRequest) {
     try {
       const body = await request.clone().json().catch(() => ({}));
       const cid = body?.campaign_id;
-      if (cid) {
+      // Sem organização resolvida, o erro veio antes da autenticação: não
+      // há campanha nossa para consertar, e escrever por id solto mexeria
+      // na linha de quem quer que seja dono daquele id.
+      if (cid && orgParaRecuperacao) {
         // Only reset if still in 'sending' — avoids overwriting a 'failed' already set above
-        await supabaseAdmin
+        const { error: recoveryError } = await supabaseAdmin
           .from('email_campaigns')
           .update({
             status: 'failed',
             error_message: `Unexpected error: ${error instanceof Error ? error.message : String(error)}`,
           })
           .eq('id', cid)
+          .eq('organization_id', orgParaRecuperacao)
           .eq('status', 'sending');
+        if (recoveryError) {
+          // A campanha fica presa em "sending". Dizer isso alto é o mínimo.
+          console.error(`[SendCampaign] campanha ${cid} presa em "sending": não consegui marcar como falha:`, recoveryError.message);
+        }
       }
     } catch (_) {
       // Best-effort recovery — don't mask the original error
