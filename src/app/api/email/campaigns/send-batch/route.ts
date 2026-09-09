@@ -261,10 +261,13 @@ export async function POST(req: NextRequest) {
     // the campaign + organization (both constant per request), so computing
     // it per-contact meant getOrgSender() hit the organizations table N times
     // for a single batch. Hoisted out to a single lookup.
-    let batchFromAddress = campaign.from_email
-      ? (campaign.sender_name ? `${campaign.sender_name} <${campaign.from_email}>` : campaign.from_email)
-      : null;
-    if (!batchFromAddress && campaign.store_id) {
+    // O endereço guardado na campanha vence — a não ser que ele seja o do
+    // domínio compartilhado e a loja já tenha domínio próprio verificado.
+    // Esse endereço é um marcador de lugar que toda loja recebe ao nascer,
+    // não uma escolha; sem esta regra o lojista verifica o domínio dele e
+    // as campanhas continuam saindo como worder.email para sempre.
+    let batchFromAddress: string | null = null;
+    if (campaign.store_id) {
       // Store-aware sender: a multi-store org must send each store's
       // campaigns under THAT store's identity, not the org default.
       // getEmailProviderForOrg layers store email_settings (and the
@@ -273,13 +276,17 @@ export async function POST(req: NextRequest) {
       // getOrgSender() and arrived as the org name ("Based").
       try {
         const { getEmailProviderForOrg } = await import('@/lib/email/providers');
+        const { chooseSender, formatSender } = await import('@/lib/email/sender-preference');
         const { config } = await getEmailProviderForOrg(organizationId, campaign.store_id);
-        if (config.defaultFrom) {
-          batchFromAddress = config.defaultSenderName
-            ? `${config.defaultSenderName} <${config.defaultFrom}>`
-            : config.defaultFrom;
-        }
+        const chosen = chooseSender(
+          { email: campaign.from_email, name: campaign.sender_name },
+          { email: config.defaultFrom, name: config.defaultSenderName },
+        );
+        batchFromAddress = formatSender(chosen);
       } catch { /* fall through to org-level */ }
+    }
+    if (!batchFromAddress && campaign.from_email) {
+      batchFromAddress = campaign.sender_name ? `${campaign.sender_name} <${campaign.from_email}>` : campaign.from_email;
     }
     if (!batchFromAddress) {
       try {
@@ -435,7 +442,10 @@ export async function POST(req: NextRequest) {
             contact_id: contact.id,
             email: contact.email,
             to_email: contact.email,
-            from_email: campaign.sender_email || null,
+            // A coluna gravada na campanha é from_email; sender_email nunca
+            // é escrita, então o registro do envio saía sem remetente — e
+            // era por isso que este problema não aparecia nos dados.
+            from_email: campaign.from_email || null,
             sender_email: campaign.sender_email || null,
             subject: campaign.subject || null,
             provider: 'resend',

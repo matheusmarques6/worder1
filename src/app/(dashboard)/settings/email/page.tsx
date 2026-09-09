@@ -28,7 +28,12 @@ export default function DomainsSettingsPage() {
 
   const dom = useApi<{ domains: DomainRow[] }>(_hasHydrated ? `/api/email/domains${storeId ? `?storeId=${encodeURIComponent(storeId)}` : ''}` : null, [storeId])
   const se = useApi<StoreEmail>(_hasHydrated && storeId ? `/api/settings/store-email?storeId=${encodeURIComponent(storeId)}` : null, [storeId])
-  const domains = dom.data?.domains || []
+  // O domínio compartilhado é infraestrutura nossa, não algo que o
+  // lojista adiciona, verifica ou remove. Ele fica fora da lista: o que
+  // aparece aqui são os domínios DELE. Onde o endereço temporário importa
+  // (enquanto não há domínio verificado) a tela diz isso em palavras.
+  const allDomains = dom.data?.domains || []
+  const domains = useMemo(() => allDomains.filter((d) => !d.is_system), [allDomains])
   const sharedDomain = se.data?.shared_domain || 'worder.email'
 
   // DMARC por domínio (consulta DNS ao vivo; cacheada aqui).
@@ -77,9 +82,27 @@ export default function DomainsSettingsPage() {
       const fresh = await api<{ domains: DomainRow[] }>(`/api/email/domains?storeId=${encodeURIComponent(storeId)}`)
       const row = fresh.domains.find((x) => x.id === d.id)
       if (row?.status === 'verified') {
-        await api('/api/settings/store-email', { method: 'PATCH', json: { storeId, email_settings: { default_sender_email: `${local}@${d.domain}` } } })
+        const previousEmail = cur.default_sender_email || undefined
+        const nextEmail = `${local}@${d.domain}`
+        await api('/api/settings/store-email', { method: 'PATCH', json: { storeId, email_settings: { default_sender_email: nextEmail } } })
         se.reload(true)
-        toast.success(`${d.domain} é o remetente padrão`, `Envios de ${storeName} saem de ${local}@${d.domain}.`)
+        // O que já estava escrito (campanhas em rascunho e agendadas, nós
+        // de e-mail das automações) guarda o endereço antigo. Sem esta
+        // chamada, verificar o domínio não mudava nada do que já existia.
+        let carried = 0
+        try {
+          const r = await api<{ nodesUpdated: number; campaignsUpdated?: number }>('/api/email/sync-defaults', {
+            method: 'POST',
+            json: { storeId, senderEmail: nextEmail, previousEmail },
+          })
+          carried = (r.nodesUpdated || 0) + (r.campaignsUpdated || 0)
+        } catch { /* o remetente já trocou; o resto o lojista ajusta na tela */ }
+        toast.success(
+          `${d.domain} é o remetente padrão`,
+          carried > 0
+            ? `Envios de ${storeName} saem de ${nextEmail}. ${carried} ${carried === 1 ? 'e-mail já criado passou' : 'e-mails já criados passaram'} a usar o novo endereço.`
+            : `Envios de ${storeName} saem de ${nextEmail}.`,
+        )
       } else {
         senderRef.current?.setDomain(d.domain)
       }
@@ -93,7 +116,7 @@ export default function DomainsSettingsPage() {
     if (action === 'dmarc') { try { await navigator.clipboard.writeText('v=DMARC1; p=quarantine; rua=mailto:dmarc@worder.email') } catch { /* sem clipboard */ } toast.info('Registro copiado', `Publique em _dmarc.${d.domain} quando os envios estiverem estáveis.`) }
   }
 
-  const ownDomain = domains.find((d) => !d.is_system)
+  const ownDomain = domains[0]
   const senderDomain = se.data?.email_settings?.default_sender_email?.split('@')[1] || sharedDomain
   const trackingDomain = se.data?.email_settings?.tracking_domain || ''
 
@@ -102,6 +125,19 @@ export default function DomainsSettingsPage() {
   return (
     <>
       <Title h="Domínios e remetente" p="De quem os e-mails saem e como o seu domínio é autenticado." right={<button type="button" className="btn btn-primary" onClick={() => { setAddErr(null); setAddOpen(true) }}><I n="plus" s={15} />Adicionar domínio</button>} />
+
+      {storeId && se.data && (
+        <SendingAsCard
+          senderName={se.data.email_settings?.default_sender_name || storeName}
+          email={se.data.email_settings?.default_sender_email || `${se.data.suggested_local_part || 'contato'}@${sharedDomain}`}
+          isShared={senderDomain === sharedDomain}
+          hasVerifiedOwn={domains.some((d) => d.status === 'verified')}
+          pendingDomain={domains.find((d) => d.status !== 'verified') || null}
+          onAdd={() => { setAddErr(null); setAddOpen(true) }}
+          onContinue={(d: DomainRow) => setWiz({ d, step: 2 })}
+          onUseOwn={() => senderRef.current?.setDomain(domains.find((d) => d.status === 'verified')!.domain)}
+        />
+      )}
 
       {!storeId ? (
         <Card><Empty title="Selecione uma loja">O remetente e os domínios de envio são configurados por loja. Escolha uma loja no menu lateral.</Empty></Card>
@@ -127,13 +163,13 @@ export default function DomainsSettingsPage() {
           <div key={x.id} className="dcard">
             <div className="dcard-h">
               <I n="mail" s={20} c={ok ? 'var(--pos)' : 'var(--text-3)'} />
-              <div><div className="dn">{x.domain}</div><div className="dm">{x.is_system ? 'Domínio compartilhado do Worder · pronto para uso' : ok ? `Verificado em ${fmtDateBR(x.verified_at || x.created_at)}` : `Adicionado em ${fmtDateBR(x.created_at)} · aguardando DNS`}</div></div>
+              <div><div className="dn">{x.domain}</div><div className="dm">{ok ? `Verificado em ${fmtDateBR(x.verified_at || x.created_at)}` : `Adicionado em ${fmtDateBR(x.created_at)} · aguardando DNS`}</div></div>
               <div className="acts">
                 {ok ? <Badge k="ok">Verificado</Badge> : <Badge k="warn">Pendente</Badge>}
                 {isDefault && <Badge k="acc">Padrão</Badge>}
-                {!x.is_system && !ok && <button type="button" className="btn btn-sm btn-primary" onClick={() => setWiz({ d: x, step: 2 })}>Continuar verificação</button>}
-                {!x.is_system && ok && <button type="button" className="btn btn-sm" onClick={() => verifyQuick(x)}><I n="refresh" s={14} />Verificar</button>}
-                {!x.is_system && <IconBtn n="x" title="Remover" danger onClick={() => removeDomain(x)} disabled={busy === `rm-${x.id}`} />}
+                {!ok && <button type="button" className="btn btn-sm btn-primary" onClick={() => setWiz({ d: x, step: 2 })}>Continuar verificação</button>}
+                {ok && <button type="button" className="btn btn-sm" onClick={() => verifyQuick(x)}><I n="refresh" s={14} />Verificar</button>}
+                <IconBtn n="x" title="Remover" danger onClick={() => removeDomain(x)} disabled={busy === `rm-${x.id}`} />
               </div>
             </div>
             <div className="auth">
@@ -142,16 +178,16 @@ export default function DomainsSettingsPage() {
               <div><Ic v={dmv === 3 ? 2 : dmv} /><div>DMARC<small>{dmv === 3 ? 'Consultando…' : dmv === 1 ? 'Publicado' : dmv === 2 ? 'p=none' : 'Recomendado'}</small></div></div>
               <div><Ic v={linksOk ? 1 : 0} /><div>Domínio dos links<small>{linksOk ? trackingDomain : 'Não configurado'}</small></div></div>
             </div>
-            {!ok && <div className="warnbar"><I n="alert" s={16} />Faltam {missing} {missing === 1 ? 'registro' : 'registros'} DNS. Enquanto isso, envios usam {sharedDomain}.<button type="button" className="btn btn-sm" onClick={() => setWiz({ d: x, step: 2 })}>Ver registros</button></div>}
+            {!ok && <div className="warnbar"><I n="alert" s={16} />Faltam {missing} {missing === 1 ? 'registro' : 'registros'} DNS. Até publicar, seus e-mails saem por um endereço temporário nosso.<button type="button" className="btn btn-sm" onClick={() => setWiz({ d: x, step: 2 })}>Ver registros</button></div>}
           </div>
         )
       })}
-      {!dom.error && domains.length === 0 && <Card><Empty title="Nenhum domínio ainda" action={<button type="button" className="btn btn-primary" onClick={() => setAddOpen(true)}><I n="plus" s={15} />Adicionar domínio</button>}>Enquanto isso seus e-mails saem pelo domínio compartilhado {sharedDomain}.</Empty></Card>}
+      {!dom.error && domains.length === 0 && <Card><Empty title="Nenhum domínio de envio" action={<button type="button" className="btn btn-primary" onClick={() => setAddOpen(true)}><I n="plus" s={15} />Adicionar domínio</button>}>Adicione o domínio da sua loja para enviar como você. Até lá, usamos um endereço temporário nosso.</Empty></Card>}
 
       {storeId && se.data && <LinkDomainCard key={`ld-${storeId}`} storeId={storeId} data={se.data} onSaved={() => se.reload(true)} register={(fn) => { const prev = senderRef.current; senderRef.current = { setDomain: prev?.setDomain || (() => {}), setTracking: fn } }} />}
 
       <Card title="Aquecimento de envio">
-        <Row tg label="Warm-up automático" help={ownDomain ? (ownDomain.warmup_enabled ? `Aumenta o volume diário gradualmente para construir reputação. Dia ${ownDomain.warmup_day || 1} de 14 · limite hoje: ${(ownDomain.warmup_daily_limit || 200).toLocaleString('pt-BR')} e-mails.` : `Aumenta o volume diário gradualmente para construir reputação de ${ownDomain.domain}. Começa em 200 e-mails/dia.`) : 'Disponível depois de adicionar um domínio próprio. O domínio compartilhado já está aquecido.'}>
+        <Row tg label="Warm-up automático" help={ownDomain ? (ownDomain.warmup_enabled ? `Aumenta o volume diário gradualmente para construir reputação. Dia ${ownDomain.warmup_day || 1} de 14 · limite hoje: ${(ownDomain.warmup_daily_limit || 200).toLocaleString('pt-BR')} e-mails.` : `Aumenta o volume diário gradualmente para construir reputação de ${ownDomain.domain}. Começa em 200 e-mails/dia.`) : 'Disponível depois de verificar o seu domínio. O endereço temporário que usamos até lá já está aquecido.'}>
           <Tog on={!!ownDomain?.warmup_enabled} disabled={!ownDomain || busy === 'warm'} label="Warm-up automático" set={(v) => ownDomain && run('warm', async () => { await api('/api/email/domains/warmup', { method: 'POST', json: { domain_id: ownDomain.id, enabled: v } }); await dom.reload(true) }, { success: v ? 'Warm-up ativado' : 'Warm-up desativado' })} />
         </Row>
       </Card>
@@ -166,6 +202,52 @@ export default function DomainsSettingsPage() {
 
 function Ic({ v }: { v: number }) {
   return <span className={'ic ' + (v === 1 ? 'ok' : v === 2 ? 'warn' : 'no')}><I n={v === 1 ? 'check' : v === 2 ? 'clock' : 'x'} s={11} /></span>
+}
+
+// ---------- Enviando como ----------
+// A primeira coisa da tela responde a pergunta que o lojista tem: de qual
+// endereço os e-mails dele saem AGORA, e o que falta para sair do
+// endereço temporário. Enquanto isso não estiver claro, a lista de
+// domínios é só uma tabela de DNS sem propósito visível.
+function SendingAsCard({ senderName, email, isShared, hasVerifiedOwn, pendingDomain, onAdd, onContinue, onUseOwn }: {
+  senderName: string
+  email: string
+  isShared: boolean
+  hasVerifiedOwn: boolean
+  pendingDomain: DomainRow | null
+  onAdd: () => void
+  onContinue: (d: DomainRow) => void
+  onUseOwn: () => void
+}) {
+  return (
+    <div className="dcard" style={{ marginBottom: 16 }}>
+      <div className="dcard-h">
+        <I n="mail" s={20} c={isShared ? 'var(--text-3)' : 'var(--pos)'} />
+        <div>
+          <div className="dn">{senderName} &lt;{email}&gt;</div>
+          <div className="dm">{isShared ? 'Endereço temporário do Worder' : 'Seu domínio, autenticado'}</div>
+        </div>
+        <div className="acts">
+          {isShared ? <Badge k="warn">Temporário</Badge> : <Badge k="ok">Seu domínio</Badge>}
+        </div>
+      </div>
+      {isShared && (
+        <div className="warnbar">
+          <I n="alert" s={16} />
+          {hasVerifiedOwn
+            ? 'Você já tem um domínio verificado, mas os envios continuam saindo pelo endereço temporário.'
+            : pendingDomain
+              ? `Falta publicar o DNS de ${pendingDomain.domain}. Até lá, quem recebe vê um endereço que não é o seu.`
+              : 'Com o seu domínio, o e-mail chega assinado pela sua marca e cai menos em spam. Leva alguns minutos e um acesso ao DNS.'}
+          {hasVerifiedOwn
+            ? <button type="button" className="btn btn-sm btn-primary" onClick={onUseOwn}>Usar o meu domínio</button>
+            : pendingDomain
+              ? <button type="button" className="btn btn-sm btn-primary" onClick={() => onContinue(pendingDomain)}>Ver registros DNS</button>
+              : <button type="button" className="btn btn-sm btn-primary" onClick={onAdd}>Usar o meu domínio</button>}
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ---------- Remetente padrão ----------
@@ -183,7 +265,10 @@ function SenderCard({ storeId, storeName, data, domains, refInit, onSaved }: { s
   useEffect(() => { refInit({ setDomain: (d) => f.set('domain', d), setTracking: () => {} }) }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const v = f.val!
-  const verifiedDomains = useMemo(() => domains.filter((d) => d.status === 'verified'), [domains])
+  // Só os domínios do lojista; o compartilhado não é um "domínio dele".
+  const ownVerified = useMemo(() => domains.filter((d) => !d.is_system && d.status === 'verified'), [domains])
+  const ownPending = useMemo(() => domains.filter((d) => !d.is_system && d.status !== 'verified'), [domains])
+  const hasOwn = ownVerified.length > 0
   const isShared = v.domain === data.shared_domain
   const email = `${v.local}@${v.domain}`
   const localOk = /^[a-z0-9][a-z0-9._-]{0,62}$/.test(v.local)
@@ -231,15 +316,31 @@ function SenderCard({ storeId, storeName, data, domains, refInit, onSaved }: { s
     <>
       <Card title="Remetente padrão" desc={`Usado em novas campanhas e automações da ${storeName}.`} foot={<SaveBar dirty={f.dirty} saving={saving} error={error} hint={`Envios de: ${v.name || storeName} <${email}>`} onSave={onSave} onCancel={() => { f.cancel(); setError(null) }} disabled={avail.state === 'taken' || avail.state === 'checking'} />}>
         <Row label="Nome do remetente" htmlFor="sd-name"><input id="sd-name" className="in" value={v.name} onChange={(e) => f.set('name', e.target.value)} /></Row>
-        <Row label="E-mail do remetente" help="Só domínios verificados aparecem aqui.">
+        <Row label="E-mail do remetente" help={hasOwn ? 'Escolha um dos seus domínios verificados.' : 'Verifique o seu domínio para enviar com ele. Até lá, o endereço é temporário.'}>
           <div className="in2">
             <input className={'in' + (avail.state === 'taken' || !localOk ? ' err' : '')} value={v.local} onChange={(e) => f.set('local', e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ''))} aria-label="Parte antes do @" />
-            <select className="in" value={v.domain} onChange={(e) => f.set('domain', e.target.value)} aria-label="Domínio do remetente">
-              <option value={data.shared_domain}>@{data.shared_domain} · compartilhado</option>
-              {verifiedDomains.filter((d) => d.domain !== data.shared_domain).map((d) => <option key={d.id} value={d.domain}>@{d.domain}</option>)}
-              {domains.filter((d) => d.status !== 'verified' && !d.is_system).map((d) => <option key={d.id} value={d.domain} disabled>@{d.domain} · aguardando</option>)}
-            </select>
+            {hasOwn ? (
+              <select className="in" value={v.domain} onChange={(e) => f.set('domain', e.target.value)} aria-label="Domínio do remetente">
+                {ownVerified.map((d) => <option key={d.id} value={d.domain}>@{d.domain}</option>)}
+                {ownPending.map((d) => <option key={d.id} value={d.domain} disabled>@{d.domain} · aguardando DNS</option>)}
+                {/* Saída de emergência: se o DNS do lojista quebrar, ele
+                    consegue voltar sem abrir chamado. Nunca como opção
+                    lado a lado com o domínio dele. */}
+                {isShared && <option value={data.shared_domain}>@{data.shared_domain} · temporário</option>}
+              </select>
+            ) : (
+              <span className="in" style={{ display: 'flex', alignItems: 'center', color: 'var(--text-3)' }}>@{data.shared_domain}</span>
+            )}
           </div>
+          {hasOwn && isShared && (
+            <div className="hp" style={{ fontSize: 12.5 }}>
+              Você já tem um domínio verificado.{' '}
+              <button type="button" className="btn-link" style={{ color: 'var(--acc-ink)', fontWeight: 500 }} onClick={() => f.set('domain', ownVerified[0].domain)}>Enviar por @{ownVerified[0].domain}</button>
+            </div>
+          )}
+          {!hasOwn && (
+            <div className="hp" style={{ fontSize: 12.5 }}>Endereço temporário do Worder. Adicione o seu domínio acima para enviar como a sua marca.</div>
+          )}
           {avail.state === 'checking' && <div className="hp" style={{ fontSize: 12.5, color: 'var(--text-3)' }}>Verificando disponibilidade…</div>}
           {avail.state === 'ok' && <div className="hp" style={{ fontSize: 12.5, color: 'var(--pos)' }}>Disponível.</div>}
           {avail.state === 'taken' && <div className="field-err">Já em uso por outra loja.{avail.suggestion && <> Sugestão: <button type="button" className="btn-link" style={{ color: 'var(--acc-ink)', fontWeight: 500 }} onClick={() => f.set('local', avail.suggestion!)}>{avail.suggestion}</button></>}</div>}

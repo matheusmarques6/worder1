@@ -83,6 +83,8 @@ export async function sendCampaignEmail({
   utmOverrides,
   utmDisabled,
 }: SendCampaignEmailParams): Promise<{ success: boolean; emailSendId?: string; error?: string; skipped?: boolean; reason?: string }> {
+  // Guardado para o log do catch: qual endereço a tentativa usou.
+  let effectiveFromForLog: string | null = null;
   let emailSendId = '' as string;
   // Hoisted so the catch block can flip email_consent on the contact
   // when Resend reports a permanent failure mid-send.
@@ -348,8 +350,18 @@ export async function sendCampaignEmail({
     // organização inteira, a do contato — o cliente é de uma loja e o
     // e-mail chega assinado por ela, nunca pela loja irmã.
     const { provider, config } = await getEmailProviderForOrg(organizationId, sendStoreId);
-    const effectiveFrom = fromEmail || config.defaultFrom || 'onboarding@resend.dev';
-    const effectiveSenderName = senderName || config.defaultSenderName;
+    // O endereço gravado no nó vence, exceto quando é o do domínio
+    // compartilhado e a loja já tem o próprio verificado — ver
+    // sender-preference. Sem isso, verificar o domínio não muda nada nas
+    // automações que já existiam.
+    const { chooseSender } = await import('@/lib/email/sender-preference');
+    const chosenSender = chooseSender(
+      { email: fromEmail, name: senderName },
+      { email: config.defaultFrom, name: config.defaultSenderName },
+    );
+    const effectiveFrom = chosenSender.email || 'onboarding@resend.dev';
+    effectiveFromForLog = effectiveFrom;
+    const effectiveSenderName = chosenSender.name || undefined;
 
     // List-Unsubscribe + List-Unsubscribe-Post headers (RFC 2369 +
     // 8058). Gmail Postmaster Tools demands both for high-volume
@@ -448,31 +460,27 @@ export async function sendCampaignEmail({
         .eq('id', emailSendId);
     }
 
-    // Auto-suppress the contact's email on permanent failures. Without
-    // this every subsequent send retries Resend, eats API quota, and
-    // racks up the bounce rate. Resend's typical permanent rejections:
-    //   "Email is on the suppression list"
-    //   "Email address is invalid"
-    //   "Domain is not verified"
-    //   "Recipient does not exist" / "No such user"
-    const permanentPatterns = [
-      /suppres/i,
-      /invalid/i,
-      /does not exist/i,
-      /no such user/i,
-      /not allowed/i,
-      /not a verified/i,
-      /unable to deliver/i,
-    ];
+    // Desistir do endereço do contato só quando a culpa é DELE (caixa
+    // inexistente, lista de supressão). Erro de configuração do remetente
+    // — domínio não verificado, "from" inválido, chave errada — não diz
+    // nada sobre quem ia receber, e apagar o consentimento por causa disso
+    // descadastrava a lista inteira do lojista, um contato por vez.
     const message = String(error?.message || '');
-    const isPermanent = permanentPatterns.some((p) => p.test(message));
-    if (isPermanent && resolvedContactId) {
+    const { shouldSuppressContact, blameForSendFailure } = await import('@/lib/email/send-error');
+    const blame = blameForSendFailure(message);
+    if (blame === 'sender') {
+      console.error('[SendCampaignEmail] falha de CONFIGURAÇÃO do remetente — nenhum contato foi marcado', {
+        from: effectiveFromForLog,
+        error: message,
+      });
+    }
+    if (shouldSuppressContact(message) && resolvedContactId) {
       try {
         await supabaseAdmin
           .from('contacts')
           .update({ email_consent: false, status: 'bounced' })
           .eq('id', resolvedContactId);
-        console.log('[SendCampaignEmail] flipped email_consent=false for permanent error', {
+        console.log('[SendCampaignEmail] endereço do contato recusado em definitivo', {
           contactId: resolvedContactId,
           error: message,
         });

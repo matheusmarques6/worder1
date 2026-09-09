@@ -141,10 +141,15 @@ export default function NewCampaignPage() {
     fetchTemplates()
     fetchSegments()
     fetchSubscriberCount()
-    fetch('/api/settings/organization')
+    // O remetente é da LOJA. Partir do padrão da organização gravava o
+    // endereço do domínio compartilhado na campanha, e ele continuava
+    // valendo mesmo depois de o lojista verificar o domínio dele.
+    const storeId = currentStore?.id
+    const url = storeId ? `/api/settings/store-email?storeId=${encodeURIComponent(storeId)}` : '/api/settings/organization'
+    fetch(url)
       .then((r) => r.json())
       .then((d) => {
-        const s = d?.organization?.email_settings || {}
+        const s = (storeId ? d?.email_settings : d?.organization?.email_settings) || {}
         if (!senderName && s.default_sender_name) setSenderName(s.default_sender_name)
         if (!senderEmail && s.default_sender_email) setSenderEmail(s.default_sender_email)
       })
