@@ -692,6 +692,10 @@ class Executor:
     def local(self, *arguments):
         version = self.command("supabase", "--version", timeout=30).stdout.strip()
         require(version == "2.111.0", "Supabase CLI version changed")
+        if arguments[0] == "start":
+            branches = self.run / "supabase/.branches"
+            no_links(branches)
+            require(not branches.exists(), "unexpected project input")
         return self.command("supabase", *arguments, "--workdir", self.run)
 
     def psql(self, container_id, sql):
@@ -713,7 +717,7 @@ class Executor:
             timeout=30,
         ).stdout.strip()
 
-    def config(self, enabled=None):
+    def config(self, enabled=None, *, before_start=False):
         path = self.run / "supabase/config.toml"
         no_links(path)
         text = path.read_text(encoding="utf-8")
@@ -732,7 +736,9 @@ class Executor:
             require(not (self.run / name).exists(), "unexpected project input")
         branches = self.run / "supabase/.branches"
         no_links(branches)
-        if branches.exists():
+        if before_start:
+            require(not branches.exists(), "unexpected project input")
+        else:
             require(
                 branches.is_dir() and [entry.name for entry in branches.iterdir()] == [
                     "_current_branch"
@@ -746,8 +752,8 @@ class Executor:
                 "unexpected project input",
             )
 
-    def files(self, expected=None):
-        self.config()
+    def files(self, expected=None, *, before_start=False):
+        self.config(before_start=before_start)
         approved = (
             manifest_shape(read_json(self.run / "manifest.json")) if expected is None else expected
         )
@@ -856,7 +862,7 @@ class Executor:
         copied = inventory(folder)
         require(copied == source, "migration changed while copying")
         write_json(self.run / "manifest.json", copied)
-        self.files()
+        self.files(before_start=True)
         free_ports()
         existing = self.command(
             "docker",
@@ -875,9 +881,6 @@ class Executor:
         ).stdout.splitlines()
         write_json(self.run / "volumes-before.json", before)
         self.gate["stage"] = "start"
-        branches = self.run / "supabase/.branches"
-        no_links(branches)
-        require(not branches.exists(), "unexpected project input")
         self.local("start", "-x", EXCLUDED)
         self.gate["stage"] = "prepare-identity"
         self.identity = self.physical()

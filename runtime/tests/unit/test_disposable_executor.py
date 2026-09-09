@@ -283,6 +283,9 @@ def executor_run(tmp_path):
     config.parent.mkdir(parents=True)
     source = (REPO / "supabase/config.toml").read_text(encoding="utf-8")
     config.write_text(ex.config_text(source, PROJECT, True, source=True), encoding="utf-8")
+    branches = run / "supabase/.branches"
+    branches.mkdir()
+    (branches / "_current_branch").write_bytes(b"main")
     return run
 
 
@@ -1484,6 +1487,9 @@ def test_prepare_copies_only_approved_inputs_before_guarded_start(
             assert ex.read_json(run / "volumes-before.json") == ["old-volume"]
             assert not (run / ".env").exists()
             assert not (run / "supabase/seed.sql").exists()
+            branches = run / "supabase/.branches"
+            branches.mkdir()
+            (branches / "_current_branch").write_bytes(b"main")
             stdout = ""
         else:
             stdout = ""
@@ -1560,6 +1566,7 @@ def test_prepare_copies_only_approved_inputs_before_guarded_start(
         "gates.json",
         "identity.json",
         "manifest.json",
+        "supabase/.branches/_current_branch",
         "supabase/config.toml",
         "supabase/migrations/20260812000001_one.sql",
         "volumes-before.json",
@@ -2831,18 +2838,20 @@ def test_prepare_accepts_cli_owned_current_branch_after_start(tmp_path, monkeypa
     }
 
 
-@pytest.mark.parametrize("point", ["preflight", "volume-inventory"])
+@pytest.mark.parametrize("point", ["preflight", "volume-inventory", "local-version"])
 @pytest.mark.parametrize("kind", ["empty-directory", "marker", "file"])
 def test_prepare_refuses_branches_present_before_start(tmp_path, monkeypatch, point, kind):
     executor, cli = fake_environment(tmp_path, monkeypatch)
-    trigger = (
-        ["docker", "context", "inspect", "--format", "{{json .Endpoints.docker.Host}}"]
-        if point == "preflight" else ["docker", "volume", "ls", "--format", "{{.Name}}"]
-    )
+    trigger = {
+        "preflight": ["docker", "context", "inspect", "--format",
+                      "{{json .Endpoints.docker.Host}}"],
+        "volume-inventory": ["docker", "volume", "ls", "--format", "{{.Name}}"],
+        "local-version": ["supabase", "--version"],
+    }[point]
 
     def runner(argv, **kwargs):
         result = cli(argv, **kwargs)
-        if argv == trigger:
+        if argv == trigger and (point != "local-version" or cli.calls.count(trigger) == 2):
             branches = executor.run / "supabase/.branches"
             branches.parent.mkdir(exist_ok=True)
             if kind == "file":
@@ -2864,7 +2873,8 @@ def test_prepare_refuses_branches_present_before_start(tmp_path, monkeypatch, po
 
 @pytest.mark.parametrize("change", [
     b"", b"feature", b"main\n", b"main\r\n", b"main\0",
-    "missing-marker", "marker-directory", "branches-file", "extra-file", "extra-directory",
+    "missing-marker", "missing-branches", "marker-directory", "branches-file",
+    "extra-file", "extra-directory",
 ])
 def test_prepare_refuses_nonexact_cli_branch_state_after_start(tmp_path, monkeypatch, change):
     executor, cli = fake_environment(tmp_path, monkeypatch)
@@ -2876,13 +2886,16 @@ def test_prepare_refuses_nonexact_cli_branch_state_after_start(tmp_path, monkeyp
             marker = branches / "_current_branch"
             if isinstance(change, bytes):
                 marker.write_bytes(change)
-            elif change in {"missing-marker", "marker-directory", "branches-file"}:
+            elif change in {
+                "missing-marker", "missing-branches", "marker-directory", "branches-file",
+            }:
                 marker.unlink()
                 if change == "marker-directory":
                     marker.mkdir()
-                elif change == "branches-file":
+                elif change in {"missing-branches", "branches-file"}:
                     branches.rmdir()
-                    branches.write_bytes(b"main")
+                    if change == "branches-file":
+                        branches.write_bytes(b"main")
             elif change == "extra-file":
                 (branches / "other").write_bytes(b"main")
             else:
