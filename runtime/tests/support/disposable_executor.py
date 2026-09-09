@@ -808,13 +808,14 @@ class Executor:
             candidates = self.command(
                 "docker", "ps", "-a", "--no-trunc", "--filter",
                 "label=com.supabase.cli.project=" + self.project,
+                "--filter", "ancestor=" + physical["imageId"],
                 "--format", "{{.ID}}", timeout=30,
             ).stdout.splitlines()
             require(candidates == [physical["containerId"]], "DB container not unique")
         direct = self.psql(physical["containerId"], SID_SQL)
         require(re.fullmatch(r"[0-9]+", direct), "invalid direct system identifier")
         require(read_system_identifier(DSN) == direct, "loopback identity mismatch")
-        if self.identity:
+        if self.identity and not allow_container_replacement:
             require(
                 direct == self.identity["systemIdentifier"],
                 "database system identifier changed",

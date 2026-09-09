@@ -16,6 +16,9 @@ REPO = Path(__file__).resolve().parents[3]
 PROJECT = "waudit-" + "a" * 32
 OLD_DB_ID = "a" * 64
 NEW_DB_ID = "c" * 64
+AUTH_ID = "f" * 64
+OLD_SID = "1234567890123456789"
+NEW_SID = "9876543210987654321"
 
 
 def test_generated_project_preserves_full_nonce_within_cli_limit(tmp_path):
@@ -2791,7 +2794,7 @@ class FakeCLI:
     def __init__(self, repo, run):
         self.repo, self.run = repo, run
         self.started = False
-        self.sid = "1234567890123456789"
+        self.sid = OLD_SID
         self.loopback_sid = None
         self.sentinel = None
         self.applied = []
@@ -2817,6 +2820,21 @@ class FakeCLI:
             {"HostIp": "0.0.0.0", "HostPort": "45322"},
             {"HostIp": "::", "HostPort": "45322"},
         ]
+        self.auth_container = {
+            "Id": AUTH_ID,
+            "Name": "/supabase_auth_" + PROJECT,
+            "Image": "sha256:" + "e" * 64,
+            "State": {"Running": True},
+            "Config": {
+                "Image": "public.ecr.aws/supabase/gotrue:v2.177.0",
+                "Labels": {
+                    "com.docker.compose.project": PROJECT,
+                    "com.supabase.cli.project": PROJECT,
+                },
+            },
+            "NetworkSettings": {"Ports": {}},
+            "Mounts": [],
+        }
         _, self.preflight = preflight_double()
 
     def change_replacement(self, changed):
@@ -2854,6 +2872,17 @@ class FakeCLI:
         elif argv == [
             "docker", "ps", "-a", "--no-trunc", "--filter",
             "label=com.supabase.cli.project=" + PROJECT, "--format", "{{.ID}}",
+        ]:
+            containers = [
+                self.container,
+                self.auth_container,
+                *([self.other_container] if self.other_container else []),
+            ]
+            output = "\n".join(container["Id"] for container in containers) if self.started else ""
+        elif argv == [
+            "docker", "ps", "-a", "--no-trunc", "--filter",
+            "label=com.supabase.cli.project=" + PROJECT, "--filter",
+            "ancestor=" + self.container["Image"], "--format", "{{.ID}}",
         ]:
             containers = [self.container, *([self.other_container] if self.other_container else [])]
             output = "\n".join(container["Id"] for container in containers) if self.started else ""
@@ -2926,6 +2955,7 @@ class FakeCLI:
                 self.sentinel = None
                 self.db_container_id = NEW_DB_ID
                 self.container["Id"] = self.db_container_id
+                self.sid = NEW_SID
                 if self.replacement_change == "image":
                     self.container["Image"] = "sha256:" + "d" * 64
                 elif self.replacement_change == "project":
@@ -2936,8 +2966,6 @@ class FakeCLI:
                     self.container["Mounts"][0]["Name"] = "other"
                 elif self.replacement_change == "port":
                     self.container["NetworkSettings"]["Ports"]["5432/tcp"][0]["HostPort"] = "45323"
-                elif self.replacement_change == "sid":
-                    self.sid = "9999999999999999999"
                 elif self.replacement_change == "loopback":
                     self.loopback_sid = "9999999999999999999"
                 elif self.replacement_change == "multiple":
@@ -3513,7 +3541,7 @@ def test_prepare_replay_full_test_and_stop_with_fake_cli(tmp_path, monkeypatch):
     assert prepared == {
         "projectId": PROJECT, "containerId": "a" * 64, "imageId": "sha256:" + "b" * 64,
         "volumeName": "supabase_db_" + PROJECT, "port": 45322,
-        "systemIdentifier": "1234567890123456789", "sentinel": None,
+        "systemIdentifier": OLD_SID, "sentinel": None,
     }
     assert json.loads((executor.run / "manifest.json").read_text("utf-8")) == [
         {"filename": "20260621_phase0_foundations.sql", "version": "20260621",
@@ -3526,7 +3554,11 @@ def test_prepare_replay_full_test_and_stop_with_fake_cli(tmp_path, monkeypatch):
     assert executor.gate["state"] == "ready" and cli.started
     assert cli.applied == ["20260621", "20260812000001"]
     ready = json.loads((executor.run / "identity.json").read_text("utf-8"))
-    assert ready | {"sentinel": None, "containerId": OLD_DB_ID} == prepared
+    assert ready | {
+        "sentinel": None,
+        "containerId": OLD_DB_ID,
+        "systemIdentifier": OLD_SID,
+    } == prepared
     assert re.fullmatch(r"[0-9a-f]{64}", ready["sentinel"])
     executor = ex.Executor(executor.repo, executor.run, runner=cli)
     assert executor.execute("Test") == 0
@@ -3555,13 +3587,13 @@ def test_prepare_replay_full_test_and_stop_with_fake_cli(tmp_path, monkeypatch):
     assert len(cli.calls) == count
 
 
-def test_replay_readopts_reset_replacement_after_all_invariants_match(tmp_path, monkeypatch):
+def test_replay_readopts_db_beside_auth_and_rotated_sid(tmp_path, monkeypatch):
     executor, _cli = fake_environment(tmp_path, monkeypatch)
     assert executor.execute("Prepare") == 0
     assert executor.execute("Replay") == 0
     identity = json.loads((executor.run / "identity.json").read_text("utf-8"))
     assert identity["containerId"] == NEW_DB_ID
-    assert identity["systemIdentifier"] == "1234567890123456789"
+    assert identity["systemIdentifier"] == NEW_SID
 
 
 def test_failed_reset_readopts_for_cleanup_and_keeps_reset_failure(tmp_path, monkeypatch):
@@ -3573,12 +3605,15 @@ def test_failed_reset_readopts_for_cleanup_and_keeps_reset_failure(tmp_path, mon
     assert gate["failure"] == {
         "stage": "reset", "kind": "CommandFailure", "exitCode": 19,
     }
+    identity = json.loads((executor.run / "identity.json").read_text("utf-8"))
+    assert (identity["containerId"], identity["systemIdentifier"]) == (NEW_DB_ID, NEW_SID)
+    assert ["docker", "inspect", NEW_DB_ID] in cli.calls
     assert gate["state"] == "stopped"
     assert not cli.started
 
 
 @pytest.mark.parametrize(
-    "changed", ["image", "project", "workdir", "volume", "port", "sid", "loopback", "multiple"],
+    "changed", ["image", "project", "workdir", "volume", "port", "loopback", "multiple"],
 )
 def test_reset_replacement_with_changed_invariant_is_never_adopted(
     tmp_path, monkeypatch, changed,
@@ -3590,7 +3625,11 @@ def test_reset_replacement_with_changed_invariant_is_never_adopted(
     assert executor.gate["state"] == "unproven"
     assert json.loads((executor.run / "unproven.json").read_text("utf-8")) == {
         "projectId": PROJECT,
-        "containerIds": [NEW_DB_ID, "d" * 64] if changed == "multiple" else [NEW_DB_ID],
+        "containerIds": (
+            [NEW_DB_ID, AUTH_ID, "d" * 64]
+            if changed == "multiple"
+            else [NEW_DB_ID, AUTH_ID]
+        ),
     }
     assert not cli.stop_called
 
@@ -3749,7 +3788,7 @@ def test_integrated_unproven_prepare_records_ids_without_cleanup(tmp_path, monke
     assert executor.execute("Prepare") == 2
     assert executor.gate["state"] == "unproven" and cli.started
     assert json.loads((executor.run / "unproven.json").read_text("utf-8")) == {
-        "projectId": PROJECT, "containerIds": ["a" * 64],
+        "projectId": PROJECT, "containerIds": [OLD_DB_ID, AUTH_ID],
     }
     assert not (executor.run / "identity.json").exists()
     assert not any(c[:2] == ["supabase", "stop"] and "--help" not in c for c in cli.calls)
