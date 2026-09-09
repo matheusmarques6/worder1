@@ -69,7 +69,7 @@ export async function GET(req: NextRequest) {
     forms.sort((a: any, b: any) => (Number(b.behavior?.priority) || 0) - (Number(a.behavior?.priority) || 0))
 
     const etag = '"' + createHash('sha1')
-      .update(forms.map((f: any) => `${f.id}:${f.updated_at}:${f.experiment ? f.experiment.id + ':' + JSON.stringify(f.experiment.split) + ':' + JSON.stringify(f.experiment.bandit || null) : ''}`).join('|') + '|v4|' + BUILD_ID)
+      .update(forms.map((f: any) => `${f.id}:${f.updated_at}:${f.experiment ? f.experiment.id + ':' + f.experiment.version + ':' + JSON.stringify(f.experiment.split) + ':' + JSON.stringify(f.experiment.bandit || null) : ''}`).join('|') + '|v5|' + BUILD_ID)
       .digest('hex').slice(0, 20) + '"'
 
     const cache = { 'Cache-Control': 'public, max-age=60, s-maxage=60, stale-while-revalidate=600', ETag: etag }

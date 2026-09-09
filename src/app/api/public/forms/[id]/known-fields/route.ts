@@ -139,39 +139,10 @@ export async function GET(
     }
 
     if (!contact && visitorId) {
-      // Resolve the identity by its canonical worder_visitor_id, falling
-      // back to the alias table (the old query filtered a nonexistent
-      // client_visitor_id column and silently errored on every call).
-      let identityContactId: string | null = null;
-
-      const { data: identity } = await supabaseAdmin
-        .from('visitor_identities')
-        .select('contact_id')
-        .eq('organization_id', form.organization_id)
-        .eq('worder_visitor_id', visitorId)
-        .not('contact_id', 'is', null)
-        .order('updated_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      identityContactId = identity?.contact_id || null;
-
-      if (!identityContactId) {
-        const { data: alias } = await supabaseAdmin
-          .from('visitor_id_aliases')
-          .select('identity_id')
-          .eq('organization_id', form.organization_id)
-          .eq('alias_visitor_id', visitorId)
-          .maybeSingle();
-        if (alias?.identity_id) {
-          const { data: aliased } = await supabaseAdmin
-            .from('visitor_identities')
-            .select('contact_id')
-            .eq('id', alias.identity_id)
-            .not('contact_id', 'is', null)
-            .maybeSingle();
-          identityContactId = aliased?.contact_id || null;
-        }
-      }
+      // O mesmo resolvedor dos outros gates: identidade canônica e aliases,
+      // sempre dentro da org do formulário.
+      const { contactIdForVisitor } = await import('@/lib/popups/targeting');
+      const identityContactId = await contactIdForVisitor(supabaseAdmin, form.organization_id, visitorId);
 
       if (identityContactId) {
         const { data } = await supabaseAdmin

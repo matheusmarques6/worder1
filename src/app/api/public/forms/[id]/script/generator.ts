@@ -172,6 +172,7 @@ export function buildPopupScript(form: PopupFormRecord, baseUrl: string): string
   return `(function(){
 "use strict";
 var FID=${JSON.stringify(String(form.id))},FNAME=${JSON.stringify(String(form.name || ''))},BU=${JSON.stringify(baseUrl)},D=${JSON.stringify(design)},B=${JSON.stringify(beh)},EXP=${JSON.stringify(form.experiment || null)},VARIANT_ID=${JSON.stringify(String(form.id))};
+var PD=D;// design do popup principal: o cupom (e a oferta por intenção) é sempre dele
 // Guard against double injection (Theme App Embed + ScriptTag loader).
 if(window["__wf_ran_"+FID])return;
 window["__wf_ran_"+FID]=true;
@@ -506,10 +507,11 @@ function pw(k,d){var v=Number(PW[k]);return isFinite(v)?v:d}
 var propS={scroll:0,dwellStart:Date.now()};
 var sessP=sessGet("_wf_prop")||{dwell:0,products:0,pages:0,cartItems:0,cartAt:0};
 if(!window.__wf_prop_bumped){window.__wf_prop_bumped=true;sessP.pages=(sessP.pages||0)+1;if(PAGE.kind==="product")sessP.products=(sessP.products||0)+1;sessSet("_wf_prop",sessP)}
-function onPropScroll(){try{var max=document.body.scrollHeight-window.innerHeight;if(max>0){var pp=Math.round(window.scrollY/max*100);if(pp>propS.scroll)propS.scroll=Math.min(100,pp)}}catch(e){}}
+function onPropScroll(){try{var max=document.body.scrollHeight-window.innerHeight;var pp=max>0?Math.round(window.scrollY/max*100):100;if(pp>propS.scroll)propS.scroll=Math.min(100,pp)}catch(e){}}
 window.addEventListener("scroll",onPropScroll,{passive:true});
 window.addEventListener("pagehide",function(){sessP.dwell=(sessP.dwell||0)+(Date.now()-propS.dwellStart)/1000;propS.dwellStart=Date.now();sessSet("_wf_prop",sessP)});
-if(stCfg.enabled&&window.Shopify&&!(sessP.cartAt&&Date.now()-sessP.cartAt<300000)){
+var wantsIntent=!!stCfg.enabled||!!((couponBlock()||{}).smartOffer||{}).enabled;
+if(wantsIntent&&window.Shopify&&!(sessP.cartAt&&Date.now()-sessP.cartAt<300000)){
   try{fetch("/cart.js",{credentials:"same-origin"}).then(function(r){return r.json()}).then(function(c){sessP.cartItems=Number(c&&c.item_count||0);sessP.cartAt=Date.now();sessSet("_wf_prop",sessP)}).catch(function(){})}catch(e){}
 }
 function propensity(){
@@ -529,8 +531,8 @@ function propensity(){
 // base sempre — é o que permite medir a margem ganha.
 var OFFER={intent:null,bucket:null,tier:null,label:""};
 function couponBlock(){
-  var all=[];(D.steps||[]).forEach(function(st){(st.blocks||[]).forEach(function(b){all.push(b)})});
-  ((D.successStep||{}).blocks||[]).forEach(function(b){all.push(b)});
+  var all=[];(PD.steps||[]).forEach(function(st){(st.blocks||[]).forEach(function(b){all.push(b)})});
+  ((PD.successStep||{}).blocks||[]).forEach(function(b){all.push(b)});
   for(var i=0;i<all.length;i++)if(all[i]&&all[i].type==="coupon")return all[i].props||{};
   return null;
 }
@@ -549,7 +551,8 @@ function computeOffer(){
   var lowMax=Math.max(5,Math.min(90,nv(so.lowMax,35))),highMin=Math.max(lowMax+5,Math.min(95,nv(so.highMin,70)));
   var sc=propensity();
   OFFER.intent=sc<lowMax?"low":sc>=highMin?"high":"mid";
-  var vid=getVisitorId()||"";
+  var vid=getVisitorId();
+  if(!vid){try{vid=sessionStorage.getItem("_wf_anon")||"";if(!vid){vid="anon-"+Math.random().toString(36).slice(2);sessionStorage.setItem("_wf_anon",vid)}}catch(e){vid="anon"}}
   var hs=vid+"|offer|"+FID,hv=0;for(var i=0;i<hs.length;i++){hv=(hv*31+hs.charCodeAt(i))>>>0}
   var ctl=Math.max(0,Math.min(50,nv(so.controlPercent,20)));
   OFFER.bucket=(hv%100)<ctl?"control":"smart";
@@ -1539,7 +1542,7 @@ function perVisitorBlocked(){
     return recent.length>=Number(perVisitorCfg.maxShows||1);
   }catch(e){return false}
 }
-if(perVisitorBlocked()&&!useCustomTrigger&&!isEmbed){blockedBy("per-visitor cap");return}
+if(perVisitorBlocked()&&!useCustomTrigger&&!isEmbed&&!RETRIG){blockedBy("per-visitor cap");return}
 
 var expCfg=B.experiment||{};
 var HOLDOUT_PCT=Math.max(0,Math.min(50,nv(expCfg.holdoutPercent,0)));

@@ -101,6 +101,18 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         // O grupo vem do TIPO do evento: impressão é sempre do exposto,
         // 'holdout' é sempre do controle. Um beacon não escolhe o grupo.
         const bucket = eventType === 'holdout' ? 'holdout' : 'exposed';
+        // variant_id só vale se for o próprio popup ou uma variante DELE:
+        // um UUID inventado viraria uma "variante" no relatório e travaria
+        // o teste (amostra nunca suficiente).
+        let variantId: string | null = null;
+        const rawVariant = shortText(body.variant_id, 64);
+        if (rawVariant && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawVariant)) {
+          if (rawVariant === params.id) variantId = rawVariant;
+          else {
+            const { data: v } = await supabaseAdmin.from('crm_forms').select('id').eq('id', rawVariant).eq('ab_parent_id', params.id).eq('organization_id', form.organization_id).maybeSingle();
+            if (v?.id) variantId = v.id;
+          }
+        }
         const stepIdx = Number.isInteger(body.step) && body.step >= 0 && body.step < 100 ? body.step : null;
         const { error: insertErr } = await supabaseAdmin.from('form_events').insert({
           organization_id: form.organization_id,
@@ -111,7 +123,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
             reason: shortText(body.reason, 64),
             visitor_id: shortText(body.visitor_id, 128),
             session_id: shortText(body.session_id, 128),
-            variant_id: shortText(body.variant_id, 64),
+            variant_id: variantId,
             bucket,
             step: stepIdx,
             // O código do cupom não entra aqui — só o tipo. O código vive

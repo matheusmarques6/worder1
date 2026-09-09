@@ -31,6 +31,7 @@ export async function consumeGrantsForOrder(
   organizationId: string,
   order: OrderLikePayload,
   contactId: string | null = null,
+  storeId: string | null = null,
 ): Promise<GrantConsumption[]> {
   const codes = (order.discount_codes ?? [])
     .map((d) => (d?.code ?? '').trim())
@@ -48,6 +49,8 @@ export async function consumeGrantsForOrder(
         p_coupon_code: code,
         p_order_ref: orderRef,
         p_contact_id: contactId,
+        // Loja do pedido: um código estático de outra loja da org não casa.
+        p_store_id: storeId,
       });
       if (error) {
         console.warn('[grant-consumption] RPC falhou (best-effort):', error.message);

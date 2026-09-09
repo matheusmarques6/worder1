@@ -1166,7 +1166,7 @@ async function processOrderPaid(store: ShopifyStoreConfig, order: any) {
   // "por código" do popup que o emitiu.
   try {
     const { consumeGrantsForOrder } = await import('@/lib/ai/grant-consumption');
-    const consumed = await consumeGrantsForOrder(store.organization_id, order, contact?.id ?? null);
+    const consumed = await consumeGrantsForOrder(store.organization_id, order, contact?.id ?? null, store.id ?? null);
     const orderRef = String(order.id ?? order.order_number ?? '').trim();
     const orderValue = parseFloat(order.total_price || '0') || 0;
     for (const c of consumed) {

@@ -1488,6 +1488,7 @@ export async function POST(
             .select('id')
             .eq('organization_id', form.organization_id)
             .eq('form_id', formId)
+            .eq('store_id', form.store_id)
             .eq('tier_key', eff.tierKey)
             .eq('status', 'active')
             .maybeSingle()

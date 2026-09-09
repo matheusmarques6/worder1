@@ -223,6 +223,8 @@ export async function startWhatsAppDoubleOptIn(
       form_id: p.formId,
       form_name: p.formName,
       submission_id: p.submissionId,
+      store_id: p.storeId,
+      account_id: account.id,
       requested_at: now,
       request_message_id: r.messageId,
       template: tpl.name,
@@ -283,6 +285,11 @@ export async function confirmWhatsAppOptInFromInbound(admin: SupabaseClient, p: 
   const evidence = (row.consent_evidence && typeof row.consent_evidence === 'object' ? row.consent_evidence : {}) as Record<string, any>
   const formId: string | null = evidence.form_id || null
   const now = new Date().toISOString()
+  // A resposta tem de chegar no número que pediu: numa org com duas lojas,
+  // um "sim" mandado para a outra loja não confirma este pedido.
+  if (evidence.store_id && p.storeId && evidence.store_id !== p.storeId) {
+    return { outcome: 'ignored', reason: 'no_pending' }
+  }
 
   if (isStopKeyword(p.textBody)) {
     await admin
@@ -342,7 +349,7 @@ export async function confirmWhatsAppOptInFromInbound(admin: SupabaseClient, p: 
       const { dispatchTrigger } = await import('@/lib/automation/trigger-dispatcher')
       await dispatchTrigger({
         organizationId: p.organizationId,
-        storeId: p.storeId,
+        storeId: (evidence.store_id as string | null) || p.storeId,
         triggerType: 'trigger_whatsapp_optin',
         contactId,
         triggerData: {
@@ -369,7 +376,7 @@ export async function confirmWhatsAppOptInFromInbound(admin: SupabaseClient, p: 
     .eq('organization_id', p.organizationId)
     .eq('phone_number', phone)
     .eq('status', 'sent')
-    .contains('metadata', { kind: 'popup_double_optin' })
+    .contains('metadata', { kind: 'popup_double_optin', form_id: formId })
 
   return { outcome: 'confirmed', contactId, via }
 }

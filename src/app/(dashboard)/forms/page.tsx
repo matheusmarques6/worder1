@@ -356,7 +356,8 @@ export default function FormsPage() {
     // (o antigo /api/forms/{id}/embed lê a tabela legada `forms` e não
     // renderiza nada para popups). Para form_type=embed o script procura
     // o host <div data-worder-form="{id}"> e renderiza inline.
-    const scriptTag = `<script src="${origin}/api/public/forms/${form.id}/script" async></script>`
+    const dom = (currentStore as any)?.domain || (currentStore as any)?.shop_domain || ''
+    const scriptTag = `<script src="${origin}/api/public/forms/${form.id}/script${dom ? `?domain=${encodeURIComponent(dom)}` : ''}" async></script>`
     const snippet = form.form_type === 'embed'
       ? `<div data-worder-form="${form.id}"></div>\n${scriptTag}`
       : scriptTag

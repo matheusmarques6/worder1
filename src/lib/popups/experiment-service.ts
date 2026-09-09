@@ -73,7 +73,7 @@ const EXPERIMENT_SELECT = 'id, organization_id, form_id, name, status, mode, kpi
 async function loadParent(admin: SupabaseClient, orgId: string, formId: string) {
   const { data, error } = await admin
     .from('crm_forms')
-    .select('id, name, status, store_id, design_json, behavior, form_type, ab_parent_id')
+    .select('id, name, slug, status, store_id, design_json, behavior, form_type, ab_parent_id')
     .eq('id', formId)
     .eq('organization_id', orgId)
     .maybeSingle()
@@ -120,7 +120,10 @@ function splitIds(formId: string, variants: VariantRow[]): string[] {
 
 export async function computeStats(admin: SupabaseClient, exp: ExperimentRow, controlId: string): Promise<{ stats: VariantStats[]; evaluation: Evaluation }> {
   const since = exp.started_at || exp.created_at
-  const { data, error } = await admin.rpc('popup_variant_stats', { p_organization_id: exp.organization_id, p_form_id: exp.form_id, p_since: since })
+  // Encerrado: a leitura congela no fim; o tráfego que veio depois (todo
+  // para a vencedora) não entra na conta.
+  const until = exp.status === 'ended' ? exp.ended_at : null
+  const { data, error } = await admin.rpc('popup_variant_stats', { p_organization_id: exp.organization_id, p_form_id: exp.form_id, p_since: since, p_until: until })
   if (error) throw new Error(error.message)
   const ids = Object.keys(exp.split || {})
   const byId = new Map<string, VariantStats>()
@@ -135,7 +138,9 @@ export async function computeStats(admin: SupabaseClient, exp: ExperimentRow, co
       revenue: Number(r.revenue) || 0,
     })
   }
-  const all = new Set([controlId, ...ids, ...byId.keys()])
+  // Só o controle e as variantes do experimento: um variant_id estranho
+  // que chegasse ao banco não vira "variante" na leitura.
+  const all = new Set([controlId, ...ids])
   const stats: VariantStats[] = [...all].map((id) => byId.get(id) || { variantId: id, impressions: 0, visitors: 0, submissions: 0, optins: 0, orders: 0, revenue: 0 })
   const evaluation = evaluateExperiment(stats, { kpi: exp.kpi, controlId, minSample: exp.min_sample, confidence: Number(exp.confidence) || 0.95 })
   return { stats, evaluation }
@@ -196,11 +201,14 @@ export async function createVariant(admin: SupabaseClient, orgId: string, formId
   const existing = await loadVariants(admin, orgId, formId)
   if (existing.length + 1 >= MAX_VARIANTS) throw new Error(`No máximo ${MAX_VARIANTS} variantes, contando a principal.`)
   const label = LABELS[existing.length + 1]
+  // slug é obrigatório e único por org.
+  const slugBase = String(parent.slug || parent.name || 'popup').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 40) || 'popup'
   const { data, error } = await admin
     .from('crm_forms')
     .insert({
       organization_id: orgId,
       store_id: parent.store_id,
+      slug: `${slugBase}-${label.toLowerCase()}-${Date.now().toString(36)}`,
       name: `${parent.name} · Variante ${label}`,
       form_type: parent.form_type,
       status: 'draft',
@@ -243,6 +251,12 @@ export interface ExperimentPatch {
 }
 
 export async function updateExperiment(admin: SupabaseClient, orgId: string, formId: string, patch: ExperimentPatch): Promise<ExperimentRow> {
+  const parent = await loadParent(admin, orgId, formId)
+  if (!parent) throw new Error('Popup não encontrado')
+  const running = await loadExperiment(admin, orgId, formId)
+  if (running?.status === 'running' && Object.keys(patch).some((k) => k !== 'name')) {
+    throw new Error('Experimento em andamento: encerre antes de mudar as regras.')
+  }
   const variants = await loadVariants(admin, orgId, formId)
   const ids = splitIds(formId, variants)
   const cur = await ensureDraftExperiment(admin, orgId, formId, normalizeSplit((await loadExperiment(admin, orgId, formId))?.split, ids))
@@ -262,6 +276,8 @@ export async function updateExperiment(admin: SupabaseClient, orgId: string, for
 }
 
 export async function startExperiment(admin: SupabaseClient, orgId: string, formId: string): Promise<ExperimentRow> {
+  const parent = await loadParent(admin, orgId, formId)
+  if (!parent) throw new Error('Popup não encontrado')
   const variants = await loadVariants(admin, orgId, formId)
   if (!variants.length) throw new Error('Crie pelo menos uma variante antes de iniciar.')
   const ids = splitIds(formId, variants)
@@ -285,6 +301,8 @@ export async function startExperiment(admin: SupabaseClient, orgId: string, form
 }
 
 export async function stopExperiment(admin: SupabaseClient, orgId: string, formId: string, reason = 'manual'): Promise<ExperimentRow | null> {
+  const parent = await loadParent(admin, orgId, formId)
+  if (!parent) throw new Error('Popup não encontrado')
   const cur = await loadExperiment(admin, orgId, formId)
   if (!cur || cur.status !== 'running') return cur
   const { data, error } = await admin
@@ -344,7 +362,7 @@ export async function applyWinner(admin: SupabaseClient, orgId: string, formId: 
 /** Pesos do bandit por contexto (página × origem × dispositivo), com Thompson. */
 export async function computeBanditWeights(admin: SupabaseClient, exp: ExperimentRow, controlId: string): Promise<{ weights: Record<string, Record<string, number>>; eligible: boolean; views: Record<string, number> }> {
   const since = exp.started_at || exp.created_at
-  const { data, error } = await admin.rpc('popup_variant_context_stats', { p_organization_id: exp.organization_id, p_form_id: exp.form_id, p_since: since })
+  const { data, error } = await admin.rpc('popup_variant_context_stats', { p_organization_id: exp.organization_id, p_form_id: exp.form_id, p_since: since, p_until: null })
   if (error) throw new Error(error.message)
   const ids = Object.keys(exp.split || {})
   const views: Record<string, number> = {}
@@ -431,6 +449,8 @@ export interface RuntimeExperiment {
   split: Record<string, number>
   variants: Array<{ id: string; design: any }>
   bandit?: Record<string, Record<string, number>>
+  /** Muda quando qualquer variante é editada — entra no ETag do bundle. */
+  version: string
 }
 
 /**
@@ -444,21 +464,21 @@ export async function attachExperiments<T extends { id: string; organization_id?
   const out = new Map<string, RuntimeExperiment>()
   if (!forms.length) return out
   const ids = forms.map((f) => f.id)
-  const { data: exps } = await admin
-    .from('popup_experiments')
-    .select(EXPERIMENT_SELECT)
-    .in('form_id', ids)
-    .eq('status', 'running')
+  // Sempre dentro das orgs dos popups pedidos — o bundle de uma loja nunca
+  // carrega o design de uma variante de outra org.
+  const orgIds = [...new Set(forms.map((f) => f.organization_id).filter(Boolean))] as string[]
+  let expQuery = admin.from('popup_experiments').select(EXPERIMENT_SELECT).in('form_id', ids).eq('status', 'running')
+  if (orgIds.length) expQuery = expQuery.in('organization_id', orgIds)
+  const { data: exps } = await expQuery
   const running = (exps || []) as ExperimentRow[]
   if (!running.length) return out
-  const { data: vrows } = await admin
-    .from('crm_forms')
-    .select('id, ab_parent_id, design_json')
-    .in('ab_parent_id', running.map((e) => e.form_id))
-  const variantsByParent = new Map<string, Array<{ id: string; design: any }>>()
+  let vQuery = admin.from('crm_forms').select('id, ab_parent_id, design_json, updated_at, organization_id').in('ab_parent_id', running.map((e) => e.form_id))
+  if (orgIds.length) vQuery = vQuery.in('organization_id', orgIds)
+  const { data: vrows } = await vQuery
+  const variantsByParent = new Map<string, Array<{ id: string; design: any; updated_at: string }>>()
   for (const v of (vrows || []) as any[]) {
     const list = variantsByParent.get(v.ab_parent_id) || []
-    list.push({ id: v.id, design: v.design_json || {} })
+    list.push({ id: v.id, design: v.design_json || {}, updated_at: String(v.updated_at || '') })
     variantsByParent.set(v.ab_parent_id, list)
   }
   for (const e of running) {
@@ -466,7 +486,8 @@ export async function attachExperiments<T extends { id: string; organization_id?
     if (!variants.length) continue
     const split = normalizeSplit(e.split, [e.form_id, ...variants.map((v) => v.id)])
     const bandit = e.mode === 'bandit' && e.stats?.bandit?.eligible ? (e.stats.bandit.weights as Record<string, Record<string, number>>) : undefined
-    out.set(e.form_id, { id: e.id, mode: e.mode, split, variants, bandit })
+    const version = `${e.updated_at}|${variants.map((v) => v.updated_at).sort().join(',')}`
+    out.set(e.form_id, { id: e.id, mode: e.mode, split, variants: variants.map((v) => ({ id: v.id, design: v.design })), bandit, version })
   }
   return out
 }

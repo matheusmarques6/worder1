@@ -256,7 +256,10 @@ export function hashFraction(s: string): number {
 
 /** Chave de contexto do bandit — a mesma que o runtime monta. */
 export function contextKey(page: string | null | undefined, traffic: string | null | undefined, device: string | null | undefined): string {
-  return `${page || 'other'}|${traffic || 'direct'}|${device || 'desktop'}`
+  // O runtime só distingue celular de "não celular" (largura); tablet
+  // entra como desktop para as chaves baterem dos dois lados.
+  const dev = device === 'mobile' ? 'mobile' : 'desktop'
+  return `${page || 'other'}|${traffic || 'direct'}|${dev}`
 }
 
 /**

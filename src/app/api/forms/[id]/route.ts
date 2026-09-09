@@ -137,19 +137,22 @@ export async function PUT(
     // storefront of the org (cross-store fan-out). Multi-store orgs must
     // pick a store before publishing; single-store orgs get it
     // auto-filled with their only active store.
-    if (status === 'published') {
-      // Variante de experimento não é publicada: entra na loja pelo popup
-      // principal, na fatia que o experimento dá a ela.
-      const { data: abRow } = await admin.from('crm_forms').select('ab_parent_id').eq('id', formId).eq('organization_id', user.organization_id).maybeSingle()
-      if (abRow?.ab_parent_id) {
-        return NextResponse.json({ error: 'Esta é uma variante de experimento. Ative o experimento no popup principal.' }, { status: 400 })
-      }
-      const { data: current } = await admin
-        .from('crm_forms')
-        .select('store_id, form_type, design_json')
-        .eq('id', formId)
-        .eq('organization_id', user.organization_id)
-        .maybeSingle()
+    const { data: current } = await admin
+      .from('crm_forms')
+      .select('store_id, form_type, design_json, status, ab_parent_id')
+      .eq('id', formId)
+      .eq('organization_id', user.organization_id)
+      .maybeSingle()
+    if (!current) return NextResponse.json({ error: 'Formulário não encontrado' }, { status: 404 })
+    // Variante de experimento não é publicada: entra na loja pelo popup
+    // principal, na fatia que o experimento dá a ela.
+    if (status === 'published' && current.ab_parent_id) {
+      return NextResponse.json({ error: 'Esta é uma variante de experimento. Ative o experimento no popup principal.' }, { status: 400 })
+    }
+    // A regra de "escolha a loja" vale para o estado RESULTANTE: tirar a
+    // loja de um popup já publicado também passa por aqui.
+    const effectiveStatus = status !== undefined ? status : current.status
+    if (effectiveStatus === 'published' && (status === 'published' || store_id !== undefined)) {
 
       const effectiveStoreId = store_id !== undefined ? store_id : current?.store_id
       const effectiveFormType = form_type !== undefined ? form_type : current?.form_type
@@ -175,6 +178,11 @@ export async function PUT(
       }
     }
 
+    // Editou uma variante: o bundle da loja tem ETag pelo pai — encosta
+    // nele para o design novo entrar no ar.
+    if (current.ab_parent_id && design_json !== undefined) {
+      await admin.from('crm_forms').update({ updated_at: new Date().toISOString() }).eq('id', current.ab_parent_id).eq('organization_id', user.organization_id)
+    }
     const { data: form, error } = await admin
       .from('crm_forms')
       .update(updates)

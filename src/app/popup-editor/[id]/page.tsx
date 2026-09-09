@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent, DragOverlay, type DragStartEvent } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
@@ -436,7 +436,7 @@ type ExperimentBundle = {
 const KPI_LABEL: Record<string, string> = { submit: 'Inscrições', optin: 'Opt-in de e-mail', revenue: 'Pedidos' }
 const END_REASON: Record<string, string> = { manual: 'encerrado manualmente', manual_apply: 'vencedora aplicada manualmente', auto_winner: 'vencedora aplicada automaticamente', auto_control_wins: 'a versão principal venceu', max_days: 'prazo esgotado sem vencedora' }
 
-function ExperimentDrawer({ formId, formName, formStatus, dirty, onClose, onOpenVariant }: { formId: string; formName: string; formStatus: string; dirty: boolean; onClose: () => void; onOpenVariant: (id: string) => void }) {
+function ExperimentDrawer({ formId, formName, formStatus, dirty, onClose, onOpenVariant, onApplied }: { formId: string; formName: string; formStatus: string; dirty: boolean; onClose: () => void; onOpenVariant: (id: string) => void; onApplied: () => void }) {
   const [data, setData] = useState<ExperimentBundle | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -461,6 +461,9 @@ function ExperimentDrawer({ formId, formName, formStatus, dirty, onClose, onOpen
       const d = await r.json()
       if (!r.ok) throw new Error(d.error || 'erro')
       setData(d); setSplit(d.split || {}); setError(null)
+      // Aplicar a vencedora troca o design do popup principal no servidor:
+      // o editor recarrega para não salvar por cima com a versão antiga.
+      if (action === 'apply_winner') onApplied()
     } catch (e: any) { setError(e?.message || 'Não foi possível atualizar') }
     finally { setBusy(null) }
   }
@@ -595,7 +598,7 @@ function ExperimentDrawer({ formId, formName, formStatus, dirty, onClose, onOpen
           <p className="text-[11px] text-gray-400">As variantes compartilham gatilhos, segmentação e cupom do popup principal.</p>
           <div className="flex items-center gap-2 flex-shrink-0">
             {running && data?.evaluation?.winnerId && !exp?.auto_apply_winner && (
-              <button onClick={() => act('apply_winner', { variant_id: data.evaluation!.winnerId })} disabled={!!busy} className="px-3 py-1.5 text-[12px] font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50">Aplicar vencedora</button>
+              <button onClick={() => act('apply_winner', { variant_id: data.evaluation!.winnerId })} disabled={!!busy || dirty} title={dirty ? 'Salve ou descarte as alterações deste popup antes de aplicar a vencedora.' : undefined} className="px-3 py-1.5 text-[12px] font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50">Aplicar vencedora</button>
             )}
             {running && <button onClick={() => act('stop')} disabled={!!busy} className="px-3 py-1.5 text-[12px] font-semibold rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50">Encerrar</button>}
             {!running && variants.length > 1 && (
@@ -874,7 +877,25 @@ function InlineEditableStyles() {
 }
 
 // ── Block Renderer (canvas) ────────────────────────────────────────────────────
-function BlockPreview({ block, selected, onContentChange, onSelect }: { block: Block; selected?: boolean; onContentChange?: (key: string, value: string) => void; onSelect?: () => void }) {
+// Como a oferta base é escrita onde o lojista digita {{offer}}. Mesma regra
+// do runtime (offerText): rótulo manual > tipo/valor do desconto.
+function offerLabelOf(cp: any): string {
+  if (!cp) return ''
+  if (cp.offerLabel) return String(cp.offerLabel)
+  if (cp.discountType === 'free_shipping') return 'Frete grátis'
+  if (cp.discountType === 'fixed_amount' || cp.discountType === 'fixed') return `R$ ${Math.round(Number(cp.discountValue) * 100) / 100} OFF`
+  return `${Math.round(Number(cp.discountValue) || 0)}% OFF`
+}
+function designOfferLabel(steps: Step[]): string {
+  for (const st of steps) for (const b of st.blocks) if (b.type === 'coupon') return offerLabelOf(b.props)
+  return ''
+}
+function applyOfferPreview(text: string, label: string | undefined): string {
+  if (label === undefined) return text
+  return String(text || '').replace(/\{\{\s*offer\s*\}\}/g, label)
+}
+
+function BlockPreview({ block, selected, onContentChange, onSelect, offerLabel }: { block: Block; selected?: boolean; onContentChange?: (key: string, value: string) => void; onSelect?: () => void; offerLabel?: string }) {
   const p = block.props
   const blockStyle: React.CSSProperties = {
     marginTop: p.marginTop || 0, marginBottom: p.marginBottom ?? 8,
@@ -926,7 +947,7 @@ function BlockPreview({ block, selected, onContentChange, onSelect }: { block: B
           />
         )
       }
-      return <Tag style={textStyle}>{p.content}</Tag>
+      return <Tag style={textStyle}>{applyOfferPreview(p.content, offerLabel)}</Tag>
     }
     case 'email':
       return <InputBlockPreview block={block}><><InputPreviewStyles /><input readOnly placeholder={p.placeholder || 'Seu email'} className="worder-input" style={{ ...buildInputStyle(p), ...phCssVar }} /></></InputBlockPreview>
@@ -971,7 +992,7 @@ function BlockPreview({ block, selected, onContentChange, onSelect }: { block: B
           <button
             onMouseEnter={e => { if (p.hoverColor) (e.currentTarget as HTMLButtonElement).style.backgroundColor = p.hoverColor }}
             onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = p.bgColor || '#F97316' }}
-            style={btnStyle}>{p.text || 'Enviar'}</button>
+            style={btnStyle}>{applyOfferPreview(p.text, offerLabel) || 'Enviar'}</button>
         )}
       </div>
     }
@@ -2153,6 +2174,9 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
                     </LabeledField>
                   )}
                 </div>
+                <LabeledField label="Rótulo da oferta" hint={`Aparece onde você escrever {{offer}} no texto ou no botão. Vazio: "${offerLabelOf({ ...p, offerLabel: '' })}".`}>
+                  <input className={inp} value={p.offerLabel || ''} onChange={e => up('offerLabel', e.target.value.slice(0, 40))} placeholder={offerLabelOf({ ...p, offerLabel: '' })} />
+                </LabeledField>
                 <div className="grid grid-cols-2 gap-2">
                   <LabeledField label="Prefixo" hint="O código sai como PREFIXO-XXXXXXXX.">
                     <input className={inp + ' font-mono uppercase'}
@@ -3585,6 +3609,8 @@ export default function PopupEditorPage() {
   // crash the canvas. Steps are also repaired on load — this is the belt.
   const activeStep: Step = (showSuccess ? design.successStep : (design.steps[activeStepIdx] ?? design.steps[0])) ?? EMPTY_FALLBACK_STEP
   const selectedBlock = activeStep?.blocks.find(b => b.id === selectedBlockId) ?? null
+  // No modo de visualização, {{offer}} vira a oferta base (o runtime troca pela oferta escolhida).
+  const previewOfferLabel = useMemo(() => designOfferLabel([...design.steps, design.successStep].filter(Boolean) as Step[]), [design.steps, design.successStep])
 
   // Drop-zone state for HTML5-drag from the block palette. dropIndicatorIdx
   // is the insertion index inside the active step (0 = before first block,
@@ -4129,7 +4155,7 @@ export default function PopupEditorPage() {
         </div>
       )}
       {showExperiment && !abParent && (
-        <ExperimentDrawer formId={formId} formName={formName} formStatus={formStatus} dirty={dirty} onClose={() => setShowExperiment(false)} onOpenVariant={id => router.push(`/popup-editor/${id}`)} />
+        <ExperimentDrawer formId={formId} formName={formName} formStatus={formStatus} dirty={dirty} onClose={() => setShowExperiment(false)} onOpenVariant={id => router.push(`/popup-editor/${id}`)} onApplied={() => { setShowExperiment(false); loadForm() }} />
       )}
 
       <div className="flex flex-1 overflow-hidden">
@@ -4492,7 +4518,7 @@ export default function PopupEditorPage() {
                   </div>
                 )}
                 <div style={{ backgroundColor: s.backgroundColor, paddingTop: s.paddingTop ?? s.padding ?? 32, paddingRight: s.paddingRight ?? s.padding ?? 32, paddingBottom: s.paddingBottom ?? s.padding ?? 32, paddingLeft: s.paddingLeft ?? s.padding ?? 32, fontFamily: s.fontFamily, flex: 1, flexBasis: 0, minWidth: 0, minHeight: (isBannerFt || isFlyoutFt) ? undefined : (s.minHeight ?? 500), display: 'flex', flexDirection: 'column', justifyContent: contentVCenter ? 'center' : 'flex-start' }}>
-                  {activeStep.blocks.map(block => <BlockPreview key={block.id} block={block} />)}
+                  {activeStep.blocks.map(block => <BlockPreview key={block.id} block={block} offerLabel={previewOfferLabel} />)}
                 </div>
                 {s.sideImage.enabled && s.sideImage.position === 'right' && s.sideImage.src && sideAllowed && (
                   <div style={{ flex: 1, flexBasis: 0, minWidth: 0 }} className="overflow-hidden">
