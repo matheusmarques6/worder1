@@ -490,3 +490,73 @@ def test_app_baseline_relations_exist(admin, table):
     assert admin.execute(
         "select to_regclass(%s)", (f"public.{table}",)
     ).fetchone()[0] == table
+
+
+def test_product_feeds_final_contract(admin):
+    """Fails if either replay history omits the reviewed product-feeds base."""
+    expected_columns = {
+        "id": ("uuid", "uuid", "NO", "gen_random_uuid()"),
+        "organization_id": ("uuid", "uuid", "NO", None),
+        "name": ("text", "text", "NO", None),
+        "feed_type": ("text", "text", "NO", "'bestsellers'::text"),
+        "time_period": ("text", "text", "YES", "'30d'::text"),
+        "filters": ("jsonb", "jsonb", "YES", "'[]'::jsonb"),
+        "max_products": ("integer", "int4", "YES", "4"),
+        "layout": ("text", "text", "YES", "'2x2'::text"),
+        "show_price": ("boolean", "bool", "YES", "true"),
+        "show_compare_price": ("boolean", "bool", "YES", "true"),
+        "show_button": ("boolean", "bool", "YES", "true"),
+        "button_text": ("text", "text", "YES", "'Comprar'::text"),
+        "created_at": ("timestamp with time zone", "timestamptz", "YES", "now()"),
+        "updated_at": ("timestamp with time zone", "timestamptz", "YES", "now()"),
+        "store_id": ("uuid", "uuid", "YES", None),
+        "excluded_product_ids": ("ARRAY", "_text", "NO", "'{}'::text[]"),
+    }
+    with admin.transaction():
+        admin.execute("set local search_path = public, extensions")
+        relation = admin.execute(
+            "select to_regclass('public.product_feeds')"
+        ).fetchone()[0]
+        assert relation == "product_feeds"
+        columns = {row[0]: row[1:] for row in admin.execute(
+            """select column_name, data_type, udt_name, is_nullable, column_default
+                 from information_schema.columns
+                where table_schema='public' and table_name='product_feeds'"""
+        ).fetchall()}
+        assert columns == expected_columns
+        assert admin.execute(
+            """select relrowsecurity, relforcerowsecurity
+                 from pg_class where oid='public.product_feeds'::regclass"""
+        ).fetchone() == (True, False)
+        policy = admin.execute(
+            """select cmd, roles, permissive,
+                      regexp_replace(
+                        regexp_replace(qual, 'profiles\\.', '', 'g'), '\\s+', '', 'g'
+                      ),
+                      regexp_replace(
+                        regexp_replace(with_check, 'profiles\\.', '', 'g'), '\\s+', '', 'g'
+                      )
+                 from pg_policies
+                where schemaname='public' and tablename='product_feeds'
+                  and policyname='Users can manage their org product_feeds'"""
+        ).fetchone()
+        assert policy == (
+            "ALL", ["public"], "PERMISSIVE",
+            "(organization_idIN(SELECTorganization_idFROMprofilesWHERE(id=auth.uid())))",
+            "(organization_idIN(SELECTorganization_idFROMprofilesWHERE(id=auth.uid())))",
+        )
+        indexes = dict(admin.execute(
+            """select indexname, indexdef from pg_indexes
+                 where schemaname='public' and tablename='product_feeds'
+                   and indexname in ('idx_product_feeds_org', 'idx_product_feeds_store')"""
+        ).fetchall())
+        assert indexes == {
+            "idx_product_feeds_org": (
+                "CREATE INDEX idx_product_feeds_org ON public.product_feeds "
+                "USING btree (organization_id)"
+            ),
+            "idx_product_feeds_store": (
+                "CREATE INDEX idx_product_feeds_store ON public.product_feeds "
+                "USING btree (store_id)"
+            ),
+        }

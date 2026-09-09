@@ -367,3 +367,31 @@ create table if not exists public.sms_sends (
 
 create unique index if not exists sms_sends_order_idempotency_idx
   on public.sms_sends(organization_id, order_id) where order_id is not null;
+
+create table if not exists public.product_feeds (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null,
+  name text not null,
+  feed_type text not null default 'bestsellers',
+  time_period text default '30d',
+  filters jsonb default '[]'::jsonb,
+  max_products int default 4,
+  layout text default '2x2',
+  show_price boolean default true,
+  show_compare_price boolean default true,
+  show_button boolean default true,
+  button_text text default 'Comprar',
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+alter table public.product_feeds enable row level security;
+
+create policy "Users can manage their org product_feeds" on public.product_feeds
+  for all using (
+    organization_id in (
+      select organization_id from profiles where id = auth.uid()
+    )
+  );
+
+create index if not exists idx_product_feeds_org on public.product_feeds(organization_id);
