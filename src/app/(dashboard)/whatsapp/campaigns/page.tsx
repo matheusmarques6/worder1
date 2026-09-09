@@ -9,6 +9,8 @@ import {
   Calendar, Users, Send, CheckCircle, Eye, MessageSquare, Clock,
   XCircle, Loader2, BarChart3,
 } from 'lucide-react'
+import { useToast } from '@/components/ui/Toast'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { useWhatsAppConnection } from '@/hooks/useWhatsAppConnection'
 import { WhatsAppConnectionRequired, WhatsAppConnectionLoading, WhatsAppConnectionBanner } from '@/components/whatsapp/WhatsAppConnectionRequired'
 import { SendingHealthPanel } from '@/components/shared/SendingHealthPanel'
@@ -47,6 +49,9 @@ export default function CampaignsPage() {
   const router = useRouter()
   const { user } = useAuthStore()
   const { currentStore } = useStoreStore()
+  const hasHydrated = useStoreStore((st) => st._hasHydrated)
+  const toast = useToast()
+  const { confirm } = useConfirm()
   const organizationId = user?.organization_id || ''
   
   // Verificar conexão do WhatsApp
@@ -58,41 +63,92 @@ export default function CampaignsPage() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [openDropdown, setOpenDropdown] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [busyId, setBusyId] = useState<string | null>(null)
 
   const fetchCampaigns = async () => {
     if (!organizationId) return
     setIsLoading(true)
+    setLoadError(null)
     try {
       const params = new URLSearchParams({ organizationId })
       if (statusFilter !== 'all') params.append('status', statusFilter)
       if (search) params.append('search', search)
-      const res = await fetch(`/api/whatsapp/campaigns?${params}`)
-      const data = await res.json()
+      // A loja escolhida entra no filtro: sem isto, uma organização com
+      // duas vitrines via as campanhas das duas misturadas, ao contrário
+      // do que o seletor de loja no topo promete.
+      if (currentStore?.id) params.append('storeId', currentStore.id)
+      const res = await fetch(`/api/whatsapp/campaigns?${params}`, { cache: 'no-store' })
+      const data = await res.json().catch(() => ({}))
+      // A resposta não era conferida: um 500 virava lista vazia, e o
+      // lojista concluía que não tinha campanha nenhuma.
+      if (!res.ok) {
+        setCampaigns([])
+        setMetrics(null)
+        setLoadError(data?.error || `Não foi possível carregar as campanhas (erro ${res.status}).`)
+        return
+      }
       setCampaigns(data.campaigns || [])
       setMetrics(data.metrics || null)
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching campaigns:', error)
+      setCampaigns([])
+      setLoadError(error?.message || 'Falha de rede ao carregar as campanhas.')
     } finally {
       setIsLoading(false)
     }
   }
 
-  useEffect(() => { if (organizationId) fetchCampaigns() }, [statusFilter, organizationId, currentStore?.id])
+  useEffect(() => {
+    // Espera a loja atual sair do localStorage: antes disso o filtro de
+    // loja iria vazio e a lista piscaria com o conteúdo errado.
+    if (organizationId && hasHydrated) fetchCampaigns()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter, organizationId, currentStore?.id, hasHydrated])
+
+  /** O que cada ação diz quando dá certo. */
+  const ACTION_OK: Record<string, string> = {
+    delete: 'Campanha excluída',
+    duplicate: 'Campanha duplicada',
+    send: 'Campanha na fila de envio',
+    pause: 'Campanha pausada',
+    resume: 'Campanha retomada',
+    cancel: 'Campanha cancelada',
+  }
 
   const handleAction = async (action: string, campaignId: string) => {
     setOpenDropdown(null)
+    if (action === 'delete') {
+      const ok = await confirm({
+        title: 'Excluir esta campanha?',
+        description: 'Os registros de envio dela também somem. Não tem como desfazer.',
+        confirmLabel: 'Excluir',
+        destructive: true,
+      })
+      if (!ok) return
+    }
+    setBusyId(campaignId)
     try {
-      if (action === 'delete') {
-        if (!confirm('Tem certeza que deseja excluir esta campanha?')) return
-        await fetch(`/api/whatsapp/campaigns/${campaignId}`, { method: 'DELETE' })
-      } else if (action === 'duplicate') {
-        await fetch(`/api/whatsapp/campaigns/${campaignId}/duplicate`, { method: 'POST' })
-      } else if (['send', 'pause', 'resume', 'cancel'].includes(action)) {
-        await fetch(`/api/whatsapp/campaigns/${campaignId}/${action}`, { method: 'POST' })
+      const url = action === 'delete'
+        ? `/api/whatsapp/campaigns/${campaignId}`
+        : action === 'duplicate'
+          ? `/api/whatsapp/campaigns/${campaignId}/duplicate`
+          : `/api/whatsapp/campaigns/${campaignId}/${action}`
+      const res = await fetch(url, { method: action === 'delete' ? 'DELETE' : 'POST' })
+      const data = await res.json().catch(() => ({}))
+      // Antes nenhuma dessas respostas era olhada: a tela recarregava e o
+      // lojista tirava a conclusão pelo que mudou (ou não mudou) na lista.
+      if (!res.ok) {
+        toast.error('A ação não foi concluída', data?.error || `Erro ${res.status}`)
+        return
       }
-      fetchCampaigns()
-    } catch (error) {
+      toast.success(ACTION_OK[action] || 'Pronto')
+      await fetchCampaigns()
+    } catch (error: any) {
       console.error('Error performing action:', error)
+      toast.error('A ação não foi concluída', error?.message || 'Falha de rede')
+    } finally {
+      setBusyId(null)
     }
   }
 
@@ -193,10 +249,26 @@ export default function CampaignsPage() {
         </button>
       </div>
 
+      {/* Falha de carregamento: "nenhuma campanha" e "não consegui
+          carregar" são coisas diferentes, e antes viravam a mesma tela. */}
+      {loadError && !isLoading && (
+        <div className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+          <XCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+          <span className="text-sm text-red-700 flex-1">{loadError}</span>
+          <button onClick={fetchCampaigns} className="text-xs font-semibold text-red-700 underline underline-offset-2">
+            Tentar novamente
+          </button>
+        </div>
+      )}
+
       {/* Table */}
       <div className="bg-gray-50 border border-gray-200 rounded-2xl overflow-hidden">
         {isLoading && campaigns.length === 0 ? (
           <div className="flex items-center justify-center py-20"><Loader2 className="w-8 h-8 text-brand-600 animate-spin" /></div>
+        ) : loadError ? (
+          <div className="py-16 text-center text-sm text-gray-500">
+            Nada carregado. Corrija o erro acima e tente de novo.
+          </div>
         ) : campaigns.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-gray-500">
             <MessageSquare className="w-16 h-16 mb-4 opacity-30" />
@@ -251,12 +323,12 @@ export default function CampaignsPage() {
                         </button>
                         {openDropdown === campaign.id && (
                           <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-gray-200 rounded-xl shadow-xl z-10 py-1">
-                            {campaign.status === 'draft' && <button onClick={(e) => { e.stopPropagation(); handleAction('send', campaign.id) }} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"><Play className="w-4 h-4" /> Enviar Agora</button>}
-                            {campaign.status === 'running' && <button onClick={(e) => { e.stopPropagation(); handleAction('pause', campaign.id) }} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"><Pause className="w-4 h-4" /> Pausar</button>}
-                            {campaign.status === 'paused' && <button onClick={(e) => { e.stopPropagation(); handleAction('resume', campaign.id) }} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"><Play className="w-4 h-4" /> Retomar</button>}
-                            <button onClick={(e) => { e.stopPropagation(); handleAction('duplicate', campaign.id) }} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"><Copy className="w-4 h-4" /> Duplicar</button>
-                            {['scheduled', 'running', 'paused'].includes(campaign.status) && <button onClick={(e) => { e.stopPropagation(); handleAction('cancel', campaign.id) }} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-yellow-400 hover:bg-gray-100"><XCircle className="w-4 h-4" /> Cancelar</button>}
-                            <button onClick={(e) => { e.stopPropagation(); handleAction('delete', campaign.id) }} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-400 hover:bg-gray-100"><Trash2 className="w-4 h-4" /> Excluir</button>
+                            {campaign.status === 'draft' && <button onClick={(e) => { e.stopPropagation(); handleAction('send', campaign.id) }} disabled={busyId === campaign.id} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"><Play className="w-4 h-4" /> Enviar Agora</button>}
+                            {campaign.status === 'running' && <button onClick={(e) => { e.stopPropagation(); handleAction('pause', campaign.id) }} disabled={busyId === campaign.id} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"><Pause className="w-4 h-4" /> Pausar</button>}
+                            {campaign.status === 'paused' && <button onClick={(e) => { e.stopPropagation(); handleAction('resume', campaign.id) }} disabled={busyId === campaign.id} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"><Play className="w-4 h-4" /> Retomar</button>}
+                            <button onClick={(e) => { e.stopPropagation(); handleAction('duplicate', campaign.id) }} disabled={busyId === campaign.id} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"><Copy className="w-4 h-4" /> Duplicar</button>
+                            {['scheduled', 'running', 'paused'].includes(campaign.status) && <button onClick={(e) => { e.stopPropagation(); handleAction('cancel', campaign.id) }} disabled={busyId === campaign.id} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-yellow-400 hover:bg-gray-100"><XCircle className="w-4 h-4" /> Cancelar</button>}
+                            <button onClick={(e) => { e.stopPropagation(); handleAction('delete', campaign.id) }} disabled={busyId === campaign.id} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-400 hover:bg-gray-100"><Trash2 className="w-4 h-4" /> Excluir</button>
                           </div>
                         )}
                       </div>

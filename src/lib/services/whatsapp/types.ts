@@ -286,12 +286,15 @@ export interface Campaign {
   audience_type: AudienceType
   audience_filters: Record<string, unknown>
   variable_mappings: Record<string, unknown>
-  total_contacts: number
-  sent_count: number
-  delivered_count: number
-  read_count: number
-  failed_count: number
-  replied_count: number
+  // Nomes do banco depois da reconciliação (antes: total_contacts,
+  // sent_count, delivered_count, read_count, failed_count).
+  audience_count: number
+  total_recipients: number
+  total_sent: number
+  total_delivered: number
+  total_read: number
+  total_failed: number
+  total_replied: number
   estimated_cost: number
   actual_cost: number
   scheduled_at?: string

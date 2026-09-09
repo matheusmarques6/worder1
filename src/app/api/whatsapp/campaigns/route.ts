@@ -40,6 +40,23 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '20')
     const offset = (page - 1) * limit
 
+    // A loja pedida tem de ser desta organização. Sem esta checagem, um
+    // uuid de fora viraria filtro e a lista voltaria vazia sem explicar
+    // por quê — ou, num refactor futuro, deixaria de filtrar.
+    let scopedStoreId: string | null = null
+    if (storeId) {
+      const { data: storeRow } = await supabase
+        .from('shopify_stores')
+        .select('id')
+        .eq('id', storeId)
+        .eq('organization_id', organizationId)
+        .maybeSingle()
+      if (!storeRow) {
+        return NextResponse.json({ error: 'Store not found in this organization' }, { status: 404 })
+      }
+      scopedStoreId = storeRow.id
+    }
+
     let query = supabase
       .from('whatsapp_campaigns')
       .select(`*`, { count: 'exact' })
@@ -47,13 +64,20 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1)
 
-    if (storeId) query = query.eq('store_id', storeId)
+    // Campanha sem loja é da organização inteira: aparece em qualquer
+    // loja escolhida, como acontece com os popups globais.
+    if (scopedStoreId) query = query.or(`store_id.eq.${scopedStoreId},store_id.is.null`)
     if (status) query = query.eq('status', status)
     if (type) query = query.eq('type', type)
-    if (search) query = query.ilike('name', `%${search}%`)
+    // O termo vai para dentro de um ilike: vírgula e parêntese saem, senão
+    // deixam de ser busca e passam a ser filtro.
+    if (search) query = query.ilike('name', `%${search.replace(/[%,()]/g, '')}%`)
 
     const { data, error, count } = await query
-    if (error) throw error
+    if (error) {
+      console.error('[WhatsAppCampaigns] falha ao listar:', error.message)
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
 
     // Métricas agregadas — scoped to the same store when storeId is
     // provided so a multi-store org sees its own per-store totals
@@ -62,14 +86,18 @@ export async function GET(request: NextRequest) {
       .from('whatsapp_campaigns')
       .select('total_sent, total_delivered, total_read, total_replied')
       .eq('organization_id', organizationId)
-    if (storeId) metricsQuery = metricsQuery.eq('store_id', storeId)
-    const { data: metricsData } = await metricsQuery
+    if (scopedStoreId) metricsQuery = metricsQuery.or(`store_id.eq.${scopedStoreId},store_id.is.null`)
+    const { data: metricsData, error: metricsError } = await metricsQuery
+    // Falha aqui não pode passar como "zero envios": isso é o que a tela
+    // mostra em letra grande.
+    if (metricsError) console.error('[WhatsAppCampaigns] métricas indisponíveis:', metricsError.message)
 
-    const metrics = {
+    const metrics = metricsError ? null : {
       totalCampaigns: count || 0,
       totalSent: metricsData?.reduce((sum, c) => sum + (c.total_sent || 0), 0) || 0,
       totalDelivered: metricsData?.reduce((sum, c) => sum + (c.total_delivered || 0), 0) || 0,
       totalRead: metricsData?.reduce((sum, c) => sum + (c.total_read || 0), 0) || 0,
+      totalReplied: metricsData?.reduce((sum, c) => sum + (c.total_replied || 0), 0) || 0,
     }
 
     return NextResponse.json({

@@ -260,6 +260,8 @@ const { templates, fetchTemplates } = useWhatsAppTemplates()
 Configure um cron job para chamar periodicamente:
 
 ```bash
+# ATENÇÃO: /api/workers/campaign foi aposentado (responde 410).
+# O envio passa por WhatsAppCampaignProcessor (fila + lotes).
 curl -X POST https://seudominio.com/api/workers/campaign \
   -H "Authorization: Bearer $CRON_SECRET"
 ```
