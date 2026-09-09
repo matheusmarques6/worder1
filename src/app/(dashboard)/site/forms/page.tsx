@@ -99,6 +99,20 @@ const templateIcon: Record<string, React.ComponentType<any>> = {
   blank: FileText,
 }
 
+interface HealthIssue {
+  level: 'error' | 'warn'
+  kind: string
+  form_id: string | null
+  form_name: string | null
+  title: string
+  detail: string
+  action: string
+}
+interface HealthPayload {
+  counts: { error: number; warn: number }
+  issues: HealthIssue[]
+}
+
 const pct = (v: number) => `${(v * 100).toFixed(1).replace('.', ',')}%`
 const int = (v: number) => v.toLocaleString('pt-BR')
 
@@ -116,6 +130,11 @@ export default function SiteFormsPage() {
   const [days, setDays] = useState(30)
   const [loading, setLoading] = useState(true)
   const [missingMigration, setMissingMigration] = useState<string | null>(null)
+  // Saúde: o que está prestes a falhar em silêncio (estoque de cupom,
+  // popup sem loja, teste passado do prazo). Falha aqui não atrapalha
+  // a lista — o painel simplesmente não aparece.
+  const [health, setHealth] = useState<HealthPayload | null>(null)
+  const [healthOpen, setHealthOpen] = useState(false)
 
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState<'all' | string>('all')
@@ -172,6 +191,15 @@ export default function SiteFormsPage() {
   }, [currentStore?.id, hasHydrated, days])
 
   useEffect(() => { load() }, [load])
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/forms/health', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (!cancelled && d) setHealth(d) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
 
   const statOf = (id: string): FormStats => stats[id] || { form_id: id, ...EMPTY_STATS }
 
@@ -358,6 +386,49 @@ export default function SiteFormsPage() {
           <span className="text-xs text-amber-700">
             As métricas de popup ainda não estão disponíveis neste ambiente (migration <code className="font-mono">{missingMigration}</code> pendente).
           </span>
+        </div>
+      )}
+
+      {/* Saúde: só aparece quando há o que resolver */}
+      {health && health.issues.length > 0 && (
+        <div className={`rounded-xl border ${health.counts.error > 0 ? 'border-red-200 bg-red-50/60' : 'border-amber-200 bg-amber-50/60'}`}>
+          <button onClick={() => setHealthOpen((v) => !v)}
+            className="w-full flex items-center gap-2 px-4 py-3 text-left"
+            aria-expanded={healthOpen}>
+            <WarningCircle size={16} weight="fill" className={health.counts.error > 0 ? 'text-red-600 flex-shrink-0' : 'text-amber-600 flex-shrink-0'} />
+            <span className={`text-xs font-medium ${health.counts.error > 0 ? 'text-red-800' : 'text-amber-800'}`}>
+              {health.counts.error > 0
+                ? `${health.counts.error} ${health.counts.error === 1 ? 'problema afetando inscritos agora' : 'problemas afetando inscritos agora'}`
+                : `${health.counts.warn} ${health.counts.warn === 1 ? 'ponto de atenção' : 'pontos de atenção'}`}
+              {health.counts.error > 0 && health.counts.warn > 0 && ` · ${health.counts.warn} ${health.counts.warn === 1 ? 'ponto de atenção' : 'pontos de atenção'}`}
+            </span>
+            <span className={`ml-auto text-[11px] ${health.counts.error > 0 ? 'text-red-600' : 'text-amber-600'}`}>{healthOpen ? 'ocultar' : 'ver detalhes'}</span>
+          </button>
+          {healthOpen && (
+            <ul className="px-4 pb-3 space-y-2">
+              {health.issues.map((it, i) => (
+                <li key={i} className="rounded-lg bg-white border border-gray-200 px-3 py-2.5">
+                  <div className="flex items-start gap-2">
+                    <span className={`mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 ${it.level === 'error' ? 'bg-red-500' : 'bg-amber-500'}`} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[13px] font-medium text-gray-900">
+                        {it.title}
+                        {it.form_name && <span className="font-normal text-gray-500"> · {it.form_name}</span>}
+                      </p>
+                      <p className="text-[12px] text-gray-600 mt-0.5 leading-snug">{it.detail}</p>
+                      <p className="text-[12px] text-gray-500 mt-1 leading-snug">{it.action}</p>
+                    </div>
+                    {it.form_id && (
+                      <button onClick={() => router.push(`/popup-editor/${it.form_id}`)}
+                        className="flex-shrink-0 text-[12px] font-semibold text-zinc-900 underline underline-offset-2">
+                        Abrir
+                      </button>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 
