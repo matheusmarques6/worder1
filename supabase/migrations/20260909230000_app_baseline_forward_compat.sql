@@ -1241,6 +1241,7 @@ begin
   end loop;
   grant select on public.profiles to authenticated;
   grant update (must_change_password, updated_at) on public.profiles to authenticated;
+  grant select, insert, update, delete on public.profiles to service_role;
 
   if exists (
     select 1
