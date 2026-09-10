@@ -34,7 +34,12 @@ export interface OAuthStateData {
 // ============================================
 
 const STATE_EXPIRY_MS = 10 * 60 * 1000; // 10 minutos
-const STATE_SECRET = process.env.OAUTH_STATE_SECRET || process.env.NEXTAUTH_SECRET || 'fallback-secret-change-me';
+
+function stateSecret(): string {
+  const secret = process.env.OAUTH_STATE_SECRET || process.env.NEXTAUTH_SECRET;
+  if (!secret) throw new Error('OAuth state secret is not configured');
+  return secret;
+}
 
 // ============================================
 // FUNÇÕES PRINCIPAIS
@@ -71,7 +76,7 @@ export function generateOAuthState(
   const payload = Buffer.from(JSON.stringify(data)).toString('base64url');
   
   // Criar assinatura HMAC
-  const signature = createHmac('sha256', STATE_SECRET)
+  const signature = createHmac('sha256', stateSecret())
     .update(payload)
     .digest('base64url');
   
@@ -101,7 +106,7 @@ export function validateOAuthState(
     const [payload, providedSignature] = parts;
     
     // Verificar assinatura
-    const expectedSignature = createHmac('sha256', STATE_SECRET)
+    const expectedSignature = createHmac('sha256', stateSecret())
       .update(payload)
       .digest('base64url');
     
