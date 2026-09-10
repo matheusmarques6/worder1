@@ -5,7 +5,7 @@ const headers = (init: Record<string, string> = {}) => new Headers(init);
 const request = (init: Record<string, string> = {}) =>
   ({ headers: headers(init) }) as Parameters<typeof authorizeCronRequest>[0];
 const nodeEnvs = ['development', 'test', 'production'];
-const forgedHeaders = [
+const forgedHeaders: Record<string, string>[] = [
   {},
   { 'x-vercel-cron': '1' },
   { 'x-internal-request': 'true' },
@@ -14,7 +14,9 @@ const forgedHeaders = [
   { authorization: 'Bearer wrong' },
 ];
 
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 describe('isCronAuthorized', () => {
   it.each(nodeEnvs)('rejects forged headers without a configured secret in %s', nodeEnv => {
