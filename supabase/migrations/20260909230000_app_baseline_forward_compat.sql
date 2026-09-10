@@ -960,7 +960,7 @@ begin
       raise exception 'app baseline incompatible: %.index', r.table_name;
     end if;
 
-    select string_agg(format('%I', key_name), ', ' order by ord)
+    select string_agg(format('%I', (parse_ident(key_name))[1]), ', ' order by ord)
       into key_sql
       from unnest(r.keys) with ordinality as x(key_name, ord);
     predicate_sql := case when r.predicate is null then ''

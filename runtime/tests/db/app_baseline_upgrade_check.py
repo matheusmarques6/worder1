@@ -323,6 +323,14 @@ def test_compensation_replay_accepts_canonical_policy_deparse(admin):
     assert scoped_catalog(admin) == before == expected_scoped_catalog()
 
 
+def test_compensation_recreates_missing_reserved_identifier_index(admin):
+    before = scoped_catalog(admin)
+    with admin.transaction(force_rollback=True):
+        admin.execute("drop index public.idx_pipeline_stages_pipeline_position")
+        admin.execute(_compensation_body())
+        assert scoped_catalog(admin) == before == expected_scoped_catalog()
+
+
 def test_email_status_without_default_is_rejected_and_rolled_back(admin):
     query = (
         "select column_default from information_schema.columns "
