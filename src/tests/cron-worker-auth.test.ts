@@ -14,14 +14,28 @@ const effects = vi.hoisted(() => {
       return () => chain
     },
   })
+  const from = vi.fn(() => chain)
+  const rpc = vi.fn(async () => queryResult)
 
   return {
     chain,
-    from: vi.fn(() => chain),
-    rpc: vi.fn(async () => queryResult),
+    from,
+    rpc,
+    createClient: vi.fn(() => ({ from, rpc })),
     dispatchTrigger: vi.fn(async () => undefined),
     resolveSegment: vi.fn(async () => ({ contactIds: [] })),
+    loadSegmentAsV2: vi.fn(async () => null),
+    extractDependencies: vi.fn(() => ({ fields: [], events: [], lists: [], segments: [] })),
     detectSegmentChanges: vi.fn(async () => ({ processed: 0 })),
+    processDueScheduledMessages: vi.fn(async () => ({
+      claimed: 0,
+      sent: 0,
+      failed: 0,
+      rescheduled: 0,
+      expired: 0,
+      recovered: 0,
+    })),
+    reclaimStaleRuns: vi.fn(async () => 0),
     reserve: vi.fn(async () => []),
     complete: vi.fn(async () => undefined),
     fail: vi.fn(async () => ({ retrying: false, nextAttemptAt: null })),
@@ -30,6 +44,9 @@ const effects = vi.hoisted(() => {
   }
 })
 
+vi.mock('@supabase/supabase-js', () => ({
+  createClient: effects.createClient,
+}))
 vi.mock('@/lib/supabase-admin', () => ({
   supabaseAdmin: { from: effects.from, rpc: effects.rpc },
   getSupabaseAdmin: () => ({ from: effects.from, rpc: effects.rpc }),
@@ -39,9 +56,19 @@ vi.mock('@/lib/automation/trigger-dispatcher', () => ({
 }))
 vi.mock('@/lib/segments', () => ({
   resolveSegment: effects.resolveSegment,
+  loadSegmentAsV2: effects.loadSegmentAsV2,
+}))
+vi.mock('@/lib/segments/dsl', () => ({
+  extractDependencies: effects.extractDependencies,
 }))
 vi.mock('@/lib/segments/change-detection', () => ({
   detectSegmentChanges: effects.detectSegmentChanges,
+}))
+vi.mock('@/lib/whatsapp/scheduled-message-sender', () => ({
+  processDueScheduledMessages: effects.processDueScheduledMessages,
+}))
+vi.mock('@/lib/automation/run-lock', () => ({
+  reclaimStaleRuns: effects.reclaimStaleRuns,
 }))
 vi.mock('@/lib/queue/durable-queue', () => ({
   reserve: effects.reserve,
@@ -104,6 +131,13 @@ refusesWithoutSecret('cron-secret-fallback-1', [
   'email-queue-worker',
 ])
 
+refusesWithoutSecret('cron-secret-fallback-2', [
+  'lgpd-retention',
+  'process-scheduled-messages',
+  'reclaim-stale-runs',
+  'recompute-segments',
+])
+
 describe('configured Bearer reaches the existing business seam', () => {
   it('reaches Supabase for a database-backed handler', async () => {
     vi.stubEnv('CRON_SECRET', 's3cret')
@@ -125,5 +159,27 @@ describe('configured Bearer reaches the existing business seam', () => {
 
     expect(response.status).not.toBe(401)
     expect(effects.isQueueAvailable).toHaveBeenCalled()
+  })
+
+  it('reaches the scheduled-message service with a configured Bearer', async () => {
+    vi.stubEnv('CRON_SECRET', 's3cret')
+    const load = routes['../app/api/cron/process-scheduled-messages/route.ts']
+    const handlers = await load() as Record<string, (req: NextRequest) => Promise<Response>>
+
+    const response = await handlers.GET(request('GET', { authorization: 'Bearer s3cret' }))
+
+    expect(response.status).not.toBe(401)
+    expect(effects.processDueScheduledMessages).toHaveBeenCalled()
+  })
+
+  it('reaches the Supabase client factory with a configured Bearer', async () => {
+    vi.stubEnv('CRON_SECRET', 's3cret')
+    const load = routes['../app/api/cron/recompute-segments/route.ts']
+    const handlers = await load() as Record<string, (req: NextRequest) => Promise<Response>>
+
+    const response = await handlers.GET(request('GET', { authorization: 'Bearer s3cret' }))
+
+    expect(response.status).not.toBe(401)
+    expect(effects.createClient).toHaveBeenCalled()
   })
 })
