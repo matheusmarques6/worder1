@@ -45,7 +45,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Campaign template not found' }, { status: 404 });
     }
 
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
+    // O teste tem de mostrar o link que o cliente vai receber: mesmo host
+    // de rastreamento do disparo de verdade.
+    const { getTrackingBaseUrl } = await import('@/lib/email/tracking-url');
+    const baseUrl = await getTrackingBaseUrl(user.organization_id, campaign.store_id || null);
     const sampleData = getSampleMergeData();
 
     // Use a fake emailSendId for test emails

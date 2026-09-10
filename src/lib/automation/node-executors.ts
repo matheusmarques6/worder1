@@ -1113,8 +1113,16 @@ const actionExecutors: Record<string, NodeExecutor> = {
           }
         } catch {}
 
-        const { getAppBaseUrl } = await import('@/lib/app-url');
-        const baseUrl = getAppBaseUrl();
+        // Os links deste e-mail saem do domínio de rastreamento (o do
+        // lojista, ou o padrão da plataforma) — não do host do painel.
+        // Um fluxo de boas-vindas com links apontando para app.worder…
+        // enquanto o remetente é o domínio da loja é o padrão que os
+        // filtros leem como e-mail de intermediário.
+        const { getTrackingBaseUrl } = await import('@/lib/email/tracking-url');
+        const baseUrl = await getTrackingBaseUrl(
+          organizationId || '',
+          (context as any)?.store?.id || (context as any)?.storeId || null,
+        );
 
         // email_sends.campaign_id is UUID — only pass it through when
         // the flow id actually is a UUID. Flow attribution lives in the

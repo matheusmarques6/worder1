@@ -1218,8 +1218,12 @@ export async function POST(
           orgId: form.organization_id,
           formId: form.id,
         })
-        const { getAppBaseUrl } = await import('@/lib/app-url')
-        const baseUrl = getAppBaseUrl()
+        // O link de confirmação sai do mesmo host dos outros links do
+        // e-mail. Misturar hosts dentro da mesma mensagem é o que faz o
+        // filtro desconfiar — e este é o único link que a pessoa precisa
+        // clicar para virar inscrita.
+        const { getTrackingBaseUrl } = await import('@/lib/email/tracking-url')
+        const baseUrl = await getTrackingBaseUrl(form.organization_id, form.store_id || null)
         const confirmUrl = `${baseUrl}/api/public/confirm-opt-in?token=${encodeURIComponent(token)}`
 
         // Remetente DA LOJA do formulário — o e-mail de confirmação de um

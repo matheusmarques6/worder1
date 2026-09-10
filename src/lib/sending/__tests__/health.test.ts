@@ -183,6 +183,37 @@ describe('saúde do envio · ordem', () => {
   })
 })
 
+describe('saúde do envio · de onde saem os links', () => {
+  it('link saindo do host do painel é ponto de atenção', () => {
+    const out = buildSendingIssues(input({ trackingHost: { url: 'https://app.worder.com.br', source: 'app' } }))
+    expect(out.map((x) => x.kind)).toEqual(['tracking_host_app'])
+    expect(out[0].level).toBe('warn')
+    expect(out[0].href).toBe('/settings/email')
+  })
+
+  it('com o padrão da plataforma e domínio próprio verificado, sugere alinhar os dois', () => {
+    const out = buildSendingIssues(input({ trackingHost: { url: 'https://click.worder.com.br', source: 'platform' } }))
+    expect(out.map((x) => x.kind)).toEqual(['tracking_host_shared'])
+  })
+
+  it('com o padrão da plataforma e SEM domínio próprio, não enche o lojista', () => {
+    // Quem ainda nem verificou o domínio de envio já tem o convite certo
+    // (sender_shared); dois avisos sobre a mesma coisa é ruído.
+    const out = buildSendingIssues(input({
+      domains: [],
+      sender: { email: 'loja@worder.email', onSharedDomain: true },
+      allowance: { onSharedDomain: true, used: 0, allowance: 1000, remaining: 1000 },
+      trackingHost: { url: 'https://click.worder.com.br', source: 'platform' },
+    }))
+    expect(out.map((x) => x.kind)).toEqual(['sender_shared'])
+  })
+
+  it('com o domínio de links da própria loja, nada a dizer', () => {
+    expect(buildSendingIssues(input({ trackingHost: { url: 'https://links.sualoja.com.br', source: 'store' } })))
+      .toEqual([])
+  })
+})
+
 describe('saúde do envio · o botão Resolver leva a algum lugar', () => {
   it('todo href aponta para uma tela que existe', () => {
     // Um aviso com botão morto é pior que aviso nenhum: o lojista clica,

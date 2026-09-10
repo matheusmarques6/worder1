@@ -15,6 +15,8 @@ import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { buildSendingIssues, type DomainRow, type WhatsAppRow } from '@/lib/sending/health'
 import { allowanceStatus } from '@/lib/email/shared-domain-allowance'
 import { isSharedDomainEmail } from '@/lib/email/shared-sender'
+import { resolveTrackingBaseUrl, platformTrackingBaseUrl } from '@/lib/email/tracking-url'
+import { getAppBaseUrl } from '@/lib/app-url'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -29,8 +31,10 @@ export async function GET(request: NextRequest) {
   const nowIso = new Date().toISOString()
   const since = new Date(Date.now() - 30 * 86400000).toISOString()
 
-  // ── Remetente em uso: o da loja quando existe, senão o da organização.
+  // ── Remetente em uso e host dos links: o da loja quando existe,
+  // senão o da organização.
   let senderEmail: string | null = null
+  let storeTrackingDomain: unknown = null
   if (storeId) {
     const { data: store } = await admin
       .from('shopify_stores')
@@ -39,15 +43,22 @@ export async function GET(request: NextRequest) {
       .eq('organization_id', orgId)
       .maybeSingle()
     senderEmail = (store?.settings as any)?.email_settings?.default_sender_email || null
+    storeTrackingDomain = (store?.settings as any)?.email_settings?.tracking_domain ?? null
   }
+  const { data: org } = await admin
+    .from('organizations')
+    .select('sender_email, email_settings')
+    .eq('id', orgId)
+    .maybeSingle()
   if (!senderEmail) {
-    const { data: org } = await admin
-      .from('organizations')
-      .select('sender_email, email_settings')
-      .eq('id', orgId)
-      .maybeSingle()
     senderEmail = org?.sender_email || (org?.email_settings as any)?.default_sender_email || null
   }
+  const trackingHost = resolveTrackingBaseUrl({
+    storeDomain: storeTrackingDomain,
+    orgDomain: (org?.email_settings as any)?.tracking_domain ?? null,
+    platformDomain: platformTrackingBaseUrl(),
+    appBaseUrl: getAppBaseUrl(),
+  })
 
   // Contagem de envios na janela: um count por status, sem trazer linhas.
   const sends = () => {
@@ -138,6 +149,7 @@ export async function GET(request: NextRequest) {
       complained: complainedRes.count || 0,
     },
     whatsapp,
+    trackingHost,
   })
 
   return NextResponse.json({

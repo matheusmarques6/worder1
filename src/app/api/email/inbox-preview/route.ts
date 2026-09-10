@@ -44,7 +44,9 @@ export async function POST(req: NextRequest) {
   let finalHtml: string = rawHtml || ''
   let finalSubject: string = subject || ''
   let finalPreheader: string = preheader || ''
-  let baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.worder.com.br'
+  // A prévia mostra o host de rastreamento, que é o que vai no e-mail.
+  const { getTrackingBaseUrl } = await import('@/lib/email/tracking-url')
+  let baseUrl = await getTrackingBaseUrl(auth.user.organization_id, null)
 
   // When campaignId is provided pull the latest saved version.
   let campaignStoreId: string | null = null
@@ -69,6 +71,11 @@ export async function POST(req: NextRequest) {
     finalSubject = camp.subject || subject || ''
     finalPreheader = camp.preview_text || preheader || ''
     campaignStoreId = camp.store_id || null
+    // Com a loja conhecida, o host dos links é o dela (a loja pode ter um
+    // domínio de rastreamento próprio, diferente do da organização).
+    if (campaignStoreId) {
+      baseUrl = await getTrackingBaseUrl(auth.user.organization_id, campaignStoreId)
+    }
     campaignName = camp.name || null
     campaignUtmRaw = (camp as any).settings?.utm ?? null
   }

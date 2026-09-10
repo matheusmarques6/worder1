@@ -95,6 +95,12 @@ export interface SendingHealthInput {
   rates: { sent: number; bounced: number; complained: number }
   /** Contas de WhatsApp da organização. */
   whatsapp: WhatsAppRow[]
+  /**
+   * De onde saem os links dos e-mails. `app` quer dizer que nem a loja,
+   * nem a organização, nem a plataforma têm domínio de rastreamento — e
+   * então os links saem do host do painel.
+   */
+  trackingHost?: { url: string; source: 'store' | 'organization' | 'platform' | 'app' }
   now?: Date
 }
 
@@ -147,6 +153,29 @@ export function buildSendingIssues(input: SendingHealthInput): SendingIssue[] {
       title: 'Enviando pelo endereço temporário',
       detail: 'Suas mensagens saem de um endereço nosso, com reputação compartilhada com outras lojas. Campanha em massa exige o seu domínio.',
       action: 'Verifique o domínio da sua loja — leva alguns minutos e é uma vez só.',
+      href: '/settings/email',
+    })
+  }
+
+  // ── De onde saem os links do e-mail ──
+  // O host dos links é lido pelos filtros junto do remetente. Link
+  // apontando para o painel, com remetente no domínio da loja, é o
+  // padrão de e-mail encaminhado por intermediário.
+  const th = input.trackingHost
+  if (th?.source === 'app') {
+    issues.push({
+      level: 'warn', kind: 'tracking_host_app', channel: 'email', subject: null,
+      title: 'Os links dos seus e-mails saem do domínio do painel',
+      detail: 'Clique, abertura e descadastro apontam para o endereço do painel. Com o remetente no seu domínio e os links noutro, o filtro lê a mensagem como encaminhada por intermediário.',
+      action: 'Configure o subdomínio de links em Configurações → E-mail (um CNAME, uma vez só).',
+      href: '/settings/email',
+    })
+  } else if (th?.source === 'platform' && verified.length > 0) {
+    issues.push({
+      level: 'warn', kind: 'tracking_host_shared', channel: 'email', subject: null,
+      title: 'Links no nosso domínio, remetente no seu',
+      detail: 'Seu domínio de envio está verificado, mas os links do e-mail ainda saem por um domínio nosso. Alinhar os dois é o que fecha a conta da reputação.',
+      action: 'Aponte um CNAME (ex.: links.sualoja.com.br) e salve em Configurações → E-mail.',
       href: '/settings/email',
     })
   }
