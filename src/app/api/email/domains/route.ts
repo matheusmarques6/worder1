@@ -18,6 +18,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError } from '@/lib/api-utils';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { createDomain } from '@/lib/email/resend';
+import { subdominioDeLinksPadrao } from '@/lib/email/tracking-subdomain';
 
 export async function GET(request: NextRequest) {
   try {
@@ -87,17 +88,33 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create domain in Resend
-    const resendDomain = await createDomain(domain);
+    // Create domain in Resend, já com o subdomínio de links do PRÓPRIO
+    // domínio do lojista.
+    //
+    // Isto inverte a decisão antiga ("tracking da Resend desligado").
+    // O motivo: quem reescreve o link por último é o Resend, no envio —
+    // então é o host DELE que o destinatário vê e que o filtro compara
+    // com o remetente. Deixar desligado obrigaria o domínio de cada
+    // lojista a ser anexado à nossa hospedagem para os links parecerem
+    // dele; ligado, basta um CNAME no DNS do lojista, ao lado do SPF e
+    // do DKIM que ele já publica. O nosso /api/t/* continua no salto
+    // seguinte, com a atribuição — ver tracking-subdomain.ts.
+    const subdominioDeLinks = subdominioDeLinksPadrao(domain);
+    const resendDomain = await createDomain(domain, { trackingSubdomain: subdominioDeLinks });
 
-    // Tracking da Resend desligado por padrão: o tracking primário é o
-    // da Worder (/api/t/*, com atribuição). Ligado junto, cada clique
-    // vira redirect duplo e cada abertura conta duas vezes.
+    let trackingLigado = false;
     if (resendDomain?.id) {
       try {
         const { setDomainTracking } = await import('@/lib/email/resend');
-        await setDomainTracking(resendDomain.id, { clickTracking: false, openTracking: false });
+        await setDomainTracking(resendDomain.id, {
+          clickTracking: true,
+          openTracking: true,
+          trackingSubdomain: subdominioDeLinks,
+        });
+        trackingLigado = true;
       } catch (e: any) {
+        // Não bloqueia o cadastro: sem isso os links saem pelo domínio
+        // compartilhado, que funciona. O painel de saúde cobra depois.
         console.warn('[EmailDomains] setDomainTracking failed (segue sem bloquear):', e?.message);
       }
     }
@@ -113,6 +130,11 @@ export async function POST(request: NextRequest) {
         resend_domain_id: resendDomain?.id || null,
         status: 'pending',
         dns_records: resendDomain?.records || [],
+        tracking_config: {
+          tracking_subdomain: subdominioDeLinks,
+          click_tracking: trackingLigado,
+          open_tracking: trackingLigado,
+        },
       })
       .select()
       .single();

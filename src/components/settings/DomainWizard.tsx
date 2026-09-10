@@ -22,6 +22,16 @@ export interface DomainRow {
   warmup_daily_limit: number | null
   is_system: boolean
   store_id?: string | null
+  /**
+   * O que o provedor de envio diz do rastreamento. `tracking_subdomain`
+   * é o host que o destinatário VÊ: o provedor reescreve o link no
+   * envio, depois do nosso render.
+   */
+  tracking_config?: {
+    tracking_subdomain?: string | null
+    click_tracking?: boolean | null
+    open_tracking?: boolean | null
+  } | null
 }
 
 export interface Rec { k: string; id: string; nm: string; host: string; val: string; pri?: string; required: boolean; status?: string }

@@ -10,7 +10,13 @@ const daysAhead = (d: number) => new Date(NOW.getTime() + d * 86400000).toISOStr
 function input(patch: Partial<SendingHealthInput> = {}): SendingHealthInput {
   return {
     sender: { email: 'loja@minhaloja.com.br', onSharedDomain: false },
-    domains: [{ domain: 'minhaloja.com.br', status: 'verified', verified_at: hoursAgo(200) }],
+    // A casa em ordem inclui o subdomínio de links do próprio domínio:
+    // é o host que o destinatário vê (o provedor reescreve o link no
+    // envio), e é isso que alinha remetente e link.
+    domains: [{
+      domain: 'minhaloja.com.br', status: 'verified', verified_at: hoursAgo(200),
+      tracking_config: { tracking_subdomain: 'click.minhaloja.com.br', click_tracking: true },
+    }],
     allowance: { onSharedDomain: false, used: 0, allowance: 1000, remaining: Infinity },
     scheduled: [],
     rates: { sent: 0, bounced: 0, complained: 0 },
@@ -67,7 +73,7 @@ describe('saúde do envio · domínio', () => {
 
   it('limite de aquecimento batido é aviso, e só para domínio verificado', () => {
     const out = buildSendingIssues(input({
-      domains: [{ domain: 'minhaloja.com.br', status: 'verified', verified_at: hoursAgo(200), warmup_enabled: true, warmup_daily_limit: 500, total_sent_today: 500 }],
+      domains: [{ domain: 'minhaloja.com.br', status: 'verified', verified_at: hoursAgo(200), warmup_enabled: true, warmup_daily_limit: 500, total_sent_today: 500, tracking_config: { tracking_subdomain: 'click.minhaloja.com.br' } }],
     }))
     expect(out.map((x) => x.kind)).toEqual(['warmup_cap'])
     expect(out[0].level).toBe('warn')
@@ -191,9 +197,31 @@ describe('saúde do envio · de onde saem os links', () => {
     expect(out[0].href).toBe('/settings/email')
   })
 
-  it('com o padrão da plataforma e domínio próprio verificado, sugere alinhar os dois', () => {
-    const out = buildSendingIssues(input({ trackingHost: { url: 'https://click.worder.com.br', source: 'platform' } }))
-    expect(out.map((x) => x.kind)).toEqual(['tracking_host_shared'])
+  it('domínio verificado com os links num domínio nosso: sugere alinhar os dois', () => {
+    const out = buildSendingIssues(input({
+      domains: [{ domain: 'minhaloja.com.br', status: 'verified', verified_at: hoursAgo(200) }],
+    }))
+    expect(out.map((x) => x.kind)).toEqual(['links_dominio_compartilhado'])
+    expect(out[0].level).toBe('warn')
+    expect(out[0].subject).toBe('minhaloja.com.br')
+    expect(out[0].action).toContain('click.minhaloja.com.br')
+  })
+
+  it('subdomínio de links de OUTRO domínio não conta como alinhado', () => {
+    const out = buildSendingIssues(input({
+      domains: [{
+        domain: 'minhaloja.com.br', status: 'verified', verified_at: hoursAgo(200),
+        tracking_config: { tracking_subdomain: 'click.worder.email', click_tracking: true },
+      }],
+    }))
+    expect(out.map((x) => x.kind)).toEqual(['links_dominio_compartilhado'])
+  })
+
+  it('domínio ainda não verificado não é cobrado pelo subdomínio de links', () => {
+    const out = buildSendingIssues(input({
+      domains: [{ domain: 'minhaloja.com.br', status: 'pending', created_at: hoursAgo(2) }],
+    }))
+    expect(out.map((x) => x.kind)).not.toContain('links_dominio_compartilhado')
   })
 
   it('com o padrão da plataforma e SEM domínio próprio, não enche o lojista', () => {

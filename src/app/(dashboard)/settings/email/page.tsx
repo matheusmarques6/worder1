@@ -112,7 +112,17 @@ export default function DomainsSettingsPage() {
   }
   const wizardAction = async (d: DomainRow, action: 'warmup' | 'links' | 'dmarc') => {
     if (action === 'warmup') { await api('/api/email/domains/warmup', { method: 'POST', json: { domain_id: d.id, enabled: true } }); await dom.reload(true); toast.success('Warm-up ativado', 'Dia 1 de 14 · limite de 200 e-mails hoje.') }
-    if (action === 'links') { senderRef.current?.setTracking(`links.${d.domain}`); toast.info('Domínio dos links preenchido', 'Salve em “Domínio dos links” e crie o CNAME.') }
+    if (action === 'links') {
+      // O host visível é o subdomínio de links DO PROVEDOR — ativá-lo é
+      // uma chamada, não um campo para o lojista preencher.
+      try {
+        await api(`/api/email/domains/${d.id}`, { method: 'PATCH', json: { tracking_subdomain: `click.${d.domain}` } })
+        await dom.reload(true)
+        toast.success('Subdomínio de links ativado', `Publique o CNAME de click.${d.domain} — ele já está na lista de registros.`)
+      } catch (e: any) {
+        toast.error('Não foi possível ativar o subdomínio de links', e?.message || 'Tente de novo em instantes.')
+      }
+    }
     if (action === 'dmarc') { try { await navigator.clipboard.writeText('v=DMARC1; p=quarantine; rua=mailto:dmarc@worder.email') } catch { /* sem clipboard */ } toast.info('Registro copiado', `Publique em _dmarc.${d.domain} quando os envios estiverem estáveis.`) }
   }
 
@@ -185,7 +195,7 @@ export default function DomainsSettingsPage() {
       })}
       {!dom.error && domains.length === 0 && <Card><Empty title="Nenhum domínio de envio" action={<button type="button" className="btn btn-primary" onClick={() => setAddOpen(true)}><I n="plus" s={15} />Adicionar domínio</button>}>Adicione o domínio da sua loja para enviar como você. Até lá, usamos um endereço temporário nosso.</Empty></Card>}
 
-      {storeId && se.data && <LinkDomainCard key={`ld-${storeId}`} storeId={storeId} data={se.data} onSaved={() => se.reload(true)} register={(fn) => { const prev = senderRef.current; senderRef.current = { setDomain: prev?.setDomain || (() => {}), setTracking: fn } }} />}
+      {storeId && se.data && <LinkDomainCard key={`ld-${storeId}`} storeId={storeId} data={se.data} domains={domains} onSaved={() => { se.reload(true); dom.reload(true) }} register={(fn) => { const prev = senderRef.current; senderRef.current = { setDomain: prev?.setDomain || (() => {}), setTracking: fn } }} />}
 
       <Card title="Aquecimento de envio">
         <Row tg label="Warm-up automático" help={ownDomain ? (ownDomain.warmup_enabled ? `Aumenta o volume diário gradualmente para construir reputação. Dia ${ownDomain.warmup_day || 1} de 14 · limite hoje: ${(ownDomain.warmup_daily_limit || 200).toLocaleString('pt-BR')} e-mails.` : `Aumenta o volume diário gradualmente para construir reputação de ${ownDomain.domain}. Começa em 200 e-mails/dia.`) : 'Disponível depois de verificar o seu domínio. O endereço temporário que usamos até lá já está aquecido.'}>
@@ -390,25 +400,92 @@ function SenderCard({ storeId, storeName, data, domains, refInit, onSaved }: { s
 }
 
 // ---------- Domínio dos links ----------
-function LinkDomainCard({ storeId, data, onSaved, register }: { storeId: string; data: StoreEmail; onSaved: () => void; register: (fn: (v: string) => void) => void }) {
+//
+// Quem reescreve o link por último é o provedor de envio, no disparo —
+// depois do nosso render. Então o host que o cliente lê ao passar o
+// mouse, e que o filtro compara com o remetente, é o subdomínio de
+// links DO PROVEDOR. Alinhá-lo com o domínio de envio é um CNAME, no
+// mesmo DNS onde o lojista já publicou SPF e DKIM.
+//
+// O nosso /api/t/* não aparece: fica no salto seguinte, carimbando a
+// atribuição. Por isso o campo antigo (apontar um domínio do lojista
+// para o NOSSO app) virou o caminho avançado — ele exige que o domínio
+// seja anexado à nossa hospedagem, e foi assim que todo link de todo
+// e-mail já morreu uma vez.
+function LinkDomainCard({ storeId, data, domains, onSaved, register }: { storeId: string; data: StoreEmail; domains: DomainRow[]; onSaved: () => void; register: (fn: (v: string) => void) => void }) {
+  const toast = useToast()
   const f = useForm({ tracking: data.email_settings?.tracking_domain || '' })
   useEffect(() => { register((v) => f.set('tracking', v)) }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const { saving, error, save } = useSave()
   const [host, setHost] = useState('app.worder.com.br')
   useEffect(() => { try { setHost(window.location.host) } catch { /* ssr */ } }, [])
   const clean = (s: string) => s.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/[^a-z0-9.-]/g, '')
+
+  const verificado = domains.find((d) => d.status === 'verified') || null
+  const subAtual = verificado?.tracking_config?.tracking_subdomain || ''
+  const sugerido = verificado ? `click.${verificado.domain}` : ''
+  const alinhado = Boolean(verificado && subAtual && subAtual.endsWith(`.${verificado.domain}`))
+  const [ativando, setAtivando] = useState(false)
+
+  const ativarSubdominio = async () => {
+    if (!verificado) return
+    setAtivando(true)
+    try {
+      await api(`/api/email/domains/${verificado.id}`, { method: 'PATCH', json: { tracking_subdomain: sugerido } })
+      toast.success('Subdomínio de links ativado', `Publique o CNAME de ${sugerido} — ele aparece na lista de registros do domínio.`)
+      onSaved()
+    } catch (e: any) {
+      toast.error('Não foi possível ativar', e?.message || 'Tente de novo em instantes.')
+    } finally {
+      setAtivando(false)
+    }
+  }
+
   const onSave = () => save(async () => {
     const t = clean(f.val!.tracking)
     if (t && !/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/.test(t)) throw new Error('Subdomínio inválido. Ex.: links.sualoja.com.br')
-    await api('/api/settings/store-email', { method: 'PATCH', json: { storeId, email_settings: { tracking_domain: t || null } } })
+    const r = await api<{ aviso?: { titulo: string; detalhe: string } | null }>('/api/settings/store-email', { method: 'PATCH', json: { storeId, email_settings: { tracking_domain: t || null } } })
+    if (r?.aviso) toast.warning(r.aviso.titulo, r.aviso.detalhe)
     onSaved()
   }, 'Domínio dos links salvo')
+
   const t = clean(f.val!.tracking)
+
   return (
-    <Card title="Domínio dos links" desc={`Cliques, aberturas e descadastro passam pelo seu domínio em vez de ${data.shared_domain}.`} foot={<SaveBar dirty={f.dirty} saving={saving} error={error} onSave={onSave} onCancel={f.cancel} />}>
-      <Row label="Subdomínio" help={<>Crie um <b>CNAME</b> de {t || 'links.sualoja.com.br'} apontando para <b>{host}</b>.</>} htmlFor="ld-in">
-        <input id="ld-in" className="in mono" placeholder="links.sualoja.com.br" value={f.val!.tracking} onChange={(e) => f.set('tracking', e.target.value)} />
-      </Row>
+    <Card
+      title="Domínio dos links"
+      desc={`Cliques, aberturas e descadastro passam pelo seu domínio em vez de ${data.shared_domain}.`}
+      foot={f.dirty ? <SaveBar dirty={f.dirty} saving={saving} error={error} onSave={onSave} onCancel={f.cancel} /> : undefined}
+    >
+      {!verificado && (
+        <Row label="Situação" help={<>Enquanto o domínio de envio não estiver verificado, os links saem por um domínio nosso — funciona, e não há nada a fazer aqui.</>}>
+          <span className="muted">Verifique o domínio de envio primeiro</span>
+        </Row>
+      )}
+
+      {verificado && alinhado && (
+        <Row label="Subdomínio" help={<>Publique o <b>CNAME</b> de <b>{subAtual}</b> — ele está na lista de registros do domínio, junto do SPF e do DKIM.</>}>
+          <span className="mono">{subAtual}</span>
+        </Row>
+      )}
+
+      {verificado && !alinhado && (
+        <Row
+          label="Subdomínio"
+          help={<>Hoje os links saem por um domínio nosso. Com <b>{sugerido}</b>, remetente e link ficam na mesma casa — é o que o filtro do Gmail lê como legítimo.</>}
+        >
+          <button type="button" className="btn btn-sm btn-primary" disabled={ativando} onClick={ativarSubdominio}>
+            {ativando ? <I n="refresh" s={13} className="spin" /> : null}Ativar {sugerido}
+          </button>
+        </Row>
+      )}
+
+      <details className="adv">
+        <summary>Avançado — apontar um domínio para o redirecionador da Worder</summary>
+        <Row label="Subdomínio" help={<>Só use se souber o que está fazendo: além do <b>CNAME</b> de {t || 'links.sualoja.com.br'} para <b>{host}</b>, o domínio precisa ser liberado na nossa hospedagem. Sem isso, todo link do e-mail vira página de erro.</>} htmlFor="ld-in">
+          <input id="ld-in" className="in mono" placeholder="links.sualoja.com.br" value={f.val!.tracking} onChange={(e) => f.set('tracking', e.target.value)} />
+        </Row>
+      </details>
     </Card>
   )
 }

@@ -54,6 +54,17 @@ export const ALLOWANCE_LOW_FRACTION = 0.2
 export interface DomainRow {
   domain: string
   status: string | null
+  /**
+   * O que o provedor de envio diz do rastreamento deste domínio. O que
+   * interessa aqui é `tracking_subdomain`: como o Resend reescreve os
+   * links NO ENVIO, é o host dele que o destinatário vê — e alinhar
+   * esse host com o domínio de envio é o que a entregabilidade pede.
+   */
+  tracking_config?: {
+    tracking_subdomain?: string | null
+    click_tracking?: boolean | null
+    open_tracking?: boolean | null
+  } | null
   verified_at?: string | null
   is_system?: boolean | null
   created_at?: string | null
@@ -183,12 +194,21 @@ export function buildSendingIssues(input: SendingHealthInput): SendingIssue[] {
       action: 'Configure o subdomínio de links em Configurações → E-mail (um CNAME, uma vez só).',
       href: '/settings/email',
     })
-  } else if (th?.source === 'platform' && verified.length > 0) {
+  }
+
+  // O host que o destinatário VÊ é o do provedor de envio, que reescreve
+  // o link depois do nosso render. Domínio de envio verificado com os
+  // links saindo por um subdomínio nosso é a sobra mais comum — e é um
+  // CNAME de resolver, no mesmo DNS onde ele já publicou SPF e DKIM.
+  for (const d of verified) {
+    const sub = d.tracking_config?.tracking_subdomain || ''
+    const doProprioDominio = Boolean(sub) && sub.toLowerCase().endsWith(`.${d.domain.toLowerCase()}`)
+    if (doProprioDominio) continue
     issues.push({
-      level: 'warn', kind: 'tracking_host_shared', channel: 'email', subject: null,
+      level: 'warn', kind: 'links_dominio_compartilhado', channel: 'email', subject: d.domain,
       title: 'Links no nosso domínio, remetente no seu',
-      detail: 'Seu domínio de envio está verificado, mas os links do e-mail ainda saem por um domínio nosso. Alinhar os dois é o que fecha a conta da reputação.',
-      action: 'Aponte um CNAME (ex.: links.sualoja.com.br) e salve em Configurações → E-mail.',
+      detail: `${d.domain} está verificado para envio, mas os links do e-mail ainda saem por um domínio nosso. Para o filtro, remetente e link em casas diferentes é sinal de intermediário — alinhar os dois é o que fecha a conta da reputação.`,
+      action: `Ative o subdomínio de links (click.${d.domain}) em Configurações → E-mail: é um CNAME, no mesmo lugar do SPF e do DKIM.`,
       href: '/settings/email',
     })
   }

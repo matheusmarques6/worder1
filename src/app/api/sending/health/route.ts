@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
   const [domainsRes, scheduledRes, waRes, sentRes, bouncedRes, complainedRes, allowance] = await Promise.all([
     admin
       .from('email_domains')
-      .select('domain, status, verified_at, is_system, created_at, warmup_enabled, warmup_daily_limit, total_sent_today, store_id')
+      .select('domain, status, verified_at, is_system, created_at, warmup_enabled, warmup_daily_limit, total_sent_today, store_id, tracking_config')
       .eq('organization_id', orgId)
       .limit(100),
     admin
