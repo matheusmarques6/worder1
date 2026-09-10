@@ -81,7 +81,12 @@ export async function GET(req: NextRequest) {
                 first_name: 'Anonimizado',
                 last_name: 'Retenção',
                 custom_fields: {},
-                is_active: false,
+                // `is_active` não existe em contacts: com ela no payload, o
+                // PostgREST recusava a linha inteira e a ANONIMIZAÇÃO NÃO
+                // ACONTECIA — uma política de retenção configurada não
+                // fazia nada. `suppressed` é a coluna real e diz o que
+                // importa aqui: não mandar mais nada para este endereço.
+                suppressed: true,
               }, { count: 'exact' })
               .eq('organization_id', policy.organization_id)
               .lt('last_active_at', cutoff)

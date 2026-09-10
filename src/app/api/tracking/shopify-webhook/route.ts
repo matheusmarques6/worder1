@@ -222,15 +222,20 @@ async function handleOrder(ctx: Ctx, data: any, event_type: string) {
     })
     if (rpcErr) {
       // Fallback manual se RPC não existir / falhou
+      // As colunas são total_spent e last_order_at — total_revenue e
+      // last_order_date não existem, e o PostgREST recusava tanto o
+      // select quanto o update: o gasto acumulado do contato nunca subia
+      // por este caminho de reserva.
       const { data: c } = await supabase.from('contacts')
-        .select('total_revenue, total_orders').eq('id', contact_id).single()
+        .select('total_spent, total_orders').eq('id', contact_id).single()
       if (c) {
-        await supabase.from('contacts').update({
-          total_revenue: (c.total_revenue || 0) + orderTotal,
+        const { error: upErr } = await supabase.from('contacts').update({
+          total_spent: (Number(c.total_spent) || 0) + orderTotal,
           total_orders: (c.total_orders || 0) + 1,
-          last_order_date: new Date().toISOString(),
+          last_order_at: new Date().toISOString(),
           shopify_customer_id: customer.id?.toString(),
         }).eq('id', contact_id)
+        if (upErr) console.error('[ShopifyWebhook] totais do contato não atualizados:', upErr.message)
       }
     }
   }
@@ -324,7 +329,10 @@ async function findOrCreateContact(
         organization_id,
         email: data.email || null,
         phone: data.phone || null,
-        name: data.name || data.email?.split('@')[0] || 'Cliente',
+        // A coluna é `full_name`; `name` não existe em contacts, e com ela
+        // no payload o PostgREST recusava a linha inteira — nenhum contato
+        // era criado por este caminho.
+        full_name: data.name || data.email?.split('@')[0] || 'Cliente',
         shopify_customer_id: data.shopify_customer_id,
       })
       .select('id')

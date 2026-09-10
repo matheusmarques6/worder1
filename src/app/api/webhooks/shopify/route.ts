@@ -2895,11 +2895,10 @@ export async function POST(request: NextRequest) {
           await supabase
             .from('contacts')
             .update({
-              is_active: false,
+              suppressed: true,
               email_consent: false,
               sms_consent: false,
               whatsapp_consent: false,
-              status: 'deleted_in_shopify',
               shopify_customer_id: null,
               updated_at: nowIso,
             })
@@ -2927,7 +2926,7 @@ export async function POST(request: NextRequest) {
           await supabase
             .from('shopify_stores')
             .update({
-              is_active: false,
+              suppressed: true,
               connection_status: 'disconnected',
               uninstalled_at: new Date().toISOString(),
               status: 'uninstalled',

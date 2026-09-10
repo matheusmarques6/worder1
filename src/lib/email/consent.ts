@@ -12,6 +12,24 @@ const BLOCKED_STATUSES = new Set(['bounced', 'complained', 'unsubscribed', 'inva
 const BLOCKED_CONSENT_STRINGS = new Set(['pending', 'false', 'denied', 'unsubscribed', 'revoked']);
 
 /**
+ * O `status` que estas funções recebem nasceu como texto ('bounced',
+ * 'complained'…), mas a coluna que EXISTE no banco é `contacts.suppressed`,
+ * booleana. A coluna `contacts.status` nunca existiu: todo select que a
+ * pedia era recusado pelo PostgREST, o guarda recebia `undefined` e
+ * liberava todo mundo — inclusive quem estava com bounce e quem ainda não
+ * confirmou o opt-in duplo.
+ *
+ * Normalizar aqui mantém um único lugar decidindo: `true` vale como
+ * bloqueio técnico permanente (a mesma classe de 'bounced'), e o texto
+ * antigo continua funcionando para quem já passa string.
+ */
+function normalizeStatus(status: unknown): string {
+  if (status === true) return 'bounced';
+  if (status === false || status === null || status === undefined) return '';
+  return String(status).toLowerCase();
+}
+
+/**
  * Returns true when the contact must NOT be emailed.
  *
  * Blocks:
@@ -28,7 +46,7 @@ export function isEmailBlocked(emailConsent: unknown, status?: unknown): boolean
   if (emailConsent === false) return true;
   const consentStr = String(emailConsent ?? '').toLowerCase();
   if (BLOCKED_CONSENT_STRINGS.has(consentStr)) return true;
-  const statusStr = String(status ?? '').toLowerCase();
+  const statusStr = normalizeStatus(status);
   if (BLOCKED_STATUSES.has(statusStr)) return true;
   return false;
 }
@@ -79,7 +97,7 @@ export function isEmailBlockedForThreshold(
   status: unknown,
   threshold: SendingThreshold = 'subscribed'
 ): boolean {
-  const statusStr = String(status ?? '').toLowerCase();
+  const statusStr = normalizeStatus(status);
   const consentStr = String(emailConsent ?? '').toLowerCase();
 
   // Piso técnico — vale para os três níveis.
@@ -111,7 +129,7 @@ export function isSmsBlockedForThreshold(
   status: unknown,
   threshold: SendingThreshold = 'all'
 ): boolean {
-  const statusStr = String(status ?? '').toLowerCase();
+  const statusStr = normalizeStatus(status);
 
   if (HARD_BLOCKED_STATUSES.has(statusStr)) return true;
   if (threshold === 'all') return false;

@@ -410,7 +410,7 @@ export async function enrichShopifyEvent(
     try {
       const { data } = await opts.supabase
         .from('contacts')
-        .select('id, email, phone, first_name, last_name, total_orders, total_spent, accepts_marketing, tags, shopify_customer_id, address1, address2, city, province, country, zip, locale')
+        .select('id, email, phone, first_name, last_name, total_orders, total_spent, accepts_marketing:is_subscribed_email, tags, shopify_customer_id, address1:address, city, province:state, country, zip')
         .eq('id', opts.contactId)
         .maybeSingle();
       contactRow = data;
@@ -419,7 +419,7 @@ export async function enrichShopifyEvent(
     try {
       const { data } = await opts.supabase
         .from('contacts')
-        .select('id, email, phone, first_name, last_name, total_orders, total_spent, accepts_marketing, tags, shopify_customer_id, address1, address2, city, province, country, zip, locale')
+        .select('id, email, phone, first_name, last_name, total_orders, total_spent, accepts_marketing:is_subscribed_email, tags, shopify_customer_id, address1:address, city, province:state, country, zip')
         .eq('organization_id', opts.organizationId)
         .ilike('email', opts.email)
         .maybeSingle();
@@ -447,6 +447,13 @@ export async function enrichShopifyEvent(
 
     // Build a default address block when we have one stored. Omnisend
     // /Klaviyo flow templates often reach into raw.billing_address.*
+    //
+    // Os nomes vêm por APELIDO do PostgREST: as colunas reais são
+    // `address` (não address1), `state` (não province) e
+    // `is_subscribed_email` (não accepts_marketing). Pedir os nomes que
+    // não existem fazia o PostgREST recusar a consulta inteira — o
+    // enriquecimento nunca tinha dado nenhum de contato. `address2` e
+    // `locale` não têm equivalente e saíram.
     const hasAddress = contactRow.address1 || contactRow.city || contactRow.country || contactRow.zip;
     if (hasAddress) {
       const billing = {
@@ -454,7 +461,6 @@ export async function enrichShopifyEvent(
         last_name: contactRow.last_name || null,
         name: [contactRow.first_name, contactRow.last_name].filter(Boolean).join(' ') || null,
         address1: contactRow.address1 || null,
-        address2: contactRow.address2 || null,
         city: contactRow.city || null,
         province: contactRow.province || null,
         country: contactRow.country || null,

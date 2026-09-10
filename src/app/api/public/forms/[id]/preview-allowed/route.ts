@@ -91,7 +91,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     if (hideFromSubscribers && contactId) {
       const { data: contact } = await supabaseAdmin
         .from('contacts')
-        .select('email_consent, status')
+        .select('email_consent, suppressed')
         .eq('id', contactId)
         .eq('organization_id', orgId)
         .maybeSingle();
@@ -105,8 +105,11 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
       // Contato suprimido (bounce, reclamação, descadastro) também não vê
       // um popup de "entre na lista" — pareceria quebrado.
-      const badStatus = new Set(['bounced', 'complained', 'unsubscribed', 'invalid']);
-      if (contact?.status && badStatus.has(String(contact.status).toLowerCase())) return deny('suppressed');
+      // `suppressed` é a coluna que existe (bounce, denúncia, descadastro
+      // técnico). O select antigo pedia `status`, era recusado, e o contato
+      // suprimido via o popup de "entre na lista" como se nada tivesse
+      // acontecido.
+      if (contact?.suppressed === true) return deny('suppressed');
 
       // Já enviou ESTE formulário antes, em qualquer dispositivo?
       const { data: prior } = await supabaseAdmin

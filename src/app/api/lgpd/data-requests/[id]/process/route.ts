@@ -177,8 +177,7 @@ async function deleteData(request: any) {
       first_name: 'Apagado',
       last_name: 'LGPD',
       full_name: 'Apagado LGPD',
-      is_active: false,
-      status: 'deleted_lgpd',
+      suppressed: true,
       email_consent: false,
       sms_consent: false,
       whatsapp_consent: false,
@@ -238,7 +237,6 @@ async function restrictProcessing(request: any) {
       email_consent: false,
       sms_consent: false,
       whatsapp_consent: false,
-      status: 'processing_restricted',
       updated_at: new Date().toISOString(),
     })
     .eq('id', request.contact_id)

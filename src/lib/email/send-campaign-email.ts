@@ -478,7 +478,11 @@ export async function sendCampaignEmail({
       try {
         await supabaseAdmin
           .from('contacts')
-          .update({ email_consent: false, status: 'bounced' })
+          // A coluna é `suppressed` (booleana) — `status` nunca existiu em
+          // contacts, e o PostgREST recusa a linha inteira quando não
+          // conhece um campo: nem a supressão nem o email_consent eram
+          // gravados. O endereço com bounce ficava marcado em lugar nenhum.
+          .update({ email_consent: false, suppressed: true })
           .eq('id', resolvedContactId);
         console.log('[SendCampaignEmail] endereço do contato recusado em definitivo', {
           contactId: resolvedContactId,

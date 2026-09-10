@@ -116,7 +116,7 @@ export async function GET(request: NextRequest) {
   // Most recent identified contacts (last 10)
   const { data: recentContacts } = await admin
     .from('contacts')
-    .select('id, email, first_name, last_name, total_orders, total_spent, created_at, last_event_at')
+    .select('id, email, first_name, last_name, total_orders, total_spent, created_at, last_event_at:last_seen_at')
     .eq('organization_id', orgId)
     .eq('store_id', store.id)
     .order('created_at', { ascending: false })

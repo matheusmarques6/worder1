@@ -614,7 +614,10 @@ const actionExecutors: Record<string, NodeExecutor> = {
         try {
           const { data: consentRow } = await supabase
             .from('contacts')
-            .select('email_consent, status')
+            // `suppressed` é a coluna que existe; `status` não. Com o
+            // select recusado, consentRow vinha nulo e o guarda liberava
+            // TODO MUNDO — inclusive bounce e opt-in duplo pendente.
+            .select('email_consent, suppressed')
             .eq('organization_id', organizationId)
             .ilike('email', String(email))
             .maybeSingle();
@@ -633,7 +636,7 @@ const actionExecutors: Record<string, NodeExecutor> = {
           );
           const isInvalid = !!consentRow && isEmailBlockedForThreshold(
             consentRow.email_consent,
-            consentRow.status,
+            consentRow.suppressed,
             emailThreshold
           );
           if (isInvalid) {
@@ -1335,12 +1338,12 @@ const actionExecutors: Record<string, NodeExecutor> = {
             const smsThreshold = normalizeThreshold(rawThreshold);
             const { data: row } = await supabase
               .from('contacts')
-              .select('sms_consent, status')
+              .select('sms_consent, suppressed')
               .eq('id', contactId)
               .maybeSingle();
-            if (row && isSmsBlockedForThreshold(row.sms_consent, row.status, smsThreshold)) {
+            if (row && isSmsBlockedForThreshold(row.sms_consent, row.suppressed, smsThreshold)) {
               console.log('[action_sms] ⊘ skipped — SMS bloqueado pelo threshold', {
-                nodeId: node?.id, contactId, threshold: smsThreshold, status: row.status,
+                nodeId: node?.id, contactId, threshold: smsThreshold, suprimido: row.suppressed,
               });
               return {
                 status: 'success',

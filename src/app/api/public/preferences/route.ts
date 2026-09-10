@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
   try {
     const { data: contact } = await supabaseAdmin
       .from('contacts')
-      .select('id, email, first_name, last_name, is_subscribed_email, is_subscribed_sms, is_subscribed_whatsapp, email_consent, status, custom_fields')
+      .select('id, email, first_name, last_name, is_subscribed_email, is_subscribed_sms, is_subscribed_whatsapp, email_consent, suppressed, custom_fields')
       .eq('id', verified.contactId)
       .eq('organization_id', verified.orgId)
       .maybeSingle();
@@ -104,7 +104,7 @@ export async function GET(request: NextRequest) {
         email: contact.email,
         first_name: contact.first_name,
         last_name: contact.last_name,
-        email_subscribed: contact.is_subscribed_email !== false && contact.email_consent !== false && !['bounced', 'complained', 'unsubscribed', 'invalid'].includes(String(contact.status || '').toLowerCase()),
+        email_subscribed: contact.is_subscribed_email !== false && contact.email_consent !== false && contact.suppressed !== true,
         sms_subscribed: !!contact.is_subscribed_sms,
         whatsapp_subscribed: !!contact.is_subscribed_whatsapp,
         topics: contact.custom_fields?.email_topics || [],
@@ -136,7 +136,7 @@ export async function POST(request: NextRequest) {
 
     const { data: contact } = await supabaseAdmin
       .from('contacts')
-      .select('id, custom_fields, status')
+      .select('id, custom_fields, suppressed, email_consent')
       .eq('id', verified.contactId)
       .eq('organization_id', verified.orgId)
       .maybeSingle();
@@ -156,17 +156,16 @@ export async function POST(request: NextRequest) {
       // which writes email_consent_at on the contacts table (the canonical
       // column — contacts has no unsubscribed_at, only email_sends does).
       updatePayload.email_consent_at = new Date().toISOString();
-      // If re-subscribing, clear recoverable block statuses (unsubscribed /
-      // bounced / invalid) so the contact can receive again. Keep 'complained'
-      // blocked — a spam complaint is a legal/reputation hard signal we never
-      // override via self-service.
-      const curStatus = String(contact.status || '').toLowerCase();
-      if (email_subscribed && ['unsubscribed', 'bounced', 'invalid'].includes(curStatus)) {
-        updatePayload.status = 'active';
-      }
-      if (!email_subscribed) {
-        updatePayload.status = 'unsubscribed';
-      }
+      // Reinscrever tira a supressão; descadastrar coloca. A coluna é
+      // `suppressed` (booleana) — `status` não existe em contacts, e o
+      // PostgREST recusava a linha inteira: salvar preferências não
+      // salvava NADA, nem os canais que a pessoa desmarcou.
+      //
+      // O que se perde ao usar um booleano: não dá para separar "voltou
+      // atrás de um descadastro" de "estava com bounce". Fica registrado
+      // aqui como decisão consciente — o motivo continua em email_sends,
+      // que é quem guarda bounce e denúncia com data.
+      updatePayload.suppressed = !email_subscribed;
     }
 
     if (typeof sms_subscribed === 'boolean') {

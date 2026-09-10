@@ -71,7 +71,7 @@ export async function GET(req: NextRequest) {
     // the original consent timestamp for audit.
     const { data: contact } = await supabaseAdmin
       .from('contacts')
-      .select('id, email, first_name, last_name, phone, email_consent, email_consent_at, status')
+      .select('id, email, first_name, last_name, phone, email_consent, email_consent_at, lifecycle_stage')
       .eq('id', payload.contactId)
       .eq('organization_id', payload.orgId)
       .maybeSingle()
@@ -105,8 +105,16 @@ export async function GET(req: NextRequest) {
         email_consent: true as boolean | string,
         email_consent_at: new Date().toISOString(),
         email_consent_source: `popup_form:${payload.formId}:double_optin`,
-        // Só promove lead → qualificado; cliente continua cliente.
-        ...(!contact.status || contact.status === 'lead' || contact.status === 'new' ? { status: 'qualified' } : {}),
+        // Só promove quem ainda não é nada; cliente continua cliente.
+        //
+        // A coluna é `lifecycle_stage`; o código escrevia `status`, que não
+        // existe em contacts — e o PostgREST recusa a linha inteira. Ou
+        // seja: a confirmação do opt-in duplo NÃO GRAVAVA NADA, nem o
+        // consentimento. Quem clicava no link do e-mail continuava
+        // pendente para sempre.
+        ...(!contact.lifecycle_stage || ['lead', 'new'].includes(String(contact.lifecycle_stage))
+          ? { lifecycle_stage: 'subscriber' }
+          : {}),
       }
       const { error: consentErr } = await supabaseAdmin
         .from('contacts')

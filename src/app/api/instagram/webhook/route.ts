@@ -384,10 +384,14 @@ async function getOrCreateContact(account: any, igUserId: string) {
     .from('contacts')
     .insert({
       organization_id: account.organization_id,
-      name: `Instagram User ${igUserId}`,
-      instagram_id: igUserId,
+      // As colunas são `full_name` e `lifecycle_stage`; `name`, `type` e
+      // `instagram_id` não existem em contacts, e o PostgREST recusa a
+      // linha inteira — nenhum contato do Instagram era criado. O id do
+      // Instagram vai em custom_fields, que é o lugar que existe.
+      full_name: `Instagram User ${igUserId}`,
       source: 'instagram',
-      type: 'lead',
+      lifecycle_stage: 'lead',
+      custom_fields: { instagram_id: igUserId },
       tags: ['instagram'],
     })
     .select('id')

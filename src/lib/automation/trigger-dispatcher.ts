@@ -236,7 +236,7 @@ export async function dispatchTrigger(opts: DispatchOptions): Promise<DispatchRe
     if (automationsWithFilters.length > 0) {
       const { data: contact } = await supabaseAdmin
         .from('contacts')
-        .select('email, first_name, last_name, phone, city, state, country, tags, lifecycle_stage, total_orders, total_spent, aov, last_order_at, created_at')
+        .select('email, first_name, last_name, phone, city, state, country, tags, lifecycle_stage, total_orders, total_spent, aov:average_order_value, last_order_at, created_at')
         .eq('id', contactId)
         .maybeSingle()
 
