@@ -16,6 +16,20 @@ const effects = vi.hoisted(() => {
   })
   const from = vi.fn(() => chain)
   const rpc = vi.fn(async () => queryResult)
+  const checkAllIntegrations = vi.fn(async () => ({
+    total: 0,
+    healthy: 0,
+    unhealthy: 0,
+    results: [],
+  }))
+  const checkIntegration = vi.fn(async () => ({
+    success: true,
+    status: 'healthy',
+    statusCode: 200,
+    message: 'ok',
+    responseTimeMs: 0,
+    shouldNotify: false,
+  }))
 
   return {
     chain,
@@ -63,6 +77,9 @@ const effects = vi.hoisted(() => {
     runBrowseAbandonedDetection: vi.fn(async () => ({ processed: 0 })),
     enqueueAutomationRun: vi.fn(async () => null),
     getAuthClient: vi.fn(async () => null),
+    checkAllIntegrations,
+    checkIntegration,
+    integrationHealthService: vi.fn(() => ({ checkAllIntegrations, checkIntegration })),
     reserve: vi.fn(async () => []),
     complete: vi.fn(async () => undefined),
     fail: vi.fn(async () => ({ retrying: false, nextAttemptAt: null })),
@@ -155,6 +172,9 @@ vi.mock('@/lib/services/browse-abandoned/detector', () => ({
 }))
 vi.mock('@/lib/api-utils', () => ({
   getAuthClient: effects.getAuthClient,
+}))
+vi.mock('@/lib/services/integration-health', () => ({
+  IntegrationHealthService: effects.integrationHealthService,
 }))
 vi.mock('@/lib/queue/durable-queue', () => ({
   reserve: effects.reserve,
@@ -260,6 +280,12 @@ refusesWithoutSecret('cron-inline-development', [
   'check-dates',
   'check-delayed-runs',
   'compute-recommendations',
+])
+
+refusesWithoutSecret('cron-inline-final', [
+  'check-abandoned-carts',
+  'check-integrations',
+  'process-runs',
 ])
 
 describe('configured Bearer reaches the existing business seam', () => {
@@ -404,5 +430,35 @@ describe('configured Bearer reaches the existing business seam', () => {
 
     expect(response.status).not.toBe(401)
     expect(effects.getSupabaseAdmin).toHaveBeenCalled()
+  })
+
+  it('checks all integrations only with a configured Bearer', async () => {
+    vi.stubEnv('CRON_SECRET', 's3cret')
+    const load = routes['../app/api/cron/check-integrations/route.ts']
+    const handlers = await load() as Record<string, (req: NextRequest) => Promise<Response>>
+
+    const response = await handlers.GET(request('GET', { authorization: 'Bearer s3cret' }))
+
+    expect(response.status).not.toBe(401)
+    expect(effects.checkAllIntegrations).toHaveBeenCalled()
+  })
+
+  it('checks one integration only with a configured Bearer', async () => {
+    vi.stubEnv('CRON_SECRET', 's3cret')
+    const load = routes['../app/api/cron/check-integrations/route.ts']
+    const handlers = await load() as Record<string, (req: NextRequest) => Promise<Response>>
+    const integrationRequest = new NextRequest('http://localhost/api/cron/check-integrations', {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer s3cret',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ type: 'shopify', integrationId: 'store-1' }),
+    })
+
+    const response = await handlers.POST(integrationRequest)
+
+    expect(response.status).not.toBe(401)
+    expect(effects.checkIntegration).toHaveBeenCalled()
   })
 })
