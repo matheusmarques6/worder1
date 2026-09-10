@@ -117,7 +117,7 @@ def test_oauth_states_catalog(admin):
     assert admin.execute(
         "select count(*) from pg_policies where schemaname='public' and tablename='oauth_states'"
     ).fetchone() == (0,)
-    for role in ("anon", "authenticated", "service_role"):
+    for role in ("anon", "authenticated", "service_role", "worker_role", "sender_role"):
         for privilege in ("SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE",
                           "REFERENCES", "TRIGGER", "MAINTAIN"):
             expected = role == "service_role" and privilege in ("SELECT", "INSERT", "DELETE")
@@ -134,9 +134,11 @@ def test_oauth_states_catalog(admin):
                 ).fetchone()[0] == expected, (role, column, privilege)
     assert admin.execute(
         """select rolname, rolsuper, rolbypassrls from pg_roles
-            where rolname in ('anon','authenticated','service_role') order by rolname"""
+            where rolname in ('anon','authenticated','service_role','worker_role','sender_role')
+            order by rolname"""
     ).fetchall() == [("anon", False, False), ("authenticated", False, False),
-                    ("service_role", False, True)]
+                    ("sender_role", False, False), ("service_role", False, True),
+                    ("worker_role", False, False)]
 
 
 def test_service_role_stores_reads_and_deletes_state(admin):
@@ -232,10 +234,11 @@ def test_migration_removes_broad_policies_and_column_grants(admin):
         _seed(admin)
         rows = _snapshot(admin)[1]
         admin.execute(
-            """grant all on public.oauth_states to public, anon, authenticated, service_role;
+            """grant all on public.oauth_states
+                 to public, anon, authenticated, service_role, worker_role, sender_role;
                grant select (metadata), insert (metadata), update (metadata),
                  references (metadata) on public.oauth_states
-                 to public, anon, authenticated, service_role;
+                 to public, anon, authenticated, service_role, worker_role, sender_role;
                create policy oauth_states_user on public.oauth_states
                  for all to public using (auth.uid() is not null);
                create policy org_isolation_rls on public.oauth_states
