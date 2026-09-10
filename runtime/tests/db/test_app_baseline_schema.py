@@ -1063,8 +1063,11 @@ def test_crm_replay_dependencies_have_the_exact_store_policy(admin, table, has_o
 ))
 def test_child_replay_dependencies_have_the_exact_parent_policy(
         admin, table, key, parent, has_org_policy):
+    key_type = column_contract(admin, table, key)[0]
+    assert key_type in ("uuid", "text")
+    child_key = f"({table}.{key})::text" if key_type == "uuid" else f"{table}.{key}"
     parent_predicate = (f"(EXISTS(SELECT1FROM{parent}pWHERE"
-                        f"((p.id)::text=({table}.{key})::text)))")
+                        f"((p.id)::text={child_key})))")
     rows = [("org_via_pai", "ALL", ["authenticated"], "PERMISSIVE",
              parent_predicate, parent_predicate)]
     if has_org_policy:
