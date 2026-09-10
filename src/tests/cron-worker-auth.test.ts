@@ -22,6 +22,7 @@ const effects = vi.hoisted(() => {
     from,
     rpc,
     createClient: vi.fn(() => ({ from, rpc })),
+    getSupabaseAdmin: vi.fn(() => ({ from, rpc })),
     dispatchTrigger: vi.fn(async () => undefined),
     resolveSegment: vi.fn(async () => ({ contactIds: [] })),
     loadSegmentAsV2: vi.fn(async () => null),
@@ -60,7 +61,7 @@ vi.mock('@supabase/supabase-js', () => ({
 }))
 vi.mock('@/lib/supabase-admin', () => ({
   supabaseAdmin: { from: effects.from, rpc: effects.rpc },
-  getSupabaseAdmin: () => ({ from: effects.from, rpc: effects.rpc }),
+  getSupabaseAdmin: effects.getSupabaseAdmin,
 }))
 vi.mock('@/lib/automation/trigger-dispatcher', () => ({
   dispatchTrigger: effects.dispatchTrigger,
@@ -128,6 +129,7 @@ function expectNoSideEffects() {
   for (const effect of sideEffects) {
     expect(effect).not.toHaveBeenCalled()
   }
+  expect(fetch).not.toHaveBeenCalled()
 }
 
 function refusesWithoutSecret(batch: string, names: string[]) {
@@ -135,7 +137,9 @@ function refusesWithoutSecret(batch: string, names: string[]) {
     it.each(names)('%s denies anonymous and forged cron headers before I/O', async name => {
       const load = routes['../app/api/cron/' + name + '/route.ts']
       expect(load).toBeTypeOf('function')
+      vi.clearAllMocks()
       const handlers = await load() as Record<string, (req: NextRequest) => Promise<Response>>
+      expectNoSideEffects()
 
       for (const method of ['GET', 'POST']) {
         if (!handlers[method]) continue
