@@ -1,8 +1,13 @@
 import { createHmac } from 'crypto'
+import { timingSafeEqual } from 'node:crypto'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
 
 vi.mock('@/lib/supabase-admin', () => ({ getSupabaseAdmin: vi.fn() }))
+vi.mock('node:crypto', async importOriginal => {
+  const crypto = await importOriginal<typeof import('node:crypto')>()
+  return { ...crypto, timingSafeEqual: vi.fn(crypto.timingSafeEqual) }
+})
 
 beforeEach(() => {
   vi.resetModules()
@@ -26,6 +31,35 @@ function signState(secret: string) {
   })).toString('base64url')
   return `${payload}.${createHmac('sha256', secret).update(payload).digest('base64url')}`
 }
+
+it('compares signatures through the real constant-time primitive', async () => {
+  const { validateOAuthState } = await import('./oauth-security')
+  const state = signState('oauth-test-secret')
+  const signature = state.split('.')[1]
+
+  expect(validateOAuthState(state, 'meta')).not.toBeNull()
+  expect(timingSafeEqual).toHaveBeenCalledTimes(1)
+  expect(timingSafeEqual).toHaveBeenCalledWith(
+    Buffer.from(signature, 'utf8'), Buffer.from(signature, 'utf8'),
+  )
+})
+
+it.each(['short', 'long', 'malformed', 'unicode'])(
+  'rejects a %s signature without accessing storage', async kind => {
+    const { consumeOAuthState } = await import('./oauth-security')
+    const [payload, signature] = signState('oauth-test-secret').split('.')
+    const invalid = {
+      short: signature.slice(1),
+      long: `${signature}=`,
+      malformed: `$${signature.slice(1)}`,
+      unicode: `é${signature.slice(1)}`,
+    }[kind]
+
+    expect(await consumeOAuthState(`${payload}.${invalid}`, 'meta')).toBeNull()
+    expect(getSupabaseAdmin).not.toHaveBeenCalled()
+    if (kind !== 'malformed') expect(timingSafeEqual).not.toHaveBeenCalled()
+  },
+)
 
 it.each(['development', 'test', 'production'])(
   'imports without a secret but refuses generation and validation in %s',
