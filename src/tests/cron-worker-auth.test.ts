@@ -65,6 +65,7 @@ const effects = vi.hoisted(() => {
     enqueueWhatsAppWebhook: vi.fn(async () => undefined),
     enqueueWhatsAppAiRespond: vi.fn(async () => undefined),
     quarantineStuckSending: vi.fn(async () => 0),
+    enqueueWebhookDelivery: vi.fn(async () => undefined),
     sendAlert: vi.fn(async () => undefined),
     checkAndAlertMessagingLimits: vi.fn(async () => ({ checked: 0, alerted: 0 })),
     checkAndAlertQualityRating: vi.fn(async () => ({ checked: 0, alerted: 0 })),
@@ -145,6 +146,7 @@ vi.mock('@/lib/queue', () => ({
   enqueueWhatsAppWebhook: effects.enqueueWhatsAppWebhook,
   enqueueWhatsAppAiRespond: effects.enqueueWhatsAppAiRespond,
   enqueueAutomationRun: effects.enqueueAutomationRun,
+  enqueueWebhookDelivery: effects.enqueueWebhookDelivery,
 }))
 vi.mock('@/lib/whatsapp/recipient-claim', () => ({
   quarantineStuckSending: effects.quarantineStuckSending,
@@ -199,9 +201,16 @@ function expectNoSideEffects() {
   expect(fetch).not.toHaveBeenCalled()
 }
 
-function refusesWithoutSecret(batch: string, names: string[]) {
+function refusesWithoutSecret(
+  batch: string,
+  names: string[],
+  requestHeaders = unauthorizedHeaders,
+  cronSecret: string | null = '',
+) {
   describe(batch, () => {
     it.each(names)('%s denies anonymous and forged cron headers before I/O', async name => {
+      if (cronSecret === null) delete process.env.CRON_SECRET
+      else vi.stubEnv('CRON_SECRET', cronSecret)
       const load = routes['../app/api/cron/' + name + '/route.ts']
       expect(load).toBeTypeOf('function')
       vi.clearAllMocks()
@@ -210,7 +219,7 @@ function refusesWithoutSecret(batch: string, names: string[]) {
 
       for (const method of ['GET', 'POST']) {
         if (!handlers[method]) continue
-        for (const headers of unauthorizedHeaders) {
+        for (const headers of requestHeaders) {
           vi.clearAllMocks()
           const response = await handlers[method](request(method, headers))
           expect(response.status).toBe(401)
@@ -287,6 +296,13 @@ refusesWithoutSecret('cron-inline-final', [
   'check-integrations',
   'process-runs',
 ])
+
+refusesWithoutSecret(
+  'cron-bearer-undefined',
+  ['webhook-deliveries-sweeper', 'webhook-deliveries-prune'],
+  [...unauthorizedHeaders, { authorization: 'Bearer undefined' }],
+  null,
+)
 
 describe('configured Bearer reaches the existing business seam', () => {
   it('reaches Supabase for a database-backed handler', async () => {
@@ -460,5 +476,16 @@ describe('configured Bearer reaches the existing business seam', () => {
 
     expect(response.status).not.toBe(401)
     expect(effects.checkIntegration).toHaveBeenCalled()
+  })
+
+  it('reaches webhook delivery sweeping with a configured Bearer', async () => {
+    vi.stubEnv('CRON_SECRET', 's3cret')
+    const load = routes['../app/api/cron/webhook-deliveries-sweeper/route.ts']
+    const handlers = await load() as Record<string, (req: NextRequest) => Promise<Response>>
+
+    const response = await handlers.GET(request('GET', { authorization: 'Bearer s3cret' }))
+
+    expect(response.status).not.toBe(401)
+    expect(effects.from).toHaveBeenCalled()
   })
 })
