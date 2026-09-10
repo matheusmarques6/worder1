@@ -6,6 +6,7 @@ guardian. Collection is offline; executing these assertions requires real PG.
 
 import hashlib
 
+import psycopg
 import pytest
 
 from tests.db.conftest import as_authenticated_user
@@ -613,6 +614,8 @@ REPLAY_DEPENDENCY_COLUMN_GROUPS = (
     ("deals", "id", "uuid", False, "uuid_generate_v4()"),
     ("deals", "organization_id pipeline_id", "uuid", False, None),
     ("deals", "store_id stage_id contact_id assigned_to", "uuid", True, None),
+    ("deals", "contact_phone", "character varying(50)", True, None),
+    ("deals", "contact_name contact_email", "character varying(255)", True, None),
     ("deals", "title", "text", False, None),
     ("deals", "currency", "text", True, "'BRL'::text"),
     ("deals", "status", "text", True, "'open'::text"),
@@ -621,6 +624,9 @@ REPLAY_DEPENDENCY_COLUMN_GROUPS = (
     ("deals", "position", "integer", True, "0"),
     ("deals", "tags", "text[]", True, "'{}'::text[]"),
     ("deals", "custom_fields", "jsonb", True, "'{}'::jsonb"),
+    ("deals", "expected_close_date", "date", True, None),
+    ("deals", "won_at lost_at", "timestamp with time zone", True, None),
+    ("deals", "lost_reason notes", "text", True, None),
     ("deals", "created_at updated_at", "timestamp with time zone", True, "now()"),
     ("deal_activities", "id", "uuid", False, "gen_random_uuid()"),
     ("deal_activities", "organization_id deal_id", "uuid", False, None),
@@ -641,7 +647,10 @@ REPLAY_DEPENDENCY_COLUMN_GROUPS = (
     ("pipeline_stage_transitions", "name description", "text", True, None),
     ("pipeline_stage_transitions", "filters", "jsonb", True, "'{}'::jsonb"),
     ("pipeline_stage_transitions", "is_enabled", "boolean", True, "true"),
+    ("pipeline_stage_transitions", "mark_as_won mark_as_lost", "boolean", True, "false"),
     ("pipeline_stage_transitions", "position transitions_count", "integer", True, "0"),
+    ("pipeline_stage_transitions", "last_triggered_at", "timestamp with time zone", True,
+     None),
     ("pipeline_stage_transitions", "created_at updated_at", "timestamp with time zone", True,
      "now()"),
     ("email_clicks", "id", "uuid", False, "gen_random_uuid()"),
@@ -656,12 +665,15 @@ REPLAY_DEPENDENCY_COLUMN_GROUPS = (
      "'running'::character varying"),
     ("automation_executions", "trigger_type error_node_id", "character varying(100)", True,
      None),
+    ("automation_executions", "retry_of", "character varying(100)", True, None),
     ("automation_executions", "trigger_data final_context resume_data", "jsonb", True, None),
     ("automation_executions", "node_results", "jsonb", True, "'{}'::jsonb"),
+    ("automation_executions", "error_message", "text", True, None),
     ("automation_executions", "duration_ms", "integer", True, None),
     ("automation_executions", "retry_count", "integer", True, "0"),
     ("automation_executions", "started_at", "timestamp with time zone", False, "now()"),
     ("automation_executions", "completed_at wait_till", "timestamp with time zone", True, None),
+    ("automation_executions", "created_at", "timestamp with time zone", True, "now()"),
     ("automation_versions", "id", "uuid", False, "gen_random_uuid()"),
     ("automation_versions", "automation_id", "uuid", False, None),
     ("automation_versions", "version", "integer", False, None),
@@ -678,6 +690,8 @@ REPLAY_DEPENDENCY_COLUMN_GROUPS = (
     ("automation_run_steps", "input_data output_data config_used variables_resolved", "jsonb",
      True, "'{}'::jsonb"),
     ("automation_run_steps", "error_details", "jsonb", True, None),
+    ("automation_run_steps", "error_message", "text", True, None),
+    ("automation_run_steps", "duration_ms", "integer", True, None),
     ("automation_run_steps", "step_order", "integer", False, "0"),
     ("automation_run_steps", "started_at completed_at", "timestamp with time zone", True, None),
     ("automation_run_steps", "created_at", "timestamp with time zone", True, "now()"),
@@ -694,13 +708,19 @@ REPLAY_DEPENDENCY_COLUMN_GROUPS = (
     ("whatsapp_campaign_recipients", "id", "uuid", False, "gen_random_uuid()"),
     ("whatsapp_campaign_recipients", "contact_id message_id", "uuid", True, None),
     ("whatsapp_campaign_recipients", "phone_number", "character varying(20)", False, None),
+    ("whatsapp_campaign_recipients", "contact_name meta_message_id conversion_order_id",
+     "character varying(255)", True, None),
+    ("whatsapp_campaign_recipients", "error_code", "character varying(50)", True, None),
+    ("whatsapp_campaign_recipients", "error_message", "text", True, None),
     ("whatsapp_campaign_recipients", "status", "character varying(20)", True,
      "'pending'::character varying"),
     ("whatsapp_campaign_recipients", "retry_count", "integer", True, "0"),
     ("whatsapp_campaign_recipients", "resolved_variables", "jsonb", True, "'{}'::jsonb"),
+    ("whatsapp_campaign_recipients", "conversion_value", "numeric(12,2)", True, None),
     ("whatsapp_campaign_recipients", "queued_at sending_at sent_at delivered_at read_at "
      "clicked_at replied_at failed_at opted_out_at", "timestamp with time zone", True, None),
     ("whatsapp_campaign_recipients", "created_at", "timestamp with time zone", True, "now()"),
+    ("whatsapp_campaign_recipients", "converted_at", "timestamp with time zone", True, None),
 )
 
 REPLAY_DEPENDENCY_FOREIGN_KEYS = (
@@ -712,53 +732,126 @@ REPLAY_DEPENDENCY_FOREIGN_KEYS = (
     ("deals", "pipeline_id", "pipelines", "CASCADE"),
     ("deals", "stage_id", "pipeline_stages", "SET NULL"),
     ("deals", "contact_id", "contacts", "SET NULL"),
+    ("deals", "assigned_to", "profiles", "SET NULL"),
     ("deal_activities", "deal_id", "deals", "CASCADE"),
+    ("pipeline_stage_transitions", "organization_id", "organizations", "CASCADE"),
     ("pipeline_stage_transitions", "pipeline_id", "pipelines", "CASCADE"),
     ("pipeline_stage_transitions", "from_stage_id", "pipeline_stages", "CASCADE"),
     ("pipeline_stage_transitions", "to_stage_id", "pipeline_stages", "CASCADE"),
     ("email_clicks", "email_send_id", "email_sends", "CASCADE"),
     ("automation_executions", "automation_id", "automations", "CASCADE"),
+    ("automation_executions", "organization_id", "organizations", "CASCADE"),
+    ("automation_executions", "contact_id", "contacts", "SET NULL"),
+    ("automation_executions", "deal_id", "deals", "SET NULL"),
     ("automation_versions", "automation_id", "automations", "CASCADE"),
+    ("automation_versions", "created_by", "auth.users", None),
     ("automation_run_steps", "run_id", "automation_runs", "CASCADE"),
     ("automation_pending_steps", "run_id", "automation_runs", "CASCADE"),
 )
 
 REPLAY_DEPENDENCY_INDEXES = {
     "shopify_products": {
-        "idx_shopify_products_store", "idx_shopify_products_sku",
-        "idx_shopify_products_org", "idx_shopify_products_feed_visible",
+        "idx_shopify_products_store": "(store_id)",
+        "idx_shopify_products_sku": "(sku)",
+        "idx_shopify_products_org": "(organization_id)",
+        "idx_shopify_products_feed_visible": "(store_id) WHERE (hidden_from_feeds = false)",
     },
-    "api_keys": {"api_keys_prefix_idx"},
+    "api_keys": {"api_keys_prefix_idx": "(key_prefix) WHERE is_active"},
     "email_templates": {
-        "idx_email_templates_org", "idx_email_templates_store",
-        "email_templates_editor_type_idx",
+        "idx_email_templates_org": "(organization_id)",
+        "idx_email_templates_store": "(store_id) WHERE (store_id IS NOT NULL)",
+        "email_templates_editor_type_idx": "(organization_id, editor_type)",
     },
     "deals": {
-        "idx_deals_org", "idx_deals_store", "idx_deals_pipeline", "idx_deals_stage",
-        "idx_deals_contact", "idx_deals_status",
+        "idx_deals_org": "(organization_id)",
+        "idx_deals_store": "(store_id)",
+        "idx_deals_pipeline": "(pipeline_id)",
+        "idx_deals_stage": "(stage_id)",
+        "idx_deals_contact": "(contact_id)",
+        "idx_deals_status": "(status)",
     },
     "deal_activities": {
-        "deal_activities_deal_idx", "deal_activities_org_idx", "deal_activities_contact_idx",
+        "deal_activities_deal_idx": "(deal_id, created_at DESC)",
+        "deal_activities_org_idx": "(organization_id, created_at DESC)",
+        "deal_activities_contact_idx": "(contact_id) WHERE (contact_id IS NOT NULL)",
     },
     "pipeline_stage_transitions": {
-        "idx_stage_transitions_org", "idx_stage_transitions_pipeline",
-        "idx_stage_transitions_source", "idx_stage_transitions_enabled",
+        "idx_stage_transitions_org": "(organization_id)",
+        "idx_stage_transitions_pipeline": "(pipeline_id)",
+        "idx_stage_transitions_source": "(source_type, trigger_event)",
+        "idx_stage_transitions_enabled": (
+            "(organization_id, source_type, trigger_event) WHERE (is_enabled = true)"
+        ),
     },
-    "email_clicks": {"idx_email_clicks_send", "idx_email_clicks_at"},
+    "email_clicks": {
+        "idx_email_clicks_send": "(email_send_id)",
+        "idx_email_clicks_at": "(clicked_at)",
+    },
     "automation_executions": {
-        "idx_automation_executions_automation", "idx_automation_executions_org",
-        "idx_automation_executions_status", "idx_automation_executions_started",
-        "idx_automation_executions_contact", "idx_automation_executions_waiting",
+        "idx_automation_executions_automation": "(automation_id)",
+        "idx_automation_executions_org": "(organization_id)",
+        "idx_automation_executions_status": "(status)",
+        "idx_automation_executions_started": "(started_at DESC)",
+        "idx_automation_executions_contact": "(contact_id)",
+        "idx_automation_executions_waiting": (
+            "(wait_till) WHERE ((status)::text = 'waiting'::text)"
+        ),
     },
-    "automation_versions": {"idx_automation_versions_automation"},
-    "automation_run_steps": {"idx_run_steps_run", "idx_run_steps_status"},
+    "automation_versions": {
+        "idx_automation_versions_automation": "(automation_id)",
+    },
+    "automation_run_steps": {
+        "idx_run_steps_run": "(run_id)",
+        "idx_run_steps_status": "(status)",
+    },
     "automation_pending_steps": {
-        "idx_pending_steps_scheduled", "idx_pending_steps_status", "idx_pending_steps_run",
-        "automation_pending_steps_locked_idx",
+        "idx_pending_steps_scheduled": "(scheduled_for)",
+        "idx_pending_steps_status": "(status)",
+        "idx_pending_steps_run": "(run_id)",
+        "automation_pending_steps_locked_idx": "(locked_at) WHERE (lock_token IS NOT NULL)",
     },
     "whatsapp_campaign_recipients": {
-        "idx_recipients_campaign", "idx_recipients_status", "idx_recipients_meta_msg",
-        "idx_wcr_stuck_sending",
+        "idx_recipients_campaign": "(campaign_id)",
+        "idx_recipients_status": "(status)",
+        "idx_recipients_meta_msg": "(meta_message_id)",
+        "idx_wcr_stuck_sending": "(sending_at) WHERE ((status)::text = 'sending'::text)",
+    },
+}
+
+REPLAY_DEPENDENCY_CONSTRAINTS = {
+    "shopify_products": {"UNIQUE (store_id, shopify_product_id)"},
+    "email_templates": {
+        "CHECK (editor_type = ANY (ARRAY['visual'::text, 'text'::text]))",
+    },
+    "deals": {
+        "CHECK (probability >= 0 AND probability <= 100)",
+        "CHECK (status = ANY (ARRAY['open'::text, 'won'::text, 'lost'::text]))",
+    },
+    "deal_activities": {
+        "CHECK (activity_type = ANY (ARRAY['note'::text, 'call'::text, 'email'::text, "
+        "'meeting'::text, 'task'::text, 'stage_change'::text, 'value_change'::text, "
+        "'custom'::text]))",
+    },
+    "automation_executions": {
+        "CHECK ((status)::text = ANY ((ARRAY['running'::character varying, "
+        "'success'::character varying, 'error'::character varying, 'waiting'::character "
+        "varying, 'cancelled'::character varying])::text[]))",
+    },
+    "automation_versions": {"UNIQUE (automation_id, version)"},
+    "automation_run_steps": {
+        "CHECK (status = ANY (ARRAY['pending'::text, 'running'::text, 'success'::text, "
+        "'error'::text, 'skipped'::text]))",
+    },
+    "automation_pending_steps": {
+        "CHECK (status = ANY (ARRAY['pending'::text, 'processing'::text, 'completed'::text, "
+        "'cancelled'::text]))",
+    },
+    "whatsapp_campaign_recipients": {
+        "CHECK ((status)::text = ANY ((ARRAY['pending'::character varying, "
+        "'queued'::character varying, 'sending'::character varying, 'sent'::character varying, "
+        "'delivered'::character varying, 'read'::character varying, 'clicked'::character "
+        "varying, 'replied'::character varying, 'failed'::character varying, "
+        "'skipped'::character varying])::text[]))",
     },
 }
 
@@ -791,7 +884,9 @@ def test_replay_dependencies_exist_with_pk_and_rls(admin, table):
 
 @pytest.mark.parametrize("table,column,target,delete", REPLAY_DEPENDENCY_FOREIGN_KEYS)
 def test_replay_dependency_foreign_keys(admin, table, column, target, delete):
-    definition = f"FOREIGN KEY ({column}) REFERENCES {target}(id) ON DELETE {delete}"
+    definition = f"FOREIGN KEY ({column}) REFERENCES {target}(id)"
+    if delete:
+        definition += f" ON DELETE {delete}"
     assert definition in constraint_definitions(admin, table).values()
 
 
@@ -802,25 +897,24 @@ def test_api_keys_user_id_remains_a_compatibility_link_without_fk(admin):
     )
 
 
-@pytest.mark.parametrize("table,names", REPLAY_DEPENDENCY_INDEXES.items())
-def test_replay_dependency_indexes(admin, table, names):
-    actual = {row[0] for row in admin.execute(
-        "select indexname from pg_indexes where schemaname='public' and tablename=%s",
-        (table,),
-    ).fetchall()}
-    assert names <= actual
+@pytest.mark.parametrize("table,definitions", REPLAY_DEPENDENCY_INDEXES.items())
+def test_replay_dependency_indexes(admin, table, definitions):
+    names = tuple(definitions)
+    actual = dict(admin.execute(
+        """select indexname, indexdef from pg_indexes
+            where schemaname='public' and tablename=%s and indexname=any(%s)""",
+        (table, list(names)),
+    ).fetchall())
+    expected = {
+        name: f"CREATE INDEX {name} ON public.{table} USING btree {suffix}"
+        for name, suffix in definitions.items()
+    }
+    assert actual == expected
 
 
-def test_shopify_product_and_template_unique_checks(admin):
-    assert "UNIQUE (store_id, shopify_product_id)" in constraint_definitions(
-        admin, "shopify_products"
-    ).values()
-    assert "CHECK (editor_type = ANY (ARRAY['visual'::text, 'text'::text]))" in (
-        constraint_definitions(admin, "email_templates").values()
-    )
-    assert "UNIQUE (automation_id, version)" in constraint_definitions(
-        admin, "automation_versions"
-    ).values()
+@pytest.mark.parametrize("table,expected", REPLAY_DEPENDENCY_CONSTRAINTS.items())
+def test_replay_dependency_checks_and_uniques(admin, table, expected):
+    assert expected <= set(constraint_definitions(admin, table).values())
 
 
 def test_recipient_key_preserves_both_reviewed_lanes(admin):
@@ -892,6 +986,224 @@ def test_child_replay_dependencies_have_the_exact_parent_policy(
         org = "(organization_id=get_user_organization_id())"
         rows.insert(0, ("org_isolation_rls", "ALL", ["authenticated"], "PERMISSIVE", org, org))
     assert _normalized_policy_rows(admin, table) == tuple(rows)
+
+
+@pytest.mark.parametrize("table", (
+    "deals", "deal_activities", "events", "pipeline_stage_transitions",
+))
+def test_crm_replay_dependencies_enforce_store_scope(dsn, admin, two_tenants, table):
+    rows = []
+    stores = []
+    parent_deals = []
+    try:
+        for tenant in (two_tenants.a, two_tenants.b):
+            store = admin.execute(
+                """insert into public.shopify_stores
+                     (organization_id, shop_domain, access_token)
+                   values (%s, %s, 'scope-fixture-not-a-secret') returning id""",
+                (tenant.id, f"scope-{tenant.user_id}.myshopify.test"),
+            ).fetchone()[0]
+            stores.append(store)
+            pipeline, stage = admin.execute(
+                """select p.id, s.id
+                     from public.pipelines p
+                     join public.pipeline_stages s on s.pipeline_id=p.id
+                    where p.organization_id=%s
+                    order by p.is_default desc, s.position
+                    limit 1""",
+                (tenant.id,),
+            ).fetchone()
+            if table == "deals":
+                row = admin.execute(
+                    """insert into public.deals
+                         (organization_id, store_id, pipeline_id, stage_id, title)
+                       values (%s, %s, %s, %s, 'Scoped deal') returning id""",
+                    (tenant.id, store, pipeline, stage),
+                ).fetchone()[0]
+            elif table == "deal_activities":
+                deal = admin.execute(
+                    """insert into public.deals
+                         (organization_id, store_id, pipeline_id, stage_id, title)
+                       values (%s, %s, %s, %s, 'Activity parent') returning id""",
+                    (tenant.id, store, pipeline, stage),
+                ).fetchone()[0]
+                parent_deals.append(deal)
+                row = admin.execute(
+                    """insert into public.deal_activities
+                         (organization_id, store_id, deal_id, activity_type)
+                       values (%s, %s, %s, 'note') returning id""",
+                    (tenant.id, store, deal),
+                ).fetchone()[0]
+            elif table == "events":
+                row = admin.execute(
+                    "insert into public.events (store_id) values (%s) returning id",
+                    (store,),
+                ).fetchone()[0]
+            else:
+                row = admin.execute(
+                    """insert into public.pipeline_stage_transitions
+                         (organization_id, store_id, pipeline_id, to_stage_id,
+                          source_type, trigger_event)
+                       values (%s, %s, %s, %s, 'fixture', 'scope') returning id""",
+                    (tenant.id, store, pipeline, stage),
+                ).fetchone()[0]
+            rows.append(row)
+
+        assert admin.execute(
+            "select has_table_privilege('authenticated', %s, 'update')",
+            (f"public.{table}",),
+        ).fetchone()[0] is True
+        with as_authenticated_user(dsn, two_tenants.a.user_id) as authenticated:
+            assert authenticated.execute(
+                f"select id::text from public.{table} where id=%s", (rows[0],),
+            ).fetchone() == (str(rows[0]),)
+            assert authenticated.execute(
+                f"select id from public.{table} where id=%s", (rows[1],),
+            ).fetchone() is None
+            assignment = "store_id=%s"
+            values = (stores[1], rows[0])
+            if table != "events":
+                assignment = "organization_id=%s, store_id=%s"
+                values = (two_tenants.b.id, stores[1], rows[0])
+            with pytest.raises(psycopg.errors.InsufficientPrivilege):
+                with authenticated.transaction():
+                    authenticated.execute(
+                        f"update public.{table} set {assignment} where id=%s", values,
+                    )
+    finally:
+        for row in rows:
+            admin.execute(f"delete from public.{table} where id=%s", (row,))
+        for deal in parent_deals:
+            admin.execute("delete from public.deals where id=%s", (deal,))
+        if stores:
+            admin.execute("delete from public.shopify_stores where id=any(%s)", (stores,))
+
+
+@pytest.mark.parametrize(("table", "parent_key"), (
+    ("email_clicks", "email_send_id"),
+    ("automation_executions", "automation_id"),
+    ("automation_versions", "automation_id"),
+    ("automation_run_steps", "run_id"),
+    ("automation_pending_steps", "run_id"),
+    ("whatsapp_campaign_recipients", "campaign_id"),
+))
+def test_child_replay_dependencies_enforce_parent_scope(
+        dsn, admin, two_tenants, table, parent_key):
+    parents = []
+    rows = []
+    key_type = None
+    try:
+        for tenant in (two_tenants.a, two_tenants.b):
+            if table == "email_clicks":
+                parent = admin.execute(
+                    """insert into public.email_sends (organization_id, email)
+                       values (%s, 'scope@example.test') returning id""",
+                    (tenant.id,),
+                ).fetchone()[0]
+            elif table in ("automation_executions", "automation_versions"):
+                parent = admin.execute(
+                    """insert into public.automations (organization_id, name, trigger_type)
+                       values (%s, 'Scoped automation', 'manual') returning id""",
+                    (tenant.id,),
+                ).fetchone()[0]
+            elif table in ("automation_run_steps", "automation_pending_steps"):
+                automation = admin.execute(
+                    """insert into public.automations (organization_id, name, trigger_type)
+                       values (%s, 'Scoped automation', 'manual') returning id""",
+                    (tenant.id,),
+                ).fetchone()[0]
+                parent = admin.execute(
+                    """insert into public.automation_runs (automation_id, organization_id)
+                       values (%s, %s) returning id""",
+                    (automation, tenant.id),
+                ).fetchone()[0]
+            else:
+                parent = admin.execute(
+                    """with generated(id) as (select gen_random_uuid())
+                       insert into public.whatsapp_campaigns
+                         (id, organization_id, campaign_id)
+                       select id, %s, id::text from generated returning id""",
+                    (tenant.id,),
+                ).fetchone()[0]
+            parents.append(parent)
+
+            if table == "email_clicks":
+                row = admin.execute(
+                    """insert into public.email_clicks (email_send_id, url)
+                       values (%s, 'https://example.test/scope') returning id""",
+                    (parent,),
+                ).fetchone()[0]
+            elif table == "automation_executions":
+                row = admin.execute(
+                    """insert into public.automation_executions
+                         (id, automation_id, organization_id)
+                       values (%s, %s, %s) returning id""",
+                    (f"scope-{parent}", parent, tenant.id),
+                ).fetchone()[0]
+            elif table == "automation_versions":
+                row = admin.execute(
+                    """insert into public.automation_versions
+                         (automation_id, version, nodes, edges)
+                       values (%s, 1, '[]', '[]') returning id""",
+                    (parent,),
+                ).fetchone()[0]
+            elif table == "automation_run_steps":
+                row = admin.execute(
+                    """insert into public.automation_run_steps (run_id, node_id, node_type)
+                       values (%s, 'scope', 'fixture') returning id""",
+                    (parent,),
+                ).fetchone()[0]
+            elif table == "automation_pending_steps":
+                row = admin.execute(
+                    """insert into public.automation_pending_steps
+                         (run_id, node_id, scheduled_for)
+                       values (%s, 'scope', now()) returning id""",
+                    (parent,),
+                ).fetchone()[0]
+            else:
+                if key_type is None:
+                    key_type = admin.execute(
+                        """select format_type(atttypid, atttypmod)
+                             from pg_attribute
+                            where attrelid='public.whatsapp_campaign_recipients'::regclass
+                              and attname='campaign_id'"""
+                    ).fetchone()[0]
+                    assert key_type in ("uuid", "text")
+                row = admin.execute(
+                    f"""insert into public.whatsapp_campaign_recipients
+                          (campaign_id, phone_number)
+                        values (%s::{key_type}, '+15550000001') returning id""",
+                    (str(parent),),
+                ).fetchone()[0]
+            rows.append(row)
+
+        assert admin.execute(
+            "select has_table_privilege('authenticated', %s, 'update')",
+            (f"public.{table}",),
+        ).fetchone()[0] is True
+        with as_authenticated_user(dsn, two_tenants.a.user_id) as authenticated:
+            assert authenticated.execute(
+                f"select id::text from public.{table} where id=%s", (rows[0],),
+            ).fetchone() == (str(rows[0]),)
+            assert authenticated.execute(
+                f"select id from public.{table} where id=%s", (rows[1],),
+            ).fetchone() is None
+            assignment = f"{parent_key}=%s"
+            values = (parents[1], rows[0])
+            if table == "automation_executions":
+                assignment = "automation_id=%s, organization_id=%s"
+                values = (parents[1], two_tenants.b.id, rows[0])
+            elif table == "whatsapp_campaign_recipients":
+                assignment = f"campaign_id=%s::{key_type}"
+                values = (str(parents[1]), rows[0])
+            with pytest.raises(psycopg.errors.InsufficientPrivilege):
+                with authenticated.transaction():
+                    authenticated.execute(
+                        f"update public.{table} set {assignment} where id=%s", values,
+                    )
+    finally:
+        for row in rows:
+            admin.execute(f"delete from public.{table} where id=%s", (row,))
 
 
 def test_email_universal_usage_final_contract(admin):

@@ -1268,4 +1268,18 @@ begin
 end
 $$;
 
+drop policy if exists org_via_pai on public.whatsapp_campaign_recipients;
+create policy org_via_pai on public.whatsapp_campaign_recipients
+  as permissive for all to authenticated
+  using (exists (
+    select 1
+      from public.whatsapp_campaigns p
+     where p.id::text = whatsapp_campaign_recipients.campaign_id::text
+  ))
+  with check (exists (
+    select 1
+      from public.whatsapp_campaigns p
+     where p.id::text = whatsapp_campaign_recipients.campaign_id::text
+  ));
+
 commit;
