@@ -51,6 +51,15 @@ const effects = vi.hoisted(() => {
     enqueueWhatsAppWebhook: vi.fn(async () => undefined),
     enqueueWhatsAppAiRespond: vi.fn(async () => undefined),
     quarantineStuckSending: vi.fn(async () => 0),
+    sendAlert: vi.fn(async () => undefined),
+    checkAndAlertMessagingLimits: vi.fn(async () => ({ checked: 0, alerted: 0 })),
+    checkAndAlertQualityRating: vi.fn(async () => ({ checked: 0, alerted: 0 })),
+    campaignQueueGetStats: vi.fn(async () => ({ pending: 0 })),
+    campaignQueueGetOldestPendingAgeMs: vi.fn(async () => null),
+    getWorkerHeartbeatAgeMs: vi.fn(async () => null),
+    evaluateWorkerHealth: vi.fn(() => ({ healthy: true })),
+    wlogError: vi.fn(),
+    wlogWarn: vi.fn(),
     reserve: vi.fn(async () => []),
     complete: vi.fn(async () => undefined),
     fail: vi.fn(async () => ({ retrying: false, nextAttemptAt: null })),
@@ -118,6 +127,24 @@ vi.mock('@/lib/queue', () => ({
 }))
 vi.mock('@/lib/whatsapp/recipient-claim', () => ({
   quarantineStuckSending: effects.quarantineStuckSending,
+}))
+vi.mock('@/lib/whatsapp/alerts', () => ({
+  sendAlert: effects.sendAlert,
+  checkAndAlertMessagingLimits: effects.checkAndAlertMessagingLimits,
+  checkAndAlertQualityRating: effects.checkAndAlertQualityRating,
+}))
+vi.mock('@/lib/whatsapp/queue', () => ({
+  campaignQueue: {
+    getStats: effects.campaignQueueGetStats,
+    getOldestPendingAgeMs: effects.campaignQueueGetOldestPendingAgeMs,
+  },
+}))
+vi.mock('@/lib/whatsapp/worker-heartbeat', () => ({
+  getWorkerHeartbeatAgeMs: effects.getWorkerHeartbeatAgeMs,
+  evaluateWorkerHealth: effects.evaluateWorkerHealth,
+}))
+vi.mock('@/lib/observability/whatsapp-logger', () => ({
+  wlog: { error: effects.wlogError, warn: effects.wlogWarn },
 }))
 vi.mock('@/lib/queue/durable-queue', () => ({
   reserve: effects.reserve,
@@ -209,6 +236,13 @@ refusesWithoutSecret('cron-header-fallback-1', [
   'prune-whatsapp-webhook-events',
   'reset-daily-whatsapp-counters',
   'reprocess-whatsapp-pending',
+])
+
+refusesWithoutSecret('cron-header-fallback-2', [
+  'whatsapp-dead-alert',
+  'whatsapp-messaging-limit-check',
+  'whatsapp-quality-check',
+  'whatsapp-webhook-heartbeat',
 ])
 
 describe('configured Bearer reaches the existing business seam', () => {
@@ -309,5 +343,16 @@ describe('configured Bearer reaches the existing business seam', () => {
 
     expect(response.status).not.toBe(401)
     expect(effects.quarantineStuckSending).toHaveBeenCalled()
+  })
+
+  it('reaches WhatsApp quality checks with a configured Bearer', async () => {
+    vi.stubEnv('CRON_SECRET', 's3cret')
+    const load = routes['../app/api/cron/whatsapp-quality-check/route.ts']
+    const handlers = await load() as Record<string, (req: NextRequest) => Promise<Response>>
+
+    const response = await handlers.GET(request('GET', { authorization: 'Bearer s3cret' }))
+
+    expect(response.status).not.toBe(401)
+    expect(effects.checkAndAlertQualityRating).toHaveBeenCalled()
   })
 })
