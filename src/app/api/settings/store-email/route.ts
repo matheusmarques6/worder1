@@ -130,6 +130,14 @@ export async function PATCH(request: NextRequest) {
   }
 
   // Domínio dos links (tracking): opcional; vazio remove.
+  //
+  // Formato certo não basta: o subdomínio precisa APONTAR PARA O WORDER.
+  // Um CNAME apontado para o lugar errado — o subdomínio de rastreamento
+  // do provedor de envio, por exemplo — mata todo clique de todo e-mail
+  // desta loja em silêncio. Salvamos assim mesmo (DNS demora a propagar,
+  // e barrar a gravação prenderia o lojista), mas devolvemos o aviso
+  // para a tela dizer na hora.
+  let avisoDoDominio: { titulo: string; detalhe: string; acao: string } | null = null;
   if (incoming.tracking_domain !== undefined) {
     const raw = String(incoming.tracking_domain || '').trim();
     if (!raw) {
@@ -138,6 +146,16 @@ export async function PATCH(request: NextRequest) {
       const td = normalizeTrackingDomain(raw);
       if (!td) return NextResponse.json({ error: 'Domínio de links inválido. Use algo como links.sualoja.com.br' }, { status: 400 });
       patch.tracking_domain = td;
+
+      try {
+        const { verificarHostDeLinks } = await import('@/lib/email/tracking-host-probe-run');
+        const veredito = await verificarHostDeLinks(td);
+        if (!veredito.ok) {
+          avisoDoDominio = { titulo: veredito.titulo, detalhe: veredito.detalhe, acao: veredito.acao };
+        }
+      } catch {
+        // Sonda é melhor esforço: não impede salvar.
+      }
     }
   }
 
@@ -228,5 +246,7 @@ export async function PATCH(request: NextRequest) {
     email_settings: finalSettings,
     shared_domain: sharedSenderDomain(),
     is_shared_domain: isSharedDomainEmail(finalSettings.default_sender_email),
+    // Salvou, mas o domínio ainda não atende pelo Worder.
+    aviso: avisoDoDominio,
   });
 }

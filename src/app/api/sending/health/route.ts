@@ -17,6 +17,7 @@ import { allowanceStatus } from '@/lib/email/shared-domain-allowance'
 import { isSharedDomainEmail } from '@/lib/email/shared-sender'
 import { resolveTrackingBaseUrl, platformTrackingBaseUrl } from '@/lib/email/tracking-url'
 import { imagemMaisRecenteDaOrg, sondarMediaComCache } from '@/lib/media/probe-run'
+import { verificarHostDeLinks } from '@/lib/email/tracking-host-probe-run'
 import { getAppBaseUrl } from '@/lib/app-url'
 
 export const dynamic = 'force-dynamic'
@@ -133,6 +134,12 @@ export async function GET(request: NextRequest) {
   // CDN que responde), então vale por 5 minutos e nunca derruba o painel.
   const media = await sondarMediaComCache(() => imagemMaisRecenteDaOrg(admin, orgId))
 
+  // O domínio dos links é um CNAME que alguém configurou: perguntar a
+  // ele é a única forma de saber se o clique do cliente chega no Worder.
+  const linksOk = trackingHost.source === 'app'
+    ? null
+    : await verificarHostDeLinks(trackingHost.url).catch(() => null)
+
   const issues = buildSendingIssues({
     sender: {
       email: senderEmail,
@@ -155,6 +162,7 @@ export async function GET(request: NextRequest) {
     },
     whatsapp,
     trackingHost,
+    hostDeLinks: linksOk || undefined,
     imagens: media
       ? { ...media.veredito, diagnostico: media.veredito.diagnostico }
       : undefined,

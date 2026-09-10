@@ -27,13 +27,25 @@
 //   4. getAppBaseUrl()
 //        último recurso, para o link nunca sair relativo (Gmail descarta).
 //
-// Todos os hosts são CNAME para o próprio app, então as MESMAS rotas
+// Todos os hosts são CNAME para o PRÓPRIO APP, então as MESMAS rotas
 // /api/t/* e /api/public/* atendem em qualquer um deles: trocar de host
 // não muda uma linha de servidor.
+//
+// E é exatamente aí que mora a armadilha que quebrou todos os links de
+// todos os e-mails: o subdomínio precisa apontar para o APP, e não pode
+// ser o mesmo que o provedor de envio usa como domínio de rastreamento
+// DELE (no Resend, o campo "Enable tracking metrics"). Quem atende ali
+// é o provedor, que não conhece /api/t/c/… e responde 400 — cada clique
+// do cliente termina numa página de erro, sem nenhum aviso de cá.
+//
+// Por isso a resolução tem um último passo: um host que já se provou
+// quebrado (sonda em /api/t/ping) é descartado em favor do domínio do
+// app. Link feio funcionando é melhor do que link bonito morto.
 // =============================================
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getAppBaseUrl } from '@/lib/app-url';
+import { hostDeLinksReprovado } from './tracking-host-probe-run';
 
 const cache = new Map<string, { url: string; ts: number }>();
 const CACHE_TTL_MS = 60_000;
@@ -101,14 +113,24 @@ export async function getTrackingBaseUrl(
     // Configuração é opcional — qualquer falha cai no padrão da plataforma.
   }
 
-  const { url } = resolveTrackingBaseUrl({
+  const appBaseUrl = getAppBaseUrl();
+  const { url, source } = resolveTrackingBaseUrl({
     storeDomain,
     orgDomain,
     platformDomain: platformTrackingBaseUrl(),
-    appBaseUrl: getAppBaseUrl(),
+    appBaseUrl,
   });
-  cache.set(key, { url, ts: Date.now() });
-  return url;
+
+  // Rede de segurança: se a sonda já provou que ninguém do Worder atende
+  // naquele host, o link sai pelo domínio do app. Nunca esperamos a
+  // sonda aqui — quem manda e-mail não fica parado por causa disso.
+  const final = source !== 'app' && hostDeLinksReprovado(url) ? appBaseUrl : url;
+  if (final !== url) {
+    console.warn(`[TrackingUrl] ${url} não atende pelo Worder; links saem por ${final}`);
+  }
+
+  cache.set(key, { url: final, ts: Date.now() });
+  return final;
 }
 
 /** Só para os testes: o cache guarda por organização e loja. */

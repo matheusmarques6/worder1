@@ -102,6 +102,12 @@ export interface SendingHealthInput {
    */
   trackingHost?: { url: string; source: 'store' | 'organization' | 'platform' | 'app' }
   /**
+   * Resultado da sonda do domínio dos links: um CNAME apontado para o
+   * lugar errado (o subdomínio de rastreamento do provedor de envio, por
+   * exemplo) mata TODO clique de TODO e-mail em silêncio.
+   */
+  hostDeLinks?: { ok: boolean; titulo: string; detalhe: string; acao: string; diagnostico: string }
+  /**
    * Resultado da sonda das imagens do e-mail. Quando o host da CDN ou o
    * transformador de imagens está fora, TODO e-mail com imagem do editor
    * chega com retângulos vazios — e nada, do lado do envio, acusa: o
@@ -183,6 +189,20 @@ export function buildSendingIssues(input: SendingHealthInput): SendingIssue[] {
       title: 'Links no nosso domínio, remetente no seu',
       detail: 'Seu domínio de envio está verificado, mas os links do e-mail ainda saem por um domínio nosso. Alinhar os dois é o que fecha a conta da reputação.',
       action: 'Aponte um CNAME (ex.: links.sualoja.com.br) e salve em Configurações → E-mail.',
+      href: '/settings/email',
+    })
+  }
+
+  // ── O domínio dos links atende pelo Worder? ──
+  // Vem antes das imagens de propósito: link morto é pior do que imagem
+  // faltando — o cliente clica, cai em erro, e a venda morre ali.
+  const hl = input.hostDeLinks
+  if (hl && !hl.ok && hl.diagnostico !== 'nao_verificado') {
+    issues.push({
+      level: 'error', kind: `links_${hl.diagnostico}`, channel: 'email', subject: null,
+      title: hl.titulo,
+      detail: hl.detalhe,
+      action: hl.acao,
       href: '/settings/email',
     })
   }
