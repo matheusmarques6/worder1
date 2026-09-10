@@ -1,0 +1,126 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { NextRequest } from 'next/server'
+
+const effects = vi.hoisted(() => {
+  const queryResult = { data: [], error: null, count: 0 }
+  let chain: any
+  chain = new Proxy({}, {
+    get: (_target, property) => {
+      if (property === 'then') {
+        return (resolve: (value: typeof queryResult) => void) => resolve(queryResult)
+      }
+      return () => chain
+    },
+  })
+
+  return {
+    chain,
+    from: vi.fn(() => chain),
+    rpc: vi.fn(async () => queryResult),
+    dispatchTrigger: vi.fn(async () => undefined),
+    resolveSegment: vi.fn(async () => ({ contactIds: [] })),
+    detectSegmentChanges: vi.fn(async () => ({ processed: 0 })),
+    reserve: vi.fn(async () => []),
+    complete: vi.fn(async () => undefined),
+    fail: vi.fn(async () => ({ retrying: false, nextAttemptAt: null })),
+    stats: vi.fn(async () => null),
+    isQueueAvailable: vi.fn(() => false),
+  }
+})
+
+vi.mock('@/lib/supabase-admin', () => ({
+  supabaseAdmin: { from: effects.from, rpc: effects.rpc },
+  getSupabaseAdmin: () => ({ from: effects.from, rpc: effects.rpc }),
+}))
+vi.mock('@/lib/automation/trigger-dispatcher', () => ({
+  dispatchTrigger: effects.dispatchTrigger,
+}))
+vi.mock('@/lib/segments', () => ({
+  resolveSegment: effects.resolveSegment,
+}))
+vi.mock('@/lib/segments/change-detection', () => ({
+  detectSegmentChanges: effects.detectSegmentChanges,
+}))
+vi.mock('@/lib/queue/durable-queue', () => ({
+  reserve: effects.reserve,
+  complete: effects.complete,
+  fail: effects.fail,
+  stats: effects.stats,
+  isQueueAvailable: effects.isQueueAvailable,
+}))
+
+const routes = import.meta.glob('../app/api/cron/*/route.ts')
+const sideEffects = Object.values(effects).filter(value => typeof value === 'function')
+
+function request(method: string, headers: Record<string, string>) {
+  return new NextRequest('http://localhost/api/cron/test', { method, headers })
+}
+
+function expectNoSideEffects() {
+  for (const effect of sideEffects) {
+    expect(effect).not.toHaveBeenCalled()
+  }
+}
+
+function refusesWithoutSecret(batch: string, names: string[]) {
+  describe(batch, () => {
+    it.each(names)('%s denies anonymous and forged cron headers before I/O', async name => {
+      const load = routes['../app/api/cron/' + name + '/route.ts']
+      expect(load).toBeTypeOf('function')
+      const handlers = await load() as Record<string, (req: NextRequest) => Promise<Response>>
+
+      for (const method of ['GET', 'POST']) {
+        if (!handlers[method]) continue
+        for (const headers of [{}, { 'x-vercel-cron': '1' }]) {
+          vi.clearAllMocks()
+          const response = await handlers[method](request(method, headers))
+          expect(response.status).toBe(401)
+          expectNoSideEffects()
+        }
+      }
+    })
+  })
+}
+
+beforeEach(() => {
+  vi.stubEnv('NODE_ENV', 'development')
+  vi.stubEnv('CRON_SECRET', '')
+  vi.stubGlobal('fetch', vi.fn())
+})
+
+afterEach(() => {
+  vi.unstubAllEnvs()
+  vi.unstubAllGlobals()
+  vi.clearAllMocks()
+})
+
+refusesWithoutSecret('cron-secret-fallback-1', [
+  'check-back-in-stock',
+  'check-inactivity',
+  'detect-segment-changes',
+  'email-queue-worker',
+])
+
+describe('configured Bearer reaches the existing business seam', () => {
+  it('reaches Supabase for a database-backed handler', async () => {
+    vi.stubEnv('CRON_SECRET', 's3cret')
+    const load = routes['../app/api/cron/check-back-in-stock/route.ts']
+    const handlers = await load() as Record<string, (req: NextRequest) => Promise<Response>>
+
+    const response = await handlers.GET(request('GET', { authorization: 'Bearer s3cret' }))
+
+    expect(response.status).not.toBe(401)
+    expect(effects.from).toHaveBeenCalled()
+  })
+
+  it('reaches the queue adapter for a service-backed handler', async () => {
+    vi.stubEnv('CRON_SECRET', 's3cret')
+    const load = routes['../app/api/cron/email-queue-worker/route.ts']
+    const handlers = await load() as Record<string, (req: NextRequest) => Promise<Response>>
+
+    const response = await handlers.GET(request('GET', { authorization: 'Bearer s3cret' }))
+
+    expect(response.status).not.toBe(401)
+    expect(effects.isQueueAvailable).toHaveBeenCalled()
+  })
+})
