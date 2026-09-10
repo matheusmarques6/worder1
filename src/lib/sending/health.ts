@@ -190,8 +190,11 @@ export function buildSendingIssues(input: SendingHealthInput): SendingIssue[] {
   // ── As imagens do e-mail carregam? ──
   const img = input.imagens
   if (img && !img.ok && img.diagnostico !== 'sem_imagens' && img.diagnostico !== 'sem_host') {
+    // Quebrar só onde há Referer (pré-visualização, alguns webmails) é
+    // ruim, mas o e-mail entregue está certo: isso é aviso, não erro.
+    const level: HealthLevel = img.diagnostico === 'hotlink_so_no_painel' ? 'warn' : 'error'
     issues.push({
-      level: 'error', kind: 'imagens_quebradas', channel: 'email', subject: null,
+      level, kind: `imagens_${img.diagnostico}`, channel: 'email', subject: null,
       title: img.titulo,
       detail: img.detalhe,
       action: img.acao,

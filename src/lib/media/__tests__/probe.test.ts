@@ -53,6 +53,36 @@ describe('classificação da sonda de imagens', () => {
     expect(v.diagnostico).toBe('storage_fora')
   })
 
+  it('recusa o proxy do Gmail: o e-mail chegou vazio', () => {
+    const v = classificarMedia(
+      { cdn_render: ok('https://cdn/render'), cdn_object: ok('https://cdn/object') },
+      { proxy: falha('https://cdn/render', 403), pagina: falha('https://cdn/render', 403) },
+    )
+    expect(v.ok).toBe(false)
+    expect(v.diagnostico).toBe('hotlink_bloqueado')
+    expect(v.detalhe).toContain('Gmail')
+    expect(v.acao).toContain('bot')
+  })
+
+  it('proxy passa e Referer de outra página é barrado: só a tela quebra', () => {
+    const v = classificarMedia(
+      { cdn_render: ok('https://cdn/render') },
+      { proxy: ok('https://cdn/render'), pagina: falha('https://cdn/render', 403) },
+    )
+    expect(v.diagnostico).toBe('hotlink_so_no_painel')
+    expect(v.detalhe).toContain('o e-mail entregue está')
+    expect(v.acao).toContain('Hotlink')
+  })
+
+  it('os três contextos respondendo: aí sim está tudo certo', () => {
+    const v = classificarMedia(
+      { cdn_render: ok('https://cdn/render') },
+      { proxy: ok('https://cdn/render'), pagina: ok('https://cdn/render') },
+    )
+    expect(v.ok).toBe(true)
+    expect(v.diagnostico).toBe('ok')
+  })
+
   it('sem sonda nenhuma não inventa diagnóstico', () => {
     expect(classificarMedia({}).diagnostico).toBe('sem_host')
   })

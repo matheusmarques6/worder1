@@ -12,6 +12,7 @@ import {
   type MediaRota,
   type MediaVeredito,
   type SondaResultado,
+  type SondasEmbutidas,
 } from './probe'
 
 const TIMEOUT_MS = 4000
@@ -46,7 +47,7 @@ function decodeSafe(seg: string): string {
   try { return decodeURIComponent(seg) } catch { return seg }
 }
 
-async function bater(url: string): Promise<SondaResultado> {
+async function bater(url: string, extras: Record<string, string> = {}): Promise<SondaResultado> {
   const ctrl = new AbortController()
   const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS)
   try {
@@ -55,7 +56,7 @@ async function bater(url: string): Promise<SondaResultado> {
     // pior do que não sondar.
     const res = await fetch(url, {
       method: 'GET',
-      headers: { Range: 'bytes=0-0', Accept: 'image/*' },
+      headers: { Range: 'bytes=0-0', Accept: 'image/*', ...extras },
       signal: ctrl.signal,
       cache: 'no-store',
     })
@@ -69,8 +70,28 @@ async function bater(url: string): Promise<SondaResultado> {
 
 export interface SondaCompleta {
   sondas: Partial<Record<MediaRota, SondaResultado>>
+  /** A mesma URL em uso, pedida como o proxy do Gmail e como outra página. */
+  embutido?: SondasEmbutidas
   veredito: MediaVeredito
   amostra: string | null
+}
+
+// Os dois contextos que embutem a imagem NÃO pedem igual, e a diferença
+// entre eles decide se o e-mail chegou vazio ou se só a nossa tela está
+// mentindo (ver o cabeçalho de probe.ts):
+//
+//   proxy do Gmail  → User-Agent de robô, NENHUM Referer;
+//   outra página    → Referer do site onde o e-mail está sendo mostrado.
+const CABECALHO_DE_PROXY = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 5.1; rv:11.0) Gecko Firefox/11.0 (via ggpht.com GoogleImageProxy)',
+  Accept: 'image/*',
+}
+
+const CABECALHO_DE_PAGINA = {
+  Referer: 'https://exemplo-preview.test/emails/1',
+  'User-Agent':
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36',
+  Accept: 'image/avif,image/webp,image/*',
 }
 
 export async function sondarMedia(storagePath: string | null): Promise<SondaCompleta> {
@@ -95,7 +116,16 @@ export async function sondarMedia(storagePath: string | null): Promise<SondaComp
   const sondas: Partial<Record<MediaRota, SondaResultado>> = {}
   entradas.forEach(([rota], i) => { sondas[rota] = resultados[i] })
 
-  return { sondas, veredito: classificarMedia(sondas), amostra: storagePath }
+  // A URL que o e-mail realmente usa, agora nos dois contextos que embutem.
+  const urlEmUso = urls.cdn_render || urls.supabase_render || urls.cdn_object || urls.supabase_object
+  const embutido: SondasEmbutidas | undefined = urlEmUso
+    ? {
+        proxy: await bater(urlEmUso, CABECALHO_DE_PROXY),
+        pagina: await bater(urlEmUso, CABECALHO_DE_PAGINA),
+      }
+    : undefined
+
+  return { sondas, embutido, veredito: classificarMedia(sondas, embutido), amostra: storagePath }
 }
 
 // ── Cache: o host é o mesmo para toda a plataforma; sondar a cada

@@ -27,7 +27,7 @@ async function resolver(html: string) {
   return resolveProductBlocks(html, 'org-1', undefined, undefined, null)
 }
 
-beforeEach(() => vi.resetModules())
+beforeEach(() => { vi.resetModules() })
 
 describe('bloco de produtos no envio', () => {
   it('o botão sai com o texto legível, não codificado', async () => {

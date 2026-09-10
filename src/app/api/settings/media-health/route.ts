@@ -24,8 +24,8 @@ export async function GET() {
 
   try {
     const caminho = await imagemMaisRecenteDaOrg(admin, orgId)
-    const { sondas, veredito, amostra } = await sondarMedia(caminho)
-    return NextResponse.json({ ...veredito, amostra, sondas })
+    const { sondas, embutido, veredito, amostra } = await sondarMedia(caminho)
+    return NextResponse.json({ ...veredito, amostra, sondas, embutido })
   } catch (e: any) {
     console.error('[MediaHealth] falhou:', e)
     return NextResponse.json({ error: e?.message || 'Falha ao verificar as imagens' }, { status: 500 })

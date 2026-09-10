@@ -73,3 +73,51 @@ describe('diagnóstico das imagens de e-mail', () => {
     expect(chamada[1].headers.Range).toBe('bytes=0-0')
   })
 })
+
+describe('a sonda que imita o proxy do Gmail', () => {
+  it('pede a imagem em uso como o proxy do Gmail: robô e SEM Referer', async () => {
+    listas['org-1'] = [{ name: 'foto.png', id: 'x' }]
+    await get()
+    const chamadas = (globalThis.fetch as any).mock.calls
+    const comoProxy = chamadas.filter((c: any[]) =>
+      String(c[1]?.headers?.['User-Agent'] || '').includes('GoogleImageProxy'))
+    expect(comoProxy).toHaveLength(1)
+    // O Gmail não manda Referer — mandar aqui esconderia o hotlink.
+    expect(comoProxy[0][1].headers.Referer).toBeUndefined()
+    // É a MESMA URL que o e-mail usa — a do /render, não outra.
+    expect(comoProxy[0][0]).toContain('/render/image/public/')
+  })
+
+  it('pede a mesma imagem como outra página pediria: com Referer', async () => {
+    listas['org-1'] = [{ name: 'foto.png', id: 'x' }]
+    await get()
+    const chamadas = (globalThis.fetch as any).mock.calls
+    const comoPagina = chamadas.filter((c: any[]) => c[1]?.headers?.Referer)
+    expect(comoPagina).toHaveLength(1)
+    expect(comoPagina[0][0]).toContain('/render/image/public/')
+  })
+
+  it('recusada para o proxy do Gmail: o e-mail chegou vazio', async () => {
+    listas['org-1'] = [{ name: 'foto.png', id: 'x' }]
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: any) => {
+      const ehRobo = String(init?.headers?.['User-Agent'] || '').includes('GoogleImageProxy')
+      return new Response(null, { status: ehRobo ? 403 : 200 })
+    }))
+    const { body } = await get()
+    expect(body.diagnostico).toBe('hotlink_bloqueado')
+    expect(body.ok).toBe(false)
+    expect(body.embutido.proxy.status).toBe(403)
+  })
+
+  it('recusada só para quem manda Referer: o e-mail está bom, a tela é que quebra', async () => {
+    listas['org-1'] = [{ name: 'foto.png', id: 'x' }]
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: any) => {
+      const temReferer = Boolean(init?.headers?.Referer)
+      return new Response(null, { status: temReferer ? 403 : 200 })
+    }))
+    const { body } = await get()
+    expect(body.diagnostico).toBe('hotlink_so_no_painel')
+    expect(body.embutido.proxy.ok).toBe(true)
+    expect(body.embutido.pagina.status).toBe(403)
+  })
+})
