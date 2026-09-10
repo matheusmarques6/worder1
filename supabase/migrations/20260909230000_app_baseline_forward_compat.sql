@@ -1282,4 +1282,76 @@ create policy org_via_pai on public.whatsapp_campaign_recipients
      where p.id::text = whatsapp_campaign_recipients.campaign_id::text
   ));
 
+-- 091000 enabled RLS on these existing runtime dependencies. Restore the
+-- operation-specific policies for the roles that already held narrow grants.
+drop policy if exists ai_agents_worker_read on public.ai_agents;
+create policy ai_agents_worker_read on public.ai_agents
+  as permissive for select to worker_role
+  using (organization_id = public.current_app_organization_id());
+
+drop policy if exists ai_agent_versions_worker_read on public.ai_agent_versions;
+create policy ai_agent_versions_worker_read on public.ai_agent_versions
+  as permissive for select to worker_role
+  using (organization_id = public.current_app_organization_id());
+
+drop policy if exists ai_agent_sources_worker_read on public.ai_agent_sources;
+create policy ai_agent_sources_worker_read on public.ai_agent_sources
+  as permissive for select to worker_role
+  using (organization_id = public.current_app_organization_id());
+
+drop policy if exists ai_agent_chunks_worker_read on public.ai_agent_chunks;
+create policy ai_agent_chunks_worker_read on public.ai_agent_chunks
+  as permissive for select to worker_role
+  using (organization_id = public.current_app_organization_id());
+
+drop policy if exists shopify_stores_worker_read on public.shopify_stores;
+create policy shopify_stores_worker_read on public.shopify_stores
+  as permissive for select to worker_role
+  using (organization_id = public.current_app_organization_id());
+
+drop policy if exists shopify_orders_worker_read on public.shopify_orders;
+create policy shopify_orders_worker_read on public.shopify_orders
+  as permissive for select to worker_role
+  using (organization_id = public.current_app_organization_id());
+
+drop policy if exists organization_api_keys_worker_read on public.organization_api_keys;
+create policy organization_api_keys_worker_read on public.organization_api_keys
+  as permissive for select to worker_role
+  using (organization_id = public.current_app_organization_id());
+
+drop policy if exists organizations_app_read on public.organizations;
+create policy organizations_app_read on public.organizations
+  as permissive for select to worker_role, sender_role
+  using (id = public.current_app_organization_id());
+
+drop policy if exists ai_usage_logs_worker_insert on public.ai_usage_logs;
+create policy ai_usage_logs_worker_insert on public.ai_usage_logs
+  as permissive for insert to worker_role
+  with check (organization_id = public.current_app_organization_id());
+
+-- These three views are a service-only boundary over the private schema.
+-- Invoker mode removed service_role's deliberate view-only access.
+alter view public.ai_runtime_activity set (security_invoker = off);
+alter view public.ai_runtime_activity_calls set (security_invoker = off);
+alter view public.ai_runtime_activity_tools set (security_invoker = off);
+
+grant select, insert, update, delete on
+  public.shopify_products,
+  public.api_keys,
+  public.email_templates,
+  public.deals,
+  public.deal_activities,
+  public.events,
+  public.pipeline_stage_transitions,
+  public.email_clicks,
+  public.automation_executions,
+  public.automation_versions,
+  public.automation_run_steps,
+  public.automation_pending_steps,
+  public.whatsapp_campaign_recipients
+to authenticated, service_role;
+
+grant select on public.shopify_stores to authenticated;
+grant select on public.email_universal_usage to service_role;
+
 commit;

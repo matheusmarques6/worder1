@@ -4,11 +4,10 @@ Três credenciais alcançam os dados — JWT do usuário, worker_role e
 sender_role — e cada uma tem que ficar confinada à sua organização.
 **Qualquer linha lida ou afetada reprova a suíte.**
 
-Nota de escopo (Adendo §A.4.6): as tabelas LEGADAS (ai_agents,
-ai_agent_versions, ai_agent_chunks…) seguem com RLS desligada no banco vivo —
-remediação pendente de aprovação. Por isso o RAG do runtime escopa por
-organization_id EXPLÍCITO na query (desvio declarado no FORK.md), e esta
-suíte afirma as tabelas NOVAS: ai_missions, alerts e a trilha internal.*.
+O fechamento de schema liga RLS também nas tabelas legadas consumidas pelo
+runtime. Esta suíte mantém a prova ponta a ponta das tabelas novas e verifica
+o acesso mínimo do worker às dependências legadas que resolvem organização e
+chaves BYO.
 """
 
 import uuid
@@ -138,15 +137,34 @@ class TestWriteIsConfinedToOneOrg:
 class TestTheLegitimatePathStillWorks:
     """Fronteira que também bloqueia o dono não é segurança, é indisponibilidade."""
 
-    def test_the_worker_reads_its_own_active_mission(
-        self, dsn: str, two_tenants: TwoTenants, e2_rows: dict
+    def test_the_worker_reads_only_its_own_runtime_dependencies(
+        self, dsn: str, admin: psycopg.Connection, two_tenants: TwoTenants, e2_rows: dict
     ) -> None:
+        own_key, other_key = uuid.uuid4(), uuid.uuid4()
+        admin.execute(
+            """insert into public.organization_api_keys
+                 (id, organization_id, provider, api_key)
+               values (%s, %s, 'test-provider', 'test-fixture-not-a-secret'),
+                      (%s, %s, 'test-provider', 'test-fixture-not-a-secret')""",
+            (own_key, two_tenants.a.id, other_key, two_tenants.b.id),
+        )
+
         with as_app_role(dsn, "worker_role", two_tenants.a.id) as conn:
-            rows = conn.execute(
+            missions = conn.execute(
                 "select id from public.ai_missions where status = 'active'"
             ).fetchall()
+            organizations = conn.execute(
+                "select id from public.organizations where id in (%s, %s) order by id",
+                (two_tenants.a.id, two_tenants.b.id),
+            ).fetchall()
+            api_keys = conn.execute(
+                "select id from public.organization_api_keys where id in (%s, %s) order by id",
+                (own_key, other_key),
+            ).fetchall()
 
-        assert [row[0] for row in rows] == [e2_rows["a"].mission_id]
+        assert [row[0] for row in missions] == [e2_rows["a"].mission_id]
+        assert organizations == [(two_tenants.a.id,)]
+        assert api_keys == [(own_key,)]
 
     def test_the_user_reads_the_missions_of_their_own_org(
         self, dsn: str, two_tenants: TwoTenants, e2_rows: dict

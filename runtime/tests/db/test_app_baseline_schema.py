@@ -833,9 +833,9 @@ REPLAY_DEPENDENCY_CONSTRAINTS = {
         "'custom'::text]))",
     },
     "automation_executions": {
-        "CHECK ((status)::text = ANY ((ARRAY['running'::character varying, "
+        "CHECK (status::text = ANY (ARRAY['running'::character varying, "
         "'success'::character varying, 'error'::character varying, 'waiting'::character "
-        "varying, 'cancelled'::character varying])::text[]))",
+        "varying, 'cancelled'::character varying]::text[]))",
     },
     "automation_versions": {"UNIQUE (automation_id, version)"},
     "automation_run_steps": {
@@ -847,11 +847,11 @@ REPLAY_DEPENDENCY_CONSTRAINTS = {
         "'cancelled'::text]))",
     },
     "whatsapp_campaign_recipients": {
-        "CHECK ((status)::text = ANY ((ARRAY['pending'::character varying, "
+        "CHECK (status::text = ANY (ARRAY['pending'::character varying, "
         "'queued'::character varying, 'sending'::character varying, 'sent'::character varying, "
         "'delivered'::character varying, 'read'::character varying, 'clicked'::character "
         "varying, 'replied'::character varying, 'failed'::character varying, "
-        "'skipped'::character varying])::text[]))",
+        "'skipped'::character varying]::text[]))",
     },
 }
 
@@ -991,6 +991,7 @@ def test_child_replay_dependencies_have_the_exact_parent_policy(
 @pytest.mark.parametrize("table", (
     "deals", "deal_activities", "events", "pipeline_stage_transitions",
 ))
+@pytest.mark.rls
 def test_crm_replay_dependencies_enforce_store_scope(dsn, admin, two_tenants, table):
     rows = []
     stores = []
@@ -1087,6 +1088,7 @@ def test_crm_replay_dependencies_enforce_store_scope(dsn, admin, two_tenants, ta
     ("automation_pending_steps", "run_id"),
     ("whatsapp_campaign_recipients", "campaign_id"),
 ))
+@pytest.mark.rls
 def test_child_replay_dependencies_enforce_parent_scope(
         dsn, admin, two_tenants, table, parent_key):
     parents = []
@@ -1211,8 +1213,12 @@ def test_email_universal_usage_final_contract(admin):
         "email_universal_usage"
     )
     assert admin.execute(
-        "select reloptions from pg_class where oid='public.email_universal_usage'::regclass"
-    ).fetchone()[0] == ["security_invoker=true"]
+        """select option_value::boolean
+             from pg_class c,
+                  lateral pg_options_to_table(c.reloptions)
+            where c.oid='public.email_universal_usage'::regclass
+              and option_name='security_invoker'"""
+    ).fetchone() == (True,)
     assert admin.execute(
         """select column_name, data_type
              from information_schema.columns
@@ -1228,8 +1234,9 @@ def test_email_universal_usage_final_contract(admin):
     ]
     assert admin.execute(
         "select has_table_privilege('anon', 'public.email_universal_usage', 'select'), "
-        "has_table_privilege('authenticated', 'public.email_universal_usage', 'select')"
-    ).fetchone() == (False, False)
+        "has_table_privilege('authenticated', 'public.email_universal_usage', 'select'), "
+        "has_table_privilege('service_role', 'public.email_universal_usage', 'select')"
+    ).fetchone() == (False, False, True)
 
 
 def test_email_universal_usage_reads_current_and_legacy_design(admin):
@@ -1321,6 +1328,7 @@ def test_api_keys_accept_hash_only_rows(admin):
         ).fetchone() == (None, "a" * 64, "wrd_test_", ["events:write"])
 
 
+@pytest.mark.rls
 def test_api_keys_org_policy_hides_and_protects_other_tenant(dsn, admin, two_tenants):
     own_id = "40000000-0000-4000-8000-000000000001"
     other_id = "40000000-0000-4000-8000-000000000002"
