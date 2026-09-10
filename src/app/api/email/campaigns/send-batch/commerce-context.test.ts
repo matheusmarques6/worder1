@@ -66,7 +66,7 @@ describe('loadCampaignCommerceContext', () => {
 
     const expected =
       'email.ilike.' +
-      JSON.stringify('x\\%\\_\\\\",contact_id.not.is.null,(x@example.test') +
+      JSON.stringify('x\\%\\_\\\\",contact\\_id.not.is.null,(x@example.test') +
       ',contact_id.eq.' +
       contact.id
     expect(calls.shopify_orders.or).toEqual([expected])

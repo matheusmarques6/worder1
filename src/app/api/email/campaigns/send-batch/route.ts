@@ -21,6 +21,7 @@ import {
   renderMergeTags,
 } from '@/lib/email/render';
 import { renderDocumentToHtml } from '@/lib/email/render-html';
+import { loadCampaignCommerceContext } from './commerce-context';
 
 export const maxDuration = 300; // 5 minutes for batch processing
 
@@ -358,15 +359,14 @@ export async function POST(req: NextRequest) {
           }
         }
 
+        const { order: lastOrder, cart } = await loadCampaignCommerceContext(
+          supabaseAdmin,
+          organizationId,
+          campaign.store_id || null,
+          { id: contact.id, email: contact.email },
+        ) as { order: any; cart: any };
+
         // Resolve last order data (best-effort)
-        try {
-          const { data: lastOrder } = await supabaseAdmin
-            .from('shopify_orders')
-            .select('order_number, total_price, created_at, tracking_url, tracking_number, currency, line_items, financial_status')
-            .or(`email.ilike.${contact.email},contact_id.eq.${contact.id}`)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
           if (lastOrder) {
             mergeData.order_number = String(lastOrder.order_number || '');
             mergeData['order.number'] = mergeData.order_number;
@@ -386,18 +386,8 @@ export async function POST(req: NextRequest) {
             mergeData['order.tracking_number'] = mergeData.tracking_number;
             mergeData.order_currency = lastOrder.currency || 'BRL';
           }
-        } catch {}
 
         // Resolve checkout_url from latest abandoned cart (best-effort)
-        try {
-          const { data: cart } = await supabaseAdmin
-            .from('shopify_checkouts')
-            .select('recovery_url, total_price, currency, line_items')
-            .eq('status', 'abandoned')
-            .or(`email.eq.${contact.email},contact_id.eq.${contact.id}`)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
           if (cart) {
             if (cart.recovery_url) {
               mergeData.checkout_url = cart.recovery_url;
@@ -416,7 +406,6 @@ export async function POST(req: NextRequest) {
               mergeData.cart_item_count = String(items.length);
             }
           }
-        } catch {}
 
         // System tags
         mergeData.current_date = new Date().toLocaleDateString('pt-BR');
