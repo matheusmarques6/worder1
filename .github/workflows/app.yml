@@ -17,6 +17,7 @@ on:
       - "vitest.config.ts"
       - "tsconfig.json"
       - "tailwind.config.ts"
+      - ".github/workflows/runtime.yml"
       - ".github/workflows/app.yml"
   push:
     branches: ["**"]
@@ -28,6 +29,7 @@ on:
       - "vitest.config.ts"
       - "tsconfig.json"
       - "tailwind.config.ts"
+      - ".github/workflows/runtime.yml"
       - ".github/workflows/app.yml"
 
 concurrency:
