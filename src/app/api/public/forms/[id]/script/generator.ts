@@ -183,7 +183,7 @@ var shown=false,ck="_wf_"+FID;
 // keyframes moram aqui dentro porque animação não atravessa a fronteira.
 var ROOT=null,HOST=null;
 function $(id){try{if(ROOT){var e=ROOT.getElementById(id);if(e)return e}return document.getElementById(id)}catch(e){return null}}
-var BASE_CSS=":host{all:initial}*,*::before,*::after{box-sizing:border-box}@keyframes wfFade{from{opacity:0}to{opacity:1}}@keyframes wfSlide{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}.wf-pop{color:#111827;line-height:1.4;font-size:14px;-webkit-font-smoothing:antialiased;text-align:left}.wf-pop button,.wf-pop input,.wf-pop select,.wf-pop textarea{font:inherit;color:inherit;margin:0}.wf-pop input::placeholder{opacity:1}.wf-pop a{color:inherit}.wf-pop p,.wf-pop h1,.wf-pop h2,.wf-pop h3{margin:0}";
+var BASE_CSS=":host{all:initial}*,*::before,*::after{box-sizing:border-box}@keyframes wfFade{from{opacity:0}to{opacity:1}}@keyframes wfSlide{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}@keyframes wfHand{0%,100%{transform:translate(-5px,0) rotate(-8deg)}50%{transform:translate(5px,-2px) rotate(6deg)}}.wf-hand{animation:wfHand 1.5s ease-in-out infinite}@media (prefers-reduced-motion:reduce){.wf-hand{animation:none}}.wf-pop{color:#111827;line-height:1.4;font-size:14px;-webkit-font-smoothing:antialiased;text-align:left}.wf-pop button,.wf-pop input,.wf-pop select,.wf-pop textarea{font:inherit;color:inherit;margin:0}.wf-pop input::placeholder{opacity:1}.wf-pop a{color:inherit}.wf-pop p,.wf-pop h1,.wf-pop h2,.wf-pop h3{margin:0}";
 function mountRoot(target){
   var host=document.createElement("div");
   host.id="wf-host-"+FID;
@@ -741,6 +741,35 @@ function gameSegs(p){
 function gameBtn(p,def){
   return '<button type="submit" data-action="submit" style="box-sizing:border-box;margin:14px 0 0;padding:'+nv(p.paddingV,14)+'px '+nv(p.paddingH,28)+'px;background:'+sv(p.bgColor,"#F97316")+';color:'+sv(p.textColor,"#fff")+';font-size:'+nv(p.fontSize,15)+'px;font-weight:700;font-family:inherit;line-height:1.2;border:none;border-radius:'+nv(p.borderRadius,8)+'px;cursor:pointer;display:'+(p.fullWidth?"block":"inline-block")+';width:'+(p.fullWidth?"100%":"auto")+';transition:opacity .2s">'+esc(applyOffer(p.buttonText||def))+'</button>';
 }
+// A lâmina da raspadinha: gradiente diagonal + listras finas, no lugar
+// do cinza chapado. É o que faz o cartão PARECER raspável antes de
+// qualquer instrução — e é desenhada no canvas porque é ela que o dedo
+// vai apagar.
+//
+// O canvas é dimensionado em pixels de dispositivo: com width/height
+// fixos no HTML, a lâmina saía borrada em tela retina.
+function paintFoil(cv,cor,lw,lh){
+  if(!cv)return;
+  var cx=null;try{cx=cv.getContext?cv.getContext("2d"):null}catch(e){}
+  if(!cx)return;
+  var r=cv.getBoundingClientRect();
+  var dpr=Math.max(1,Math.min(2,window.devicePixelRatio||1));
+  var w=Math.max(1,Math.round((r.width||lw||300)*dpr));
+  var h=Math.max(1,Math.round((r.height||lh||160)*dpr));
+  cv.width=w;cv.height=h;
+  var g=cx.createLinearGradient(0,0,w,h);
+  g.addColorStop(0,wfShade(cor,20));g.addColorStop(.45,cor);g.addColorStop(.55,wfShade(cor,12));g.addColorStop(1,wfShade(cor,-16));
+  cx.fillStyle=g;cx.fillRect(0,0,w,h);
+  cx.globalAlpha=.10;cx.strokeStyle="#FFFFFF";cx.lineWidth=Math.max(1,dpr);
+  for(var x=-h;x<w+h;x+=Math.max(8,12*dpr)){cx.beginPath();cx.moveTo(x,0);cx.lineTo(x+h,h);cx.stroke()}
+  cx.globalAlpha=1;
+}
+function wfShade(hex,amt){
+  var m=/^#([0-9a-fA-F]{6})$/.exec(String(hex||""));if(!m)return String(hex||"#C0C6CF");
+  var n=parseInt(m[1],16),R=(n>>16)+amt,G=((n>>8)&255)+amt,B=(n&255)+amt;
+  function cl(v){return v<0?0:v>255?255:v}
+  return"#"+((1<<24)+(cl(R)<<16)+(cl(G)<<8)+cl(B)).toString(16).slice(1);
+}
 // Depois do envio: gira a roleta (ou libera a raspadinha) até o segmento
 // que o servidor sorteou, e só então chama done() — a etapa de sucesso.
 function playGameAnim(el,g,done){
@@ -761,27 +790,91 @@ function playGameAnim(el,g,done){
       return;
     }
     if(type==="scratch"){
-      var cv=$("wf-scr-c-"+gid),pz=$("wf-scr-p-"+gid),hint=$("wf-scr-h-"+gid);
+      var cv=$("wf-scr-c-"+gid),pz=$("wf-scr-p-"+gid),hint=$("wf-scr-h-"+gid),badge=$("wf-scr-b-"+gid);
       if(pz)pz.textContent=String(g.label||"");
       var cx=null;try{cx=cv&&cv.getContext?cv.getContext("2d"):null}catch(e){}
       // Sem canvas (navegador antigo, leitor de tela): revela direto.
-      if(!cv||!cx){if(cv)cv.style.display="none";end(1200);return}
-      var W=cv.width,H=cv.height,down=false,strokes=0;
-      function reveal(){if(fin)return;cv.style.transition="opacity .5s";cv.style.opacity="0";cv.style.pointerEvents="none";end(1100)}
-      function pos(ev){var r=cv.getBoundingClientRect(),t=ev.touches?ev.touches[0]:ev;return{x:(t.clientX-r.left)*W/Math.max(1,r.width),y:(t.clientY-r.top)*H/Math.max(1,r.height)}}
-      function check(){try{var d=cx.getImageData(0,0,W,H).data,c=0,tot=0;for(var k=3;k<d.length;k+=64){tot++;if(d[k]===0)c++}if(tot&&c/tot>0.45)reveal()}catch(e){reveal()}}
-      function scratch(ev){if(fin)return;if(ev.cancelable)ev.preventDefault();var q=pos(ev);cx.globalCompositeOperation="destination-out";cx.beginPath();cx.arc(q.x,q.y,Math.max(16,W/12),0,Math.PI*2);cx.fill();if(++strokes%6===0)check()}
+      if(!cv||!cx){if(cv)cv.style.display="none";if(badge)badge.style.display="none";end(1200);return}
+      if(!cv.width||!cv.height)paintFoil(cv,cv.getAttribute("data-cover")||"#C0C6CF");
+      var W=cv.width,H=cv.height,riscando=false,ultimo=null,passos=0,comecou=false,ocioso=null,auto=null;
+      // O pincel acompanha o tamanho do cartão: num cartão pequeno, um
+      // pincel fixo apagaria tudo num traço; num grande, levaria uma
+      // eternidade.
+      var pincel=Math.max(14,Math.min(W,H)/6);
       cv.style.cursor="grab";
-      function up(){down=false}
-      cv.addEventListener("mousedown",function(e){down=true;scratch(e)});
-      cv.addEventListener("mousemove",function(e){if(down)scratch(e)});
-      window.addEventListener("mouseup",up);
-      cv.addEventListener("touchstart",scratch,{passive:false});
-      cv.addEventListener("touchmove",scratch,{passive:false});
-      if(hint){hint.style.display="block";hint.addEventListener("click",function(e){e.preventDefault();reveal()})}
-      // Quem não raspa em 20 s vê o prêmio mesmo assim.
-      var auto=setTimeout(reveal,20000);
-      cleanup=function(){clearTimeout(auto);window.removeEventListener("mouseup",up)};
+      cv.setAttribute("data-scratchable","1");
+      function revelar(){
+        if(fin)return;
+        cv.style.transition="opacity .45s";cv.style.opacity="0";cv.style.pointerEvents="none";
+        if(badge)badge.style.opacity="0";
+        end(1050);
+      }
+      function ponto(ev){
+        var r=cv.getBoundingClientRect(),t=(ev.touches&&ev.touches[0])||ev;
+        return{x:(t.clientX-r.left)*W/Math.max(1,r.width),y:(t.clientY-r.top)*H/Math.max(1,r.height)};
+      }
+      // Quanto da lâmina já saiu. Amostra 1 pixel a cada 64 — o suficiente
+      // para a proporção e barato o bastante para rodar durante o arrasto.
+      function conferir(){
+        try{
+          var d=cx.getImageData(0,0,W,H).data,vazios=0,tot=0;
+          for(var k=3;k<d.length;k+=64){tot++;if(d[k]===0)vazios++}
+          if(tot&&vazios/tot>0.5)revelar();
+        }catch(e){revelar()}
+      }
+      // O traço é uma LINHA entre o ponto anterior e o atual, não um
+      // círculo solto por evento: com o dedo rápido, os arcos soltos
+      // deixavam buracos e a raspadinha parecia quebrada.
+      function traco(q){
+        cx.globalCompositeOperation="destination-out";
+        cx.lineCap="round";cx.lineJoin="round";cx.lineWidth=pincel*2;
+        if(ultimo){cx.beginPath();cx.moveTo(ultimo.x,ultimo.y);cx.lineTo(q.x,q.y);cx.stroke()}
+        cx.beginPath();cx.arc(q.x,q.y,pincel,0,Math.PI*2);cx.fill();
+        ultimo=q;
+      }
+      function adiarOcioso(){
+        if(ocioso)clearTimeout(ocioso);
+        // Começou a raspar e parou: já entendeu a brincadeira, abre o
+        // resto em vez de deixar o prêmio pela metade.
+        ocioso=setTimeout(revelar,6000);
+      }
+      function mover(ev){
+        if(fin||!riscando)return;
+        if(ev.cancelable)ev.preventDefault();
+        if(!comecou){
+          comecou=true;
+          cv.style.cursor="grabbing";
+          if(badge)badge.style.opacity="0";
+          if(auto){clearTimeout(auto);auto=null}
+          try{if(navigator.vibrate)navigator.vibrate(12)}catch(e){}
+          try{wfEmit("gameScratchStart",{game:"scratch"})}catch(e){}
+        }
+        traco(ponto(ev));
+        if(++passos%4===0)conferir();
+        adiarOcioso();
+      }
+      function comecar(ev){if(fin)return;riscando=true;ultimo=null;mover(ev)}
+      function soltar(){if(!riscando)return;riscando=false;ultimo=null;cv.style.cursor="grab";conferir()}
+      // Pointer Events cobre mouse, dedo e caneta com um caminho só, e o
+      // capture mantém o traço quando o dedo sai do cartão no meio.
+      if(window.PointerEvent){
+        cv.addEventListener("pointerdown",function(e){try{cv.setPointerCapture(e.pointerId)}catch(_e){}comecar(e)});
+        cv.addEventListener("pointermove",mover);
+        cv.addEventListener("pointerup",soltar);
+        cv.addEventListener("pointercancel",soltar);
+      }else{
+        cv.addEventListener("mousedown",comecar);
+        cv.addEventListener("mousemove",mover);
+        window.addEventListener("mouseup",soltar);
+        cv.addEventListener("touchstart",comecar,{passive:false});
+        cv.addEventListener("touchmove",mover,{passive:false});
+        cv.addEventListener("touchend",soltar);
+      }
+      // Quem não pode arrastar (teclado, leitor de tela) tem o atalho.
+      if(hint){hint.style.display="block";hint.addEventListener("click",function(e){e.preventDefault();revelar()})}
+      // Quem nunca encostou vê o prêmio mesmo assim.
+      auto=setTimeout(revelar,20000);
+      cleanup=function(){if(auto)clearTimeout(auto);if(ocioso)clearTimeout(ocioso);window.removeEventListener("mouseup",soltar)};
       return;
     }
   }catch(e){}
@@ -923,15 +1016,35 @@ function renderBlock(b){
     }
     case"scratch":{
       var ssg=gameSegs(p);if(!ssg.length)break;
-      var scid=bid(b.id),SW=Math.max(160,Math.min(480,nv(p.width,300))),SH=Math.max(80,Math.min(320,nv(p.height,150)));
+      var scid=bid(b.id),SW=Math.max(160,Math.min(480,nv(p.width,320))),SH=Math.max(80,Math.min(360,nv(p.height,190)));
+      var scCov=sv(p.coverColor,"#C0C6CF"),scTxc=sv(p.coverTextColor,"#FFFFFF"),scTxt=String(p.coverText||"Raspe aqui").slice(0,40);
       h='<div data-game="scratch" data-game-id="'+scid+'" style="'+blockStyleStr(p,true,true)+'text-align:center">'
-        +'<div id="wf-scr-'+scid+'" style="position:relative;display:inline-block;width:'+SW+'px;max-width:100%;height:'+SH+'px;border-radius:'+nv(p.cardRadius,12)+'px;overflow:hidden;background:'+sv(p.prizeBg,"#FFF7ED")+';box-shadow:0 4px 14px rgba(0,0,0,.12)">'
-        +'<div id="wf-scr-p-'+scid+'" style="position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;padding:12px;font-size:'+nv(p.prizeSize,24)+'px;font-weight:800;color:'+sv(p.prizeColor,"#F97316")+';text-align:center;line-height:1.2">?</div>'
-        +'<canvas id="wf-scr-c-'+scid+'" width="'+SW+'" height="'+SH+'" aria-hidden="true" style="position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;touch-action:none;cursor:not-allowed"></canvas>'
+        +'<div id="wf-scr-'+scid+'" style="position:relative;display:inline-block;width:'+SW+'px;max-width:100%;height:'+SH+'px;border-radius:'+nv(p.cardRadius,14)+'px;overflow:hidden;background:'+sv(p.prizeBg,"#FFF7ED")+';box-shadow:0 6px 20px rgba(0,0,0,.14);-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent">'
+        +'<div id="wf-scr-p-'+scid+'" style="position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;padding:12px;font-size:'+nv(p.prizeSize,26)+'px;font-weight:800;color:'+sv(p.prizeColor,"#F97316")+';text-align:center;line-height:1.2">?</div>'
+        +'<canvas id="wf-scr-c-'+scid+'" data-cover="'+scCov+'" aria-hidden="true" style="position:absolute;top:0;left:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab"></canvas>'
+        +'<div id="wf-scr-b-'+scid+'" style="position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);pointer-events:none;display:flex;align-items:center;justify-content:center;gap:9px;color:'+scTxc+';font-weight:800;font-size:13px;letter-spacing:1.6px;text-transform:uppercase;text-shadow:0 1px 2px rgba(0,0,0,.28);transition:opacity .25s">'
+        +'<svg class="wf-hand" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11V6a1.5 1.5 0 0 1 3 0v5"></path><path d="M12 11V4.5a1.5 1.5 0 0 1 3 0V11"></path><path d="M15 11V6.5a1.5 1.5 0 0 1 3 0V13"></path><path d="M9 11V9.5a1.5 1.5 0 0 0-3 0V14c0 3.3 2.7 6 6 6h1.5a4.5 4.5 0 0 0 4.5-4.5V13"></path></svg>'
+        +'<span>'+esc(scTxt)+'</span></div>'
         +'</div>'
-        +'<div id="wf-scr-h-'+scid+'" style="display:none;margin-top:8px;font-size:12px;color:#6B7280"><a href="#" style="color:inherit;text-decoration:underline">'+esc(p.revealText||"Revelar pr\\u00eamio")+'</a></div>'
+        +'<div id="wf-scr-h-'+scid+'" style="display:none;margin-top:10px;font-size:12px;color:#6B7280"><a href="#" style="color:inherit;text-decoration:underline">'+esc(p.revealText||"Revelar pr\\u00eamio")+'</a></div>'
         +gameBtn(p,"Raspar")+'</div>';
-      (function(cid,cover,ctext,tcol){setTimeout(function(){var cv=$(cid);if(!cv)return;try{var cx=cv.getContext("2d");if(!cx)return;cx.fillStyle=cover;cx.fillRect(0,0,cv.width,cv.height);cx.fillStyle=tcol;cx.font="700 16px sans-serif";cx.textAlign="center";cx.textBaseline="middle";cx.fillText(ctext,cv.width/2,cv.height/2)}catch(e){}},60)})("wf-scr-c-"+scid,sv(p.coverColor,"#9CA3AF"),String(p.coverText||"Raspe aqui").slice(0,40),sv(p.coverTextColor,"#FFFFFF"));
+      (function(cid,cor,lw,lh){setTimeout(function(){
+        var cv=$(cid);if(!cv)return;
+        paintFoil(cv,cor,lw,lh);
+        // Antes do envio o prêmio ainda não foi sorteado, então raspar não
+        // teria o que revelar. Em vez de deixar o arrasto morrer no vazio
+        // (ou, pior, de pintar um "cursor: não permitido" no cartão), o
+        // primeiro toque leva o visitante ao campo que falta preencher.
+        cv.addEventListener("pointerdown",function(){
+          if(cv.getAttribute("data-scratchable"))return;
+          var f=cv.closest?cv.closest("form"):null;
+          // O primeiro input do formulário é a armadilha de robô
+          // (_wf_hp, escondida fora da tela): focar nela levaria o
+          // visitante para lugar nenhum.
+          var alvo=f&&f.querySelector?f.querySelector('input:not([type=hidden]):not([disabled]):not([name="_wf_hp"]):not([tabindex="-1"])'):null;
+          if(alvo&&alvo.focus)try{alvo.focus()}catch(e){}
+        });
+      },60)})("wf-scr-c-"+scid,scCov,SW,SH);
       break;
     }
     case"countdown":{

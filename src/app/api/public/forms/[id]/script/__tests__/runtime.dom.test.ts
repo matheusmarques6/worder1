@@ -799,6 +799,126 @@ describe('gamificação: roleta e raspadinha', () => {
     expect(root(id)!.textContent).toContain('SHIP-1')
   })
 
+  // A raspadinha tem de RASPAR: arrastar o dedo (ou o mouse) apaga a
+  // lâmina, e o traço acompanha o movimento. Antes, cada evento pintava um
+  // círculo solto — com o dedo rápido sobravam buracos — e o cartão só
+  // ficava tocável depois do envio, com "cursor: não permitido" em cima.
+  function contextoFalso(alphaZerado: () => number) {
+    const chamadas: string[] = []
+    const ctx: any = {
+      chamadas,
+      globalCompositeOperation: '', globalAlpha: 1, lineCap: '', lineJoin: '', lineWidth: 0,
+      fillStyle: '', strokeStyle: '', font: '', textAlign: '', textBaseline: '',
+      beginPath: () => chamadas.push('beginPath'),
+      moveTo: () => chamadas.push('moveTo'),
+      lineTo: () => chamadas.push('lineTo'),
+      stroke: () => chamadas.push('stroke'),
+      arc: () => chamadas.push('arc'),
+      fill: () => chamadas.push('fill'),
+      fillRect: () => chamadas.push('fillRect'),
+      fillText: () => chamadas.push('fillText'),
+      createLinearGradient: () => ({ addColorStop: () => {} }),
+      getImageData: () => {
+        // 1 em cada 64 bytes é lido (o alpha); devolvemos a proporção pedida.
+        const total = 4096
+        const data = new Uint8ClampedArray(total)
+        const zerar = Math.floor((total / 64) * alphaZerado())
+        for (let i = 0, z = 0; i < total; i += 64, z++) data[i + 3] = z < zerar ? 0 : 255
+        return { data }
+      },
+    }
+    return ctx
+  }
+
+  async function raspar(id: string, ctx: any, movimentos: number) {
+    const cv = root(id)!.querySelector('canvas') as HTMLCanvasElement
+    cv.getBoundingClientRect = () => ({ left: 0, top: 0, width: 320, height: 190, right: 320, bottom: 190, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect
+    cv.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 10, clientY: 10 }))
+    for (let i = 1; i <= movimentos; i++) {
+      cv.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: 10 + i * 12, clientY: 10 + i * 5 }))
+    }
+    window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+    await vi.advanceTimersByTimeAsync(10)
+    return cv
+  }
+
+  it('raspadinha: arrastar apaga a lâmina com traço contínuo', async () => {
+    freshPage()
+    const ctx = contextoFalso(() => 0.1)
+    const orig = (HTMLCanvasElement.prototype as any).getContext
+    ;(HTMLCanvasElement.prototype as any).getContext = () => ctx
+    try {
+      withSubmit({ game: { type: 'scratch', segment: 0, segment_id: 's1', label: '10% OFF', prize: 'base' }, coupon: null })
+      const id = run(gameDesign({ id: 'sc2', type: 'scratch', props: { segments, buttonText: 'Raspar' } }))
+      await vi.advanceTimersByTimeAsync(1500)
+      const form = formEl(id)!
+      ;(form.querySelector('input[name="email"]') as HTMLInputElement).value = 'ana@example.com'
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      await vi.advanceTimersByTimeAsync(50)
+
+      ctx.chamadas.length = 0
+      const cv = await raspar(id, ctx, 5)
+
+      // Traço contínuo entre um ponto e o outro — não um círculo solto.
+      expect(ctx.chamadas).toContain('lineTo')
+      expect(ctx.chamadas).toContain('stroke')
+      expect(ctx.chamadas.filter((c: string) => c === 'arc').length).toBeGreaterThan(1)
+      expect(ctx.globalCompositeOperation).toBe('destination-out')
+      // Ainda tem lâmina: 10% apagado não revela.
+      expect(cv.style.opacity).not.toBe('0')
+    } finally {
+      ;(HTMLCanvasElement.prototype as any).getContext = orig
+    }
+  })
+
+  it('raspadinha: passada a metade, o resto abre sozinho e o prêmio aparece', async () => {
+    freshPage()
+    const ctx = contextoFalso(() => 0.8)
+    const orig = (HTMLCanvasElement.prototype as any).getContext
+    ;(HTMLCanvasElement.prototype as any).getContext = () => ctx
+    try {
+      withSubmit({ game: { type: 'scratch', segment: 0, segment_id: 's1', label: '10% OFF', prize: 'base' }, coupon: null })
+      const id = run(gameDesign({ id: 'sc3', type: 'scratch', props: { segments, buttonText: 'Raspar' } }))
+      await vi.advanceTimersByTimeAsync(1500)
+      const form = formEl(id)!
+      ;(form.querySelector('input[name="email"]') as HTMLInputElement).value = 'ana@example.com'
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      await vi.advanceTimersByTimeAsync(50)
+
+      const cv = await raspar(id, ctx, 5)
+      expect(cv.style.opacity).toBe('0')
+      await vi.advanceTimersByTimeAsync(1500)
+      expect(root(id)!.textContent).toContain('Você ganhou 10% OFF')
+    } finally {
+      ;(HTMLCanvasElement.prototype as any).getContext = orig
+    }
+  })
+
+  it('raspadinha: o cartão não diz "não pode" — e antes do envio leva ao campo que falta', async () => {
+    freshPage()
+    const ctx = contextoFalso(() => 0)
+    const orig = (HTMLCanvasElement.prototype as any).getContext
+    ;(HTMLCanvasElement.prototype as any).getContext = () => ctx
+    try {
+      withSubmit({})
+      const id = run(gameDesign({ id: 'sc4', type: 'scratch', props: { segments, buttonText: 'Raspar' } }))
+      await vi.advanceTimersByTimeAsync(1500)
+      const cv = root(id)!.querySelector('canvas') as HTMLCanvasElement
+      expect(cv.getAttribute('style') || '').not.toContain('not-allowed')
+      expect(cv.getAttribute('style') || '').toContain('touch-action:none')
+      // A lâmina foi pintada com gradiente e listras, não com cinza chapado.
+      expect(ctx.chamadas).toContain('fillRect')
+      expect(ctx.chamadas.filter((c: string) => c === 'stroke').length).toBeGreaterThan(3)
+      // Toque antes do sorteio: em vez de morrer no vazio, foca o e-mail.
+      const email = formEl(id)!.querySelector('input[name="email"]') as HTMLInputElement
+      cv.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+      // Dentro de shadow root o foco fica em root.activeElement.
+      expect(root(id)!.activeElement).toBe(email)
+    } finally {
+      ;(HTMLCanvasElement.prototype as any).getContext = orig
+    }
+  })
+
   it('raspadinha: sem canvas revela direto; prêmio "nada" esconde o bloco de cupom', async () => {
     freshPage()
     const orig = (HTMLCanvasElement.prototype as any).getContext
