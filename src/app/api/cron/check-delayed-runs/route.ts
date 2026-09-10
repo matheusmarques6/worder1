@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { enqueueAutomationRun } from '@/lib/queue';
-import { getAuthClient } from '@/lib/api-utils';
+import { authorizeCronRequest } from '@/lib/cron-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,33 +28,12 @@ function getSupabase() {
 // ============================================
 
 export async function GET(request: NextRequest) {
-  const supabase = getSupabase();
-
-  // Verificar autorização
-  // X-Internal-Request removed from the authorize check: client-settable
-  // and not stripped by Vercel, so it was spoofable. Only Vercel Cron,
-  // Bearer CRON_SECRET, or dev. (The outbound fetch to the worker below
-  // still sends X-Internal-Request — that's the worker's own auth.)
-  const isVercelCron = request.headers.get('x-vercel-cron') === '1';
-  const authHeader = request.headers.get('authorization');
-  const cronSecret = process.env.CRON_SECRET;
-  const isDev = process.env.NODE_ENV === 'development';
-
-  // Also allow a real authenticated session: the "Forçar retomada" button in
-  // the flow builder (Toolbar.tsx) does a same-origin POST → GET. Removing the
-  // spoofable X-Internal-Request header closed the hole; an authenticated user
-  // triggering their own delayed-run sweep is legitimate.
-  const auth = await getAuthClient();
-
-  const isAuthorized = isDev || isVercelCron || !!auth ||
-    (cronSecret && authHeader === `Bearer ${cronSecret}`);
-
-  if (!isAuthorized) {
+  if (!authorizeCronRequest(request)) {
     console.log('[Check Delayed] Unauthorized request');
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  console.log('[Check Delayed] Starting check (Vercel Cron:', isVercelCron, ')');
+  console.log('[Check Delayed] Starting check');
 
   try {
     const now = new Date().toISOString();
