@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { checkAndAlertMessagingLimits } from '@/lib/whatsapp/alerts';
 import { wlog } from '@/lib/observability/whatsapp-logger';
+import { authorizeCronRequest } from '@/lib/cron-auth';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -13,18 +14,8 @@ export const maxDuration = 30;
 // VERDADE do tier (ver MESSAGING_LIMIT_STRING_TO_TIER em '@/config/whatsapp-tiers',
 // [FIX-C1]). checkAndAlertMessagingLimits() alerta em TIER_250/TIER_1K — strings que
 // batem com o mapa canônico. O numérico `messaging_tier` está morto para tiering.
-function authorize(req: NextRequest): boolean {
-  if (req.headers.get('x-vercel-cron')) return true;
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret) {
-    const auth = req.headers.get('authorization');
-    if (auth === `Bearer ${cronSecret}`) return true;
-  }
-  return process.env.NODE_ENV !== 'production';
-}
-
 export async function GET(req: NextRequest) {
-  if (!authorize(req)) {
+  if (!authorizeCronRequest(req)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 

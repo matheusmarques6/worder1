@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { sendAlert } from '@/lib/whatsapp/alerts';
 import { wlog } from '@/lib/observability/whatsapp-logger';
+import { authorizeCronRequest } from '@/lib/cron-auth';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -20,18 +21,8 @@ export const maxDuration = 30;
 
 const STALE_THRESHOLD_HOURS = 2;
 
-function authorize(req: NextRequest): boolean {
-  if (req.headers.get('x-vercel-cron')) return true;
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret) {
-    const auth = req.headers.get('authorization');
-    if (auth === `Bearer ${cronSecret}`) return true;
-  }
-  return process.env.NODE_ENV !== 'production';
-}
-
 export async function GET(req: NextRequest) {
-  if (!authorize(req)) {
+  if (!authorizeCronRequest(req)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
