@@ -13,7 +13,7 @@
  * 4. Usado apenas uma vez
  */
 
-import { createHmac, randomBytes } from 'crypto';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 
 // ============================================
@@ -110,7 +110,9 @@ export function validateOAuthState(
       .update(payload)
       .digest('base64url');
     
-    if (providedSignature !== expectedSignature) {
+    const providedBytes = Buffer.from(providedSignature, 'utf8');
+    const expectedBytes = Buffer.from(expectedSignature, 'utf8');
+    if (providedBytes.length !== expectedBytes.length || !timingSafeEqual(providedBytes, expectedBytes)) {
       console.warn('[OAuth] State inválido: assinatura incorreta');
       return null;
     }
