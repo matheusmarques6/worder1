@@ -1,22 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient, getAuthClient, authError } from '@/lib/api-utils';
+import { assertDebugAllowed } from '@/lib/debug-guard';
 export const dynamic = 'force-dynamic';
 
-const DEBUG_SECRET = process.env.DEBUG_ROUTE_SECRET;
-const IS_PRODUCTION = process.env.NODE_ENV === 'production';
-
-function isAuthorized(request: NextRequest): boolean {
-  if (!IS_PRODUCTION) return true;
-  if (!DEBUG_SECRET) return false;
-  const providedSecret = request.headers.get('x-debug-secret') || request.nextUrl.searchParams.get('secret');
-  return providedSecret === DEBUG_SECRET;
-}
-
 export async function GET(request: NextRequest) {
-  // ✅ SEGURANÇA: Bloquear em produção sem secret
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const blocked = assertDebugAllowed(request);
+  if (blocked) return blocked;
 
   const auth = await getAuthClient();
   if (!auth) return authError();

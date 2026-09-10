@@ -60,6 +60,7 @@ beforeEach(() => {
   mocks.getAuthClient.mockResolvedValue({
     user: { id: 'user-a', organization_id: 'org-a' },
   })
+  vi.spyOn(console, 'error').mockImplementation(() => {})
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(
     JSON.stringify({ shop: { name: 'Store A' } }),
     { status: 200, headers: { 'content-type': 'application/json' } },
@@ -70,6 +71,7 @@ afterEach(() => {
   vi.resetModules()
   vi.unstubAllEnvs()
   vi.unstubAllGlobals()
+  vi.restoreAllMocks()
 })
 
 describe.each(routes)('$name', ({ url, load }) => {
