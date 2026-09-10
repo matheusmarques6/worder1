@@ -769,6 +769,15 @@ describe('gamificação: roleta e raspadinha', () => {
     })
   }
 
+  // A rotação é lida do ATRIBUTO transform do grupo que gira (wf-wdisc),
+  // não do style do <svg>: o aro, o brilho e o ponteiro ficam parados, e
+  // quem gira é só o disco.
+  function discRot(form: HTMLFormElement): number {
+    const g = form.querySelector('g[id^="wf-wdisc-"]') as SVGElement
+    const m = /rotate\(([-\d.]+)/.exec(String(g.getAttribute('transform') || ''))
+    return m ? parseFloat(m[1]) : NaN
+  }
+
   it('roleta: os segmentos saem do design, o servidor decide e a roleta para no prêmio antes do sucesso', async () => {
     freshPage()
     withSubmit({
@@ -776,6 +785,7 @@ describe('gamificação: roleta e raspadinha', () => {
       coupon: { code: 'SHIP-1', kind: 'free_shipping', value: 0, ends_at: null, auto_apply: false, show_code: true },
     })
     const results = listen('gameResult')
+    const paradas = listen('gameWheelStop')
     const id = run(gameDesign({ id: 'w1', type: 'wheel', props: { segments, buttonText: 'Girar!' } }))
     await vi.advanceTimersByTimeAsync(1500)
     const form = formEl(id)!
@@ -784,19 +794,122 @@ describe('gamificação: roleta e raspadinha', () => {
     expect(svg.querySelectorAll('path').length).toBe(4)
     expect(svg.querySelectorAll('text')[2].textContent).toBe('Frete grátis')
     expect(form.querySelector('[data-action="submit"]')!.textContent).toBe('Girar!')
+    // Parada, a roleta está na posição zero.
+    expect(discRot(form)).toBe(0)
     ;(form.querySelector('input[name="email"]') as HTMLInputElement).value = 'ana@example.com'
     form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
     await vi.advanceTimersByTimeAsync(50)
-    // Gira para o terceiro de quatro setores (centro a 225°): cinco voltas
-    // menos 225°, com folga só dentro do setor. Sucesso ainda não.
-    const rot = parseFloat(String(svg.style.transform || '').replace(/[^0-9.-]/g, ''))
-    expect(rot).toBeGreaterThanOrEqual(1800 - 225 - 22.5)
-    expect(rot).toBeLessThanOrEqual(1800 - 225 + 22.5)
+    // Girando: o sucesso ainda não entrou e o prêmio ainda não foi
+    // anunciado para quem usa leitor de tela.
     expect(root(id)!.textContent).not.toContain('Você ganhou')
+    expect(form.querySelector('[id^="wf-wsr-"]')!.textContent).toBe('')
     expect(results[0]).toMatchObject({ game: 'wheel', segment: 2, label: 'Frete grátis', prize: 't-ship' })
     await vi.advanceTimersByTimeAsync(5500)
+    // Parou no centro do terceiro de quatro setores (225°), cinco voltas
+    // depois, com folga só dentro do setor.
+    const rot = discRot(form)
+    expect(rot).toBeGreaterThanOrEqual(1800 - 225 - 18)
+    expect(rot).toBeLessThanOrEqual(1800 - 225 + 18)
+    // Os outros setores apagam e o sorteado ganha o contorno pulsante.
+    const secs = Array.from(svg.querySelectorAll('path[id^="wf-wsec-"]')) as SVGElement[]
+    expect(secs.map((s) => s.style.fillOpacity)).toEqual(['0.28', '0.28', '', '0.28'])
+    expect(svg.querySelector('path.wf-wglow')).toBeTruthy()
+    expect(paradas[0]).toMatchObject({ game: 'wheel', segment: 2, label: 'Frete grátis' })
     expect(root(id)!.textContent).toContain('Você ganhou Frete grátis')
     expect(root(id)!.textContent).toContain('SHIP-1')
+  })
+
+  // A roleta tem de PARECER um objeto: aro com volume, pinos nas divisões,
+  // brilho fixo no alto, cubo no centro e o ponteiro por fora do que gira.
+  // Antes era um gráfico de pizza rodando inteiro — brilho incluído.
+  it('roleta: aro, pinos, brilho e ponteiro ficam fora do que gira', async () => {
+    freshPage()
+    withSubmit({ game: { type: 'wheel', segment: 0, segment_id: 's1', label: '10% OFF', prize: 'base' } })
+    const id = run(gameDesign({ id: 'w1', type: 'wheel', props: { segments } }))
+    await vi.advanceTimersByTimeAsync(1500)
+    const form = formEl(id)!
+    const svg = form.querySelector('svg[id^="wf-wheel-"]') as SVGElement
+    const disc = form.querySelector('g[id^="wf-wdisc-"]') as SVGElement
+    // Dentro do disco: os quatro setores, os quatro rótulos e um pino por
+    // divisão. Nada mais — o resto não pode girar.
+    expect(disc.querySelectorAll('path[id^="wf-wsec-"]').length).toBe(4)
+    expect(disc.querySelectorAll('text').length).toBe(4)
+    expect(disc.querySelectorAll('circle').length).toBe(4)
+    // Fora dele: aro com gradiente, brilho, cubo.
+    const rim = Array.from(svg.querySelectorAll('circle')).find((c) => String(c.getAttribute('stroke') || '').indexOf('wf-wrim-') >= 0)
+    expect(rim).toBeTruthy()
+    expect(Array.from(svg.querySelectorAll('circle')).some((c) => String(c.getAttribute('fill') || '').indexOf('wf-wsh-') >= 0)).toBe(true)
+    expect(svg.querySelector('linearGradient[id^="wf-wrim-"]')).toBeTruthy()
+    // O ponteiro é um irmão do svg, com o pivô no topo: é ele que os pinos
+    // empurram enquanto o disco passa.
+    const ptr = form.querySelector('[id^="wf-wptr-"]') as HTMLElement
+    expect(ptr).toBeTruthy()
+    expect(ptr.parentElement!.contains(svg)).toBe(true)
+    expect(ptr.style.transformOrigin).toBe('50% 13%')
+    expect(form.querySelector('[id^="wf-wcf-"]')).toBeTruthy()
+    expect(form.querySelector('[id^="wf-wsr-"]')!.getAttribute('role')).toBe('status')
+  })
+
+  it('roleta: ganhou joga confete, "tente de novo" não', async () => {
+    freshPage()
+    withSubmit({ game: { type: 'wheel', segment: 0, segment_id: 's1', label: '10% OFF', prize: 'base' } })
+    const id = run(gameDesign({ id: 'w1', type: 'wheel', props: { segments } }))
+    await vi.advanceTimersByTimeAsync(1500)
+    const form = formEl(id)!
+    ;(form.querySelector('input[name="email"]') as HTMLInputElement).value = 'ana@example.com'
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await vi.advanceTimersByTimeAsync(4700)
+    expect(form.querySelector('[id^="wf-wcf-"]')!.children.length).toBe(18)
+
+    freshPage()
+    withSubmit({ game: { type: 'wheel', segment: 1, segment_id: 's2', label: 'Quase!', prize: 'none' } })
+    const id2 = run(gameDesign({ id: 'w1', type: 'wheel', props: { segments } }))
+    await vi.advanceTimersByTimeAsync(1500)
+    const f2 = formEl(id2)!
+    ;(f2.querySelector('input[name="email"]') as HTMLInputElement).value = 'bia@example.com'
+    f2.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await vi.advanceTimersByTimeAsync(4700)
+    expect(f2.querySelector('[id^="wf-wcf-"]')!.children.length).toBe(0)
+  })
+
+  // Quem pediu menos movimento no sistema não recebe cinco voltas, tique
+  // nem confete: o disco vai direto para o prêmio.
+  it('roleta: prefers-reduced-motion vai direto ao prêmio', async () => {
+    freshPage()
+    const antes = window.matchMedia
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: (q: string) => ({ matches: /reduce/.test(q), media: q, onchange: null, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent: () => false }),
+    })
+    try {
+      withSubmit({
+        game: { type: 'wheel', segment: 2, segment_id: 's3', label: 'Frete grátis', prize: 't-ship' },
+        coupon: { code: 'SHIP-1', kind: 'free_shipping', value: 0, ends_at: null, auto_apply: false, show_code: true },
+      })
+      const id = run(gameDesign({ id: 'w1', type: 'wheel', props: { segments } }))
+      await vi.advanceTimersByTimeAsync(1500)
+      const form = formEl(id)!
+      ;(form.querySelector('input[name="email"]') as HTMLInputElement).value = 'ana@example.com'
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      await vi.advanceTimersByTimeAsync(120)
+      // Sem voltas: menos de um giro, e já no setor sorteado (225° − 4 voltas).
+      const rot = discRot(form)
+      expect(rot).toBeGreaterThanOrEqual(135 - 18)
+      expect(rot).toBeLessThanOrEqual(135 + 18)
+      expect(form.querySelector('[id^="wf-wcf-"]')!.children.length).toBe(0)
+      await vi.advanceTimersByTimeAsync(1600)
+      expect(root(id)!.textContent).toContain('Você ganhou Frete grátis')
+    } finally {
+      Object.defineProperty(window, 'matchMedia', { configurable: true, value: antes })
+    }
+  })
+
+  it('roleta: o tique pode ser desligado no bloco', async () => {
+    freshPage()
+    withSubmit({ game: { type: 'wheel', segment: 0, segment_id: 's1', label: '10% OFF', prize: 'base' } })
+    const id = run(gameDesign({ id: 'w1', type: 'wheel', props: { segments, sound: false } }))
+    await vi.advanceTimersByTimeAsync(1500)
+    expect(formEl(id)!.querySelector('[data-game="wheel"]')!.getAttribute('data-sound')).toBe('0')
   })
 
   // A raspadinha tem de RASPAR: arrastar o dedo (ou o mouse) apaga a

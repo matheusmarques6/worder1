@@ -60,7 +60,7 @@ const radio = (id: string, label: string, options: string[], over: Record<string
 // nível progressivo pelo id, ou nada). O sorteio é do servidor.
 const wheel = (id: string, segments: any[], over: Record<string, any> = {}) => ({
   id, type: 'wheel',
-  props: { segments, buttonText: 'Girar a roleta', size: 280, labelSize: 12, labelColor: '#FFFFFF', strokeColor: '#FFFFFF', pointerColor: '#111827', bgColor: '#111827', textColor: '#FFFFFF', fontSize: 15, borderRadius: 8, fullWidth: true, ...over },
+  props: { segments, buttonText: 'Girar a roleta', size: 320, labelSize: 13, labelColor: '#FFFFFF', strokeColor: '#FFFFFF', pointerColor: '#111827', rimColor: '#111827', sound: true, bgColor: '#111827', textColor: '#FFFFFF', fontSize: 15, borderRadius: 8, fullWidth: true, ...over },
 })
 const scratch = (id: string, segments: any[], over: Record<string, any> = {}) => ({
   id, type: 'scratch',
@@ -265,11 +265,13 @@ export const POPUP_TEMPLATES: PopupTemplate[] = [
     description: 'E-mail para girar. O servidor sorteia entre 10%, frete grátis e "tente de novo"; a roleta para no prêmio.',
     design: design('popup',
       [[
-        text('t1', 'Gire e ganhe'),
-        sub('t2', 'Deixe seu e-mail e gire a roleta. Todo mundo tem chance.'),
-        spacer('sp1'),
-        email('e1'),
-        consent('c1', ['email'], EMAIL_CONSENT),
+        // A ordem das referências que convertem: título grande, uma linha
+        // de contexto, o JOGO em destaque, e só depois o campo e o botão.
+        // Roleta com botão grudado embaixo dela empurra o e-mail para
+        // fora da primeira dobra no celular.
+        text('t1', 'Gire e ganhe', { fontSize: 40, lineHeight: 1.05, letterSpacing: -0.5, color: '#111827' }),
+        sub('t2', 'Deixe seu e-mail e gire. Todo mundo leva alguma coisa.', { fontSize: 16, color: '#4B5563' }),
+        spacer('sp1', 14),
         wheel('w1', [
           { id: 's1', label: '10% OFF', prize: 'base', weight: 35, color: '#F97316' },
           { id: 's2', label: 'Quase!', prize: 'none', weight: 15, color: '#111827' },
@@ -277,14 +279,18 @@ export const POPUP_TEMPLATES: PopupTemplate[] = [
           { id: 's4', label: '10% OFF', prize: 'base', weight: 20, color: '#374151' },
           { id: 's5', label: 'Tente de novo', prize: 'none', weight: 5, color: '#FB923C' },
           { id: 's6', label: '10% OFF', prize: 'base', weight: 10, color: '#1F2937' },
-        ]),
+        ], { showButton: false, size: 300 }),
+        spacer('sp2', 16),
+        email('e1', { placeholder: 'Seu melhor e-mail' }),
+        consent('c1', ['email'], EMAIL_CONSENT),
+        button('b1', 'GIRAR A ROLETA', { bgColor: '#111827', fontSize: 15, paddingV: 16, borderRadius: 10 }),
       ]],
       [
-        text('s1', 'Você ganhou {{prize}}'),
+        text('s1', 'Você ganhou {{prize}}', { fontSize: 32 }),
         sub('s2', 'Seu cupom já está no carrinho e vale por 7 dias.'),
         coupon('k1', { code: 'ROLETA10', codePrefix: 'ROLETA', tiers: [{ id: 't-frete', label: 'Frete grátis', afterStepId: '', discountType: 'free_shipping', discountValue: 0, code: 'FRETEGRATIS' }] }),
       ],
-      { styles: { width: 460, minHeight: 0 } },
+      { styles: { width: 460, minHeight: 0, fullscreenMobile: true } },
     ),
   },
   {

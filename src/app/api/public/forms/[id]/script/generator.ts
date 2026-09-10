@@ -183,7 +183,7 @@ var shown=false,ck="_wf_"+FID;
 // keyframes moram aqui dentro porque animação não atravessa a fronteira.
 var ROOT=null,HOST=null;
 function $(id){try{if(ROOT){var e=ROOT.getElementById(id);if(e)return e}return document.getElementById(id)}catch(e){return null}}
-var BASE_CSS=":host{all:initial}*,*::before,*::after{box-sizing:border-box}@keyframes wfFade{from{opacity:0}to{opacity:1}}@keyframes wfSlide{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}@keyframes wfHand{0%,100%{transform:translate(-5px,0) rotate(-8deg)}50%{transform:translate(5px,-2px) rotate(6deg)}}.wf-hand{animation:wfHand 1.5s ease-in-out infinite}@media (prefers-reduced-motion:reduce){.wf-hand{animation:none}}.wf-pop{color:#111827;line-height:1.4;font-size:14px;-webkit-font-smoothing:antialiased;text-align:left}.wf-pop button,.wf-pop input,.wf-pop select,.wf-pop textarea{font:inherit;color:inherit;margin:0}.wf-pop input::placeholder{opacity:1}.wf-pop a{color:inherit}.wf-pop p,.wf-pop h1,.wf-pop h2,.wf-pop h3{margin:0}";
+var BASE_CSS=":host{all:initial}*,*::before,*::after{box-sizing:border-box}@keyframes wfFade{from{opacity:0}to{opacity:1}}@keyframes wfSlide{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}@keyframes wfHand{0%,100%{transform:translate(-5px,0) rotate(-8deg)}50%{transform:translate(5px,-2px) rotate(6deg)}}.wf-hand{animation:wfHand 1.5s ease-in-out infinite}@keyframes wfWGlow{0%,100%{opacity:.25}50%{opacity:.95}}.wf-wglow{animation:wfWGlow 1s ease-in-out 2}@media (prefers-reduced-motion:reduce){.wf-hand{animation:none}.wf-wglow{animation:none;opacity:.9}}.wf-pop{color:#111827;line-height:1.4;font-size:14px;-webkit-font-smoothing:antialiased;text-align:left}.wf-pop button,.wf-pop input,.wf-pop select,.wf-pop textarea{font:inherit;color:inherit;margin:0}.wf-pop input::placeholder{opacity:1}.wf-pop a{color:inherit}.wf-pop p,.wf-pop h1,.wf-pop h2,.wf-pop h3{margin:0}";
 function mountRoot(target){
   var host=document.createElement("div");
   host.id="wf-host-"+FID;
@@ -781,17 +781,149 @@ function playGameAnim(el,g,done){
   var type=el.getAttribute("data-game"),gid=el.getAttribute("data-game-id"),fin=false,cleanup=null;
   function end(ms){if(fin)return;fin=true;if(cleanup){try{cleanup()}catch(e){}cleanup=null}setTimeout(done,ms==null?900:ms)}
   try{
+    // A ROLETA
+    //
+    // O que separa uma roleta profissional de um gráfico de pizza dando
+    // voltas não é a velocidade: são quatro coisas, e todas moram aqui.
+    //
+    //   1. desaceleração exponencial. Roleta de verdade perde energia por
+    //      atrito, então a curva é uma cauda longa — os últimos 20 graus
+    //      levam quase um segundo. É a cauda que cria a expectativa. Com
+    //      a curva errada (ou com uma transition qualquer) o giro parece
+    //      travar de repente, e a sensação é de animação, não de sorteio.
+    //   2. impulso. Antes de sair, o disco RECUA um tico. É o mesmo
+    //      truque do desenho animado: o olho lê o recuo como força.
+    //   3. encaixe. No fim, passa alguns graus do alvo e volta. Sem isso
+    //      o disco "estaciona", e nada mecânico estaciona.
+    //   4. o ponteiro batendo nos pinos. Cada divisão que passa empurra o
+    //      ponteiro, que volta com uma molinha, e faz um tique. É o
+    //      detalhe que quase ninguém nota — e o único que, faltando, faz
+    //      qualquer roleta na tela parecer de brinquedo.
+    //
+    // Quem gira é só o disco (wf-wdisc). O aro, o brilho de cima, o cubo
+    // e o ponteiro ficam parados: luz e ponteiro que giram junto com o
+    // objeto entregam na hora que aquilo é uma imagem rodando.
     if(type==="wheel"){
-      var svg=$("wf-wheel-"+gid),n=parseInt(el.getAttribute("data-n"),10)||0,i=Math.max(0,Math.min(n-1,parseInt(g.segment,10)||0));
-      if(!svg||n<2){end(0);return}
-      // Cinco voltas e para no centro do setor, com uma folga aleatória
-      // dentro dele para não parar sempre no mesmo ponto.
-      var seg=360/n,rot=360*5-((i+0.5)*seg)+(Math.random()-0.5)*seg*0.5;
-      svg.style.transition="transform 4.2s cubic-bezier(.12,.72,.08,1)";
-      void svg.getBoundingClientRect();
-      svg.style.transform="rotate("+rot.toFixed(2)+"deg)";
-      var t=setTimeout(function(){end()},4500);
-      svg.addEventListener("transitionend",function(){clearTimeout(t);end()},{once:true});
+      var disco=$("wf-wdisc-"+gid),ptr=$("wf-wptr-"+gid),sr=$("wf-wsr-"+gid),cf=$("wf-wcf-"+gid);
+      var n=parseInt(el.getAttribute("data-n"),10)||0,i=Math.max(0,Math.min(n-1,parseInt(g.segment,10)||0));
+      if(!disco||n<2){end(0);return}
+      var seg=360/n;
+      // Cinco voltas e para no centro do setor sorteado, com uma folga
+      // dentro dele para não parar sempre no mesmo pixel.
+      var alvo=360*5-((i+0.5)*seg)+(Math.random()-0.5)*seg*0.4;
+      // O tempo varia um pouco a cada giro. Roleta que demora exatamente
+      // o mesmo tanto toda vez denuncia que o resultado já estava dado.
+      var ANT=9,OVER=Math.min(7,seg*0.28),DA=260,DS=Math.round(3300+n*40+(Math.random()*300-150)),DB=400,TOT=DA+DS+DB;
+      var acabou=false,ultimoSetor=null,ultimoTique=0,ac=null,trava=null;
+      var lento=false;try{lento=!!(window.matchMedia&&window.matchMedia("(prefers-reduced-motion:reduce)").matches)}catch(e){}
+      // O atributo transform do SVG, não a propriedade CSS: o atributo
+      // gira em torno do centro que a gente informa, sem depender de
+      // transform-origin/transform-box (que em SVG variam por navegador).
+      function girar(d){try{disco.setAttribute("transform","rotate("+d.toFixed(2)+" 150 150)")}catch(e){}}
+      function eoc(u){return 1-Math.pow(1-u,3)}
+      function eoq(u){return 1-Math.pow(1-u,5)}
+      function onde(t){
+        if(t<DA)return -ANT*eoc(t/DA);
+        if(t<DA+DS)return -ANT+(alvo+OVER+ANT)*eoq((t-DA)/DS);
+        return alvo+OVER-OVER*eoc(Math.min(1,(t-DA-DS)/DB));
+      }
+      // O tique é sintetizado, não baixado: um clique curto de 50ms não
+      // vale um arquivo de áudio no bundle de todo mundo.
+      function tique(){
+        if(lento||el.getAttribute("data-sound")==="0")return;
+        try{
+          var AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;
+          if(!ac)ac=new AC();
+          var o=ac.createOscillator(),v=ac.createGain(),t=ac.currentTime;
+          o.type="square";o.frequency.value=1150;
+          v.gain.setValueAtTime(0.045,t);v.gain.exponentialRampToValueAtTime(0.0008,t+0.05);
+          o.connect(v);v.connect(ac.destination);o.start(t);o.stop(t+0.055);
+        }catch(e){}
+      }
+      // Uma divisão passou pelo ponteiro? Empurra e toca. A trava de 45ms
+      // é o que faz a batida aparecer só quando o giro já está lento — no
+      // começo passam dezenas de pinos por segundo, e piscar o ponteiro
+      // em todos viraria tremedeira.
+      function bater(rot,agora){
+        var s=Math.floor((rot+seg/2)/seg);
+        if(ultimoSetor===null){ultimoSetor=s;return}
+        if(s===ultimoSetor)return;
+        ultimoSetor=s;
+        if(agora-ultimoTique<45)return;
+        ultimoTique=agora;
+        if(ptr&&!lento){
+          ptr.style.transition="transform .06s ease-out";
+          ptr.style.transform="rotate(-15deg)";
+          setTimeout(function(){if(ptr){ptr.style.transition="transform .17s cubic-bezier(.34,1.5,.64,1)";ptr.style.transform="rotate(0deg)"}},60);
+        }
+        tique();
+      }
+      // Confete de DOM puro: 18 retângulos que saem do centro e caem.
+      // Sem biblioteca, sem canvas e sem imagem — o popup inteiro tem de
+      // continuar cabendo no bundle da loja.
+      function confete(){
+        if(!cf||lento)return;
+        var cores=[];
+        for(var c=0;c<n;c++){var pc=$("wf-wsec-"+gid+"-"+c);if(pc&&pc.getAttribute)cores.push(pc.getAttribute("fill")||"#F97316")}
+        if(!cores.length)cores=["#F97316"];
+        for(var q=0;q<18;q++){
+          var ang=(-90+(Math.random()*160-80))*Math.PI/180,dist=70+Math.random()*130;
+          var d=document.createElement("i");
+          d.style.cssText="position:absolute;left:50%;top:38%;margin:-6px 0 0 -3px;width:7px;height:11px;border-radius:2px;background:"+cores[q%cores.length]+";transform:translate(0,0) rotate(0deg);will-change:transform,opacity";
+          cf.appendChild(d);
+          (function(node,dx,dy,rot){
+            setTimeout(function(){
+              node.style.transition="transform 1.05s cubic-bezier(.18,.62,.3,1),opacity .75s ease-in .35s";
+              node.style.transform="translate("+dx.toFixed(0)+"px,"+dy.toFixed(0)+"px) rotate("+rot+"deg)";
+              node.style.opacity="0";
+            },20+q*14);
+            setTimeout(function(){if(node.parentNode)node.parentNode.removeChild(node)},1700+q*14);
+          })(d,Math.cos(ang)*dist,Math.sin(ang)*dist+40+Math.random()*90,Math.round(Math.random()*540-270));
+        }
+      }
+      function terminar(){
+        if(acabou)return;acabou=true;
+        girar(alvo);
+        // O prêmio da pessoa fica sozinho aceso: os outros setores
+        // apagam, e o sorteado ganha um contorno pulsante. Sem esse
+        // fecho, a roleta para e ninguém sabe onde ela parou.
+        for(var k=0;k<n;k++){var pk=$("wf-wsec-"+gid+"-"+k);if(pk&&k!==i)pk.style.fillOpacity="0.28"}
+        var pv=$("wf-wsec-"+gid+"-"+i);
+        if(pv&&pv.getAttribute){
+          try{
+            var ov=document.createElementNS("http://www.w3.org/2000/svg","path");
+            ov.setAttribute("d",pv.getAttribute("d")||"");
+            ov.setAttribute("fill","none");ov.setAttribute("stroke","#FFFFFF");
+            ov.setAttribute("stroke-width","4");ov.setAttribute("stroke-linejoin","round");
+            ov.setAttribute("class","wf-wglow");
+            disco.appendChild(ov);
+          }catch(e){}
+        }
+        // Quem usa leitor de tela não vê a roleta parar: ouve o prêmio.
+        if(sr)sr.textContent=String(g.label||"");
+        if(g.prize!=="none")confete();
+        try{wfEmit("gameWheelStop",{game:"wheel",segment:i,label:g.label||null})}catch(e){}
+        end(900);
+      }
+      // Quem pediu menos movimento não recebe cinco voltas: o disco vai
+      // direto para o prêmio.
+      if(lento){girar(((alvo%360)+360)%360);trava=setTimeout(terminar,450);cleanup=function(){clearTimeout(trava)};return}
+      function pedir(f){if(window.requestAnimationFrame)window.requestAnimationFrame(f);else setTimeout(function(){f(Date.now())},16)}
+      var t0=null;
+      function passo(ts){
+        if(fin||acabou)return;
+        if(t0===null)t0=ts;
+        var t=ts-t0;
+        if(t>=TOT){terminar();return}
+        var r=onde(t);girar(r);bater(r,ts);
+        pedir(passo);
+      }
+      pedir(passo);
+      // Trava: o quadro a quadro pode simplesmente não rodar (aba em
+      // segundo plano, navegador sem rAF). O prêmio não pode ficar preso
+      // atrás de uma animação.
+      trava=setTimeout(terminar,TOT);
+      cleanup=function(){clearTimeout(trava)};
       return;
     }
     if(type==="scratch"){
@@ -1045,17 +1177,42 @@ function renderBlock(b){
     }
     case"wheel":{
       var wsg=gameSegs(p);if(wsg.length<2)break;
-      var wn=wsg.length,wid=bid(b.id),WR=140,WC=150,wsz=Math.max(180,Math.min(440,nv(p.size,300))),wp="";
+      // Um disco que gira dentro de um aro que fica parado.
+      //
+      // A separação é o que faz a peça parecer objeto: aro metálico com
+      // volume, brilho FIXO no alto (luz não gira junto com a coisa
+      // iluminada), pinos nas divisões — que é onde o ponteiro bate — e
+      // cubo cobrindo o miolo, onde todos os setores se encontram e
+      // qualquer roleta desenhada fica feia.
+      var wn=wsg.length,wid=bid(b.id),WR=132,WC=150,wsz=Math.max(200,Math.min(460,nv(p.size,320))),wp="",wpin="";
+      var wStroke=sv(p.strokeColor,"#FFFFFF"),wRim=sv(p.rimColor,"#111827"),wPtr=sv(p.pointerColor,"#111827");
       for(var wi=0;wi<wn;wi++){
         var a0=(wi*360/wn-90)*Math.PI/180,a1=((wi+1)*360/wn-90-(wn===2?0.01:0))*Math.PI/180;
-        wp+='<path d="M'+WC+' '+WC+' L'+(WC+WR*Math.cos(a0)).toFixed(2)+' '+(WC+WR*Math.sin(a0)).toFixed(2)+' A'+WR+' '+WR+' 0 0 1 '+(WC+WR*Math.cos(a1)).toFixed(2)+' '+(WC+WR*Math.sin(a1)).toFixed(2)+' Z" fill="'+wsg[wi].color+'" stroke="'+sv(p.strokeColor,"#FFFFFF")+'" stroke-width="2"></path>';
-        var am=(wi+0.5)*360/wn-90,ar=am*Math.PI/180,tx=(WC+WR*0.62*Math.cos(ar)).toFixed(2),ty=(WC+WR*0.62*Math.sin(ar)).toFixed(2);
-        wp+='<text x="'+tx+'" y="'+ty+'" transform="rotate('+am.toFixed(2)+' '+tx+' '+ty+')" text-anchor="middle" dominant-baseline="middle" font-size="'+nv(p.labelSize,12)+'" font-weight="700" font-family="inherit" fill="'+(wsg[wi].textColor||sv(p.labelColor,"#FFFFFF"))+'">'+esc(wsg[wi].label)+'</text>';
+        wp+='<path id="wf-wsec-'+wid+'-'+wi+'" d="M'+WC+' '+WC+' L'+(WC+WR*Math.cos(a0)).toFixed(2)+' '+(WC+WR*Math.sin(a0)).toFixed(2)+' A'+WR+' '+WR+' 0 0 1 '+(WC+WR*Math.cos(a1)).toFixed(2)+' '+(WC+WR*Math.sin(a1)).toFixed(2)+' Z" fill="'+wsg[wi].color+'" stroke="'+wStroke+'" stroke-width="2" style="transition:fill-opacity .45s"></path>';
+        var am=(wi+0.5)*360/wn-90,ar=am*Math.PI/180,tx=(WC+WR*0.63*Math.cos(ar)).toFixed(2),ty=(WC+WR*0.63*Math.sin(ar)).toFixed(2);
+        wp+='<text x="'+tx+'" y="'+ty+'" transform="rotate('+am.toFixed(2)+' '+tx+' '+ty+')" text-anchor="middle" dominant-baseline="middle" font-size="'+nv(p.labelSize,13)+'" font-weight="800" font-family="inherit" fill="'+(wsg[wi].textColor||sv(p.labelColor,"#FFFFFF"))+'">'+esc(wsg[wi].label)+'</text>';
+        // O pino fica na divisão, na borda do disco: gira com ele e é o
+        // que passa por baixo do ponteiro.
+        var ap=(wi*360/wn-90)*Math.PI/180;
+        wpin+='<circle cx="'+(WC+(WR-4)*Math.cos(ap)).toFixed(2)+'" cy="'+(WC+(WR-4)*Math.sin(ap)).toFixed(2)+'" r="3.2" fill="#FFFFFF" fill-opacity=".92"></circle>';
       }
-      h='<div data-game="wheel" data-game-id="'+wid+'" data-n="'+wn+'" style="'+blockStyleStr(p,true,true)+'text-align:center">'
-        +'<div style="position:relative;display:inline-block;width:'+wsz+'px;max-width:100%">'
-        +'<div style="position:absolute;left:50%;top:-4px;transform:translateX(-50%);width:0;height:0;border-left:11px solid transparent;border-right:11px solid transparent;border-top:24px solid '+sv(p.pointerColor,"#111827")+';z-index:2;filter:drop-shadow(0 2px 2px rgba(0,0,0,.25))"></div>'
-        +'<svg id="wf-wheel-'+wid+'" viewBox="0 0 300 300" role="img" aria-label="'+esc(p.ariaLabel||"Roleta de pr\\u00eamios")+'" style="width:100%;height:auto;display:block;transform:rotate(0deg);will-change:transform">'+wp+'<circle cx="150" cy="150" r="16" fill="'+sv(p.strokeColor,"#FFFFFF")+'" stroke="'+sv(p.pointerColor,"#111827")+'" stroke-width="3"></circle></svg>'
+      h='<div data-game="wheel" data-game-id="'+wid+'" data-n="'+wn+'"'+(p.sound===false?' data-sound="0"':'')+' style="'+blockStyleStr(p,true,true)+'text-align:center">'
+        +'<div style="position:relative;display:inline-block;width:'+wsz+'px;max-width:100%;filter:drop-shadow(0 14px 28px rgba(0,0,0,.24))">'
+        +'<svg id="wf-wheel-'+wid+'" viewBox="0 0 300 300" role="img" aria-label="'+esc(p.ariaLabel||"Roleta de pr\\u00eamios")+'" style="width:100%;height:auto;display:block;overflow:visible">'
+        +'<defs>'
+        +'<linearGradient id="wf-wrim-'+wid+'" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="'+wfShade(wRim,46)+'"></stop><stop offset=".48" stop-color="'+wRim+'"></stop><stop offset="1" stop-color="'+wfShade(wRim,-30)+'"></stop></linearGradient>'
+        +'<radialGradient id="wf-wsh-'+wid+'" cx=".33" cy=".24" r=".8"><stop offset="0" stop-color="#FFFFFF" stop-opacity=".3"></stop><stop offset=".52" stop-color="#FFFFFF" stop-opacity=".05"></stop><stop offset="1" stop-color="#000000" stop-opacity=".16"></stop></radialGradient>'
+        +'</defs>'
+        +'<circle cx="150" cy="150" r="141" fill="none" stroke="url(#wf-wrim-'+wid+')" stroke-width="17"></circle>'
+        +'<g id="wf-wdisc-'+wid+'" transform="rotate(0 150 150)">'+wp+wpin+'</g>'
+        +'<circle cx="150" cy="150" r="132" fill="url(#wf-wsh-'+wid+')" pointer-events="none"></circle>'
+        +'<circle cx="150" cy="150" r="26" fill="'+wStroke+'"></circle><circle cx="150" cy="150" r="26" fill="none" stroke="rgba(0,0,0,.12)" stroke-width="1"></circle><circle cx="150" cy="150" r="8.5" fill="'+wPtr+'"></circle>'
+        +'</svg>'
+        // O ponteiro fica FORA do svg que gira, com o pivô no topo: é ele
+        // que a batida dos pinos empurra.
+        +'<div id="wf-wptr-'+wid+'" style="position:absolute;left:50%;top:-3px;width:30px;height:46px;margin-left:-15px;z-index:2;transform-origin:50% 13%;transform:rotate(0deg);pointer-events:none"><svg viewBox="0 0 30 46" width="30" height="46" aria-hidden="true" style="display:block;filter:drop-shadow(0 3px 4px rgba(0,0,0,.32))"><path d="M15 46 L4.4 17.5 A11 11 0 1 1 25.6 17.5 Z" fill="'+wPtr+'" stroke="#FFFFFF" stroke-width="2.6" stroke-linejoin="round"></path><circle cx="15" cy="14.5" r="3.4" fill="#FFFFFF" fill-opacity=".92"></circle></svg></div>'
+        +'<div id="wf-wcf-'+wid+'" style="position:absolute;left:0;top:0;right:0;bottom:0;pointer-events:none;overflow:visible"></div>'
+        +'<div id="wf-wsr-'+wid+'" role="status" aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;white-space:nowrap;clip:rect(0 0 0 0)"></div>'
         +'</div>'+gameBtn(p,"Girar")+'</div>';
       break;
     }

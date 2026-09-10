@@ -6,7 +6,7 @@ import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type D
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { TRAFFIC_TYPES, PAGE_TEMPLATES } from '@/lib/popups/targeting'
-import { wheelSectorPath, wheelLabelPos } from '@/lib/popups/games'
+import { wheelSectorPath, wheelLabelPos, wheelPinPos, WHEEL_R, WHEEL_RIM_R, WHEEL_RIM_W } from '@/lib/popups/games'
 import { splitLines } from '@/lib/popups/lines'
 import {
   ArrowLeft, Save, Loader2, Monitor, Smartphone, Plus, Trash2, X, Undo2, Redo2, Copy,
@@ -333,7 +333,7 @@ const defaultProps: Record<string, Record<string, any>> = {
       { id: 's3', label: '10% OFF', prize: 'base', weight: 35, color: '#FDBA74' },
       { id: 's4', label: 'Tente de novo', prize: 'none', weight: 15, color: '#374151' },
     ],
-    buttonText: 'Girar a roleta', size: 300, labelSize: 12, labelColor: '#FFFFFF', strokeColor: '#FFFFFF', pointerColor: '#111827',
+    buttonText: 'Girar a roleta', size: 320, labelSize: 13, labelColor: '#FFFFFF', strokeColor: '#FFFFFF', pointerColor: '#111827', rimColor: '#111827', sound: true,
     bgColor: '#F97316', textColor: '#FFFFFF', fontSize: 15, borderRadius: 8, fullWidth: false,
   },
   scratch: {
@@ -939,6 +939,16 @@ function publishProblems(design: PopupDesign): string[] {
     if ((b.type === 'wheel' || b.type === 'scratch') && !hasCoupon) out.push('O jogo promete um prêmio, mas não há bloco de cupom na etapa de sucesso.')
     if (b.type === 'countdown' && !b.props?.endDate) out.push('A contagem regressiva está sem data final — ficaria zerada na loja.')
   }
+  // Jogo sem botão próprio depende do botão da etapa. Se a etapa não tem
+  // nenhum botão de envio, o visitante não tem como jogar — o popup abre e
+  // fica de enfeite, sem nada quebrado à vista.
+  for (const st of design.steps) {
+    const blocks = st.blocks || []
+    if (!blocks.some(b => (b.type === 'wheel' || b.type === 'scratch') && b.props?.showButton === false)) continue
+    if (!blocks.some(b => b.type === 'button' && (b.props?.action || 'submit') === 'submit')) {
+      out.push('O jogo está sem botão próprio e a etapa não tem botão de envio — ninguém conseguiria jogar.')
+    }
+  }
   return Array.from(new Set(out))
 }
 // O rótulo do primeiro segmento do primeiro jogo: é o que a visualização
@@ -1112,22 +1122,57 @@ function BlockPreview({ block, selected, onContentChange, onSelect, offerLabel, 
       </div>
     }
     case 'wheel': {
+      // A pré-visualização é a MESMA peça que vai ao ar: disco, aro com
+      // volume, pinos nas divisões, brilho fixo no alto, cubo no centro e
+      // o ponteiro em forma de alfinete. O que o lojista arruma aqui é o
+      // que o visitante vê girar.
       const segs = gameSegments(p)
-      const size = Math.max(180, Math.min(440, Number(p.size) || 300))
+      const size = Math.max(200, Math.min(460, Number(p.size) || 320))
       if (segs.length < 2) return <div style={{ ...blockStyle, padding: 16, textAlign: 'center', border: '1px dashed #FCA5A5', borderRadius: 8, color: '#B91C1C', fontSize: 12 }}>A roleta precisa de pelo menos dois segmentos.</div>
+      const rim = p.rimColor || '#111827'
+      const ptr = p.pointerColor || '#111827'
+      const hub = p.strokeColor || '#FFFFFF'
+      const gid = `wprev-${String(block.id).replace(/[^a-zA-Z0-9_-]/g, "")}`
       return <div style={{ ...blockStyle, textAlign: 'center' }}>
-        <div style={{ position: 'relative', display: 'inline-block', width: size, maxWidth: '100%' }}>
-          <div style={{ position: 'absolute', left: '50%', top: -4, transform: 'translateX(-50%)', width: 0, height: 0, borderLeft: '11px solid transparent', borderRight: '11px solid transparent', borderTop: `24px solid ${p.pointerColor || '#111827'}`, zIndex: 2, filter: 'drop-shadow(0 2px 2px rgba(0,0,0,.25))' }} />
-          <svg viewBox="0 0 300 300" role="img" aria-label="Roleta de prêmios" style={{ width: '100%', height: 'auto', display: 'block' }}>
-            {segs.map((sg, i) => {
-              const lp = wheelLabelPos(i, segs.length)
-              return <g key={sg.id + i}>
-                <path d={wheelSectorPath(i, segs.length)} fill={sg.color} stroke={p.strokeColor || '#FFFFFF'} strokeWidth={2} />
-                <text x={lp.x} y={lp.y} transform={`rotate(${lp.angle} ${lp.x} ${lp.y})`} textAnchor="middle" dominantBaseline="middle" fontSize={p.labelSize || 12} fontWeight={700} fill={sg.textColor || p.labelColor || '#FFFFFF'}>{sg.label}</text>
-              </g>
-            })}
-            <circle cx={150} cy={150} r={16} fill={p.strokeColor || '#FFFFFF'} stroke={p.pointerColor || '#111827'} strokeWidth={3} />
+        <div style={{ position: 'relative', display: 'inline-block', width: size, maxWidth: '100%', filter: 'drop-shadow(0 14px 28px rgba(0,0,0,.24))' }}>
+          <svg viewBox="0 0 300 300" role="img" aria-label="Roleta de prêmios" style={{ width: '100%', height: 'auto', display: 'block', overflow: 'visible' }}>
+            <defs>
+              <linearGradient id={`${gid}-rim`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stopColor={shadeHex(rim, 46)} />
+                <stop offset=".48" stopColor={rim} />
+                <stop offset="1" stopColor={shadeHex(rim, -30)} />
+              </linearGradient>
+              <radialGradient id={`${gid}-sheen`} cx=".33" cy=".24" r=".8">
+                <stop offset="0" stopColor="#FFFFFF" stopOpacity=".3" />
+                <stop offset=".52" stopColor="#FFFFFF" stopOpacity=".05" />
+                <stop offset="1" stopColor="#000000" stopOpacity=".16" />
+              </radialGradient>
+            </defs>
+            <circle cx={150} cy={150} r={WHEEL_RIM_R} fill="none" stroke={`url(#${gid}-rim)`} strokeWidth={WHEEL_RIM_W} />
+            <g>
+              {segs.map((sg, i) => {
+                const lp = wheelLabelPos(i, segs.length)
+                return <g key={sg.id + i}>
+                  <path d={wheelSectorPath(i, segs.length)} fill={sg.color} stroke={hub} strokeWidth={2} />
+                  <text x={lp.x} y={lp.y} transform={`rotate(${lp.angle} ${lp.x} ${lp.y})`} textAnchor="middle" dominantBaseline="middle" fontSize={p.labelSize || 13} fontWeight={800} fill={sg.textColor || p.labelColor || '#FFFFFF'}>{sg.label}</text>
+                </g>
+              })}
+              {segs.map((sg, i) => {
+                const pin = wheelPinPos(i, segs.length)
+                return <circle key={`pin${sg.id}${i}`} cx={pin.x} cy={pin.y} r={3.2} fill="#FFFFFF" fillOpacity={0.92} />
+              })}
+            </g>
+            <circle cx={150} cy={150} r={WHEEL_R} fill={`url(#${gid}-sheen)`} pointerEvents="none" />
+            <circle cx={150} cy={150} r={26} fill={hub} />
+            <circle cx={150} cy={150} r={26} fill="none" stroke="rgba(0,0,0,.12)" strokeWidth={1} />
+            <circle cx={150} cy={150} r={8.5} fill={ptr} />
           </svg>
+          <div style={{ position: 'absolute', left: '50%', top: -3, width: 30, height: 46, marginLeft: -15, zIndex: 2, pointerEvents: 'none' }}>
+            <svg viewBox="0 0 30 46" width={30} height={46} aria-hidden="true" style={{ display: 'block', filter: 'drop-shadow(0 3px 4px rgba(0,0,0,.32))' }}>
+              <path d="M15 46 L4.4 17.5 A11 11 0 1 1 25.6 17.5 Z" fill={ptr} stroke="#FFFFFF" strokeWidth={2.6} strokeLinejoin="round" />
+              <circle cx={15} cy={14.5} r={3.4} fill="#FFFFFF" fillOpacity={0.92} />
+            </svg>
+          </div>
         </div>
         <GameButtonPreview p={p} fallback="Girar" />
       </div>
@@ -1522,22 +1567,37 @@ function GameEditor({ type, p, up, hints }: { type: string; p: any; up: (k: stri
     </div>
     <div className="pt-4 border-t border-gray-100 space-y-3">
       <SectionHeader title="Botão" icon={<MousePointerClick className="w-3 h-3" />} />
-      <LabeledField label="Texto">
-        <input className={inp} value={p.buttonText || ''} onChange={e => up('buttonText', e.target.value.slice(0, 40))} placeholder={isWheel ? 'Girar a roleta' : 'Raspar'} />
-      </LabeledField>
-      <ColorRow label="Fundo" value={p.bgColor || '#F97316'} onChange={v => up('bgColor', v)} />
-      <ColorRow label="Texto" value={p.textColor || '#FFFFFF'} onChange={v => up('textColor', v)} />
-      <Toggle label="Largura total" checked={!!p.fullWidth} onChange={v => up('fullWidth', v)} />
+      {/* Nas referências que convertem, o jogo não tem botão grudado
+          embaixo: quem dispara é o botão da etapa, no fim do formulário.
+          Desligado aqui, o bloco entrega só o jogo — e o sorteio acontece
+          no envio de qualquer maneira. */}
+      <Toggle label="Botão junto do jogo" checked={p.showButton !== false} onChange={v => up('showButton', v)} />
+      {p.showButton === false ? (
+        <p className="text-[11px] text-gray-400 leading-snug">Quem dispara é o botão da etapa. Confira se existe um bloco de botão com a ação "Enviar" abaixo do jogo.</p>
+      ) : (
+        <>
+          <LabeledField label="Texto">
+            <input className={inp} value={p.buttonText || ''} onChange={e => up('buttonText', e.target.value.slice(0, 40))} placeholder={isWheel ? 'Girar a roleta' : 'Raspar'} />
+          </LabeledField>
+          <ColorRow label="Fundo" value={p.bgColor || '#F97316'} onChange={v => up('bgColor', v)} />
+          <ColorRow label="Texto" value={p.textColor || '#FFFFFF'} onChange={v => up('textColor', v)} />
+          <Toggle label="Largura total" checked={!!p.fullWidth} onChange={v => up('fullWidth', v)} />
+        </>
+      )}
     </div>
     <div className="pt-4 border-t border-gray-100 space-y-3">
       <SectionHeader title="Aparência" icon={<Palette className="w-3 h-3" />} />
       {isWheel ? (
         <>
-          <LabeledField label="Tamanho"><Slider value={p.size || 300} onChange={v => up('size', v)} min={180} max={440} unit="px" /></LabeledField>
-          <LabeledField label="Texto dos segmentos"><Slider value={p.labelSize || 12} onChange={v => up('labelSize', v)} min={8} max={20} unit="px" /></LabeledField>
+          <LabeledField label="Tamanho"><Slider value={p.size || 320} onChange={v => up('size', v)} min={200} max={460} unit="px" /></LabeledField>
+          <LabeledField label="Texto dos segmentos"><Slider value={p.labelSize || 13} onChange={v => up('labelSize', v)} min={8} max={20} unit="px" /></LabeledField>
           <ColorRow label="Cor do texto" value={p.labelColor || '#FFFFFF'} onChange={v => up('labelColor', v)} />
-          <ColorRow label="Ponteiro" value={p.pointerColor || '#111827'} onChange={v => up('pointerColor', v)} />
+          <ColorRow label="Aro" value={p.rimColor || '#111827'} onChange={v => up('rimColor', v)} />
+          <ColorRow label="Ponteiro e cubo" value={p.pointerColor || '#111827'} onChange={v => up('pointerColor', v)} />
           <ColorRow label="Divisórias" value={p.strokeColor || '#FFFFFF'} onChange={v => up('strokeColor', v)} />
+          {/* O tique de cada pino que passa é o que faz o giro parecer
+              mecânico. Quem não quiser som na loja desliga aqui. */}
+          <Toggle label="Tique ao girar" checked={p.sound !== false} onChange={v => up('sound', v)} />
         </>
       ) : (
         <>

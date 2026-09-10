@@ -105,8 +105,13 @@ export function secureRandom(): number {
 // em string). Os setores começam às 12h e seguem no sentido horário; o
 // ponteiro fica fixo em cima e a roleta gira até o centro do setor sorteado.
 // ---------------------------------------------------------------------------
-export const WHEEL_R = 140
+// O raio dos setores para em 132 (e não em 150) porque os 18px de fora
+// são o aro: ele não gira, e é o que dá volume à peça.
+export const WHEEL_R = 132
 export const WHEEL_C = 150
+/** Raio do aro (o centro do traço) e a espessura dele. */
+export const WHEEL_RIM_R = 141
+export const WHEEL_RIM_W = 17
 
 export function wheelSectorPath(i: number, n: number, r = WHEEL_R, c = WHEEL_C): string {
   const step = 360 / Math.max(2, n)
@@ -121,7 +126,17 @@ export function wheelLabelPos(i: number, n: number, r = WHEEL_R, c = WHEEL_C): {
   const step = 360 / Math.max(2, n)
   const angle = (i + 0.5) * step - 90
   const rad = angle * Math.PI / 180
-  return { x: Number((c + r * 0.62 * Math.cos(rad)).toFixed(2)), y: Number((c + r * 0.62 * Math.sin(rad)).toFixed(2)), angle: Number(angle.toFixed(2)) }
+  return { x: Number((c + r * 0.63 * Math.cos(rad)).toFixed(2)), y: Number((c + r * 0.63 * Math.sin(rad)).toFixed(2)), angle: Number(angle.toFixed(2)) }
+}
+
+/**
+ * O pino de cada divisão, na borda do disco. Ele gira junto com a roleta
+ * — é nele que o ponteiro bate, e a batida é o que faz o giro parecer
+ * mecânico em vez de desenhado.
+ */
+export function wheelPinPos(i: number, n: number, r = WHEEL_R, c = WHEEL_C): { x: number; y: number } {
+  const rad = (i * (360 / Math.max(2, n)) - 90) * Math.PI / 180
+  return { x: Number((c + (r - 4) * Math.cos(rad)).toFixed(2)), y: Number((c + (r - 4) * Math.sin(rad)).toFixed(2)) }
 }
 
 /** Rotação (graus, sentido horário) que leva o centro do setor i ao ponteiro, com cinco voltas antes. */
