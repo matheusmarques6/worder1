@@ -293,7 +293,7 @@ FUNCTIONS = (
     ("get_user_organization_id", "",
      "75201ac93ee64426135de60415cbc8fe4eaeac23ff6488749037d23cafd9c3bc"),
     ("handle_new_user", "",
-     "0e52901d4909765f414ddd7a318303e2d0ecbb515d8212a5445f16410efc7c6b"),
+     "1ba60e53bdfa48f9238ddcc30e0671541b0279a0d7c4b2e340df51b1343ba267"),
 )
 
 

@@ -5,7 +5,9 @@ this task only proves they collect and keeps the expectations reviewable.
 """
 
 import json
+import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import psycopg
@@ -102,6 +104,12 @@ def test_invitation_requires_persisted_authority_and_uses_database_role(
                  "active" if invalid == "status" else "invited",
                  two_tenants.b.user_id if invalid == "tenant" else two_tenants.a.user_id),
             ).fetchone()[0]
+        counts_query = (
+            "select count(*), "
+            "(select count(*) from public.pipelines where organization_id=%s) "
+            "from public.organizations"
+        )
+        before = admin.execute(counts_query, (organization_id,)).fetchone()
         _insert_auth_user(
             admin, user_id, email,
             {"invited_org_id": str(organization_id), "invited_role": "admin"},
@@ -110,6 +118,7 @@ def test_invitation_requires_persisted_authority_and_uses_database_role(
             "select organization_id, role::text from public.profiles where id=%s", (user_id,)
         ).fetchone()
         if invalid is None:
+            assert admin.execute(counts_query, (organization_id,)).fetchone() == before
             assert profile == (organization_id, "member")
             assert admin.execute(
                 "select user_id, role::text, status from public.organization_members where id=%s",
@@ -123,6 +132,86 @@ def test_invitation_requires_persisted_authority_and_uses_database_role(
                 "where organization_id=%s and user_id=%s",
                 (organization_id, user_id),
             ).fetchone()[0] == 0
+
+
+def test_concurrent_auth_inserts_consume_invitation_only_once(dsn, admin, two_tenants):
+    first_id, second_id = uuid.uuid4(), uuid.uuid4()
+    email = f"race-{first_id}@example.test"
+    target = two_tenants.a.id
+    metadata = {"invited_org_id": str(target), "invited_role": "admin"}
+    membership, ctid = admin.execute(
+        """insert into public.organization_members
+             (organization_id, role, email, status, invited_by)
+           values (%s, 'member', %s, 'invited', %s) returning id, ctid::text""",
+        (target, email, two_tenants.a.user_id),
+    ).fetchone()
+    page, tuple_id = map(int, ctid.strip("()").split(","))
+    try:
+        with (psycopg.connect(dsn, autocommit=True, connect_timeout=5) as first,
+              psycopg.connect(dsn, autocommit=True, connect_timeout=5) as second):
+            for connection in (first, second):
+                connection.execute("set statement_timeout='10s'")
+                connection.execute("set lock_timeout='8s'")
+
+            def consume_again():
+                with second.transaction():
+                    # Distinct spellings still select the same LOWER(email) invitation.
+                    _insert_auth_user(second, second_id, email.upper(), metadata)
+
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                with first.transaction():
+                    _insert_auth_user(first, first_id, email, metadata)
+                    attempt = pool.submit(consume_again)
+                    deadline = time.monotonic() + 5
+                    blocked_on_membership = False
+                    while time.monotonic() < deadline and not attempt.done():
+                        blocked_on_membership = admin.execute(
+                            """select exists (
+                                 select 1 from pg_locks where pid=%s and locktype='tuple'
+                                   and relation='public.organization_members'::regclass
+                                   and page=%s and tuple=%s and granted
+                               ) and %s=any(pg_blocking_pids(%s))""",
+                            (second.info.backend_pid, page, tuple_id,
+                             first.info.backend_pid, second.info.backend_pid),
+                        ).fetchone()[0]
+                        if blocked_on_membership:
+                            break
+                        time.sleep(0.02)
+                    if attempt.done():
+                        attempt.result()
+                    if not blocked_on_membership:
+                        indexes = admin.execute(
+                            """select schemaname, tablename, indexdef from pg_indexes
+                               where (schemaname, tablename) in
+                                 (('auth', 'users'), ('public', 'profiles'))
+                                 and indexdef like 'CREATE UNIQUE%' order by indexname""",
+                        ).fetchall()
+                        pytest.fail(
+                            "NEEDS_CONTEXT: second auth insert did not reach the invitation "
+                            f"tuple lock; uniqueness definitions: {indexes!r}"
+                        )
+                # The first commit releases the row; the second must recheck the invite.
+                attempt.result(timeout=10)
+        profiles = {row[0]: row[1:] for row in admin.execute(
+            "select id, organization_id::text, role::text from public.profiles "
+            "where id=any(%s)", ([first_id, second_id],),
+        )}
+        assert profiles[first_id] == (str(target), "member")
+        assert profiles[second_id][0] != str(target)
+        assert profiles[second_id][1] == "owner"
+        assert admin.execute(
+            """select id, user_id, role::text, status from public.organization_members
+               where organization_id=%s and lower(email)=lower(%s)""", (target, email),
+        ).fetchall() == [(membership, first_id, "member", "active")]
+    finally:
+        own_orgs = [row[0] for row in admin.execute(
+            "select organization_id from public.profiles where id=any(%s) "
+            "and organization_id not in (%s, %s)",
+            ([first_id, second_id], two_tenants.a.id, two_tenants.b.id),
+        )]
+        admin.execute("delete from auth.users where id=any(%s)", ([first_id, second_id],))
+        admin.execute("delete from public.organization_members where id=%s", (membership,))
+        admin.execute("delete from public.organizations where id=any(%s)", (own_orgs,))
 
 
 def test_owner_invitation_aborts_auth_insert_without_orphan(admin, two_tenants):
