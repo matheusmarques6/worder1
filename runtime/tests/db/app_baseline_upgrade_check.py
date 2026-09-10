@@ -343,7 +343,22 @@ def test_compensation_replay_accepts_canonical_policy_deparse(admin):
     assert scoped_catalog(admin) == before == expected_scoped_catalog()
 
 
-def test_unknown_profile_column_grant_aborts_compensation_without_mutation(admin):
+@pytest.mark.parametrize(("ddl", "expected_acl"), (
+    (
+        "grant update on public.profiles to public",
+        (("profiles", None, "PUBLIC", "postgres", "UPDATE", False),),
+    ),
+    (
+        "grant update (role, organization_id) on public.profiles to public",
+        (
+            ("profiles", "organization_id", "PUBLIC", "postgres", "UPDATE", False),
+            ("profiles", "role", "PUBLIC", "postgres", "UPDATE", False),
+        ),
+    ),
+), ids=("table", "columns"))
+def test_unknown_authority_grant_aborts_compensation_without_mutation(
+    admin, ddl, expected_acl,
+):
     acl_query = """select c.relname, null::text,
                           case when x.grantee=0 then 'PUBLIC' else pg_get_userbyid(x.grantee) end,
                           pg_get_userbyid(x.grantor), x.privilege_type, x.is_grantable
@@ -363,16 +378,9 @@ def test_unknown_profile_column_grant_aborts_compensation_without_mutation(admin
                     order by 1, 2 nulls first, 3, 4, 5, 6"""
     before = scoped_catalog(admin)
     with admin.transaction(force_rollback=True):
-        admin.execute(
-            "grant update (role, organization_id) on public.profiles to public"
-        )
+        admin.execute(ddl)
         incompatible_acl = tuple(admin.execute(acl_query).fetchall())
-        assert (
-            "profiles", "organization_id", "PUBLIC", "postgres", "UPDATE", False,
-        ) in incompatible_acl
-        assert (
-            "profiles", "role", "PUBLIC", "postgres", "UPDATE", False,
-        ) in incompatible_acl
+        assert all(row in incompatible_acl for row in expected_acl)
 
         with pytest.raises(
             psycopg.errors.RaiseException,
