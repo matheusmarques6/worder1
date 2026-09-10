@@ -410,7 +410,7 @@ export async function enrichShopifyEvent(
     try {
       const { data } = await opts.supabase
         .from('contacts')
-        .select('id, email, phone, first_name, last_name, total_orders, total_spent, accepts_marketing:is_subscribed_email, tags, shopify_customer_id, address1:address, city, province:state, country, zip')
+        .select('id, email, phone, first_name, last_name, total_orders, total_spent, accepts_marketing:is_subscribed_email, tags, shopify_customer_id, address, city, state, country, zip')
         .eq('id', opts.contactId)
         .maybeSingle();
       contactRow = data;
@@ -419,7 +419,7 @@ export async function enrichShopifyEvent(
     try {
       const { data } = await opts.supabase
         .from('contacts')
-        .select('id, email, phone, first_name, last_name, total_orders, total_spent, accepts_marketing:is_subscribed_email, tags, shopify_customer_id, address1:address, city, province:state, country, zip')
+        .select('id, email, phone, first_name, last_name, total_orders, total_spent, accepts_marketing:is_subscribed_email, tags, shopify_customer_id, address, city, state, country, zip')
         .eq('organization_id', opts.organizationId)
         .ilike('email', opts.email)
         .maybeSingle();
@@ -448,23 +448,26 @@ export async function enrichShopifyEvent(
     // Build a default address block when we have one stored. Omnisend
     // /Klaviyo flow templates often reach into raw.billing_address.*
     //
-    // Os nomes vêm por APELIDO do PostgREST: as colunas reais são
-    // `address` (não address1), `state` (não province) e
-    // `is_subscribed_email` (não accepts_marketing). Pedir os nomes que
-    // não existem fazia o PostgREST recusar a consulta inteira — o
-    // enriquecimento nunca tinha dado nenhum de contato. `address2` e
-    // `locale` não têm equivalente e saíram.
-    const hasAddress = contactRow.address1 || contactRow.city || contactRow.country || contactRow.zip;
+    // O select pedia address1, address2, province, locale e
+    // accepts_marketing — nenhuma dessas colunas existe em contacts, e o
+    // PostgREST recusa a consulta INTEIRA quando não conhece um campo: o
+    // enriquecimento nunca teve dado nenhum de contato. Os nomes reais
+    // são `address` (JSONB com o endereço inteiro), `state`,
+    // `is_subscribed_email` — e `locale` não tem equivalente.
+    const endereco: Record<string, any> =
+      contactRow.address && typeof contactRow.address === 'object' ? contactRow.address : {};
+    const hasAddress = endereco.address1 || endereco.street || contactRow.city || contactRow.country || contactRow.zip;
     if (hasAddress) {
       const billing = {
         first_name: contactRow.first_name || null,
         last_name: contactRow.last_name || null,
         name: [contactRow.first_name, contactRow.last_name].filter(Boolean).join(' ') || null,
-        address1: contactRow.address1 || null,
-        city: contactRow.city || null,
-        province: contactRow.province || null,
-        country: contactRow.country || null,
-        zip: contactRow.zip || null,
+        address1: endereco.address1 || endereco.street || null,
+        address2: endereco.address2 || null,
+        city: contactRow.city || endereco.city || null,
+        province: contactRow.state || endereco.province || null,
+        country: contactRow.country || endereco.country || null,
+        zip: contactRow.zip || endereco.zip || null,
         phone: contactRow.phone || null,
       };
       raw.billing_address = raw.billing_address || billing;
