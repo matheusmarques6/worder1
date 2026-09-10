@@ -1,3 +1,5 @@
+/// <reference types="vite/client" />
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 
@@ -51,6 +53,7 @@ vi.mock('@/lib/queue/durable-queue', () => ({
 
 const routes = import.meta.glob('../app/api/cron/*/route.ts')
 const sideEffects = Object.values(effects).filter(value => typeof value === 'function')
+const unauthorizedHeaders: Record<string, string>[] = [{}, { 'x-vercel-cron': '1' }]
 
 function request(method: string, headers: Record<string, string>) {
   return new NextRequest('http://localhost/api/cron/test', { method, headers })
@@ -71,7 +74,7 @@ function refusesWithoutSecret(batch: string, names: string[]) {
 
       for (const method of ['GET', 'POST']) {
         if (!handlers[method]) continue
-        for (const headers of [{}, { 'x-vercel-cron': '1' }]) {
+        for (const headers of unauthorizedHeaders) {
           vi.clearAllMocks()
           const response = await handlers[method](request(method, headers))
           expect(response.status).toBe(401)
