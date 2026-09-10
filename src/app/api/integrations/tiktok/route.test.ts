@@ -25,7 +25,6 @@ beforeEach(() => {
   mocks.upsert.mockResolvedValue({ data: null, error: null })
   mocks.from.mockImplementation((table: string) => {
     if (table === 'oauth_states') return {
-      select: () => ({ eq: () => ({ single: async () => ({ data: null, error: null }) }) }),
       insert: mocks.insert,
     }
     if (table === 'tiktok_accounts') return { upsert: mocks.upsert }
@@ -65,9 +64,10 @@ it('connect emits a signed state accepted by the real callback for the authentic
   const result = await GET(new NextRequest(callback))
 
   expect(result.headers.get('location')).toBe('https://app.example.test/settings?tab=integrations&success=tiktok_connected')
-  expect(mocks.insert).toHaveBeenCalledWith(expect.objectContaining({
-    provider: 'tiktok', organization_id: 'org-a', user_id: 'user-a', nonce: expect.any(String),
-  }))
+  expect(mocks.insert).toHaveBeenCalledWith({
+    provider: 'tiktok', organization_id: 'org-a',
+    state: expect.stringMatching(/^nonce:[a-f0-9]{32}$/), expires_at: expect.any(String),
+  })
   expect(mocks.upsert).toHaveBeenCalledWith(expect.objectContaining({
     organization_id: 'org-a', connected_by: 'user-a', advertiser_id: 'advertiser-a',
   }), { onConflict: 'organization_id,advertiser_id' })

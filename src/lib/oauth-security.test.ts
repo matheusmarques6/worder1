@@ -1,6 +1,6 @@
 import { createHmac } from 'crypto'
 import { timingSafeEqual } from 'node:crypto'
-import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
 
 vi.mock('@/lib/supabase-admin', () => ({ getSupabaseAdmin: vi.fn() }))
@@ -151,4 +151,93 @@ it('rejects provider mismatch, payload tampering and expiry without touching sto
   vi.advanceTimersByTime(10 * 60 * 1000 + 1)
   expect(await oauth.consumeOAuthState(state, 'meta')).toBeNull()
   expect(getSupabaseAdmin).not.toHaveBeenCalled()
+})
+
+describe('atomic nonce consumption', () => {
+  const insert = vi.fn()
+  const select = vi.fn()
+  const from = vi.fn()
+
+  beforeEach(() => {
+    insert.mockReset().mockResolvedValue({ data: null, error: null })
+    // The modern table has no nonce column; the SDK resolves errors instead of throwing.
+    select.mockReturnValue({
+      eq: () => ({ single: async () => ({ data: null, error: { code: '42703' } }) }),
+    })
+    from.mockReturnValue({ insert, select })
+    vi.mocked(getSupabaseAdmin).mockReturnValue({ from } as unknown as ReturnType<typeof getSupabaseAdmin>)
+  })
+
+  it('returns valid data only after one INSERT with the modern four-column contract', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-09-10T12:00:00Z'))
+    const { consumeOAuthState } = await import('./oauth-security')
+
+    expect(await consumeOAuthState(signState('oauth-test-secret'), 'meta')).toEqual({
+      organizationId: 'org-a', userId: 'user-a', provider: 'meta',
+      nonce: 'test-nonce', createdAt: Date.now(),
+    })
+    expect(from).toHaveBeenCalledTimes(1)
+    expect(from).toHaveBeenCalledWith('oauth_states')
+    expect(select).not.toHaveBeenCalled()
+    expect(insert).toHaveBeenCalledTimes(1)
+    expect(insert).toHaveBeenCalledWith({
+      state: 'nonce:test-nonce', provider: 'meta', organization_id: 'org-a',
+      expires_at: '2026-09-10T12:10:00.000Z',
+    })
+  })
+
+  it.each(['23505', '42703', '42501'])('rejects a resolved INSERT error %s', async code => {
+    insert.mockResolvedValueOnce({ data: null, error: { code } })
+    const { consumeOAuthState } = await import('./oauth-security')
+
+    expect(await consumeOAuthState(signState('oauth-test-secret'), 'meta')).toBeNull()
+    expect(insert).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects an SDK promise rejection', async () => {
+    insert.mockRejectedValueOnce(new Error('storage unavailable'))
+    const { consumeOAuthState } = await import('./oauth-security')
+
+    expect(await consumeOAuthState(signState('oauth-test-secret'), 'meta')).toBeNull()
+    expect(insert).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects failure to initialize the database client', async () => {
+    vi.mocked(getSupabaseAdmin).mockImplementationOnce(() => { throw new Error('not configured') })
+    const { consumeOAuthState } = await import('./oauth-security')
+
+    await expect(consumeOAuthState(signState('oauth-test-secret'), 'meta')).resolves.toBeNull()
+    expect(from).not.toHaveBeenCalled()
+  })
+
+  it('accepts only one concurrent consumer when the unique state INSERT rejects the duplicate', async () => {
+    const claimed = new Set<string>()
+    insert.mockImplementation(async ({ state }: { state: string }) => {
+      if (claimed.has(state)) return { data: null, error: { code: '23505' } }
+      claimed.add(state)
+      return { data: null, error: null }
+    })
+    const { consumeOAuthState, generateOAuthState } = await import('./oauth-security')
+    const state = generateOAuthState('org-a', 'user-a', 'meta')
+
+    const results = await Promise.all([
+      consumeOAuthState(state, 'meta'), consumeOAuthState(state, 'meta'),
+    ])
+
+    expect(results.filter(Boolean)).toHaveLength(1)
+    expect(results.filter(result => result === null)).toHaveLength(1)
+    expect(insert).toHaveBeenCalledTimes(2)
+    expect(select).not.toHaveBeenCalled()
+    expect([...claimed]).toEqual([expect.stringMatching(/^nonce:[a-f0-9]{32}$/)])
+  })
+
+  it('rejects an invalid state before client initialization or any database operation', async () => {
+    const { consumeOAuthState } = await import('./oauth-security')
+
+    expect(await consumeOAuthState('not-a-signed-state', 'meta')).toBeNull()
+    expect(getSupabaseAdmin).not.toHaveBeenCalled()
+    expect(from).not.toHaveBeenCalled()
+    expect(insert).not.toHaveBeenCalled()
+  })
 })
