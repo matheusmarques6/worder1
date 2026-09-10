@@ -1207,14 +1207,36 @@ begin
       join pg_namespace n on n.oid = c.relnamespace,
            lateral aclexplode(coalesce(c.relacl, acldefault('r', c.relowner))) a
      where n.nspname = 'public'
-       and c.relname in (select distinct table_name from app_baseline_columns)
+       and (c.relname in (select distinct table_name from app_baseline_columns)
+            or c.relname = 'profiles')
        and (case when a.grantee = 0 then 'PUBLIC' else pg_get_userbyid(a.grantee) end
               <> all(allowed_roles)
-            or pg_get_userbyid(a.grantor) <> 'postgres'
+             or pg_get_userbyid(a.grantor) <> 'postgres'
             or a.privilege_type <> all(allowed_privileges)
             or a.is_grantable)
   ) then
-    raise exception 'app baseline incompatible: scoped_grants.unknown';
+    raise exception 'app baseline incompatible: authority_grants.unknown';
+  end if;
+
+  if exists (
+    select 1
+      from pg_class c
+      join pg_namespace n on n.oid = c.relnamespace
+      join pg_attribute col on col.attrelid = c.oid,
+           lateral aclexplode(col.attacl) a
+     where n.nspname = 'public'
+       and (c.relname in (select distinct table_name from app_baseline_columns)
+            or c.relname = 'profiles')
+       and col.attnum > 0 and not col.attisdropped
+       and (c.relname not in ('organization_members', 'profiles')
+            or case when a.grantee = 0 then 'PUBLIC'
+                    else pg_get_userbyid(a.grantee) end
+                 not in ('anon', 'authenticated')
+            or pg_get_userbyid(a.grantor) <> 'postgres'
+            or a.privilege_type not in ('INSERT', 'UPDATE')
+            or a.is_grantable)
+  ) then
+    raise exception 'app baseline incompatible: authority_grants.unknown';
   end if;
 
   for r in select distinct table_name from app_baseline_columns order by table_name loop
@@ -1226,8 +1248,8 @@ begin
   end loop;
 
   -- Invitations and tenant/role assignments are written only by trusted services.
-  revoke insert, update, delete on public.organization_members, public.profiles
-    from anon, authenticated;
+  revoke all privileges on public.profiles from anon, authenticated, service_role;
+  revoke insert, update, delete on public.organization_members from anon, authenticated;
   for r in
     select c.relname, string_agg(quote_ident(a.attname), ', ' order by a.attnum) as columns
       from pg_class c join pg_namespace n on n.oid = c.relnamespace
@@ -1247,7 +1269,10 @@ begin
     select 1
       from (select unnest(allowed_roles) as role_name) roles
       cross join (select unnest(allowed_privileges) as privilege_name) privileges
-      cross join (select distinct table_name from app_baseline_columns) tables
+      cross join (
+        select distinct table_name from app_baseline_columns
+        union all select 'profiles'
+      ) tables
      where exists (
        select 1
          from pg_class c
@@ -1261,12 +1286,53 @@ begin
           and not a.is_grantable
      ) <> (
        roles.role_name = 'postgres'
-       or (privileges.privilege_name = any(array['SELECT', 'INSERT', 'UPDATE', 'DELETE'])
-           and (tables.table_name <> 'organization_members'
-                or roles.role_name = 'service_role' or privileges.privilege_name = 'SELECT'))
+       or (
+         privileges.privilege_name = any(array['SELECT', 'INSERT', 'UPDATE', 'DELETE'])
+         and (
+           (tables.table_name = 'profiles'
+            and (roles.role_name = 'service_role'
+                 or (roles.role_name = 'authenticated'
+                     and privileges.privilege_name = 'SELECT')))
+           or
+           (tables.table_name <> 'profiles'
+            and (tables.table_name <> 'organization_members'
+                 or roles.role_name = 'service_role'
+                 or privileges.privilege_name = 'SELECT'))
+         )
+       )
      )
   ) then
-    raise exception 'app baseline incompatible: scoped_grants.definition';
+    raise exception 'app baseline incompatible: authority_grants.definition';
+  end if;
+
+  if exists (
+    with actual as (
+      select c.relname::text as table_name, col.attname::text as column_name,
+             (case when a.grantee = 0 then 'PUBLIC'
+                   else pg_get_userbyid(a.grantee)::text end) as grantee,
+             pg_get_userbyid(a.grantor)::text as grantor,
+             a.privilege_type, a.is_grantable
+        from pg_class c
+        join pg_namespace n on n.oid = c.relnamespace
+        join pg_attribute col on col.attrelid = c.oid,
+             lateral aclexplode(col.attacl) a
+       where n.nspname = 'public'
+         and (c.relname in (select distinct table_name from app_baseline_columns)
+              or c.relname = 'profiles')
+         and col.attnum > 0 and not col.attisdropped
+    ),
+    expected(table_name, column_name, grantee, grantor, privilege_type, is_grantable) as (
+      values
+        ('profiles', 'must_change_password', 'authenticated', 'postgres', 'UPDATE', false),
+        ('profiles', 'updated_at', 'authenticated', 'postgres', 'UPDATE', false)
+    )
+    select 1 from (
+      (select * from actual except all select * from expected)
+      union all
+      (select * from expected except all select * from actual)
+    ) difference
+  ) then
+    raise exception 'app baseline incompatible: authority_column_grants.definition';
   end if;
 end
 $$;
