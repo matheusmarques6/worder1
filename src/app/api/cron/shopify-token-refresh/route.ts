@@ -8,32 +8,20 @@
 // so it just needs the client_id + api_secret (Client Secret)
 // we persisted at connect-time.
 //
-// Auth: Bearer CRON_SECRET if the env var is set (matches Vercel
-// Cron auth header convention). When unset, the endpoint is open
-// (only useful in dev).
+// Auth: Authorization: Bearer CRON_SECRET (required).
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { refreshStoreToken } from '@/lib/shopify/client-credentials';
 import { refreshPrimaryDomain } from '@/lib/shopify/store-url';
+import { authorizeCronRequest } from '@/lib/cron-auth';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-// Accepts Vercel Cron (x-vercel-cron header) OR Authorization: Bearer
-// CRON_SECRET. Fail-closed in production: when CRON_SECRET is unset we
-// reject in prod (open only in dev). Previously a missing secret skipped
-// the whole check, leaving the endpoint fully open in production.
-function isAuthorized(req: NextRequest): boolean {
-  if (req.headers.get('x-vercel-cron')) return true;
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return process.env.NODE_ENV !== 'production';
-  return req.headers.get('authorization') === `Bearer ${secret}`;
-}
-
 export async function GET(request: NextRequest) {
-  if (!isAuthorized(request)) {
+  if (!authorizeCronRequest(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

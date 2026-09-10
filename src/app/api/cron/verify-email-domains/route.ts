@@ -10,16 +10,10 @@ export const maxDuration = 60
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { verifyEmailDomain } from '@/lib/email/domain-dns-check'
-
-function authorized(req: NextRequest): boolean {
-  if (req.headers.get('x-vercel-cron')) return true
-  const secret = process.env.CRON_SECRET
-  if (!secret) return process.env.NODE_ENV !== 'production'
-  return req.headers.get('authorization') === `Bearer ${secret}`
-}
+import { authorizeCronRequest } from '@/lib/cron-auth'
 
 export async function GET(req: NextRequest) {
-  if (!authorized(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!authorizeCronRequest(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const since = new Date(Date.now() - 30 * 86400_000).toISOString()
   const { data: pending } = await supabaseAdmin
     .from('email_domains')

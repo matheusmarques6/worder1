@@ -4,10 +4,7 @@
  *
  * GET /api/cron/auto-process
  *
- * Autenticação:
- *  - Vercel Cron envia header `x-vercel-cron: 1`
- *  - OU header `Authorization: Bearer <CRON_SECRET>`
- *  - Sem nenhum deles → 401
+ * Autenticação: `Authorization: Bearer <CRON_SECRET>` obrigatório.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -15,6 +12,7 @@ import { createClient } from '@supabase/supabase-js';
 import { executeWorkflow, Workflow } from '@/lib/automation/execution-engine';
 import { claimRun, releaseRun, withHeartbeat } from '@/lib/automation/run-lock';
 import { mergeNodeResults } from '@/lib/automation/node-results';
+import { authorizeCronRequest } from '@/lib/cron-auth';
 export const dynamic = 'force-dynamic';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -23,22 +21,8 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 // Permitir execução mais longa
 export const maxDuration = 60;
 
-function isAuthorizedCron(request: NextRequest): boolean {
-  // Vercel Cron identifier
-  if (request.headers.get('x-vercel-cron')) return true;
-
-  const secret = process.env.CRON_SECRET;
-  if (!secret) {
-    // Em dev sem CRON_SECRET definido, aceitamos (evita bloqueio local)
-    return process.env.NODE_ENV !== 'production';
-  }
-
-  const auth = request.headers.get('authorization');
-  return auth === `Bearer ${secret}`;
-}
-
 export async function GET(request: NextRequest) {
-  if (!isAuthorizedCron(request)) {
+  if (!authorizeCronRequest(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
