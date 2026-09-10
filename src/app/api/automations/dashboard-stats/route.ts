@@ -65,6 +65,22 @@ export async function GET(request: NextRequest) {
     if (storeId) activeQuery = activeQuery.eq('store_id', storeId);
     const { count: activeAutomations } = await activeQuery;
 
+    // `automation_runs` não tem store_id: quem carrega a loja é a
+    // automação. Para escopar as execuções por loja, resolvemos antes
+    // os ids das automações daquela loja e filtramos por eles — antes
+    // o `.eq('store_id', …)` derrubava a consulta e todos os cards de
+    // execução mostravam zero em qualquer loja selecionada.
+    let storeAutomationIds: string[] | null = null;
+    if (storeId) {
+      const { data: storeAutomations } = await supabase
+        .from('automations')
+        .select('id')
+        .eq('organization_id', orgId)
+        .eq('store_id', storeId);
+      storeAutomationIds = (storeAutomations || []).map((a: any) => a.id);
+    }
+    const semAutomacoesDaLoja = storeAutomationIds !== null && storeAutomationIds.length === 0;
+
     // =============================================
     // 2. Processados Hoje
     // =============================================
@@ -73,29 +89,16 @@ export async function GET(request: NextRequest) {
 
     let processedToday = 0;
 
-    let runsTodayQuery = supabase
-      .from('automation_runs')
-      .select('id', { count: 'exact', head: true })
-      .eq('organization_id', orgId)
-      .gte('created_at', todayStart.toISOString());
-    if (storeId) runsTodayQuery = runsTodayQuery.eq('store_id', storeId);
-    const { count: runsToday } = await runsTodayQuery;
+    if (!semAutomacoesDaLoja) {
+      let runsTodayQuery = supabase
+        .from('automation_runs')
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', orgId)
+        .gte('created_at', todayStart.toISOString());
+      if (storeAutomationIds) runsTodayQuery = runsTodayQuery.in('automation_id', storeAutomationIds);
+      const { count: runsToday } = await runsTodayQuery;
 
-    processedToday = runsToday || 0;
-
-    if (processedToday === 0) {
-      try {
-        let execsQuery = supabase
-          .from('automation_executions')
-          .select('id', { count: 'exact', head: true })
-          .eq('organization_id', orgId)
-          .gte('started_at', todayStart.toISOString());
-        if (storeId) execsQuery = execsQuery.eq('store_id', storeId);
-        const { count: execsToday } = await execsQuery;
-        processedToday = execsToday || 0;
-      } catch (e) {
-        // Tabela pode não existir
-      }
+      processedToday = runsToday || 0;
     }
 
     // =============================================
@@ -106,30 +109,17 @@ export async function GET(request: NextRequest) {
 
     let conversions30d = 0;
 
-    let dealsRunsQuery = supabase
-      .from('automation_runs')
-      .select('id', { count: 'exact', head: true })
-      .eq('organization_id', orgId)
-      .not('deal_id', 'is', null)
-      .gte('created_at', thirtyDaysAgo.toISOString());
-    if (storeId) dealsRunsQuery = dealsRunsQuery.eq('store_id', storeId);
-    const { count: dealsFromRuns } = await dealsRunsQuery;
+    if (!semAutomacoesDaLoja) {
+      let dealsRunsQuery = supabase
+        .from('automation_runs')
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', orgId)
+        .not('deal_id', 'is', null)
+        .gte('created_at', thirtyDaysAgo.toISOString());
+      if (storeAutomationIds) dealsRunsQuery = dealsRunsQuery.in('automation_id', storeAutomationIds);
+      const { count: dealsFromRuns } = await dealsRunsQuery;
 
-    conversions30d = dealsFromRuns || 0;
-
-    // Fallback via automation_rules.deals_created_count
-    let rulesQuery = supabase
-      .from('automation_rules')
-      .select('deals_created_count')
-      .eq('organization_id', orgId);
-    if (storeId) rulesQuery = rulesQuery.eq('store_id', storeId);
-    const { data: rules } = await rulesQuery;
-
-    if (rules) {
-      const rulesCreated = rules.reduce((sum: number, r: any) => sum + (r.deals_created_count || 0), 0);
-      if (conversions30d === 0) {
-        conversions30d = rulesCreated;
-      }
+      conversions30d = dealsFromRuns || 0;
     }
 
     // =============================================
@@ -137,14 +127,18 @@ export async function GET(request: NextRequest) {
     // =============================================
     let revenue30d = 0;
 
-    let runsWithDealsQuery = supabase
-      .from('automation_runs')
-      .select('deal_id')
-      .eq('organization_id', orgId)
-      .not('deal_id', 'is', null)
-      .gte('created_at', thirtyDaysAgo.toISOString());
-    if (storeId) runsWithDealsQuery = runsWithDealsQuery.eq('store_id', storeId);
-    const { data: runsWithDeals } = await runsWithDealsQuery;
+    let runsWithDeals: any[] = [];
+    if (!semAutomacoesDaLoja) {
+      let runsWithDealsQuery = supabase
+        .from('automation_runs')
+        .select('deal_id')
+        .eq('organization_id', orgId)
+        .not('deal_id', 'is', null)
+        .gte('created_at', thirtyDaysAgo.toISOString());
+      if (storeAutomationIds) runsWithDealsQuery = runsWithDealsQuery.in('automation_id', storeAutomationIds);
+      const { data } = await runsWithDealsQuery;
+      runsWithDeals = data || [];
+    }
 
     if (runsWithDeals && runsWithDeals.length > 0) {
       const dealIds = runsWithDeals.map((r: any) => r.deal_id).filter(Boolean);

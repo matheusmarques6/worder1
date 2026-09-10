@@ -256,21 +256,37 @@ async function handleCheckoutWebhook(organizationId: string, checkout: any) {
 
 async function triggerAutomations(organizationId: string, trigger: string, data: any) {
   // Find active automations with matching trigger
-  const { data: automations } = await supabase
+  // `canvas_data` não existe: o desenho fica em `nodes`/`edges`. Pedir a
+  // coluna fazia o PostgREST recusar a consulta inteira, e nenhum webhook
+  // desta rota disparava automação alguma.
+  const { data: automations, error: automationsError } = await supabase
     .from('automations')
-    .select('id, canvas_data')
+    .select('id, organization_id')
     .eq('organization_id', organizationId)
     .eq('status', 'active')
     .eq('trigger_type', trigger);
 
+  if (automationsError) {
+    console.error('[Shopify] Erro ao buscar automações do gatilho:', automationsError);
+    return;
+  }
+
   if (!automations?.length) return;
 
-  // Queue automation runs (in production, use a job queue like BullMQ)
+  // Enfileira as execuções: quem processa é o cron /api/cron/process-runs,
+  // que só pega runs em `pending`. Marcar como `running` aqui deixava a
+  // execução parada para sempre. O organization_id é o que a RLS usa.
   for (const automation of automations) {
-    await supabase.from('automation_runs').insert({
+    const { error: runError } = await supabase.from('automation_runs').insert({
       automation_id: automation.id,
-      status: 'running',
-      metadata: { trigger_data: data },
+      organization_id: automation.organization_id ?? organizationId,
+      status: 'pending',
+      trigger_type: trigger,
+      trigger_data: data,
+      metadata: { trigger_data: data, source: 'shopify_webhook' },
     });
+    if (runError) {
+      console.error('[Shopify] Erro ao enfileirar execução de automação:', runError);
+    }
   }
 }

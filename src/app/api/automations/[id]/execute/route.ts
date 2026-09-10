@@ -196,24 +196,45 @@ export async function POST(
     // Salvar execução no banco (exceto para testes)
     if (!isTest) {
       try {
-        await supabaseAdmin
-          .from('automation_executions')
+        // A execução manual é gravada em `automation_runs` — a mesma
+        // tabela do motor da fila e dos crons, e a que a tela de
+        // histórico lê. `automation_executions` não tem organization_id
+        // (nem trigger_type, nem duration_ms): a linha antiga era
+        // recusada pelo PostgREST e a execução sumia do histórico.
+        // `id` é uuid na tabela e o motor gera "EXEC-<timestamp>-<rand>";
+        // o id do motor vai para o metadata. E o status do motor
+        // (success/error) não passa no CHECK da coluna, que fala
+        // pending/running/waiting/completed/failed/cancelled.
+        const statusDoRun = result.status === 'success'
+          ? 'completed'
+          : result.status === 'error'
+            ? 'failed'
+            : result.status;
+
+        const { error: runError } = await supabaseAdmin
+          .from('automation_runs')
           .insert({
-            id: executionId,
             automation_id: automationId,
-            status: result.status,
+            organization_id: organizationId,
+            status: statusDoRun,
             trigger_type: triggerType || 'manual',
             trigger_data: triggerData,
             contact_id: contactId || null,
             deal_id: dealId || null,
             node_results: result.nodeResults,
-            final_context: result.context,
+            result: result.context,
+            total_steps: nodes.length,
             duration_ms: duration,
             error_message: result.error || null,
             error_node_id: result.errorNodeId || null,
             started_at: initialContext.trigger.timestamp,
             completed_at: new Date().toISOString(),
+            metadata: { engine_execution_id: executionId, source: 'manual' },
           });
+
+        if (runError) {
+          console.error('Erro ao salvar execução:', runError);
+        }
       } catch (saveError) {
         console.error('Erro ao salvar execução:', saveError);
       }

@@ -169,14 +169,22 @@ async function executeAutomation(params: ExecuteAutomationParams): Promise<void>
     .insert({
       organization_id: organizationId,
       automation_id: automationId,
-      queue_item_id: queueItemId,
       contact_id: contact?.id,
       deal_id: deal?.id,
       status: 'running',
       trigger_type: triggerType,
       trigger_data: triggerData,
       total_steps: nodes.length,
-      context: { contact, deal, trigger: triggerData },
+      started_at: new Date().toISOString(),
+      // `queue_item_id` e `context` não existem em automation_runs — a
+      // tabela guarda o extra em `metadata`. Com as duas no payload, o
+      // PostgREST recusava a linha, o código caía no `throw` logo abaixo
+      // e a automação NEM COMEÇAVA: toda execução vinda da fila morria
+      // antes do primeiro nó.
+      metadata: {
+        queue_item_id: queueItemId ?? null,
+        context: { contact, deal, trigger: triggerData },
+      },
     })
     .select()
     .single();
@@ -225,11 +233,16 @@ async function executeAutomation(params: ExecuteAutomationParams): Promise<void>
           run_id: runId,
           node_id: node.id,
           node_type: node.type,
-          node_label: node.data.label || node.type,
           status: 'running',
-          config_used: node.data.config || {},
-          step_order: stepOrder,
           started_at: new Date().toISOString(),
+          // O que descreve o passo (rótulo, configuração usada, ordem)
+          // vai em `input_data`: automation_run_steps não tem colunas
+          // para isso, e mandá-las derrubava o registro de cada passo.
+          input_data: {
+            node_label: node.data.label || node.type,
+            config_used: node.data.config || {},
+            step_order: stepOrder,
+          },
         })
         .select()
         .single();
@@ -248,10 +261,14 @@ async function executeAutomation(params: ExecuteAutomationParams): Promise<void>
           .from('automation_run_steps')
           .update({
             status: result.skipped ? 'skipped' : 'success',
-            output_data: result.output,
-            variables_resolved: result.variables || {},
+            // `variables_resolved` e `duration_ms` não são colunas do
+            // passo; entram junto do resultado, que é jsonb.
+            output_data: {
+              ...(result.output && typeof result.output === 'object' ? result.output : { value: result.output }),
+              variables_resolved: result.variables || {},
+              duration_ms: stepDuration,
+            },
             completed_at: new Date().toISOString(),
-            duration_ms: stepDuration,
           })
           .eq('id', step?.id);
 
@@ -270,12 +287,15 @@ async function executeAutomation(params: ExecuteAutomationParams): Promise<void>
                 run_id: runId,
                 node_id: skipNodeId,
                 node_type: nodes.find((n: AutomationNode) => n.id === skipNodeId)?.type || 'unknown',
-                node_label: nodes.find((n: AutomationNode) => n.id === skipNodeId)?.data.label || 'Unknown',
                 status: 'skipped',
-                step_order: ++stepOrder,
-                output_data: { reason: 'Condição não atendida' },
+                // Mesmo motivo do insert do passo normal: rótulo e ordem
+                // moram em `input_data`, duração em `output_data`.
+                input_data: {
+                  node_label: nodes.find((n: AutomationNode) => n.id === skipNodeId)?.data.label || 'Unknown',
+                  step_order: ++stepOrder,
+                },
+                output_data: { reason: 'Condição não atendida', duration_ms: 0 },
                 completed_at: new Date().toISOString(),
-                duration_ms: 0,
               });
           }
         }
@@ -305,9 +325,9 @@ async function executeAutomation(params: ExecuteAutomationParams): Promise<void>
           .update({
             status: 'error',
             error_message: nodeError.message,
-            error_details: { stack: nodeError.stack },
+            // Idem: o detalhe do erro e a duração vão no resultado.
+            output_data: { error_details: { stack: nodeError.stack }, duration_ms: stepDuration },
             completed_at: new Date().toISOString(),
-            duration_ms: stepDuration,
           })
           .eq('id', step?.id);
 

@@ -33,9 +33,12 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false })
       .range((page - 1) * limit, page * limit - 1)
 
-    // Filters
+    // A tabela guarda `success` (booleano) e `trigger_event`; `status`,
+    // `message`, `rule_name` e `event_type` não existem. Os filtros
+    // antigos derrubavam a consulta inteira — a tela de monitoramento
+    // ficava vazia assim que alguém filtrasse.
     if (status && status !== 'all') {
-      query = query.eq('status', status)
+      query = query.eq('success', status === 'success' || status === 'completed')
     }
 
     if (source && source !== 'all') {
@@ -49,14 +52,25 @@ export async function GET(request: NextRequest) {
     }
 
     if (buscaSegura) {
-      query = query.or(`message.ilike.%${buscaSegura}%,rule_name.ilike.%${buscaSegura}%,event_type.ilike.%${buscaSegura}%`)
+      // Só as colunas de texto que existem.
+      query = query.or(`trigger_event.ilike.%${buscaSegura}%,action_type.ilike.%${buscaSegura}%,error_message.ilike.%${buscaSegura}%`)
     }
 
     const { data, error } = await query
 
     if (error) throw error
 
-    return NextResponse.json({ logs: data || [] })
+    // A tela lê status/message/rule_name/event_type: devolvemos esses
+    // nomes a partir das colunas reais, para o contrato dela não mudar.
+    const logs = (data || []).map((l: any) => ({
+      ...l,
+      status: l.success === false ? 'error' : 'success',
+      event_type: l.trigger_event ?? null,
+      rule_name: (l.details && typeof l.details === 'object' ? l.details.rule_name : null) ?? null,
+      message: (l.details && typeof l.details === 'object' ? l.details.message : null) ?? l.error_message ?? '',
+    }))
+
+    return NextResponse.json({ logs })
   } catch (error: any) {
     console.error('Error fetching automation logs:', error)
     if (error.code === '42P01') {
@@ -97,15 +111,19 @@ export async function POST(request: NextRequest) {
       .insert({
         organization_id: user.organization_id,
         rule_id,
-        rule_name,
         source_type,
-        event_type,
-        status,
-        message: message || '',
+        // `trigger_event` e `success` são as colunas; o nome da regra e a
+        // mensagem vão em `details`. Antes, com event_type/status/message/
+        // rule_name/metadata no payload, NENHUM log de automação era
+        // gravado — e é essa tabela que alimenta a tela de monitoramento.
+        trigger_event: event_type,
+        action_type: source_type,
+        success: !(status === 'error' || status === 'failed'),
         error_message,
         deal_id,
         contact_id,
-        metadata: metadata || {},
+        details: { rule_name: rule_name ?? null, message: message || '' },
+        event_data: metadata || {},
       })
       .select()
       .single()
