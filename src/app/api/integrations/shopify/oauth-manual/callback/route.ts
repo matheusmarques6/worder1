@@ -74,9 +74,7 @@ export async function GET(request: NextRequest) {
       return redirectTo(APP_URL, '/integrations/shopify?error=missing_params');
     }
 
-    // ── State de uso único ──
-    // Schema vivo: (state, provider, metadata). Fallback pro formato
-    // antigo (state_token, data) usado pelo fluxo oficial em CI/dev.
+    // ── State de uso único ── oauth_states é (state, provider, metadata).
     let pending: any = null;
     const nowIso = new Date().toISOString();
     {
@@ -87,25 +85,22 @@ export async function GET(request: NextRequest) {
         .eq('provider', 'shopify_manual_oauth')
         .gte('expires_at', nowIso)
         .maybeSingle();
-      if (!readErr && row?.metadata) pending = row.metadata;
-      if (readErr) {
-        const { data: legacy } = await supabase
-          .from('oauth_states')
-          .select('data')
-          .eq('state_token', state)
-          .gte('expires_at', nowIso)
-          .maybeSingle();
-        if (legacy?.data) pending = legacy.data;
-      }
+      if (readErr) console.warn('[ShopifyOAuthManual] leitura do state falhou:', readErr);
+      if (row?.metadata) pending = row.metadata;
     }
     if (!pending || pending.provider !== 'shopify_manual_oauth') {
       return redirectTo(APP_URL, '/integrations/shopify?error=invalid_state');
     }
     // Consumir o state ANTES do exchange — replay do mesmo link não pode
-    // gerar um segundo token. (delete nos dois formatos, best-effort)
-    const del = await supabase.from('oauth_states').delete().eq('state', state);
-    if (del.error) {
-      await supabase.from('oauth_states').delete().eq('state_token', state);
+    // gerar um segundo token.
+    const { data: consumido } = await supabase
+      .from('oauth_states')
+      .delete()
+      .eq('state', state)
+      .select('id');
+    if (!consumido || consumido.length === 0) {
+      // Outra requisição consumiu este state primeiro.
+      return redirectTo(APP_URL, '/integrations/shopify?error=invalid_state');
     }
 
     const organizationId: string = pending.organization_id;

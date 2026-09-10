@@ -67,35 +67,23 @@ export async function GET(request: NextRequest) {
     let organizationId: string | null = null;
 
     // Try 1: State saved in oauth_states (Worder OAuth flow).
-    // Schema vivo: (state, metadata); formato antigo: (state_token, data).
     if (state) {
       const nowIso = new Date().toISOString();
-      let statePayload: any = null;
 
-      const { data: modernRow, error: modernErr } = await supabase
+      const { data: stateRow, error: stateErr } = await supabase
         .from('oauth_states')
         .select('metadata')
         .eq('state', state)
         .gte('expires_at', nowIso)
         .maybeSingle();
-      if (!modernErr && modernRow?.metadata) statePayload = modernRow.metadata;
-      if (modernErr) {
-        const { data: legacyRow } = await supabase
-          .from('oauth_states')
-          .select('data')
-          .eq('state_token', state)
-          .gte('expires_at', nowIso)
-          .maybeSingle();
-        if (legacyRow?.data) statePayload = legacyRow.data;
-      }
+      if (stateErr) console.warn('[Shopify Callback] leitura do state falhou:', stateErr);
+
+      const statePayload: any = stateRow?.metadata ?? null;
 
       if (statePayload?.organization_id) {
         organizationId = statePayload.organization_id;
-        // Delete used state (nos dois formatos, best-effort)
-        const del = await supabase.from('oauth_states').delete().eq('state', state);
-        if (del.error) {
-          await supabase.from('oauth_states').delete().eq('state_token', state);
-        }
+        // Consumir o state usado
+        await supabase.from('oauth_states').delete().eq('state', state);
         console.log('[Shopify Callback] Resolved org via oauth_states:', organizationId);
       }
     }

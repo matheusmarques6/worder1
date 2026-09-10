@@ -160,28 +160,51 @@ export async function consumeOAuthState(
   const supabase = getSupabaseAdmin();
   
   try {
-    // Verificar se nonce já foi usado (tabela oauth_states)
-    const { data: existingState } = await supabase
+    // O esquema de oauth_states é (state, provider, organization_id,
+    // metadata, expires_at). As colunas `nonce`, `user_id` e `used_at`
+    // NÃO existem: o select era recusado (e `.single()` sem erro
+    // checado devolvia null, isto é, "nonce inédito") e o insert também
+    // — ou seja, a proteção contra replay estava desligada, e o mesmo
+    // state valia quantas vezes o atacante quisesse dentro dos 10min.
+    const { data: existingState, error: readError } = await supabase
       .from('oauth_states')
       .select('id')
-      .eq('nonce', data.nonce)
-      .single();
-    
+      .eq('state', data.nonce)
+      .eq('provider', data.provider)
+      .maybeSingle();
+
+    if (readError) throw readError;
+
     if (existingState) {
       console.warn('[OAuth] State já utilizado (replay attack?)');
       return null;
     }
-    
-    // Marcar nonce como usado
-    await supabase.from('oauth_states').insert({
-      nonce: data.nonce,
+
+    // Marcar nonce como usado. Quem torna o uso único atômico é a
+    // restrição única de `state` na tabela: duas requisições simultâneas
+    // com o mesmo state — a corrida que o select acima não cobre —
+    // fazem a segunda cair aqui com 23505.
+    const { error: insertError } = await supabase.from('oauth_states').insert({
+      state: data.nonce,
       provider: data.provider,
       organization_id: data.organizationId,
-      user_id: data.userId,
-      used_at: new Date().toISOString(),
+      metadata: {
+        user_id: data.userId,
+        store_id: data.storeId ?? null,
+        used_at: new Date().toISOString(),
+        kind: 'consumed_nonce',
+      },
       expires_at: new Date(data.createdAt + STATE_EXPIRY_MS).toISOString(),
     });
-    
+
+    if (insertError) {
+      if (insertError.code === '23505') {
+        console.warn('[OAuth] State já utilizado (corrida de replay)');
+        return null;
+      }
+      throw insertError;
+    }
+
     return data;
   } catch (error) {
     // ✅ FAIL-CLOSED: se não conseguimos consultar/marcar o state (tabela
