@@ -39,6 +39,14 @@ const effects = vi.hoisted(() => {
     recipientModeLeadTimeMs: vi.fn(() => 0),
     startCampaign: vi.fn(async () => undefined),
     processDueWhatsappCampaigns: vi.fn(async () => ({ claimed: 0, started: 0, failed: 0 })),
+    verifyEmailDomain: vi.fn(async () => ({ status: 'pending' })),
+    refreshStoreToken: vi.fn(async () => 'token'),
+    refreshPrimaryDomain: vi.fn(async () => null),
+    claimRun: vi.fn(async () => null),
+    releaseRun: vi.fn(async () => undefined),
+    withHeartbeat: vi.fn(async (_id: string, _token: string, fn: () => Promise<unknown>) => fn()),
+    executeWorkflow: vi.fn(async () => ({ status: 'success', nodeResults: [] })),
+    mergeNodeResults: vi.fn((_old: unknown, current: unknown) => current),
     reserve: vi.fn(async () => []),
     complete: vi.fn(async () => undefined),
     fail: vi.fn(async () => ({ retrying: false, nextAttemptAt: null })),
@@ -72,6 +80,9 @@ vi.mock('@/lib/whatsapp/scheduled-message-sender', () => ({
 }))
 vi.mock('@/lib/automation/run-lock', () => ({
   reclaimStaleRuns: effects.reclaimStaleRuns,
+  claimRun: effects.claimRun,
+  releaseRun: effects.releaseRun,
+  withHeartbeat: effects.withHeartbeat,
 }))
 vi.mock('@/lib/scheduling/campaign-plan', () => ({
   recipientModeLeadTimeMs: effects.recipientModeLeadTimeMs,
@@ -81,6 +92,21 @@ vi.mock('@/lib/whatsapp/campaign-processor', () => ({
 }))
 vi.mock('@/lib/whatsapp/scheduled-campaigns', () => ({
   processDueWhatsappCampaigns: effects.processDueWhatsappCampaigns,
+}))
+vi.mock('@/lib/email/domain-dns-check', () => ({
+  verifyEmailDomain: effects.verifyEmailDomain,
+}))
+vi.mock('@/lib/shopify/client-credentials', () => ({
+  refreshStoreToken: effects.refreshStoreToken,
+}))
+vi.mock('@/lib/shopify/store-url', () => ({
+  refreshPrimaryDomain: effects.refreshPrimaryDomain,
+}))
+vi.mock('@/lib/automation/execution-engine', () => ({
+  executeWorkflow: effects.executeWorkflow,
+}))
+vi.mock('@/lib/automation/node-results', () => ({
+  mergeNodeResults: effects.mergeNodeResults,
 }))
 vi.mock('@/lib/queue/durable-queue', () => ({
   reserve: effects.reserve,
@@ -157,6 +183,13 @@ refusesWithoutSecret('cron-secret-fallback-3', [
   'update-send-times',
 ])
 
+refusesWithoutSecret('cron-secret-fallback-4', [
+  'verify-email-domains',
+  'shopify-import-worker',
+  'shopify-token-refresh',
+  'auto-process',
+])
+
 describe('configured Bearer reaches the existing business seam', () => {
   it('reaches Supabase for a database-backed handler', async () => {
     vi.stubEnv('CRON_SECRET', 's3cret')
@@ -222,5 +255,27 @@ describe('configured Bearer reaches the existing business seam', () => {
 
     expect(response.status).not.toBe(401)
     expect(effects.processDueWhatsappCampaigns).toHaveBeenCalled()
+  })
+
+  it('reaches email-domain storage with a configured Bearer', async () => {
+    vi.stubEnv('CRON_SECRET', 's3cret')
+    const load = routes['../app/api/cron/verify-email-domains/route.ts']
+    const handlers = await load() as Record<string, (req: NextRequest) => Promise<Response>>
+
+    const response = await handlers.GET(request('GET', { authorization: 'Bearer s3cret' }))
+
+    expect(response.status).not.toBe(401)
+    expect(effects.from).toHaveBeenCalled()
+  })
+
+  it('reaches the automation client with a configured Bearer', async () => {
+    vi.stubEnv('CRON_SECRET', 's3cret')
+    const load = routes['../app/api/cron/auto-process/route.ts']
+    const handlers = await load() as Record<string, (req: NextRequest) => Promise<Response>>
+
+    const response = await handlers.GET(request('GET', { authorization: 'Bearer s3cret' }))
+
+    expect(response.status).not.toBe(401)
+    expect(effects.createClient).toHaveBeenCalled()
   })
 })
