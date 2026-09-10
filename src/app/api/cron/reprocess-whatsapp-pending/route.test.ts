@@ -12,7 +12,7 @@
  * cai.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest'
 
 const mockEnqueueWebhook = vi.fn().mockResolvedValue(undefined)
 const mockEnqueueAi = vi.fn().mockResolvedValue(undefined)
@@ -61,8 +61,10 @@ import { GET } from './route'
 import { clearRuntimeModeCache } from '@/lib/ai/runtime-rollout'
 
 function fakeReq(): any {
-  return { headers: new Headers({ 'x-vercel-cron': '1' }) }
+  return { headers: new Headers({ authorization: 'Bearer test-cron-secret' }) }
 }
+
+afterEach(() => vi.unstubAllEnvs())
 
 const EVENTS_RPC = 'pending_whatsapp_webhook_events_for_reprocess'
 const AI_RPC = 'pending_whatsapp_ai_responses_for_reprocess'
@@ -73,6 +75,7 @@ function aiRow(organizationId: string, conversationId = 'conv-1') {
 
 describe('GET /api/cron/reprocess-whatsapp-pending — fase 2 respeita o rollout', () => {
   beforeEach(() => {
+    vi.stubEnv('CRON_SECRET', 'test-cron-secret')
     for (const k of Object.keys(rpcResults)) delete rpcResults[k]
     for (const k of Object.keys(orgRolloutResults)) delete orgRolloutResults[k]
     lastOrgId = undefined

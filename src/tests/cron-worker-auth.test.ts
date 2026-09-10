@@ -48,6 +48,9 @@ const effects = vi.hoisted(() => {
     withHeartbeat: vi.fn(async (_id: string, _token: string, fn: () => Promise<unknown>) => fn()),
     executeWorkflow: vi.fn(async () => ({ status: 'success', nodeResults: [] })),
     mergeNodeResults: vi.fn((_old: unknown, current: unknown) => current),
+    enqueueWhatsAppWebhook: vi.fn(async () => undefined),
+    enqueueWhatsAppAiRespond: vi.fn(async () => undefined),
+    quarantineStuckSending: vi.fn(async () => 0),
     reserve: vi.fn(async () => []),
     complete: vi.fn(async () => undefined),
     fail: vi.fn(async () => ({ retrying: false, nextAttemptAt: null })),
@@ -108,6 +111,13 @@ vi.mock('@/lib/automation/execution-engine', () => ({
 }))
 vi.mock('@/lib/automation/node-results', () => ({
   mergeNodeResults: effects.mergeNodeResults,
+}))
+vi.mock('@/lib/queue', () => ({
+  enqueueWhatsAppWebhook: effects.enqueueWhatsAppWebhook,
+  enqueueWhatsAppAiRespond: effects.enqueueWhatsAppAiRespond,
+}))
+vi.mock('@/lib/whatsapp/recipient-claim', () => ({
+  quarantineStuckSending: effects.quarantineStuckSending,
 }))
 vi.mock('@/lib/queue/durable-queue', () => ({
   reserve: effects.reserve,
@@ -192,6 +202,13 @@ refusesWithoutSecret('cron-secret-fallback-4', [
   'shopify-import-worker',
   'shopify-token-refresh',
   'auto-process',
+])
+
+refusesWithoutSecret('cron-header-fallback-1', [
+  'close-expired-whatsapp-windows',
+  'prune-whatsapp-webhook-events',
+  'reset-daily-whatsapp-counters',
+  'reprocess-whatsapp-pending',
 ])
 
 describe('configured Bearer reaches the existing business seam', () => {
@@ -281,5 +298,16 @@ describe('configured Bearer reaches the existing business seam', () => {
 
     expect(response.status).not.toBe(401)
     expect(effects.createClient).toHaveBeenCalled()
+  })
+
+  it('reaches WhatsApp pending recovery with a configured Bearer', async () => {
+    vi.stubEnv('CRON_SECRET', 's3cret')
+    const load = routes['../app/api/cron/reprocess-whatsapp-pending/route.ts']
+    const handlers = await load() as Record<string, (req: NextRequest) => Promise<Response>>
+
+    const response = await handlers.GET(request('GET', { authorization: 'Bearer s3cret' }))
+
+    expect(response.status).not.toBe(401)
+    expect(effects.quarantineStuckSending).toHaveBeenCalled()
   })
 })
