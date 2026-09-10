@@ -343,6 +343,49 @@ def test_compensation_replay_accepts_canonical_policy_deparse(admin):
     assert scoped_catalog(admin) == before == expected_scoped_catalog()
 
 
+def test_unknown_profile_column_grant_aborts_compensation_without_mutation(admin):
+    acl_query = """select c.relname, null::text,
+                          case when x.grantee=0 then 'PUBLIC' else pg_get_userbyid(x.grantee) end,
+                          pg_get_userbyid(x.grantor), x.privilege_type, x.is_grantable
+                     from pg_class c join pg_namespace n on n.oid=c.relnamespace,
+                          lateral aclexplode(coalesce(c.relacl, acldefault('r', c.relowner))) x
+                    where n.nspname='public'
+                      and c.relname in ('profiles', 'organization_members')
+                    union all
+                   select c.relname, a.attname,
+                          case when x.grantee=0 then 'PUBLIC' else pg_get_userbyid(x.grantee) end,
+                          pg_get_userbyid(x.grantor), x.privilege_type, x.is_grantable
+                     from pg_class c join pg_namespace n on n.oid=c.relnamespace
+                     join pg_attribute a on a.attrelid=c.oid,
+                          lateral aclexplode(a.attacl) x
+                    where n.nspname='public'
+                      and c.relname in ('profiles', 'organization_members')
+                    order by 1, 2 nulls first, 3, 4, 5, 6"""
+    before = scoped_catalog(admin)
+    with admin.transaction(force_rollback=True):
+        admin.execute(
+            "grant update (role, organization_id) on public.profiles to public"
+        )
+        incompatible_acl = tuple(admin.execute(acl_query).fetchall())
+        assert (
+            "profiles", "organization_id", "PUBLIC", "postgres", "UPDATE", False,
+        ) in incompatible_acl
+        assert (
+            "profiles", "role", "PUBLIC", "postgres", "UPDATE", False,
+        ) in incompatible_acl
+
+        with pytest.raises(
+            psycopg.errors.RaiseException,
+            match=r"authority_grants\.unknown",
+        ):
+            with admin.transaction():
+                admin.execute(_compensation_body())
+
+        assert tuple(admin.execute(acl_query).fetchall()) == incompatible_acl
+        assert scoped_catalog(admin) == before
+    assert scoped_catalog(admin) == before == expected_scoped_catalog()
+
+
 def test_compensation_recreates_missing_reserved_identifier_index(admin):
     before = scoped_catalog(admin)
     with admin.transaction(force_rollback=True):
