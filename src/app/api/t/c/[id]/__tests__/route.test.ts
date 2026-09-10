@@ -19,6 +19,8 @@ const send = {
   store_id: null,
 }
 
+const escritas: any[] = []
+
 const admin = {
   from: () => ({
     select: () => ({
@@ -26,7 +28,7 @@ const admin = {
       is: () => ({ then: undefined }),
     }),
     update: () => ({ eq: () => ({ is: async () => ({ error: null }) }) }),
-    insert: () => ({ select: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }),
+    insert: (linha: any) => { escritas.push(linha); return { select: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) } },
   }),
   rpc: async () => ({ data: null, error: null }),
 }
@@ -54,7 +56,7 @@ async function clicar(url: string, host = 'click.worder.email') {
   } as any)
 }
 
-beforeEach(() => { vi.resetModules() })
+beforeEach(() => { vi.resetModules(); escritas.length = 0 })
 
 describe('clique no link do feed de produtos', () => {
   it('o link relatado redireciona — não é a rota que responde 400', async () => {
@@ -77,6 +79,13 @@ describe('clique no link do feed de produtos', () => {
   it('serve em qualquer host — é o mesmo app atrás do domínio de clique', async () => {
     const res = await clicar(DESTINO, 'app.worder.com.br')
     expect(res.status).toBe(302)
+  })
+
+  it('registra por qual host o clique entrou — é como se prova o domínio dos links', async () => {
+    await clicar(DESTINO, 't.worder.email')
+    await new Promise((r) => setTimeout(r, 20))
+    const evento = escritas.find((e) => e?.event_type === 'email_clicked')
+    expect(evento?.properties?.TrackingHost).toBe('t.worder.email')
   })
 
   it('sem url é 400 com corpo explicando (o 400 vazio do relato não é este)', async () => {

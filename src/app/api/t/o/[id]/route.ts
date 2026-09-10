@@ -93,7 +93,14 @@ async function recordOpen(emailSendId: string, headers: Headers) {
       await supabaseAdmin.from('contact_events').insert({
         organization_id: orgId, contact_id: send.contact_id,
         event_type: 'email_opened', event_source: 'worder_email',
-        properties: { CampaignId: send.campaign_id, SendId: emailSendId, ab_variant: send.ab_variant },
+        // O host da abertura, pelo mesmo motivo do clique: é o que diz,
+        // depois, se o pixel saiu pelo domínio certo.
+        properties: {
+          CampaignId: send.campaign_id,
+          SendId: emailSendId,
+          ab_variant: send.ab_variant,
+          TrackingHost: headers.get('host') || null,
+        },
         occurred_at: now,
         idempotency_key: `email_opened:${send.campaign_id}:${send.contact_id}:${day}`,
       }).select().maybeSingle();
