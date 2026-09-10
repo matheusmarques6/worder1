@@ -484,14 +484,19 @@ async function processCustomerCreated(store: ShopifyStoreConfig, customer: any) 
 
   // Criar notificação
   const supabase = getSupabase();
-  await supabase.from('notifications').insert({
+  // `data` e `is_read` não existem: as colunas são `metadata` e `read`.
+  // Com os nomes errados, o aviso nunca chegava ao sino do painel.
+  const { error: notifErr } = await supabase.from('notifications').insert({
     organization_id: store.organization_id,
     type: 'contact',
     title: 'Novo cliente do Shopify',
     message: `${customer.first_name || ''} ${customer.last_name || ''} (${customer.email}) foi adicionado.`,
-    data: { contact_id: contact?.id, source: 'shopify' },
-    is_read: false,
+    metadata: { contact_id: contact?.id, source: 'shopify' },
+    reference_type: 'contact',
+    reference_id: contact?.id || null,
+    read: false,
   });
+  if (notifErr) console.error('[Shopify Webhook] aviso de novo cliente não criado:', notifErr.message);
 }
 
 async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
@@ -1136,13 +1141,16 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
     type: 'order',
     title: 'Novo pedido do Shopify',
     message: `Pedido #${order.order_number} de ${order.email} - R$ ${orderValue.toFixed(2)}`,
-    data: {
+    // `data` e `is_read` não existem: as colunas são `metadata` e `read`.
+    metadata: {
       order_id: order.id,
       order_number: order.order_number,
       contact_id: contact.id,
       value: orderValue,
     },
-    is_read: false,
+    reference_type: 'order',
+    reference_id: order.id ? String(order.id) : null,
+    read: false,
   });
 }
 

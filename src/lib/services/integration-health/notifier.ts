@@ -95,11 +95,17 @@ export class NotificationService {
       organization_id: payload.organizationId,
       user_id: payload.userId ?? null,
       type: payload.type,
-      category: payload.category,
-      priority: payload.priority,
       title: payload.title,
       message: payload.message,
-      data: payload.data,
+      // A tabela guarda o extra em `metadata`; `data`, `category` e
+      // `priority` não existem, e o PostgREST recusa a linha inteira —
+      // nenhuma notificação de integração era criada. Categoria e
+      // prioridade continuam registradas, dentro do metadata.
+      metadata: {
+        ...(payload.data && typeof payload.data === 'object' ? payload.data : { data: payload.data }),
+        category: payload.category ?? null,
+        priority: payload.priority ?? null,
+      },
       action_url: payload.actionUrl,
       action_label: payload.actionLabel,
       read: false,

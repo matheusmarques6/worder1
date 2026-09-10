@@ -746,7 +746,9 @@ async function executeSendNotification(
       title,
       message,
       type: 'automation',
-      data: {
+      // A coluna é `metadata`; com `data` o PostgREST recusava a linha e
+      // o nó "notificar" das automações não notificava ninguém.
+      metadata: {
         contact_id: context.contact?.id,
         deal_id: context.deal?.id,
         automation_run: context.system?.execution_id

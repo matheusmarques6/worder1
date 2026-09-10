@@ -964,16 +964,21 @@ async function createNotification(
   data: Record<string, unknown>
 ): Promise<void> {
   try {
-    await supabase
+    // As colunas são `metadata` e `read`; `data`/`is_read` não existem e
+    // faziam o PostgREST recusar a linha inteira — nenhum aviso de
+    // webhook da Shopify chegava ao sino do painel. O catch em volta
+    // engolia o erro, então isso nunca apareceu em lugar nenhum.
+    const { error } = await supabase
       .from('notifications')
       .insert({
         organization_id: store.organization_id,
         type: `shopify_${type}`,
         title: data.title,
         message: data.message,
-        data: data,
-        is_read: false,
+        metadata: data,
+        read: false,
       });
+    if (error) console.error('[ShopifyWebhook] aviso não criado:', error.message);
   } catch (error) {
     console.error('Failed to create notification:', error);
   }

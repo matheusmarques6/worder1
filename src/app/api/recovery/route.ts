@@ -142,7 +142,10 @@ async function handleCartTab(opts: {
 
   let q = supabaseAdmin
     .from('contact_events')
-    .select('id, contact_id, store_id, organization_id, properties, session_id, anonymous_id, monetary_value, currency, occurred_at, created_at, event_type')
+    // contact_events guarda `received_at` (quando chegou até nós), não
+    // `created_at`. Pedir a coluna errada fazia o PostgREST recusar a
+    // consulta inteira: a tela de recuperação não via carrinho nenhum.
+    .select('id, contact_id, store_id, organization_id, properties, session_id, anonymous_id, monetary_value, currency, occurred_at, received_at, event_type')
     .in('organization_id', orgIds)
     .in('event_type', ['added_to_cart', 'add_to_cart', 'checkout_started'])
     .gte('occurred_at', since)

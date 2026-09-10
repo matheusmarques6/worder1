@@ -78,14 +78,13 @@ export async function POST(
           name: `${original.name}${targetStore?.shop_name ? ` (${targetStore.shop_name})` : ''}`,
           subject: original.subject,
           preview_text: original.preview_text,
-          from_name: original.from_name,
-          from_email: original.from_email,
-          reply_to: original.reply_to,
+          // from_name/from_email/reply_to não existem em email_templates:
+          // o remetente é resolvido por loja na hora do envio. Com eles no
+          // payload, clonar o modelo para outra loja falhava sempre.
           html: original.html,
           design: original.design,
           design_json: original.design_json,
           category: original.category,
-          tags: original.tags,
           thumbnail_url: original.thumbnail_url,
           created_by: user.id,
         })

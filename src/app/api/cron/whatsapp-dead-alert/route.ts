@@ -82,8 +82,10 @@ async function checkCampaignWorkerHealth(): Promise<any> {
           type: 'whatsapp_campaign_worker_stalled',
           title: 'Campaign worker parado',
           message: workerHealth.reason,
-          severity: 'critical',
-          metadata: workerHealth,
+          // `severity` não existe na tabela; a gravidade vai junto do
+          // resto no metadata. Antes, o alerta mais importante que temos
+          // — o worker de campanha parado — não era gravado.
+          metadata: { ...workerHealth, severity: 'critical' },
           created_at: new Date().toISOString(),
         });
         if (notifErr) console.log('[dead-alert] notification insert failed (best-effort):', notifErr.message);
