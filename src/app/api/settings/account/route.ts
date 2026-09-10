@@ -120,7 +120,7 @@ export async function PATCH(request: NextRequest) {
       if (phone && onlyDigits(phone).length < 8) return NextResponse.json({ error: 'Telefone inválido.' }, { status: 400 })
       const { first_name, last_name } = splitName(full)
       const { error } = await supabaseAdmin.from('profiles')
-        .update({ full_name: full, first_name, last_name, phone: phone || null, updated_at: new Date().toISOString() })
+        .update({ first_name, last_name, phone: phone || null, updated_at: new Date().toISOString() })
         .eq('id', userId)
       if (error) throw error
       await supabaseAdmin.auth.admin.updateUserById(userId, { user_metadata: { full_name: full, first_name, last_name, name: full } }).catch(() => {})
