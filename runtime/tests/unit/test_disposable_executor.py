@@ -164,6 +164,48 @@ def test_inventory_rejects_empty_unexpected_or_duplicate_entries(tmp_path, names
         ex.inventory(tmp_path)
 
 
+@pytest.mark.parametrize(
+    ("relative_path", "expected"),
+    [
+        (
+            "supabase/migrations/20260812000005_app_baseline_prereqs.sql",
+            """create or replace function public.get_user_organization_id()
+            returns uuid
+            language sql
+            stable
+            security definer
+            set search_path = public
+            as $$
+              select coalesce(
+                (current_setting('request.jwt.claims', true)::json->>'organization_id')::uuid,
+                (select organization_id from public.profiles where id = auth.uid())
+              );
+            $$;""",
+        ),
+        (
+            "runtime/tests/db/fixtures/app_baseline_legacy.sql",
+            """create or replace function public.get_user_organization_id()
+            returns uuid as $$
+              select organization_id from public.profiles where id = auth.uid()
+            $$ language sql security definer;""",
+        ),
+    ],
+)
+def test_sealed_app_inputs_provide_expected_org_helper(relative_path, expected):
+    source = (REPO / relative_path).read_text(encoding="utf-8")
+    match = re.search(
+        r"create\s+or\s+replace\s+function\s+public\.get_user_organization_id\(\)"
+        r".*?\$\$.*?\$\$(?:\s+language\s+sql\s+security\s+definer)?\s*;",
+        source,
+        re.DOTALL,
+    )
+
+    assert match is not None, f"missing org helper provider in {relative_path}"
+    assert re.sub(r"\s+", " ", match.group(0)).strip() == re.sub(
+        r"\s+", " ", expected
+    ).strip()
+
+
 def upgrade_repo(tmp_path):
     repo = tmp_path / "repo"
     migrations = repo / "supabase/migrations"

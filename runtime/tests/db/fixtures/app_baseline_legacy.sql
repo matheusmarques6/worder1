@@ -1,5 +1,10 @@
 -- Synthetic legacy application schema. Test data only; no production values.
 
+create or replace function public.get_user_organization_id()
+returns uuid as $$
+  select organization_id from public.profiles where id = auth.uid()
+$$ language sql security definer;
+
 create table public.organization_members (
   id uuid primary key default uuid_generate_v4(),
   organization_id uuid not null references public.organizations(id) on delete cascade,

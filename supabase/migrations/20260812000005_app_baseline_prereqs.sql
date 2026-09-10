@@ -6,6 +6,19 @@
 -- whatsapp-schema-v3.sql; archived 20260401/20260415/20260508/20260513 changes;
 -- current campaign, automation, auth and tracking readers/writers.
 
+create or replace function public.get_user_organization_id()
+returns uuid
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce(
+    (current_setting('request.jwt.claims', true)::json->>'organization_id')::uuid,
+    (select organization_id from public.profiles where id = auth.uid())
+  );
+$$;
+
 create table if not exists public.organization_members (
   id uuid primary key default uuid_generate_v4(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
