@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { executeWorkflow, Workflow } from '@/lib/automation/execution-engine';
 import { mergeNodeResults } from '@/lib/automation/node-results';
+import { authorizeCronRequest } from '@/lib/cron-auth';
 export const dynamic = 'force-dynamic';
 // Vercel default for cron is 60s on Pro. Action_email itself has a 60s
 // node timeout, plus DB writes + Resend round-trip — one slow run can
@@ -19,22 +20,8 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 export async function GET(request: NextRequest) {
-  // Verificar autorização
-  // X-Internal-Request was removed from the authorize check: it's
-  // client-settable and not stripped by Vercel, so any caller could spoof
-  // it. Only Vercel Cron or Bearer CRON_SECRET is accepted now.
-  const isVercelCron = request.headers.get('x-vercel-cron') === '1';
-  const authHeader = request.headers.get('authorization');
-  const cronSecret = process.env.CRON_SECRET;
-
-  const isAuthorized = isVercelCron ||
-    (cronSecret && authHeader === `Bearer ${cronSecret}`);
-
-  if (!isAuthorized) {
-    console.log('[ProcessRuns] Unauthorized request - headers:', {
-      'x-vercel-cron': request.headers.get('x-vercel-cron'),
-      hasAuth: !!authHeader,
-    });
+  if (!authorizeCronRequest(request)) {
+    console.log('[ProcessRuns] Unauthorized request');
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

@@ -6,27 +6,19 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { authorizeCronRequest } from '@/lib/cron-auth';
 export const dynamic = 'force-dynamic';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 export async function GET(request: NextRequest) {
-  // Verificar autorização
-  // X-Internal-Request removed: client-settable and not stripped by
-  // Vercel, so it was spoofable. Only Vercel Cron or Bearer CRON_SECRET.
-  const isVercelCron = request.headers.get('x-vercel-cron') === '1';
-  const authHeader = request.headers.get('authorization');
-  const cronSecret = process.env.CRON_SECRET;
-
-  const isAuthorized = isVercelCron ||
-    (cronSecret && authHeader === `Bearer ${cronSecret}`);
-
-  if (!isAuthorized) {
+  if (!authorizeCronRequest(request)) {
     console.log('[CheckAbandonedCarts] Unauthorized request');
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const cronSecret = process.env.CRON_SECRET;
   console.log('[CheckAbandonedCarts] Starting check');
 
   const supabase = createClient(supabaseUrl, supabaseKey);
