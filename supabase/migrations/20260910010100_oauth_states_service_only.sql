@@ -87,8 +87,6 @@ begin
      and indnkeyatts=1 and indnatts=1 and indkey[0]=state_attribute
      and indpred is null and indexprs is null;
   if valid_uniques>1
-     or (select count(*) from pg_index where indrelid=relation and not indisprimary)
-        <>valid_uniques
      or exists (
        select 1 from pg_class c
         where c.oid=to_regclass('public.oauth_states_state_key')
