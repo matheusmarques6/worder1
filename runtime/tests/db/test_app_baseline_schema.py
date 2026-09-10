@@ -5,6 +5,7 @@ guardian. Collection is offline; executing these assertions requires real PG.
 """
 
 import hashlib
+from pathlib import Path
 
 import psycopg
 import pytest
@@ -250,7 +251,7 @@ CHECK_VALUES = (
 )
 
 INDEXES = (
-    ("pipeline_stages", ("pipeline_id", "position"), False, None),
+    ("pipeline_stages", ("pipeline_id", '"position"'), False, None),
     ("automation_runs", ("created_at",), False, "(status = 'pending'::text)"),
     ("automation_runs", ("waiting_until",), False, "(status = 'waiting'::text)"),
     ("email_sends", ("dedupe_key",), True, "(dedupe_key IS NOT NULL)"),
@@ -307,6 +308,19 @@ def function_definition_digest(definition):
 ))
 def test_function_digest_preserves_sql_content(original, changed):
     assert function_definition_digest(original) != function_definition_digest(changed)
+
+
+def test_position_index_catalogs_use_postgres_quoted_token():
+    migration = (
+        Path(__file__).resolve().parents[3]
+        / "supabase/migrations/20260909230000_app_baseline_forward_compat.sql"
+    ).read_text(encoding="utf-8")
+
+    assert (
+        ("pipeline_stages", ("pipeline_id", '"position"'), False, None) in INDEXES,
+        "('idx_pipeline_stages_pipeline_position', 'pipeline_stages',\n"
+        "   array['pipeline_id', '\"position\"'], false, null)," in migration,
+    ) == (True, True)
 
 
 def scoped_catalog(admin):

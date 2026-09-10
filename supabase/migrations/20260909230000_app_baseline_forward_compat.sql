@@ -905,7 +905,7 @@ create temporary table app_baseline_indexes (
 
 insert into app_baseline_indexes values
   ('idx_pipeline_stages_pipeline_position', 'pipeline_stages',
-   array['pipeline_id', 'position'], false, null),
+   array['pipeline_id', '"position"'], false, null),
   ('idx_automation_runs_pending', 'automation_runs',
    array['created_at'], false, '(status = ''pending''::text)'),
   ('idx_automation_runs_waiting', 'automation_runs',
