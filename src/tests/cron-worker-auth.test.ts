@@ -36,6 +36,9 @@ const effects = vi.hoisted(() => {
       recovered: 0,
     })),
     reclaimStaleRuns: vi.fn(async () => 0),
+    recipientModeLeadTimeMs: vi.fn(() => 0),
+    startCampaign: vi.fn(async () => undefined),
+    processDueWhatsappCampaigns: vi.fn(async () => ({ claimed: 0, started: 0, failed: 0 })),
     reserve: vi.fn(async () => []),
     complete: vi.fn(async () => undefined),
     fail: vi.fn(async () => ({ retrying: false, nextAttemptAt: null })),
@@ -69,6 +72,15 @@ vi.mock('@/lib/whatsapp/scheduled-message-sender', () => ({
 }))
 vi.mock('@/lib/automation/run-lock', () => ({
   reclaimStaleRuns: effects.reclaimStaleRuns,
+}))
+vi.mock('@/lib/scheduling/campaign-plan', () => ({
+  recipientModeLeadTimeMs: effects.recipientModeLeadTimeMs,
+}))
+vi.mock('@/lib/whatsapp/campaign-processor', () => ({
+  campaignProcessor: { startCampaign: effects.startCampaign },
+}))
+vi.mock('@/lib/whatsapp/scheduled-campaigns', () => ({
+  processDueWhatsappCampaigns: effects.processDueWhatsappCampaigns,
 }))
 vi.mock('@/lib/queue/durable-queue', () => ({
   reserve: effects.reserve,
@@ -138,6 +150,13 @@ refusesWithoutSecret('cron-secret-fallback-2', [
   'recompute-segments',
 ])
 
+refusesWithoutSecret('cron-secret-fallback-3', [
+  'resolve-ab-winners',
+  'send-scheduled-campaigns',
+  'send-scheduled-whatsapp-campaigns',
+  'update-send-times',
+])
+
 describe('configured Bearer reaches the existing business seam', () => {
   it('reaches Supabase for a database-backed handler', async () => {
     vi.stubEnv('CRON_SECRET', 's3cret')
@@ -181,5 +200,27 @@ describe('configured Bearer reaches the existing business seam', () => {
 
     expect(response.status).not.toBe(401)
     expect(effects.createClient).toHaveBeenCalled()
+  })
+
+  it('reaches campaign planning with a configured Bearer', async () => {
+    vi.stubEnv('CRON_SECRET', 's3cret')
+    const load = routes['../app/api/cron/send-scheduled-campaigns/route.ts']
+    const handlers = await load() as Record<string, (req: NextRequest) => Promise<Response>>
+
+    const response = await handlers.GET(request('GET', { authorization: 'Bearer s3cret' }))
+
+    expect(response.status).not.toBe(401)
+    expect(effects.recipientModeLeadTimeMs).toHaveBeenCalled()
+  })
+
+  it('reaches WhatsApp campaign processing with a configured Bearer', async () => {
+    vi.stubEnv('CRON_SECRET', 's3cret')
+    const load = routes['../app/api/cron/send-scheduled-whatsapp-campaigns/route.ts']
+    const handlers = await load() as Record<string, (req: NextRequest) => Promise<Response>>
+
+    const response = await handlers.GET(request('GET', { authorization: 'Bearer s3cret' }))
+
+    expect(response.status).not.toBe(401)
+    expect(effects.processDueWhatsappCampaigns).toHaveBeenCalled()
   })
 })
