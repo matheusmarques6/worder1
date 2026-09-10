@@ -44,8 +44,8 @@ PRESERVATION_QUERIES = {
         "trigger_data, lock_token, locked_at, locked_by, created_at"
     ),
     "email_campaigns": (
-        "id, organization_id, name, subject, status, total_recipients, total_sent, total_opened, "
-        "total_clicked, opens, clicks, settings, metadata, created_at, updated_at"
+        "id, organization_id, template_id, name, subject, status, total_recipients, total_sent, "
+        "total_opened, total_clicked, opens, clicks, settings, metadata, created_at, updated_at"
     ),
     "whatsapp_campaigns": (
         "id, organization_id, name, title, campaign_id, status, template_name, "
@@ -158,7 +158,8 @@ def load_expected_fixture_rows():
              {"event": "waiting"}, _id(108), _at(8, 1), "worker-8", _at(8)),
         ),
         "email_campaigns": ((
-            _id(9), org, "Legacy Email", "Fixture subject", "scheduled", 20, 18, 7, 3, 8, 4,
+            _id(9), org, _id(18), "Legacy Email", "Fixture subject", "scheduled",
+            20, 18, 7, 3, 8, 4,
             {"mode": "legacy"}, {"fixture": 9}, _at(9), _at(9),
         ),),
         "whatsapp_campaigns": (
@@ -287,6 +288,25 @@ def execute_compensation_against_unknown_status_inside_transaction(admin):
 
 def test_upgrade_preserves_fixture_primary_keys_and_values(admin):
     assert preservation_rows(admin) == load_expected_fixture_rows()
+
+
+def test_email_template_orphan_aborts_compensation_without_coercion(admin):
+    before = preservation_rows(admin)
+    with admin.transaction(force_rollback=True):
+        admin.execute(
+            "alter table public.email_campaigns drop constraint email_campaigns_template_id_fkey"
+        )
+        admin.execute(
+            "update public.email_campaigns set template_id=%s where id=%s", (_id(999), _id(9)),
+        )
+        incompatible = preservation_rows(admin)
+        with pytest.raises(
+            psycopg.errors.RaiseException, match=r"email_campaigns\.template_id\.orphan",
+        ):
+            with admin.transaction():
+                admin.execute(_compensation_body())
+        assert preservation_rows(admin) == incompatible
+    assert preservation_rows(admin) == before
 
 
 def test_upgrade_preserves_replay_dependency_rows(admin):

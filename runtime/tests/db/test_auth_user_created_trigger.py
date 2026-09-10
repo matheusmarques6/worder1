@@ -11,6 +11,8 @@ from pathlib import Path
 import psycopg
 import pytest
 
+from tests.db.conftest import as_authenticated_user
+
 MIGRATION_PATH = (
     Path(__file__).resolve().parents[3]
     / "supabase/migrations/20260910000000_auth_user_created_trigger.sql"
@@ -76,49 +78,117 @@ def test_auth_insert_provisions_one_owner_membership_pipeline_and_six_stages(adm
         _cleanup_signup(admin, user_id)
 
 
-def test_invited_auth_insert_joins_inviter_and_consumes_null_user_membership(admin):
+@pytest.mark.parametrize(
+    "invalid", (None, "missing", "email", "status", "consumed", "role", "tenant"),
+)
+def test_invitation_requires_persisted_authority_and_uses_database_role(
+        admin, two_tenants, invalid):
     user_id = uuid.uuid4()
-    organization_id = uuid.uuid4()
+    organization_id = uuid.UUID(str(two_tenants.a.id))
     email = f"invite-{user_id}@example.test"
-    label = f"invite-{organization_id.hex}"
-
-    try:
+    with admin.transaction(force_rollback=True):
         admin.execute(
-            "insert into public.organizations (id, name, slug) values (%s, %s, %s)",
-            (organization_id, label, label),
+            "update public.profiles set role=%s::user_role where id=%s",
+            ("member" if invalid == "role" else "owner", two_tenants.a.user_id),
+        )
+        membership = None
+        if invalid != "missing":
+            membership = admin.execute(
+                """insert into public.organization_members
+                      (organization_id, user_id, role, email, status, invited_by)
+                   values (%s, %s, 'member', %s, %s, %s) returning id""",
+                (organization_id, two_tenants.b.user_id if invalid == "consumed" else None,
+                 "wrong@example.test" if invalid == "email" else email.upper(),
+                 "active" if invalid == "status" else "invited",
+                 two_tenants.b.user_id if invalid == "tenant" else two_tenants.a.user_id),
+            ).fetchone()[0]
+        _insert_auth_user(
+            admin, user_id, email,
+            {"invited_org_id": str(organization_id), "invited_role": "admin"},
+        )
+        profile = admin.execute(
+            "select organization_id, role::text from public.profiles where id=%s", (user_id,)
+        ).fetchone()
+        if invalid is None:
+            assert profile == (organization_id, "member")
+            assert admin.execute(
+                "select user_id, role::text, status from public.organization_members where id=%s",
+                (membership,),
+            ).fetchone() == (user_id, "member", "active")
+        else:
+            assert profile[0] != organization_id
+            assert profile[1] == "owner"
+            assert admin.execute(
+                "select count(*) from public.organization_members "
+                "where organization_id=%s and user_id=%s",
+                (organization_id, user_id),
+            ).fetchone()[0] == 0
+
+
+def test_owner_invitation_aborts_auth_insert_without_orphan(admin, two_tenants):
+    user_id = uuid.uuid4()
+    email = f"owner-invite-{user_id}@example.test"
+    with admin.transaction(force_rollback=True):
+        admin.execute(
+            "update public.profiles set role='owner' where id=%s", (two_tenants.a.user_id,),
         )
         admin.execute(
             """insert into public.organization_members
-                  (organization_id, user_id, role, email, name, status)
-               values (%s, null, 'member', %s, 'Invited User', 'invited')""",
-            (organization_id, email),
+                 (organization_id, role, email, status, invited_by)
+               values (%s, 'owner', %s, 'invited', %s)""",
+            (two_tenants.a.id, email, two_tenants.a.user_id),
         )
-        before = admin.execute(
-            "select count(*), (select count(*) from public.pipelines where organization_id=%s) "
-            "from public.organizations",
-            (organization_id,),
-        ).fetchone()
-        _insert_auth_user(
-            admin,
-            user_id,
-            email,
-            {"invited_org_id": str(organization_id), "invited_role": "agent"},
-        )
+        with pytest.raises(psycopg.errors.RaiseException, match="owner invitation"):
+            with admin.transaction():
+                _insert_auth_user(admin, user_id, email, {"invited_org_id": str(two_tenants.a.id)})
         assert admin.execute(
-            "select organization_id, role::text from public.profiles where id=%s", (user_id,)
-        ).fetchone() == (organization_id, "agent")
-        assert admin.execute(
-            """select user_id, role::text, status from public.organization_members
-                 where organization_id=%s and lower(email)=lower(%s)""",
-            (organization_id, email),
-        ).fetchall() == [(user_id, "agent", "active")]
-        assert admin.execute(
-            "select count(*), (select count(*) from public.pipelines where organization_id=%s) "
-            "from public.organizations",
-            (organization_id,),
-        ).fetchone() == before
-    finally:
-        _cleanup_signup(admin, user_id, organization_id)
+            "select count(*) from auth.users where id=%s", (user_id,),
+        ).fetchone()[0] == 0
+
+
+def test_authenticated_cannot_forge_invites_or_profile_authority(dsn, two_tenants):
+    with as_authenticated_user(dsn, two_tenants.a.user_id) as authenticated:
+        for statement in (
+            "insert into public.organization_members (organization_id, role) values (%s, 'admin')",
+            "update public.organization_members set role='admin' where organization_id=%s",
+            "delete from public.organization_members where organization_id=%s",
+            "update public.profiles set organization_id=%s where id=auth.uid()",
+        ):
+            with pytest.raises(psycopg.errors.InsufficientPrivilege):
+                with authenticated.transaction():
+                    authenticated.execute(statement, (two_tenants.a.id,))
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            with authenticated.transaction():
+                authenticated.execute("update public.profiles set role='admin' where id=auth.uid()")
+        with authenticated.transaction(force_rollback=True):
+            assert authenticated.execute(
+                """update public.profiles set must_change_password=false, updated_at=now()
+                   where id=auth.uid() returning id::text""",
+            ).fetchone() == (str(two_tenants.a.user_id),)
+
+
+def test_profile_and_membership_acl_preserves_only_trusted_authority_writes(admin):
+    for table in ("profiles", "organization_members"):
+        for role in ("anon", "authenticated", "service_role"):
+            for operation in ("INSERT", "UPDATE", "DELETE"):
+                assert admin.execute(
+                    "select has_table_privilege(%s, %s, %s)",
+                    (role, f"public.{table}", operation),
+                ).fetchone()[0] == (role == "service_role")
+            for operation in ("INSERT", "UPDATE"):
+                columns = {
+                    row[0] for row in admin.execute(
+                        """select attname from pg_attribute
+                           where attrelid=to_regclass(%s) and attnum>0 and not attisdropped
+                             and has_column_privilege(%s, attrelid, attnum, %s)""",
+                        (f"public.{table}", role, operation),
+                    )
+                }
+                if role != "service_role":
+                    expected = {"must_change_password", "updated_at"} if (
+                        table == "profiles" and role == "authenticated" and operation == "UPDATE"
+                    ) else set()
+                    assert columns == expected
 
 
 def _auth_trigger_definitions(admin):

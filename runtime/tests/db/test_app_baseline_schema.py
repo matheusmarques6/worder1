@@ -5,6 +5,7 @@ guardian. Collection is offline; executing these assertions requires real PG.
 """
 
 import hashlib
+import uuid
 
 import psycopg
 import pytest
@@ -215,6 +216,7 @@ FOREIGN_KEYS = (
     ("automation_runs", "automation_id", "automations", "CASCADE"),
     ("automation_runs", "contact_id", "contacts", "SET NULL"),
     ("email_campaigns", "organization_id", "organizations", "CASCADE"),
+    ("email_campaigns", "template_id", "email_templates", "SET NULL"),
     ("whatsapp_campaigns", "organization_id", "organizations", "CASCADE"),
     ("whatsapp_campaigns", "template_id", "whatsapp_templates", ""),
     ("whatsapp_campaigns", "instance_id", "whatsapp_instances", ""),
@@ -291,7 +293,7 @@ FUNCTIONS = (
     ("get_user_organization_id", "",
      "75201ac93ee64426135de60415cbc8fe4eaeac23ff6488749037d23cafd9c3bc"),
     ("handle_new_user", "",
-     "b332ee52c4b4810af7f8ebbb54f10aff9fd58f106de695089c87ea6969db60eb"),
+     "0e52901d4909765f414ddd7a318303e2d0ecbb515d8212a5445f16410efc7c6b"),
 )
 
 
@@ -456,11 +458,15 @@ def expected_scoped_catalog():
             roles += ("anon", "authenticated")
         for role in roles:
             rows.append(("function_acl", name, signature, role, "postgres", "EXECUTE", False))
-    # Supabase's public-schema defaults, retained by the active RLS migrations.
+    # Direct ACLs are exact: owner keeps structural privileges, API roles use DML.
     for table in RELATIONS:
         for role in ("postgres", "anon", "authenticated", "service_role"):
-            for privilege in ("INSERT", "SELECT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES",
-                              "TRIGGER", "MAINTAIN"):
+            privileges = ("SELECT", "INSERT", "UPDATE", "DELETE")
+            if role == "postgres":
+                privileges += ("TRUNCATE", "REFERENCES", "TRIGGER", "MAINTAIN")
+            elif table == "organization_members" and role != "service_role":
+                privileges = ("SELECT",)
+            for privilege in privileges:
                 rows.append(("table_acl", table, role, "postgres", privilege, False))
     # Final auth attachment is owned by Task 5, after the prerequisite replay.
     rows.append(("trigger", "auth", "users",
@@ -471,6 +477,48 @@ def expected_scoped_catalog():
 
 def test_app_baseline_scoped_catalog(admin):
     assert scoped_catalog(admin) == expected_scoped_catalog()
+
+
+@pytest.mark.parametrize("role", ("anon", "authenticated", "service_role"))
+def test_data_api_roles_cannot_use_structural_table_privileges(admin, role):
+    for table in RELATIONS:
+        for privilege in ("TRUNCATE", "REFERENCES", "TRIGGER", "MAINTAIN"):
+            assert not admin.execute(
+                "select has_table_privilege(%s, %s, %s)",
+                (role, f"public.{table}", privilege),
+            ).fetchone()[0], (role, table, privilege)
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):
+        with admin.transaction(force_rollback=True):
+            admin.execute(psycopg.sql.SQL("set local role {}").format(psycopg.sql.Identifier(role)))
+            admin.execute("truncate public.sms_sends")
+
+
+def test_email_template_link_rejects_orphans_and_preserves_campaign_on_delete(admin, two_tenants):
+    template_id, campaign_id = uuid.uuid4(), uuid.uuid4()
+    with admin.transaction(force_rollback=True):
+        admin.execute(
+            "insert into public.email_templates (id, organization_id, name) "
+            "values (%s, %s, 'Linked')",
+            (template_id, two_tenants.a.id),
+        )
+        admin.execute(
+            """insert into public.email_campaigns (id, organization_id, name, template_id)
+               values (%s, %s, 'History', %s)""",
+            (campaign_id, two_tenants.a.id, template_id),
+        )
+        assert admin.execute(
+            "select template_id from public.email_campaigns where id=%s", (campaign_id,),
+        ).fetchone() == (template_id,)
+        admin.execute("delete from public.email_templates where id=%s", (template_id,))
+        assert admin.execute(
+            "select name, template_id from public.email_campaigns where id=%s", (campaign_id,),
+        ).fetchone() == ("History", None)
+        with pytest.raises(psycopg.errors.ForeignKeyViolation):
+            with admin.transaction():
+                admin.execute(
+                    """insert into public.email_campaigns (organization_id, name, template_id)
+                       values (%s, 'Orphan', %s)""", (two_tenants.a.id, template_id),
+                )
 
 
 @pytest.mark.parametrize("table,columns,pg_type,nullable,default", COLUMN_GROUPS)

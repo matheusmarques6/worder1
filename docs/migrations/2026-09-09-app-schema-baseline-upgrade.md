@@ -17,7 +17,7 @@ The executor is the only caller of SQL, migration paths, exclusions, and test-en
 | 20260812000002 | `20260812000002_runtime_roles_and_internal.sql` | `DF4A849999D0A407B07792BFC26C2DAB533664AB417DC6D56665A3D23E2803D3` |
 | 20260812000003 | `20260812000003_identity_conversations.sql` | `52C96186B085C52C3DFC1C17508A147408D90246972BD6D59F5E55BCB0E2ABD6` |
 | 20260812000004 | `20260812000004_engine_functions.sql` | `B1C92756190FFA67D201615EF7B0212DBC4676C2D8EAEFBD467747B450C0D304` |
-| 20260812000005 | `20260812000005_app_baseline_prereqs.sql` | `D3ADD48509CE0853A62A28920D9994DF4E18239F683B8C517427F92666A1C288` |
+| 20260812000005 | `20260812000005_app_baseline_prereqs.sql` | `0EC210C1CA3B2F1ACC92B693455FFC51173E3DC2C3CCD7AD3EC3F576654099BC` |
 | 20260813000001 | `20260813000001_ai_missions.sql` | `BE978E08303E5B498275F7BD2BB4896D9A84DC1E9EAB100E0CD45360645C1A75` |
 | 20260813000002 | `20260813000002_internal_llm_trail.sql` | `ABFADC5DD7A3F4005CC994602ACEF39CB41857BC6C0B7757D15989D70FEB29F9` |
 | 20260813000003 | `20260813000003_sender_preflight.sql` | `4057DDC1DA472E07FAB4DE6C597A7E7A3CA0017D2FC1D4F087271B47550444B1` |
@@ -88,15 +88,15 @@ The executor is the only caller of SQL, migration paths, exclusions, and test-en
 | 20260909120000 | `20260909120000_views_security_invoker.sql` | `A576E44F6AF7ECB379060D3FEBCA518FF685948B17551A578301243846242368` |
 | 20260909130000 | `20260909130000_revoke_definer_functions.sql` | `A44015515E74CC61800268D2D11E390D1980CE2010BF9CBA14ED75B8FA39E421` |
 | 20260909140000 | `20260909140000_definer_search_path.sql` | `1DCBB5819031C770A3C88B49A40378F6FA6BF7D01EDE0FCAD544C150AF89DCB6` |
-| 20260909230000 | `20260909230000_app_baseline_forward_compat.sql` | `12BE1631D07228EC8B6047CC04BAB7EF6ECC170DDA7B65A30242EC8147F4893B` |
-| 20260910000000 | `20260910000000_auth_user_created_trigger.sql` | `D1E1026B4C4153E569DBC048D102A381FB871E1E0404B0F6EF3B827F11CEA97E` |
+| 20260909230000 | `20260909230000_app_baseline_forward_compat.sql` | `8EE427D7894833AA4B6F48CA3FB52AD86894BA28244CB6747851A17362226E51` |
+| 20260910000000 | `20260910000000_auth_user_created_trigger.sql` | `016BFFC5FB60021404B4D4B81A2A13CE291AD230608D948D2A3759B36D56A097` |
 
 ## Upgrade manifest
 
 `PrepareUpgrade` creates the approved old history through `20260909140000_definer_search_path.sql`, excluding exactly `20260812000005_app_baseline_prereqs.sql`. It applies the fixed legacy fixture, then `Upgrade` may append only these two reviewed files, in order:
 
-1. `20260909230000_app_baseline_forward_compat.sql` (`12BE1631D07228EC8B6047CC04BAB7EF6ECC170DDA7B65A30242EC8147F4893B`)
-2. `20260910000000_auth_user_created_trigger.sql` (`D1E1026B4C4153E569DBC048D102A381FB871E1E0404B0F6EF3B827F11CEA97E`)
+1. `20260909230000_app_baseline_forward_compat.sql` (`8EE427D7894833AA4B6F48CA3FB52AD86894BA28244CB6747851A17362226E51`)
+2. `20260910000000_auth_user_created_trigger.sql` (`016BFFC5FB60021404B4D4B81A2A13CE291AD230608D948D2A3759B36D56A097`)
 
 The sealed `Upgrade` action owns this projection and history check. Do not pass a migration limit, SQL path, exclusion, or caller-selected mapping. The upgraded history must be the old prefix plus exactly this suffix.
 
@@ -167,8 +167,9 @@ The following are prohibited in this local proof and are not workarounds: `--inc
 - Every executed suite is non-empty with zero skips, failures, errors, and warning-masked failures.
 - `manifest.json` hashes match this inventory, and database migration history matches the exact manifest in order; the upgrade history excludes the bootstrap and ends with only the two approved suffix versions.
 - Fresh and upgraded `scoped_catalog(admin)` equal the shared `expected_scoped_catalog()`, including columns, constraints, indexes, RLS/policies, functions/triggers, enum order, and ACLs.
-- Upgrade preservation rows retain primary keys and values across all 11 scoped relations and all 13 replay prerequisites; this includes legacy template JSON, plaintext test-key compatibility, and the text campaign key. The legacy `email_sends` pending row remains pending while the new default is queued.
-- Auth tests prove normal signup owner provisioning, invited signup membership consumption without an extra organization/pipeline, and duplicate/noncanonical trigger rejection without partial change.
+- Upgrade preservation rows retain primary keys and values across all 11 scoped relations and all 13 replay prerequisites; this includes legacy template JSON, the non-null email campaign/template link (`...0009` to `...0018`), plaintext test-key compatibility, and the text campaign key. The legacy `email_sends` pending row remains pending while the new default is queued. Template deletion preserves campaign history through `ON DELETE SET NULL`; orphans abort compensation without coercion.
+- Auth tests prove normal signup owner provisioning, invitation selection under a membership row lock using the persisted role and a same-organization owner/admin inviter, rejection of forged metadata and invalid invitations, and transactional failure for owner invitations. Authenticated profile updates are limited to `must_change_password` and `updated_at`; membership and authority writes remain service-only. Existing RLS and duplicate/noncanonical trigger rejection remain in force.
+- Direct table ACLs are exact: `postgres` retains eight privileges, Data API roles receive only DML, and `anon`/`authenticated` have only SELECT on `organization_members`. Real PostgreSQL role tests reject structural privileges and SQL TRUNCATE across the 11-table scope; this makes no claim about an HTTP TRUNCATE endpoint.
 - `gates.json` reaches `ready` before tests and `stopped` after cleanup; `identity.json` remains consistent; there are no project-labeled containers, networks, or volumes, no recorded IDs remain, all three ports are free, and the executor lock is absent.
 
 ## Abort procedure

@@ -700,6 +700,8 @@ insert into app_baseline_foreign_keys values
    'FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE SET NULL'),
   ('email_campaigns', 'organization_id', 'organizations', 'cascade',
    'FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE'),
+  ('email_campaigns', 'template_id', 'email_templates', 'set null',
+   'FOREIGN KEY (template_id) REFERENCES email_templates(id) ON DELETE SET NULL'),
   ('whatsapp_campaigns', 'organization_id', 'organizations', 'cascade',
    'FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE'),
   ('whatsapp_campaigns', 'template_id', 'whatsapp_templates', '',
@@ -1216,16 +1218,36 @@ begin
   end if;
 
   for r in select distinct table_name from app_baseline_columns order by table_name loop
-    execute format('grant all privileges on table public.%I to anon, authenticated, service_role',
+    execute format('revoke truncate, references, trigger, maintain on table public.%I '
+                   || 'from anon, authenticated, service_role', r.table_name);
+    execute format('grant select, insert, update, delete on table public.%I '
+                   || 'to anon, authenticated, service_role',
                    r.table_name);
   end loop;
+
+  -- Invitations and tenant/role assignments are written only by trusted services.
+  revoke insert, update, delete on public.organization_members, public.profiles
+    from anon, authenticated;
+  for r in
+    select c.relname, string_agg(quote_ident(a.attname), ', ' order by a.attnum) as columns
+      from pg_class c join pg_namespace n on n.oid = c.relnamespace
+      join pg_attribute a on a.attrelid = c.oid
+     where n.nspname = 'public' and c.relname in ('organization_members', 'profiles')
+       and a.attnum > 0 and not a.attisdropped
+     group by c.relname
+  loop
+    execute format('revoke insert (%s), update (%s) on public.%I from anon, authenticated',
+                   r.columns, r.columns, r.relname);
+  end loop;
+  grant select on public.profiles to authenticated;
+  grant update (must_change_password, updated_at) on public.profiles to authenticated;
 
   if exists (
     select 1
       from (select unnest(allowed_roles) as role_name) roles
       cross join (select unnest(allowed_privileges) as privilege_name) privileges
       cross join (select distinct table_name from app_baseline_columns) tables
-     where not exists (
+     where exists (
        select 1
          from pg_class c
          join pg_namespace n on n.oid = c.relnamespace,
@@ -1236,6 +1258,11 @@ begin
           and pg_get_userbyid(a.grantor) = 'postgres'
           and a.privilege_type = privileges.privilege_name
           and not a.is_grantable
+     ) <> (
+       roles.role_name = 'postgres'
+       or (privileges.privilege_name = any(array['SELECT', 'INSERT', 'UPDATE', 'DELETE'])
+           and (tables.table_name <> 'organization_members'
+                or roles.role_name = 'service_role' or privileges.privilege_name = 'SELECT'))
      )
   ) then
     raise exception 'app baseline incompatible: scoped_grants.definition';

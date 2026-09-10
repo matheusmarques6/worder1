@@ -412,7 +412,7 @@ create table if not exists public.email_campaigns (
   reply_to text,
   html_content text,
   text_content text,
-  template_id uuid,
+  template_id uuid references public.email_templates(id) on delete set null,
   list_id uuid,
   segment_id uuid,
   status text default 'draft'

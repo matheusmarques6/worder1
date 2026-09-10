@@ -10,19 +10,27 @@ DECLARE
   org_id UUID;
   pipe_id UUID;
   inv_org UUID;
+  inv_member UUID;
   inv_role user_role;
   inv_name TEXT;
 BEGIN
   -- ---------- Convidado para uma organização existente ----------
   BEGIN
     inv_org := NULLIF(NEW.raw_user_meta_data->>'invited_org_id', '')::uuid;
-  EXCEPTION WHEN OTHERS THEN inv_org := NULL; END;
+  EXCEPTION WHEN invalid_text_representation THEN inv_org := NULL; END;
 
-  IF inv_org IS NOT NULL AND EXISTS (SELECT 1 FROM organizations o WHERE o.id = inv_org) THEN
-    BEGIN
-      inv_role := COALESCE(NULLIF(NEW.raw_user_meta_data->>'invited_role', ''), 'member')::user_role;
-    EXCEPTION WHEN OTHERS THEN inv_role := 'member'; END;
-    IF inv_role = 'owner' THEN inv_role := 'admin'; END IF;
+  -- Metadata is only a selector; a locked, authorized invitation is the proof.
+  SELECT m.id, m.role INTO inv_member, inv_role
+    FROM organization_members m
+    JOIN profiles inviter ON inviter.id = m.invited_by
+   WHERE m.organization_id = inv_org AND LOWER(m.email) = LOWER(NEW.email)
+     AND m.status = 'invited' AND m.user_id IS NULL
+     AND inviter.organization_id = m.organization_id AND inviter.role IN ('owner', 'admin')
+   ORDER BY m.id LIMIT 1
+   FOR UPDATE OF m;
+
+  IF inv_member IS NOT NULL THEN
+    IF inv_role = 'owner' THEN RAISE EXCEPTION 'owner invitation is not allowed'; END IF;
     inv_name := NULLIF(TRIM(COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'name', '')), '');
 
     INSERT INTO profiles (id, email, first_name, last_name, organization_id, role)
@@ -33,16 +41,14 @@ BEGIN
       COALESCE(NEW.raw_user_meta_data->>'last_name', ''),
       inv_org,
       inv_role
-    )
-    ON CONFLICT (id) DO UPDATE SET organization_id = EXCLUDED.organization_id, role = EXCLUDED.role;
+    );
 
     UPDATE organization_members
        SET user_id = NEW.id, status = 'active', joined_at = NOW(), role = inv_role,
            name = COALESCE(name, inv_name)
-     WHERE organization_id = inv_org AND LOWER(email) = LOWER(NEW.email);
+     WHERE id = inv_member AND user_id IS NULL;
     IF NOT FOUND THEN
-      INSERT INTO organization_members (organization_id, user_id, role, email, status, joined_at, name)
-      VALUES (inv_org, NEW.id, inv_role, NEW.email, 'active', NOW(), inv_name);
+      RAISE EXCEPTION 'invitation was already consumed';
     END IF;
     RETURN NEW;
   END IF;
@@ -82,10 +88,6 @@ BEGIN
     (pipe_id, 'Closed Lost', '#ef4444', 5, 0, false, true);
 
   RETURN NEW;
-EXCEPTION
-  WHEN OTHERS THEN
-    RAISE WARNING 'Error in handle_new_user: %', SQLERRM;
-    RETURN NEW;
 END;
 $function$;
 

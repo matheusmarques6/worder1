@@ -867,11 +867,12 @@ values
    '2026-01-29T00:00:00Z');
 
 insert into public.email_campaigns
-  (id, organization_id, name, subject, status, total_recipients, total_sent,
+  (id, organization_id, template_id, name, subject, status, total_recipients, total_sent,
    total_opened, total_clicked, opens, clicks, settings, metadata, created_at, updated_at)
 values
   ('00000000-0000-4000-8000-000000000009',
-   '00000000-0000-4000-8000-000000000001', 'Legacy Email', 'Fixture subject',
+   '00000000-0000-4000-8000-000000000001',
+   '00000000-0000-4000-8000-000000000018', 'Legacy Email', 'Fixture subject',
    'scheduled', 20, 18, 7, 3, 8, 4, '{"mode":"legacy"}', '{"fixture":9}',
    '2026-01-09T00:00:00Z', '2026-01-09T00:00:00Z');
 
