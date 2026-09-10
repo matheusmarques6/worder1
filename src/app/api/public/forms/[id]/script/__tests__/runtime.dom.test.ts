@@ -1112,3 +1112,28 @@ describe('formato de popup moderno', () => {
     expect(root(id)?.getElementById(`wf-ov-${id}`)).toBeFalsy()
   })
 })
+
+describe('jogo sem botão colado', () => {
+  function freshPage() {
+    for (const k of Object.keys(window)) if (k.startsWith('__wf')) delete (window as any)[k]
+  }
+  beforeEach(() => { freshPage() })
+
+  it('showButton:false entrega só o cartão — quem dispara é o botão da etapa', async () => {
+    const id = run(design({
+      steps: [{ blocks: [
+        { id: 'sc', type: 'scratch', props: { showButton: false, segments: [{ id: 's1', label: '10% OFF', prize: 'base', weight: 100 }] } },
+        { id: 'e1', type: 'email', props: { required: true } },
+        { id: 'b1', type: 'button', props: { text: 'Raspar e ver meu prêmio', action: 'submit' } },
+      ] }],
+    }))
+    await vi.advanceTimersByTimeAsync(1500)
+    const jogo = root(id)!.querySelector('[data-game="scratch"]') as HTMLElement
+    expect(jogo).toBeTruthy()
+    // Nenhum botão dentro do bloco do jogo…
+    expect(jogo.querySelector('button')).toBeNull()
+    // …e o botão da etapa continua sendo o que envia.
+    const acao = Array.from(root(id)!.querySelectorAll('button')).find(b => b.textContent === 'Raspar e ver meu prêmio')
+    expect(acao?.getAttribute('data-action')).toBe('submit')
+  })
+})

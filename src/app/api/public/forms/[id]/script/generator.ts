@@ -739,6 +739,11 @@ function gameSegs(p){
   return o;
 }
 function gameBtn(p,def){
+  // Nas referências que convertem, o cartão (e a roleta) não tem botão
+  // grudado embaixo: a ação fica onde o resto do formulário está. Com
+  // showButton:false o bloco entrega só o jogo, e quem dispara é o botão
+  // da etapa — o sorteio acontece no submit de qualquer jeito.
+  if(p&&p.showButton===false)return"";
   return '<button type="submit" data-action="submit" style="box-sizing:border-box;margin:14px 0 0;padding:'+nv(p.paddingV,14)+'px '+nv(p.paddingH,28)+'px;background:'+sv(p.bgColor,"#F97316")+';color:'+sv(p.textColor,"#fff")+';font-size:'+nv(p.fontSize,15)+'px;font-weight:700;font-family:inherit;line-height:1.2;border:none;border-radius:'+nv(p.borderRadius,8)+'px;cursor:pointer;display:'+(p.fullWidth?"block":"inline-block")+';width:'+(p.fullWidth?"100%":"auto")+';transition:opacity .2s">'+esc(applyOffer(p.buttonText||def))+'</button>';
 }
 // A lâmina da raspadinha: gradiente diagonal + listras finas, no lugar

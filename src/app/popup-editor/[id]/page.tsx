@@ -15,7 +15,7 @@ import {
   CircleDot, CheckSquare, Type, MousePointerClick, ImageIcon, Minus,
   GripHorizontal, Tag, Clock, Eye, Settings, Palette, Upload, LayoutGrid,
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
-  Bold, Italic, Underline, Link2, ExternalLink, Sparkles, Disc3, Eraser, Gift,
+  Bold, Italic, Underline, Link2, ExternalLink, Sparkles, Disc3, Eraser, Gift, Hand,
   BarChart3,
   SlidersHorizontal, Layers, Square, Sun, CornerDownRight,
   MoveHorizontal, MoveVertical, Check, MoreHorizontal, Pencil,
@@ -341,7 +341,7 @@ const defaultProps: Record<string, Record<string, any>> = {
       { id: 's1', label: '10% OFF', prize: 'base', weight: 80, color: '#F97316' },
       { id: 's2', label: 'Não foi dessa vez', prize: 'none', weight: 20, color: '#111827' },
     ],
-    buttonText: 'Raspar', width: 300, height: 150, coverColor: '#9CA3AF', coverText: 'Raspe aqui', coverTextColor: '#FFFFFF', prizeBg: '#FFF7ED', prizeColor: '#F97316', prizeSize: 24, cardRadius: 12,
+    buttonText: 'Raspar', width: 320, height: 190, coverColor: '#C0C6CF', coverText: 'Raspe aqui', coverTextColor: '#FFFFFF', prizeBg: '#FFF7ED', prizeColor: '#F97316', prizeSize: 26, cardRadius: 14,
     bgColor: '#F97316', textColor: '#FFFFFF', fontSize: 15, borderRadius: 8, fullWidth: false,
   },
 }
@@ -957,7 +957,20 @@ function gameSegments(p: any): Array<{ id: string; label: string; prize: string;
   }))
 }
 function GameButtonPreview({ p, fallback }: { p: any; fallback: string }) {
+  // showButton:false → o jogo vai sozinho e quem dispara é o botão da
+  // etapa. É como as referências mostram o cartão e a roleta.
+  if (p?.showButton === false) return null
   return <button type="button" style={{ marginTop: 14, padding: `${p.paddingV || 14}px ${p.paddingH || 28}px`, background: p.bgColor || '#F97316', color: p.textColor || '#fff', fontSize: p.fontSize || 15, fontWeight: 700, border: 'none', borderRadius: p.borderRadius ?? 8, cursor: 'pointer', display: p.fullWidth ? 'block' : 'inline-block', width: p.fullWidth ? '100%' : 'auto' }}>{p.buttonText || fallback}</button>
+}
+
+/** Clareia (amt>0) ou escurece um #rrggbb. Espelha wfShade do runtime. */
+function shadeHex(hex: string, amt: number): string {
+  const m = /^#([0-9a-fA-F]{6})$/.exec(String(hex || ''))
+  if (!m) return String(hex || '#C0C6CF')
+  const n = parseInt(m[1], 16)
+  const cl = (v: number) => (v < 0 ? 0 : v > 255 ? 255 : v)
+  const r = cl((n >> 16) + amt), g = cl(((n >> 8) & 255) + amt), b = cl((n & 255) + amt)
+  return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)
 }
 
 const NO_LAYOUT_BORDER = new Set(['email', 'phone', 'name-input', 'text-input', 'date-input', 'dropdown', 'radio', 'checkbox', 'legal-consent', 'coupon', 'countdown', 'wheel', 'scratch'])
@@ -1120,13 +1133,28 @@ function BlockPreview({ block, selected, onContentChange, onSelect, offerLabel, 
       </div>
     }
     case 'scratch': {
+      // A pré-visualização tem de ser a MESMA coisa que vai ao ar. Antes,
+      // aqui, a cobertura era um polígono cinza com zigue-zague — um
+      // borrão que não existe em lugar nenhum do runtime, e que fazia o
+      // lojista achar que a raspadinha era isso.
       const segs = gameSegments(p)
-      const w = Math.max(160, Math.min(480, Number(p.width) || 300)), h = Math.max(80, Math.min(320, Number(p.height) || 150))
+      const w = Math.max(160, Math.min(480, Number(p.width) || 320))
+      const h = Math.max(80, Math.min(360, Number(p.height) || 190))
+      const foil = p.coverColor || '#C0C6CF'
       return <div style={{ ...blockStyle, textAlign: 'center' }}>
-        <div style={{ position: 'relative', display: 'inline-block', width: w, maxWidth: '100%', height: h, borderRadius: p.cardRadius ?? 12, overflow: 'hidden', background: p.prizeBg || '#FFF7ED', boxShadow: '0 4px 14px rgba(0,0,0,.12)' }}>
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12, fontSize: p.prizeSize || 24, fontWeight: 800, color: p.prizeColor || '#F97316', lineHeight: 1.2 }}>{segs[0]?.label || '?'}</div>
-          {/* A cobertura, "meio raspada" para o lojista ver os dois lados. */}
-          <div style={{ position: 'absolute', inset: 0, background: p.coverColor || '#9CA3AF', clipPath: 'polygon(0 0, 100% 0, 100% 62%, 78% 74%, 60% 52%, 38% 72%, 20% 58%, 0 70%)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: h * 0.22, color: p.coverTextColor || '#FFFFFF', fontWeight: 700, fontSize: 16 }}>{p.coverText || 'Raspe aqui'}</div>
+        <div style={{ position: 'relative', display: 'inline-block', width: w, maxWidth: '100%', height: h, borderRadius: p.cardRadius ?? 14, overflow: 'hidden', background: p.prizeBg || '#FFF7ED', boxShadow: '0 6px 20px rgba(0,0,0,.14)' }}>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12, fontSize: p.prizeSize || 26, fontWeight: 800, color: p.prizeColor || '#F97316', lineHeight: 1.2 }}>{segs[0]?.label || '?'}</div>
+          {/* A lâmina: o mesmo gradiente + listras finas que o runtime pinta no canvas. */}
+          <div style={{
+            position: 'absolute', inset: 0,
+            backgroundColor: foil,
+            backgroundImage: `linear-gradient(135deg, ${shadeHex(foil, 20)} 0%, ${foil} 45%, ${shadeHex(foil, 12)} 55%, ${shadeHex(foil, -16)} 100%), repeating-linear-gradient(135deg, rgba(255,255,255,.10) 0 1px, transparent 1px 12px)`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
+            color: p.coverTextColor || '#FFFFFF', fontWeight: 800, fontSize: 13, letterSpacing: 1.6, textTransform: 'uppercase', textShadow: '0 1px 2px rgba(0,0,0,.28)',
+          }}>
+            <Hand className="w-[22px] h-[22px]" strokeWidth={1.8} />
+            <span>{p.coverText || 'Raspe aqui'}</span>
+          </div>
         </div>
         <GameButtonPreview p={p} fallback="Raspar" />
       </div>

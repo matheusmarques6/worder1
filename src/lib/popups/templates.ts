@@ -64,7 +64,7 @@ const wheel = (id: string, segments: any[], over: Record<string, any> = {}) => (
 })
 const scratch = (id: string, segments: any[], over: Record<string, any> = {}) => ({
   id, type: 'scratch',
-  props: { segments, buttonText: 'Raspar', width: 300, height: 150, coverColor: '#9CA3AF', coverText: 'Raspe aqui', coverTextColor: '#FFFFFF', prizeBg: '#FFF7ED', prizeColor: '#F97316', prizeSize: 24, cardRadius: 12, bgColor: '#111827', textColor: '#FFFFFF', fontSize: 15, borderRadius: 8, fullWidth: true, ...over },
+  props: { segments, showButton: false, width: 360, height: 200, coverColor: '#C0C6CF', coverText: 'Raspe com o dedo', coverTextColor: '#FFFFFF', prizeBg: '#111827', prizeColor: '#FFFFFF', prizeSize: 30, cardRadius: 16, ...over },
 })
 
 const baseStyles = {
@@ -292,26 +292,28 @@ export const POPUP_TEMPLATES: PopupTemplate[] = [
     name: 'Raspadinha',
     formType: 'popup',
     category: 'game',
-    description: 'E-mail para raspar. Revela o prêmio sorteado no servidor — no celular, com o dedo.',
+    description: 'Cartão grande, raspado com o dedo. O prêmio é sorteado no servidor quando o e-mail entra.',
     design: design('popup',
       [[
-        text('t1', 'Raspe e descubra seu desconto'),
-        sub('t2', 'Deixe seu e-mail para liberar a raspadinha.'),
-        spacer('sp1'),
-        email('e1'),
-        consent('c1', ['email'], EMAIL_CONSENT),
+        text('t1', 'Tente a sorte', { fontSize: 40, lineHeight: 1.05, letterSpacing: -0.5, color: '#111827' }),
+        sub('t2', 'Raspe o cartão e veja o seu desconto.', { fontSize: 16, color: '#4B5563' }),
+        spacer('sp1', 18),
         scratch('sc1', [
           { id: 's1', label: '10% OFF', prize: 'base', weight: 70, color: '#F97316' },
           { id: 's2', label: 'Frete grátis', prize: 't-frete', weight: 20, color: '#FDBA74' },
           { id: 's3', label: 'Não foi dessa vez', prize: 'none', weight: 10, color: '#111827' },
         ]),
+        spacer('sp2', 18),
+        email('e1', { placeholder: 'Seu melhor e-mail' }),
+        consent('c1', ['email'], EMAIL_CONSENT),
+        button('b1', 'Raspar e ver meu prêmio', { bgColor: '#111827', fontSize: 15, paddingV: 16, borderRadius: 10 }),
       ]],
       [
-        text('s1', 'Você ganhou {{prize}}'),
+        text('s1', 'Você ganhou {{prize}}', { fontSize: 32 }),
         sub('s2', 'Seu cupom já está no carrinho e vale por 7 dias.'),
         coupon('k1', { code: 'RASPOU10', codePrefix: 'RASPOU', tiers: [{ id: 't-frete', label: 'Frete grátis', afterStepId: '', discountType: 'free_shipping', discountValue: 0, code: 'FRETEGRATIS' }] }),
       ],
-      { styles: { width: 460, minHeight: 0 } },
+      { styles: { width: 460, minHeight: 0, fullscreenMobile: true } },
     ),
   },
   {
