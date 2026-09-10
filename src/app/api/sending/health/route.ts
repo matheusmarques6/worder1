@@ -16,6 +16,7 @@ import { buildSendingIssues, type DomainRow, type WhatsAppRow } from '@/lib/send
 import { allowanceStatus } from '@/lib/email/shared-domain-allowance'
 import { isSharedDomainEmail } from '@/lib/email/shared-sender'
 import { resolveTrackingBaseUrl, platformTrackingBaseUrl } from '@/lib/email/tracking-url'
+import { imagemMaisRecenteDaOrg, sondarMediaComCache } from '@/lib/media/probe-run'
 import { getAppBaseUrl } from '@/lib/app-url'
 
 export const dynamic = 'force-dynamic'
@@ -128,6 +129,10 @@ export async function GET(request: NextRequest) {
   const domainsUnknown = !!domainsRes.error
   if (domainsUnknown) console.warn('[sending-health] não consegui ler os domínios:', domainsRes.error!.message)
 
+  // A sonda das imagens é a mesma para toda a plataforma (é o host da
+  // CDN que responde), então vale por 5 minutos e nunca derruba o painel.
+  const media = await sondarMediaComCache(() => imagemMaisRecenteDaOrg(admin, orgId))
+
   const issues = buildSendingIssues({
     sender: {
       email: senderEmail,
@@ -150,6 +155,9 @@ export async function GET(request: NextRequest) {
     },
     whatsapp,
     trackingHost,
+    imagens: media
+      ? { ...media.veredito, diagnostico: media.veredito.diagnostico }
+      : undefined,
   })
 
   return NextResponse.json({

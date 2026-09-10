@@ -19,7 +19,8 @@
 //   2. organizations.email_settings.tracking_domain
 //        o mesmo, quando vale para a organização inteira
 //   3. EMAIL_TRACKING_DOMAIN
-//        o padrão da plataforma (click.worder.com.br). É o que atende
+//        o padrão da plataforma (click.worder.email — mesma família do
+//        remetente worder.email e da CDN cdn.worder.email). É o que atende
 //        quem ainda não configurou nada — antes disto, TODO link caía no
 //        host do painel (app.worder.com.br), que é justamente o que não
 //        deve aparecer no e-mail de ninguém.

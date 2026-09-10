@@ -101,6 +101,13 @@ export interface SendingHealthInput {
    * então os links saem do host do painel.
    */
   trackingHost?: { url: string; source: 'store' | 'organization' | 'platform' | 'app' }
+  /**
+   * Resultado da sonda das imagens do e-mail. Quando o host da CDN ou o
+   * transformador de imagens está fora, TODO e-mail com imagem do editor
+   * chega com retângulos vazios — e nada, do lado do envio, acusa: o
+   * Resend aceitou, o log diz enviado.
+   */
+  imagens?: { ok: boolean; titulo: string; detalhe: string; acao: string; diagnostico: string }
   now?: Date
 }
 
@@ -176,6 +183,18 @@ export function buildSendingIssues(input: SendingHealthInput): SendingIssue[] {
       title: 'Links no nosso domínio, remetente no seu',
       detail: 'Seu domínio de envio está verificado, mas os links do e-mail ainda saem por um domínio nosso. Alinhar os dois é o que fecha a conta da reputação.',
       action: 'Aponte um CNAME (ex.: links.sualoja.com.br) e salve em Configurações → E-mail.',
+      href: '/settings/email',
+    })
+  }
+
+  // ── As imagens do e-mail carregam? ──
+  const img = input.imagens
+  if (img && !img.ok && img.diagnostico !== 'sem_imagens' && img.diagnostico !== 'sem_host') {
+    issues.push({
+      level: 'error', kind: 'imagens_quebradas', channel: 'email', subject: null,
+      title: img.titulo,
+      detail: img.detalhe,
+      action: img.acao,
       href: '/settings/email',
     })
   }

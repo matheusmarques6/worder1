@@ -40,6 +40,20 @@ export interface MediaUrlOptions {
   quality?: number
 }
 
+/**
+ * O transformador (/render/image) é recurso PAGO do Supabase. Onde ele
+ * não está habilitado, TODA imagem de e-mail responde 400 e o e-mail sai
+ * com os retângulos vazios — sem nenhum erro do lado do envio. Esta
+ * chave é a saída de emergência: com CDN_IMAGE_TRANSFORM=off as URLs
+ * passam a sair pelo caminho direto (/object), que sempre serve, ao
+ * custo de mandar a imagem no tamanho original.
+ */
+export function transformacaoDeImagemHabilitada(): boolean {
+  const raw = String(process.env.CDN_IMAGE_TRANSFORM ?? '').trim().toLowerCase()
+  if (!raw) return true
+  return !['0', 'off', 'false', 'no', 'nao', 'não'].includes(raw)
+}
+
 /** Host da CDN configurado, sem protocolo nem barra final; null se ausente. */
 export function cdnImagesHost(): string | null {
   const raw = process.env.CDN_IMAGES_DOMAIN
@@ -97,7 +111,7 @@ function buildStorageUrl(host: string, bucketAndPath: string, opts: MediaUrlOpti
     .split('/')
     .map((seg) => encodeURIComponent(decodeSafe(seg)))
     .join('/')
-  if (!isTransformableImage(bucketAndPath)) {
+  if (!isTransformableImage(bucketAndPath) || !transformacaoDeImagemHabilitada()) {
     return `https://${host}/storage/v1/object/public/${encoded}`
   }
   const width = opts.width || EMAIL_IMAGE_WIDTH

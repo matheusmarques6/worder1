@@ -79,7 +79,7 @@ function renderProductCard(p: any, opts: {
  */
 export function resolveProductPlaceholders(html: string): string {
   return html.replace(
-    /<!-- WORDER_PRODUCT_BLOCK:([^:]+):(\d+):(\d+):(true|false):(true|false):(true|false):([^-]+) -->/g,
+    /<!-- WORDER_PRODUCT_BLOCK:([^:]+):(\d+):(\d+):(true|false):(true|false):(true|false):(\S*) -->/g,
     (_, _feedType, totalStr, colsStr, showPrice, showComparePrice, showButton, buttonText) => {
       const total = Math.min(Number(totalStr) || 4, SAMPLE_PRODUCTS.length)
       const cols = Math.max(1, Math.min(Number(colsStr) || 2, 4))
