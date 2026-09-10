@@ -945,6 +945,46 @@ function renderBlock(b){
       h='<div style="'+blockStyleStr(p,true)+'"'+branchAttr(p)+'>'+rLabel+'<div'+(p.required?' data-wfreq="1"'+vaStr(p):'')+'>'+ri+'</div></div>';
       break;
     }
+    // Escolha: os botões empilhados que abrem quase todo popup bom que
+    // existe por aí ("What are you shopping for?"). Clicar é a resposta E
+    // o avanço — sem bolinha de rádio, sem segundo botão "continuar".
+    // A resposta vai num campo escondido, então cai na submissão como
+    // qualquer outro campo, e cada opção pode levar a uma etapa própria.
+    case"choice":{
+      var chOpts=[];
+      var chRaw=p.options||[];
+      for(var ci=0;ci<chRaw.length&&ci<8;ci++){
+        var co=chRaw[ci];
+        if(typeof co==="string")chOpts.push({label:co,value:co,next:""});
+        else if(co&&typeof co==="object")chOpts.push({label:String(co.label||co.value||""),value:String(co.value!=null?co.value:co.label||""),next:String(co.next||"")});
+      }
+      chOpts=chOpts.filter(function(o){return o.label});
+      if(!chOpts.length)break;
+      var chId=bid(b.id),chName=p.mapTo==="custom"?("custom:"+(p.mapToCustom||p.label||"escolha")):(p.mapTo||p.label||"escolha");
+      var chFf=sv(st.fontFamily,"inherit");
+      var chGap=nv(p.gap,10),chRad=nv(p.borderRadius,10);
+      var chBg=sv(p.optionBg,"#FFFFFF"),chFg=sv(p.optionColor,"#111827");
+      var chBw=nv(p.borderWidth,0),chBc=sv(p.borderColor,"#111827");
+      var chFs=nv(p.fontSize,15),chFw=sv(p.fontWeight,"600");
+      var chPv=nv(p.paddingV,16),chPh=nv(p.paddingH,18);
+      var chUp=p.uppercase?"text-transform:uppercase;letter-spacing:"+nv(p.letterSpacing,1)+"px;":"";
+      var chHover=sv(p.hoverBg,"");
+      var chCss=chHover?'<style>#'+chId+' .wf-ch:hover{background:'+chHover+'!important}</style>':"";
+      var chBtns="";
+      for(var cj=0;cj<chOpts.length;cj++){
+        var op=chOpts[cj];
+        var nextAt=op.next&&stepIndexById(op.next)>=0?' data-next="'+esc(op.next)+'"':"";
+        chBtns+='<button type="button" class="wf-ch" data-action="next-step" data-choice="'+esc(op.value)+'" data-choice-input="wf-cho-'+chId+'"'+nextAt
+          +' style="box-sizing:border-box;display:block;width:100%;margin:0;padding:'+chPv+'px '+chPh+'px;background:'+chBg+';color:'+chFg+';font-family:'+chFf+';font-size:'+chFs+'px;font-weight:'+chFw+';line-height:1.25;text-align:center;'+chUp
+          +'border:'+(chBw>0?chBw+'px solid '+chBc:"none")+';border-radius:'+chRad+'px;cursor:pointer;transition:background .18s,transform .18s;-webkit-tap-highlight-color:transparent">'+esc(applyOffer(op.label))+'</button>';
+      }
+      var chDecline=p.declineText?'<button type="button" data-action="close" style="display:block;margin:'+nv(p.declineGap,14)+'px auto 0;background:none;border:none;padding:4px;font-family:'+chFf+';font-size:'+nv(p.declineSize,13)+'px;color:'+sv(p.declineColor,"#6B7280")+';text-decoration:underline;cursor:pointer">'+esc(p.declineText)+'</button>':"";
+      var chLabel=(p.showLabel!==false&&p.label)?'<div style="font-family:'+chFf+';font-size:'+nv(p.labelSize,15)+'px;color:'+sv(p.labelColor,"#374151")+';text-align:center;margin:0 0 '+nv(p.labelGap,14)+'px">'+esc(applyOffer(p.label))+'</div>':"";
+      h=chCss+'<div id="'+chId+'" style="'+blockStyleStr(p,true)+'">'+chLabel
+        +'<input type="hidden" id="wf-cho-'+chId+'" name="'+esc(chName)+'" value="" />'
+        +'<div style="display:flex;flex-direction:column;gap:'+chGap+'px">'+chBtns+'</div>'+chDecline+'</div>';
+      break;
+    }
     case"checkbox":{
       var cbName=p.mapTo==="custom"?("custom:"+(p.mapToCustom||p.label||"check")):(p.mapTo||p.label||"check");
       var cbff=sv(st.fontFamily,"inherit");
@@ -1177,6 +1217,30 @@ function show(){
   function hasSideAt(m){return sideUrlOk&&!!si.enabled&&!m&&formType!=="banner"&&formType!=="flyout"}
   var embedHost=isEmbed?document.querySelector('[data-worder-form="'+FID+'"]'):null;
   var pop=document.createElement("div");pop.id="wf-pop-"+FID;pop.className="wf-pop";
+  // Fundo de imagem sangrando: é o formato de quase todo popup que
+  // converte hoje — foto ocupando o cartão inteiro, marca pequena,
+  // título grande por cima. Antes só existia imagem em COLUNA lateral,
+  // que é o formato de e-mail, não de popup.
+  var bgi=st.backgroundImage||{};
+  var bgUrl=safeUrl(bgi.src||"");
+  var hasBgImg=!!(bgi.enabled&&bgUrl);
+  // O véu é o que mantém o texto legível sobre a foto. Gradiente por
+  // padrão (escurece só onde o texto fica); estilo 'flat' quando a foto
+  // é clara demais e precisa de um tom por cima inteiro.
+  function veuCss(){
+    var ov=bgi.overlay||{};
+    if(ov.enabled===false)return "";
+    var cor=sv(ov.color,"#000000"),op=Math.min(Math.max(nv(ov.opacity,45),0),100)/100;
+    var rgba=hexToRgba(cor,op);
+    if(ov.style==="flat")return "background-image:linear-gradient("+rgba+","+rgba+");";
+    return "background-image:linear-gradient(to bottom,"+hexToRgba(cor,Math.max(0,op*0.15))+" 0%,"+hexToRgba(cor,Math.max(0,op*0.35))+" 45%,"+rgba+" 100%);";
+  }
+  function hexToRgba(hex,a){
+    var m=/^#([0-9a-fA-F]{6})$/.exec(String(hex||""));
+    if(!m)return "rgba(0,0,0,"+a+")";
+    var n=parseInt(m[1],16);
+    return "rgba("+((n>>16)&255)+","+((n>>8)&255)+","+(n&255)+","+a+")";
+  }
   var padT=st.paddingTop!=null?nv(st.paddingTop,32):(typeof st.padding==="number"?st.padding:32);
   var padR=st.paddingRight!=null?nv(st.paddingRight,32):(typeof st.padding==="number"?st.padding:32);
   var padB=st.paddingBottom!=null?nv(st.paddingBottom,32):(typeof st.padding==="number"?st.padding:32);
@@ -1191,6 +1255,15 @@ function show(){
     if(minH>0)minH=Math.min(minH,Math.floor(window.innerHeight*0.92));
     var anim=(st.animation==="none"||isEmbed)?"":"animation:"+(st.animation==="slide-up"?"wfSlide":"wfFade")+" .3s ease;";
     var s="box-sizing:border-box!important;position:relative!important;display:flex!important;flex-direction:row!important;overflow:hidden!important;background:"+sv(st.backgroundColor,"#fff")+"!important;"+anim;
+    if(hasBgImg){
+      s+='background-image:url("'+bgUrl+'")!important;background-size:'+sv(bgi.size,"cover")+'!important;background-position:'+sv(bgi.position,"center")+'!important;background-repeat:no-repeat!important;';
+    }
+    // Tela cheia no celular: é assim que as referências aparecem no
+    // telefone, e é o que resolve o popup espremido em 320px de altura.
+    if(m&&st.fullscreenMobile&&formType!=="banner"&&formType!=="fullpage"&&!isEmbed){
+      s+="width:100vw!important;max-width:100vw!important;height:100dvh!important;max-height:100dvh!important;border-radius:0!important;box-shadow:none!important;";
+      return s;
+    }
     if(formType==="banner"){
       s+="width:100%!important;max-width:100%!important;border-radius:0;box-shadow:0 2px 8px rgba(0,0,0,0.08);";
     } else if(formType==="flyout"){
@@ -1211,7 +1284,9 @@ function show(){
     var maxH=formType==="banner"?"none":(formType==="flyout"?"80vh":(formType==="fullpage"?"100vh":"90vh"));
     // display:flex column + margin:auto on the child = editor's vertical
     // centering parity, safe under overflow (auto margins collapse to 0).
-    return "box-sizing:border-box!important;flex:1 1 "+basis+"!important;min-width:0!important;max-width:"+basis+"!important;background:"+sv(st.backgroundColor,"#fff")+";padding:"+padT+"px "+padR+"px "+padB+"px "+padL+"px;overflow-y:auto;max-height:"+maxH+";font-family:"+fontFam+";display:flex;flex-direction:column;";
+    var fundo=hasBgImg?"background:transparent;"+veuCss():"background:"+sv(st.backgroundColor,"#fff")+";";
+    if(m&&st.fullscreenMobile&&formType!=="banner"&&!isEmbed)maxH="100dvh";
+    return "box-sizing:border-box!important;flex:1 1 "+basis+"!important;min-width:0!important;max-width:"+basis+"!important;"+fundo+"padding:"+padT+"px "+padR+"px "+padB+"px "+padL+"px;overflow-y:auto;max-height:"+maxH+";font-family:"+fontFam+";display:flex;flex-direction:column;";
   }
   var content=document.createElement("div");
   var sideEl=null;
@@ -1408,6 +1483,16 @@ function show(){
       if(submitted)return;
       var frm=btn.closest("form")||$("wf-form-"+FID);
       if(!frm)return;
+      // Bloco de escolha: o próprio botão é a resposta. Guarda no campo
+      // escondido ANTES do harvest, senão a resposta não entra na
+      // submissão.
+      var chosen=btn.getAttribute("data-choice");
+      if(chosen!=null){
+        var hidId=btn.getAttribute("data-choice-input");
+        var hidEl=hidId?$(hidId):null;
+        if(hidEl)hidEl.value=chosen;
+        wfEmit("choice",{value:chosen,step:curStep});
+      }
       // R2: validate the CURRENT step before advancing, then harvest it.
       if(!validateStep(frm)){dlog("next-step blocked by validation");return}
       harvest(frm);

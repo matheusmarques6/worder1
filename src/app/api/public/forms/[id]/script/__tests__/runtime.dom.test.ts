@@ -989,3 +989,126 @@ describe('formatos: embed e banner não são modais', () => {
     expect(pop.getAttribute('role')).toBe('dialog')
   })
 })
+
+// =============================================
+// O formato que as referências usam: foto sangrando, tela cheia no
+// celular e botões de escolha empilhados. Nenhum dos três existia — o
+// popup só sabia ser um cartão branco com bolinhas de rádio.
+// =============================================
+describe('formato de popup moderno', () => {
+  function freshPage() {
+    for (const k of Object.keys(window)) if (k.startsWith('__wf')) delete (window as any)[k]
+  }
+  beforeEach(() => { freshPage() })
+
+  const FOTO = 'https://cdn.loja.com/capa.jpg'
+
+  it('foto de fundo cobre o cartão e o conteúdo ganha véu para o texto sobreviver', async () => {
+    const id = run(design({
+      styles: {
+        width: 480, closeButton: { show: true }, backgroundColor: '#FFFFFF',
+        backgroundImage: { enabled: true, src: FOTO, overlay: { color: '#000000', opacity: 60 } },
+      },
+    }))
+    await vi.advanceTimersByTimeAsync(1500)
+    const pop = root(id)!.getElementById(`wf-pop-${id}`) as HTMLElement
+    expect(pop.style.cssText).toContain(FOTO)
+    expect(pop.style.cssText).toMatch(/background-size:\s*cover/)
+    // O conteúdo não pinta branco por cima da foto…
+    const conteudo = pop.querySelector('div') as HTMLElement
+    expect(conteudo.style.background).not.toBe('rgb(255, 255, 255)')
+    // …e o véu é um gradiente, não um bloco chapado.
+    expect(conteudo.style.cssText).toContain('linear-gradient')
+  })
+
+  it('foto de origem suspeita não vira fundo', async () => {
+    const id = run(design({
+      styles: { width: 480, closeButton: { show: true }, backgroundImage: { enabled: true, src: 'javascript:alert(1)' } },
+    }))
+    await vi.advanceTimersByTimeAsync(1500)
+    const pop = root(id)!.getElementById(`wf-pop-${id}`) as HTMLElement
+    expect(pop.style.cssText).not.toContain('javascript:')
+    expect(pop.style.cssText).not.toContain('background-image:url')
+  })
+
+  it('no celular, tela cheia de verdade — sem cartão espremido', async () => {
+    const largura = window.innerWidth
+    Object.defineProperty(window, 'innerWidth', { value: 390, configurable: true })
+    try {
+      const id = run(design({ styles: { width: 480, closeButton: { show: true }, fullscreenMobile: true } }))
+      await vi.advanceTimersByTimeAsync(1500)
+      const pop = root(id)!.getElementById(`wf-pop-${id}`) as HTMLElement
+      // jsdom normaliza o CSS ao aplicar: comparamos pelos valores, não
+      // pela string crua.
+      expect(pop.style.getPropertyValue('height')).toBe('100dvh')
+      expect(pop.style.getPropertyValue('width')).toBe('100vw')
+      expect(pop.style.getPropertyValue('border-radius')).toBe('0')
+    } finally {
+      Object.defineProperty(window, 'innerWidth', { value: largura, configurable: true })
+    }
+  })
+
+  it('escolha: clicar responde e avança na mesma ação', async () => {
+    const escolhas = listen('choice')
+    const id = run(design({
+      steps: [
+        { id: 'p1', blocks: [{ id: 'ch', type: 'choice', props: {
+          label: 'O que você procura hoje?', mapTo: 'custom', mapToCustom: 'interesse',
+          options: [{ label: 'Bikinis', value: 'bikini' }, { label: 'Inteiro', value: 'inteiro', next: 'p3' }],
+          declineText: 'Não, obrigado',
+        } }] },
+        { id: 'p2', blocks: [{ id: 'e2', type: 'email', props: { required: true } }, { id: 'b2', type: 'button', props: { text: 'Quero', action: 'submit' } }] },
+        { id: 'p3', blocks: [{ id: 'e3', type: 'email', props: { required: true } }, { id: 'b3', type: 'button', props: { text: 'Quero inteiro', action: 'submit' } }] },
+      ],
+    }))
+    await vi.advanceTimersByTimeAsync(1500)
+
+    const botoes = root(id)!.querySelectorAll('button.wf-ch')
+    expect(botoes.length).toBe(2)
+    // Sem bolinha de rádio: são botões de largura total.
+    expect(root(id)!.querySelector('input[type="radio"]')).toBeNull()
+    expect((botoes[0] as HTMLElement).style.width).toBe('100%')
+
+    ;(botoes[1] as HTMLElement).click()
+    await vi.advanceTimersByTimeAsync(20)
+
+    // A opção com destino próprio pulou a etapa do meio…
+    expect(root(id)!.textContent).toContain('Quero inteiro')
+    // …e a resposta foi anunciada para quem escuta (a etapa já trocou, o
+    // campo escondido saiu com ela — a persistência é o próximo teste).
+    expect(escolhas).toHaveLength(1)
+    expect(escolhas[0]).toMatchObject({ value: 'inteiro', step: 0 })
+  })
+
+  it('escolha: a resposta chega no servidor junto do e-mail', async () => {
+    const id = run(design({
+      steps: [
+        { id: 'p1', blocks: [{ id: 'ch', type: 'choice', props: {
+          mapTo: 'custom', mapToCustom: 'interesse', options: ['Cabelo', 'Corpo'],
+        } }] },
+        { id: 'p2', blocks: [{ id: 'e2', type: 'email', props: { required: true } }, { id: 'b2', type: 'button', props: { text: 'Enviar', action: 'submit' } }] },
+      ],
+    }))
+    await vi.advanceTimersByTimeAsync(1500)
+    ;(root(id)!.querySelectorAll('button.wf-ch')[0] as HTMLElement).click()
+    await vi.advanceTimersByTimeAsync(20)
+    const form = formEl(id)!
+    ;(form.querySelector('input[name="email"]') as HTMLInputElement).value = 'ana@example.com'
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await vi.advanceTimersByTimeAsync(50)
+    const envio = calls.find((c) => c.url.includes('/submit'))
+    expect(envio?.body?.answers?.['custom:interesse']).toBe('Cabelo')
+  })
+
+  it('escolha: o "não, obrigado" fecha o popup', async () => {
+    const id = run(design({
+      steps: [{ id: 'p1', blocks: [{ id: 'ch', type: 'choice', props: { options: ['A', 'B'], declineText: 'Não, obrigado' } }] }],
+    }))
+    await vi.advanceTimersByTimeAsync(1500)
+    const recusa = Array.from(root(id)!.querySelectorAll('button')).find((b) => b.textContent === 'Não, obrigado')!
+    expect(recusa).toBeTruthy()
+    recusa.click()
+    await vi.advanceTimersByTimeAsync(20)
+    expect(root(id)?.getElementById(`wf-ov-${id}`)).toBeFalsy()
+  })
+})
