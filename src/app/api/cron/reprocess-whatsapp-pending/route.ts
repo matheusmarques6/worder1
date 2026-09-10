@@ -14,22 +14,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { enqueueWhatsAppWebhook, enqueueWhatsAppAiRespond } from '@/lib/queue';
 import { quarantineStuckSending } from '@/lib/whatsapp/recipient-claim';
+import { authorizeCronRequest } from '@/lib/cron-auth';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-function authorize(req: NextRequest): boolean {
-  if (req.headers.get('x-vercel-cron')) return true;
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret) {
-    const auth = req.headers.get('authorization');
-    if (auth === `Bearer ${cronSecret}`) return true;
-  }
-  return process.env.NODE_ENV !== 'production';
-}
-
 export async function GET(req: NextRequest) {
-  if (!authorize(req)) {
+  if (!authorizeCronRequest(req)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 

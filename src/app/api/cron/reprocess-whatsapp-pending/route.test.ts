@@ -64,7 +64,9 @@ function fakeReq(): any {
   return { headers: new Headers({ authorization: 'Bearer test-cron-secret' }) }
 }
 
-afterEach(() => vi.unstubAllEnvs())
+afterEach(() => {
+  vi.unstubAllEnvs()
+})
 
 const EVENTS_RPC = 'pending_whatsapp_webhook_events_for_reprocess'
 const AI_RPC = 'pending_whatsapp_ai_responses_for_reprocess'
