@@ -91,7 +91,12 @@ export async function GET(req: NextRequest) {
           .select('id, last_active_at, store_id')
           .eq('organization_id', auto.organization_id)
           .lte('last_active_at', threshold)
-          .eq('is_active', true)
+          // `contacts.is_active` não existe: o filtro derrubava a
+          // consulta inteira e a régua de inatividade nunca disparava
+          // para ninguém. O que o passo quer é não incomodar quem está
+          // bloqueado ou na lista de supressão.
+          .not('is_blocked', 'is', true)
+          .not('suppressed', 'is', true)
           .order('last_active_at', { ascending: true, nullsFirst: true })
           .range(from, from + PAGE_SIZE - 1)
         if (auto.store_id) {

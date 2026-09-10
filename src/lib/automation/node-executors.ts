@@ -2420,12 +2420,24 @@ const actionExecutors: Record<string, NodeExecutor> = {
         return { status: 'error', output: null, error: 'Nenhuma lista selecionada no nó' };
       }
       try {
+        // `contact_list_members` não tem organization_id — o filtro
+        // derrubava o delete inteiro e ninguém saía de lista nenhuma.
+        // A cerca do inquilino é a lista: confirmamos que ela é desta
+        // organização antes de mexer.
+        const { data: lista } = await supabase
+          .from('contact_lists')
+          .select('id')
+          .eq('id', config.listId)
+          .eq('organization_id', organizationId)
+          .maybeSingle();
+        if (!lista) {
+          return { status: 'error', output: null, error: 'Lista não encontrada nesta organização' };
+        }
         const { error } = await supabase
           .from('contact_list_members')
           .delete()
           .eq('list_id', config.listId)
-          .eq('contact_id', contactId)
-          .eq('organization_id', organizationId);
+          .eq('contact_id', contactId);
         if (error) {
           return { status: 'error', output: null, error: `Falha ao remover da lista: ${error.message}` };
         }

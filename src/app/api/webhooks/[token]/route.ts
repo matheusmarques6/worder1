@@ -36,16 +36,45 @@ export async function POST(
       headers[key] = value
     })
 
-    // Find the installed integration by webhook token
-    const { data: installation, error: installError } = await supabase
-      .from('installed_integrations')
-      .select(`
-        *,
-        integration:integrations(*)
-      `)
-      .eq('webhook_token', params.token)
-      .eq('status', 'active')
-      .single()
+    // Find the installed integration by webhook token.
+    // `installed_integrations` não tem coluna `webhook_token`: o token
+    // fica dentro de `configuration`. Com o filtro na coluna inexistente
+    // o PostgREST recusava a consulta e TODO webhook de integração
+    // respondia "Invalid webhook token", qualquer que fosse o token.
+    const ehUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      .test(params.token)
+
+    let installation: any = null
+    let installError: any = null
+    {
+      const porToken = await supabase
+        .from('installed_integrations')
+        .select(`
+          *,
+          integration:integrations(*)
+        `)
+        .eq('configuration->>webhook_token', params.token)
+        .eq('status', 'active')
+        .maybeSingle()
+      installation = porToken.data
+      installError = porToken.error
+
+      // Instalações antigas não guardam token: aí o endereço do webhook
+      // carrega o próprio id da instalação.
+      if (!installation && !installError && ehUuid) {
+        const porId = await supabase
+          .from('installed_integrations')
+          .select(`
+            *,
+            integration:integrations(*)
+          `)
+          .eq('id', params.token)
+          .eq('status', 'active')
+          .maybeSingle()
+        installation = porId.data
+        installError = porId.error
+      }
+    }
 
     if (installError || !installation) {
       console.error('Webhook token not found or integration inactive:', params.token)
@@ -173,15 +202,16 @@ function buildLeadData(
 ): Record<string, any> {
   return {
     organization_id: installation.organization_id,
-    name: normalized.name || 
-          `${normalized.firstName || ''} ${normalized.lastName || ''}`.trim() || 
+    // Em `contacts` o nome é `full_name`; `name` não existe.
+    full_name: normalized.name ||
+          `${normalized.firstName || ''} ${normalized.lastName || ''}`.trim() ||
           null,
     first_name: normalized.firstName || null,
     last_name: normalized.lastName || null,
     email: normalized.email || null,
     phone: normalized.phone || null,
     company: normalized.company || null,
-    whatsapp_jid: normalized.whatsappJid || null,
+    whatsapp_id: normalized.whatsappJid || null,
     source: sourceOverride || normalized.source,
     tags: [...(installation.auto_tags || []), ...normalized.tags],
     custom_fields: normalized.customFields,
@@ -379,19 +409,19 @@ async function createOrUpdateLead(supabase: any, installation: any, leadData: an
     }
   }
 
-  // 3. Verificar por WhatsApp JID
-  if (!existingLead && leadData.whatsapp_jid) {
+  // 3. Verificar por WhatsApp JID (a coluna é `whatsapp_id`)
+  if (!existingLead && leadData.whatsapp_id) {
     const { data } = await supabase
       .from('contacts')
       .select('*')
       .eq('organization_id', installation.organization_id)
-      .eq('whatsapp_jid', leadData.whatsapp_jid)
+      .eq('whatsapp_id', leadData.whatsapp_id)
       .limit(1)
       .maybeSingle()
     
     if (data) {
       existingLead = data
-      matchType = 'whatsapp_jid'
+      matchType = 'whatsapp_id'
     }
   }
 
@@ -430,16 +460,16 @@ async function createOrUpdateLead(supabase: any, installation: any, leadData: an
     }
 
     // Só atualiza campos se tiverem valor (não sobrescrever com null)
-    if (leadData.name) updateData.name = leadData.name
+    if (leadData.full_name) updateData.full_name = leadData.full_name
     if (leadData.email) updateData.email = leadData.email
     if (leadData.phone) updateData.phone = leadData.phone
     if (leadData.company) updateData.company = leadData.company
-    if (leadData.whatsapp_jid) updateData.whatsapp_jid = leadData.whatsapp_jid
+    if (leadData.whatsapp_id) updateData.whatsapp_id = leadData.whatsapp_id
     if (mergedTags.length > 0) updateData.tags = mergedTags
     updateData.custom_fields = mergedCustomFields
     
-    // Atualizar last_activity_at se a coluna existir
-    updateData.last_activity_at = new Date().toISOString()
+    // A coluna de última atividade é `last_active_at`.
+    updateData.last_active_at = new Date().toISOString()
 
     const { data: updated, error } = await supabase
       .from('contacts')
@@ -459,19 +489,25 @@ async function createOrUpdateLead(supabase: any, installation: any, leadData: an
       updated_at: new Date().toISOString(),
     }
 
-    if (leadData.name) insertData.name = leadData.name
+    if (leadData.full_name) insertData.full_name = leadData.full_name
     if (leadData.first_name) insertData.first_name = leadData.first_name
     if (leadData.last_name) insertData.last_name = leadData.last_name
     if (leadData.email) insertData.email = leadData.email
     if (leadData.phone) insertData.phone = leadData.phone
     if (leadData.company) insertData.company = leadData.company
-    if (leadData.whatsapp_jid) insertData.whatsapp_jid = leadData.whatsapp_jid
+    if (leadData.whatsapp_id) insertData.whatsapp_id = leadData.whatsapp_id
     if (leadData.tags?.length > 0) insertData.tags = leadData.tags
     if (leadData.custom_fields) insertData.custom_fields = leadData.custom_fields
 
-    // Campos adicionais se existirem no schema
-    if (externalId) insertData.source_external_id = externalId
-    if (installation.integration?.slug) insertData.source_platform = installation.integration.slug
+    // `source_external_id` e `source_platform` não são colunas de
+    // contacts: a origem detalhada vai em custom_fields, que existe.
+    if (externalId || installation.integration?.slug) {
+      insertData.custom_fields = {
+        ...(insertData.custom_fields || {}),
+        ...(externalId ? { source_external_id: externalId } : {}),
+        ...(installation.integration?.slug ? { source_platform: installation.integration.slug } : {}),
+      }
+    }
 
     const { data: newLead, error } = await supabase
       .from('contacts')
@@ -550,15 +586,17 @@ export async function GET(
     
     if (supabase) {
       // Buscar integração para verificar o token
+      // Mesma história do POST: o token mora em `configuration`, e as
+      // credenciais na coluna `credentials` (não `credentials_encrypted`).
       const { data: installation } = await supabase
         .from('installed_integrations')
-        .select('credentials_encrypted')
-        .eq('webhook_token', params.token)
+        .select('credentials, configuration')
+        .eq('configuration->>webhook_token', params.token)
         .maybeSingle()
-      
+
       // Verificar se o verify_token bate com o armazenado nas credenciais
       // ou com o próprio webhook_token (fallback)
-      const storedVerifyToken = installation?.credentials_encrypted?.verify_token
+      const storedVerifyToken = installation?.credentials?.verify_token
       
       if (verifyToken === storedVerifyToken || verifyToken === params.token) {
         return new Response(challenge, { 

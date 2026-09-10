@@ -42,13 +42,24 @@ export async function GET(
       throw error
     }
 
-    // Buscar integrações disponíveis (configuradas no sistema)
-    const { data: availableIntegrations } = await supabase
-      .from('integrations')
-      .select('id, name, type, config')
+    // Buscar integrações disponíveis (as que a organização instalou).
+    // `integrations` é o catálogo global: não tem organization_id, type
+    // nem config, e a consulta antiga era recusada inteira — a lista de
+    // integrações disponíveis chegava sempre vazia na tela do agente.
+    const { data: instaladas } = await supabase
+      .from('installed_integrations')
+      .select('id, configuration, status, integration:integrations(id, name, slug)')
       .eq('organization_id', organizationId)
-      .in('type', ['shopify', 'woocommerce', 'nuvemshop'])
-      .eq('is_active', true)
+      .eq('status', 'active')
+
+    const availableIntegrations = (instaladas || [])
+      .filter((i: any) => ['shopify', 'woocommerce', 'nuvemshop'].includes(i.integration?.slug))
+      .map((i: any) => ({
+        id: i.id,
+        name: i.integration?.name || i.integration?.slug,
+        type: i.integration?.slug,
+        config: i.configuration || {},
+      }))
 
     return NextResponse.json({
       integrations: integrations || [],

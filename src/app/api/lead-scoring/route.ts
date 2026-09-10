@@ -334,13 +334,28 @@ async function calculateLeadScore(
     .eq('deal_id', dealId)
     .order('created_at', { ascending: false })
 
-  // Get messages data
-  const { data: messages } = await supabase
-    .from('messages')
-    .select('*')
-    .eq('contact_id', deal.contact_id)
-    .order('created_at', { ascending: false })
-    .limit(100)
+  // Get messages data.
+  // `messages` não tem contact_id: a ligação com o contato é a conversa.
+  // Com o filtro na coluna inexistente a consulta era recusada e o score
+  // ignorava toda a conversa do lead.
+  const { data: conversasDoContato } = deal.contact_id
+    ? await supabase
+        .from('conversations')
+        .select('id')
+        .eq('contact_id', deal.contact_id)
+        .limit(100)
+    : { data: [] as any[] }
+
+  const idsDasConversas = (conversasDoContato || []).map((c: any) => c.id)
+
+  const { data: messages } = idsDasConversas.length
+    ? await supabase
+        .from('messages')
+        .select('*')
+        .in('conversation_id', idsDasConversas)
+        .order('created_at', { ascending: false })
+        .limit(100)
+    : { data: [] as any[] }
 
   // Calculate scoring factors
   const factors: ScoringFactors = {

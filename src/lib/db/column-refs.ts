@@ -19,10 +19,13 @@
 //   • desiste da chamada inteira se houver spread, chave computada ou
 //     qualquer coisa que não dê para ler com certeza;
 //   • em select, ignora `*`, apelidos (`a:b`), relações embutidas
-//     (`rel(...)`) e qualquer coisa com ponto.
+//     (`rel(...)`) e qualquer coisa com ponto;
+//   • em filtro (.eq/.in/.gte/…), pega só o nome cru: caminho de json
+//     (`metadata->>x`), coluna de relação embutida (`contacts.email`) e
+//     qualquer coisa interpolada ficam de fora.
 // =============================================
 
-export type RefKind = 'insert' | 'update' | 'upsert' | 'select'
+export type RefKind = 'insert' | 'update' | 'upsert' | 'select' | 'filter'
 
 export interface ColumnRef {
   table: string
@@ -97,6 +100,86 @@ export function colunasDoSelect(sel: string): string[] {
   return saida
 }
 
+const METODOS_DE_FILTRO = new Set([
+  'eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'like', 'ilike', 'is',
+  'in', 'contains', 'containedBy', 'overlaps',
+])
+
+/** Um nome de coluna cru; caminho de json e coluna de relação ficam de fora. */
+function colunaSimples(bruto: string): string | null {
+  const c = bruto.trim()
+  return /^[a-z_][a-z_0-9]*$/.test(c) ? c : null
+}
+
+/**
+ * O texto do encadeamento que começa logo depois do `.from(...)`: a
+ * sequência de `.metodo(...)` colada nele, e nada além disso.
+ */
+export function trechoDaCadeia(texto: string, inicio: number): string {
+  let i = inicio
+  const partes: string[] = []
+  for (;;) {
+    while (i < texto.length && /\s/.test(texto[i])) i++
+    if (texto[i] !== '.') break
+    const nome = /^\.([A-Za-z_$][\w$]*)\s*\(/.exec(texto.slice(i, i + 80))
+    if (!nome) break
+    let j = i + nome[0].length
+    let prof = 1
+    let aspas: string | null = null
+    while (j < texto.length && prof > 0) {
+      const ch = texto[j]
+      if (aspas) {
+        if (ch === '\\') j++
+        else if (ch === aspas) aspas = null
+      } else if (ch === "'" || ch === '"' || ch === '`') aspas = ch
+      else if (ch === '(') prof++
+      else if (ch === ')') prof--
+      j++
+    }
+    if (prof !== 0) break
+    partes.push(texto.slice(i, j))
+    i = j
+  }
+  return partes.join('')
+}
+
+/** Colunas citadas nos filtros de um trecho de encadeamento. */
+export function colunasDeFiltro(cadeia: string): string[] {
+  const saida: string[] = []
+  const re = /\.([A-Za-z_$][\w$]*)\(\s*['"]([^'"]{1,120})['"]/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(cadeia)) !== null) {
+    if (!METODOS_DE_FILTRO.has(m[1])) continue
+    const coluna = colunaSimples(m[2])
+    if (coluna) saida.push(coluna)
+  }
+  return saida
+}
+
+/** `let q = db.from('t')` → 'q'. Sem atribuição, null. */
+export function variavelDaConsulta(source: string, posDoFrom: number): string | null {
+  const inicioDaLinha = source.lastIndexOf('\n', posDoFrom) + 1
+  const antes = source.slice(inicioDaLinha, posDoFrom)
+  const m = /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*[^=]*$/.exec(antes)
+  return m ? m[1] : null
+}
+
+/** Filtros aplicados a uma variável de consulta no resto do arquivo. */
+export function filtrosDaVariavel(source: string, variavel: string): string[] {
+  const saida: string[] = []
+  const re = new RegExp(
+    `\\b${variavel}\\s*\\.\\s*([A-Za-z_$][\\w$]*)\\(\\s*['"]([^'"]{1,120})['"]`,
+    'g',
+  )
+  let m: RegExpExecArray | null
+  while ((m = re.exec(source)) !== null) {
+    if (!METODOS_DE_FILTRO.has(m[1])) continue
+    const coluna = colunaSimples(m[2])
+    if (coluna) saida.push(coluna)
+  }
+  return saida
+}
+
 export function extractColumnRefs(source: string): ColumnRef[] {
   const refs: ColumnRef[] = []
   const from = /\.from\(\s*['"]([a-z_0-9]+)['"]\s*\)/g
@@ -126,6 +209,32 @@ export function extractColumnRefs(source: string): ColumnRef[] {
     while ((s = selects.exec(trecho)) !== null) {
       for (const c of colunasDoSelect(s[1])) {
         refs.push({ table, column: c, kind: 'select', line })
+      }
+    }
+
+    // Filtro com coluna que não existe derruba a consulta do mesmo jeito
+    // que um select: foi assim que escolher uma loja zerou os cartões do
+    // dashboard de automações (.eq('store_id') numa tabela sem store_id).
+    //
+    // Aqui a janela de 2500 caracteres não serve: entre um `.from()` e o
+    // seguinte cabe a consulta de OUTRA tabela feita por uma função
+    // auxiliar (`count('crm_forms').eq(…)`), e os filtros dela seriam
+    // creditados à tabela errada. Só vale o que está no encadeamento —
+    // a sequência literal de `.metodo(...)` colada no `.from()`.
+    const cadeia = trechoDaCadeia(source, m.index + m[0].length)
+    for (const coluna of colunasDeFiltro(cadeia)) {
+      refs.push({ table, column: coluna, kind: 'filter', line })
+    }
+
+    // O encadeamento também pode ser montado em pedaços:
+    //   let q = db.from('t').select('*')
+    //   if (loja) q = q.eq('store_id', loja)
+    // Quando a consulta nasce numa variável, os filtros que forem
+    // aplicados a essa variável no mesmo arquivo contam para a tabela.
+    const variavel = variavelDaConsulta(source, m.index)
+    if (variavel) {
+      for (const coluna of filtrosDaVariavel(source, variavel)) {
+        refs.push({ table, column: coluna, kind: 'filter', line })
       }
     }
   }

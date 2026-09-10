@@ -59,3 +59,41 @@ describe('leitura das colunas que o código pede', () => {
     expect(extractColumnRefs(src)[0].line).toBe(3)
   })
 })
+
+describe('colunas citadas nos filtros', () => {
+  it('pega a coluna de um .eq no encadeamento', () => {
+    expect(pares(`db.from('t').select('id').eq('store_id', x)`))
+      .toEqual(['t.id:select', 't.store_id:filter'])
+  })
+
+  it('ignora caminho de json e coluna de relação embutida', () => {
+    expect(pares(`db.from('t').select('id').eq('metadata->>store_id', x).eq('contacts.email', y)`))
+      .toEqual(['t.id:select'])
+  })
+
+  it('não credita à tabela errada o filtro de uma consulta vizinha', () => {
+    const src = `
+      const count = (tabela) => db.from(tabela).select('id', { head: true })
+      const [a, b] = await Promise.all([
+        db.from('lojas').select('id').eq('organization_id', org),
+        count('formularios').eq('status', 'publicado'),
+      ])
+    `
+    expect(pares(src)).toEqual(['lojas.id:select', 'lojas.organization_id:filter'])
+  })
+
+  it('segue o filtro aplicado depois, quando a consulta mora numa variável', () => {
+    const src = `
+      let q = db.from('runs').select('id').eq('organization_id', org)
+      if (loja) q = q.eq('store_id', loja)
+    `
+    expect(pares(src)).toEqual(
+      ['runs.id:select', 'runs.organization_id:filter', 'runs.store_id:filter'],
+    )
+  })
+
+  it('método que não é filtro não vira coluna', () => {
+    expect(pares(`db.from('t').select('id').order('criado_em').limit(10)`))
+      .toEqual(['t.id:select'])
+  })
+})

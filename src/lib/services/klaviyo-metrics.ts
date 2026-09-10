@@ -48,13 +48,16 @@ export async function getKlaviyoMetrics(
   const { supabase, organizationId, storeId, startDate, endDate } = params
 
   try {
-    // 1. Buscar integração Klaviyo ativa
+    // 1. Buscar integração Klaviyo ativa.
+    // `integrations` é o catálogo global (sem organization_id, type,
+    // status ou config): a consulta era recusada e as métricas do
+    // Klaviyo nunca apareciam. A conta conectada mora em
+    // `klaviyo_accounts`, que tem organização, loja e chave.
     let integrationQuery = supabase
-      .from('integrations')
-      .select('id, config')
+      .from('klaviyo_accounts')
+      .select('id, api_key, public_key, account_id')
       .eq('organization_id', organizationId)
-      .eq('type', 'klaviyo')
-      .eq('status', 'active')
+      .eq('is_active', true)
 
     if (storeId) {
       integrationQuery = integrationQuery.eq('store_id', storeId)
@@ -72,9 +75,9 @@ export async function getKlaviyoMetrics(
       return null
     }
 
-    const config = integration.config as { 
-      api_key?: string
-      public_key?: string 
+    const config = {
+      api_key: integration.api_key as string | undefined,
+      public_key: integration.public_key as string | undefined,
     }
 
     if (!config.api_key) {
@@ -199,12 +202,13 @@ export async function hasKlaviyoIntegration(
   storeId?: string
 ): Promise<boolean> {
   try {
+    // Mesma correção do getKlaviyoMetrics: a conta conectada é
+    // `klaviyo_accounts`, não o catálogo `integrations`.
     let query = supabase
-      .from('integrations')
+      .from('klaviyo_accounts')
       .select('id')
       .eq('organization_id', organizationId)
-      .eq('type', 'klaviyo')
-      .eq('status', 'active')
+      .eq('is_active', true)
 
     if (storeId) {
       query = query.eq('store_id', storeId)

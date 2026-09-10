@@ -15,6 +15,7 @@
 
 import { getSupabaseClient } from '@/lib/api-utils';
 import { SupabaseClient } from '@supabase/supabase-js';
+import { nodeExecutors } from '../node-executors';
 
 let _supabase: SupabaseClient | null = null;
 function getDb(): SupabaseClient {
@@ -72,17 +73,14 @@ export async function executeAction(
         return await executeUpdateContact(config, context, organizationId);
       
       case 'action_email':
-        return await executeSendEmail(config, context, organizationId);
-
-      case 'send_email':
-        // Alias for action_email - used by flow templates
-        return await executeSendEmail(config, context, organizationId);
+      case 'send_email':   // apelido usado pelos modelos de fluxo
+        return await delegarParaNoDeEnvio('action_email', config, context, organizationId);
 
       case 'action_whatsapp':
-        return await executeSendWhatsApp(config, context, organizationId);
-      
+        return await delegarParaNoDeEnvio('action_whatsapp', config, context, organizationId);
+
       case 'action_sms':
-        return await executeSendSMS(config, context, organizationId);
+        return await delegarParaNoDeEnvio('action_sms', config, context, organizationId);
       
       case 'action_create_deal':
         return await executeCreateDeal(config, context, organizationId);
@@ -372,194 +370,108 @@ async function executeUpdateContact(
 // ACTION: SEND EMAIL
 // =====================================================
 
-async function executeSendEmail(
-  config: any,
-  context: ActionContext,
-  organizationId: string
-): Promise<ActionResult> {
-  const contact = context.contact;
-  if (!contact?.email) {
-    throw new Error('Email do contato não encontrado');
-  }
+// =====================================================
+// ENVIOS: e-mail, WhatsApp e SMS
+//
+// Estas três ações tinham implementação de mentira aqui: buscavam a
+// integração em `integrations` (catálogo global, sem organization_id,
+// type nem status — a consulta era recusada e a integração vinha sempre
+// nula), davam console.log de "Would send" e devolviam success: true.
+// Ou seja, a automação disparada pela fila dizia que mandou e-mail,
+// WhatsApp e SMS sem mandar nada.
+//
+// O envio de verdade — com consentimento, remetente da loja, supressão,
+// Smart Sending, deduplicação e rastreamento — já existe em
+// node-executors. Aqui a gente só traduz o contexto e delega.
+// =====================================================
 
-  // Buscar integração de email (Klaviyo ou outro)
-  const { data: integration } = await supabase
-    .from('integrations')
-    .select('*')
-    .eq('organization_id', organizationId)
-    .eq('type', 'klaviyo')
-    .eq('status', 'active')
-    .single();
+/** ActionContext (linha do banco) → VariableContext (o que o nó espera). */
+function contextoDoNo(context: ActionContext, organizationId: string): any {
+  const c = context.contact || {};
+  const nome = `${c.first_name || ''} ${c.last_name || ''}`.trim();
 
-  const subject = resolveVariable(config.subject || 'Mensagem automática', context);
-  const body = resolveVariable(config.body || config.message || '', context);
-  const templateId = config.templateId || config.template;
-
-  if (integration) {
-    // Enviar via Klaviyo
-    try {
-      const klaviyoApiKey = integration.credentials?.api_key;
-      
-      if (templateId) {
-        // Usar template do Klaviyo
-        // TODO: Implementar chamada real à API do Klaviyo
-        console.log(`[Action] Would send Klaviyo template ${templateId} to ${contact.email}`);
-      } else {
-        // Enviar email direto
-        console.log(`[Action] Would send Klaviyo email to ${contact.email}`);
-      }
-
-      return {
-        success: true,
-        output: {
-          action: 'send_email',
-          provider: 'klaviyo',
-          to: contact.email,
-          subject,
-          template_id: templateId,
-          sent: true
-        }
-      };
-    } catch (e: any) {
-      throw new Error(`Erro ao enviar email via Klaviyo: ${e.message}`);
-    }
-  }
-
-  // Sem integração - logar apenas
-  console.log(`[Action] Email would be sent to ${contact.email} (no integration configured)`);
-  
   return {
-    success: true,
-    output: {
-      action: 'send_email',
-      provider: 'none',
-      to: contact.email,
-      subject,
-      body_preview: body.substring(0, 100),
-      warning: 'Integração de email não configurada'
-    }
+    organizationId,
+    storeId: c.store_id ?? null,
+    contact: c.id
+      ? {
+          ...c,
+          id: c.id,
+          email: c.email,
+          phone: c.phone,
+          firstName: c.first_name,
+          lastName: c.last_name,
+          name: nome || c.full_name || c.email,
+          tags: c.tags || [],
+          customFields: c.custom_fields || {},
+          createdAt: c.created_at,
+          updatedAt: c.updated_at,
+          totalOrders: c.total_orders,
+          totalSpent: c.total_spent,
+          timezone: c.timezone ?? null,
+          country: c.country ?? null,
+        }
+      : undefined,
+    deal: context.deal || undefined,
+    // O motor de variáveis quer {type, data, timestamp}; mandar o
+    // trigger cru apagava toda tag {{event.*}}.
+    trigger:
+      context.trigger && typeof context.trigger === 'object' && 'type' in context.trigger
+        ? context.trigger
+        : {
+            type: context.system?.trigger_type || 'manual',
+            data: context.trigger || {},
+            timestamp: new Date().toISOString(),
+          },
+    nodes: context.nodes || {},
+    workflow: {
+      id: context.system?.automation_id || null,
+      name: context.system?.automation_name || null,
+      executionId: context.system?.execution_id || null,
+      startedAt: context.system?.current_date || new Date().toISOString(),
+    },
   };
 }
 
-// =====================================================
-// ACTION: SEND WHATSAPP
-// =====================================================
-
-async function executeSendWhatsApp(
+async function delegarParaNoDeEnvio(
+  tipo: string,
   config: any,
   context: ActionContext,
   organizationId: string
 ): Promise<ActionResult> {
-  const contact = context.contact;
-  if (!contact?.phone) {
-    throw new Error('Telefone do contato não encontrado');
+  const executor = nodeExecutors[tipo];
+  if (!executor) {
+    return {
+      success: false,
+      output: { action: tipo },
+      error: `Ação ${tipo} não implementada`,
+    };
   }
 
-  // Buscar integração WhatsApp
-  const { data: integration } = await supabase
-    .from('integrations')
-    .select('*')
-    .eq('organization_id', organizationId)
-    .eq('type', 'whatsapp')
-    .eq('status', 'active')
-    .single();
+  const resultado = await executor.execute({
+    node: { id: `${tipo}-fila`, type: tipo, data: { config } } as any,
+    config: config || {},
+    context: contextoDoNo(context, organizationId) as any,
+    supabase,
+    isTest: false,
+    organizationId,
+  });
 
-  const message = resolveVariable(config.message || config.body || '', context);
-  const templateId = config.templateId || config.template;
-
-  if (integration) {
-    try {
-      const phoneNumber = formatPhoneNumber(contact.phone);
-      
-      // TODO: Implementar chamada real à API do WhatsApp Business
-      console.log(`[Action] Would send WhatsApp to ${phoneNumber}`);
-
-      return {
-        success: true,
-        output: {
-          action: 'send_whatsapp',
-          to: phoneNumber,
-          template_id: templateId,
-          message_preview: message.substring(0, 100),
-          sent: true
-        }
-      };
-    } catch (e: any) {
-      throw new Error(`Erro ao enviar WhatsApp: ${e.message}`);
-    }
+  if (resultado.status === 'error') {
+    throw new Error(resultado.error || `Falha ao executar ${tipo}`);
   }
 
   return {
     success: true,
     output: {
-      action: 'send_whatsapp',
-      to: contact.phone,
-      message_preview: message.substring(0, 100),
-      warning: 'Integração WhatsApp não configurada'
-    }
+      action: tipo,
+      skipped: resultado.status === 'skipped',
+      ...(resultado.output && typeof resultado.output === 'object'
+        ? resultado.output
+        : { value: resultado.output }),
+    },
   };
 }
-
-// =====================================================
-// ACTION: SEND SMS
-// =====================================================
-
-async function executeSendSMS(
-  config: any,
-  context: ActionContext,
-  organizationId: string
-): Promise<ActionResult> {
-  const contact = context.contact;
-  if (!contact?.phone) {
-    throw new Error('Telefone do contato não encontrado');
-  }
-
-  // Buscar integração Twilio
-  const { data: integration } = await supabase
-    .from('integrations')
-    .select('*')
-    .eq('organization_id', organizationId)
-    .eq('type', 'twilio')
-    .eq('status', 'active')
-    .single();
-
-  const message = resolveVariable(config.message || config.body || '', context);
-
-  if (integration) {
-    try {
-      const phoneNumber = formatPhoneNumber(contact.phone);
-      
-      // TODO: Implementar chamada real à API do Twilio
-      console.log(`[Action] Would send SMS to ${phoneNumber}`);
-
-      return {
-        success: true,
-        output: {
-          action: 'send_sms',
-          to: phoneNumber,
-          message_preview: message.substring(0, 100),
-          sent: true
-        }
-      };
-    } catch (e: any) {
-      throw new Error(`Erro ao enviar SMS: ${e.message}`);
-    }
-  }
-
-  return {
-    success: true,
-    output: {
-      action: 'send_sms',
-      to: contact.phone,
-      message_preview: message.substring(0, 100),
-      warning: 'Integração SMS não configurada'
-    }
-  };
-}
-
-// =====================================================
-// ACTION: CREATE DEAL
-// =====================================================
 
 async function executeCreateDeal(
   config: any,

@@ -35,10 +35,13 @@ export async function GET(request: NextRequest) {
     let errorsCount = 0
     try {
       // RLS filtra automaticamente
+      // A coluna de resultado é `success` (booleano); `status` não
+      // existe, e o filtro derrubava a consulta — o cartão de erros das
+      // automações mostrava zero mesmo com o log cheio de falha.
       const { count, error: logsError } = await supabase
         .from('automation_logs')
         .select('id', { count: 'exact', head: true })
-        .eq('status', 'error')
+        .eq('success', false)
         .gte('created_at', sevenDaysAgo.toISOString())
 
       if (!logsError) {
