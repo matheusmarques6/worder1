@@ -5,7 +5,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { SupabaseClient } from '@supabase/supabase-js';
-import { getAuthClient, authError } from '@/lib/api-utils';
+import { getAuthClient, authError, validateStoreAccess } from '@/lib/api-utils';
+import { getSupabaseAdmin } from '@/lib/supabase-admin';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -230,7 +231,7 @@ async function bulkInsertDeals(supabase: SupabaseClient, deals: any[], batchSize
 export async function GET(request: NextRequest) {
   const auth = await getAuthClient();
   if (!auth) return authError();
-  const { supabase } = auth;
+  const { supabase, user } = auth;
 
   try {
     const { searchParams } = new URL(request.url);
@@ -241,10 +242,23 @@ export async function GET(request: NextRequest) {
       return jsonResponse({ success: false, error: 'storeId required' }, 400);
     }
 
-    const { data: store, error } = await supabase
+    const validation = await validateStoreAccess(
+      supabase, user.organization_id, storeId, auth.user.id,
+    );
+    if (!validation.valid) {
+      return jsonResponse(
+        { success: false, error: validation.error },
+        validation.status || 403,
+      );
+    }
+
+    const storeOrganizationId = validation.storeOrganizationId!;
+    const supabaseAdmin = getSupabaseAdmin();
+    const { data: store, error } = await supabaseAdmin
       .from('shopify_stores')
       .select('shop_domain, access_token, shop_name')
       .eq('id', storeId)
+      .eq('organization_id', storeOrganizationId)
       .single();
 
     if (error || !store?.access_token) {
@@ -319,10 +333,23 @@ export async function POST(request: NextRequest) {
       return jsonResponse({ success: false, error: 'storeId required' }, 400);
     }
 
-    const { data: store, error: storeError } = await supabase
+    const validation = await validateStoreAccess(
+      supabase, user.organization_id, storeId, auth.user.id,
+    );
+    if (!validation.valid) {
+      return jsonResponse(
+        { success: false, error: validation.error },
+        validation.status || 403,
+      );
+    }
+
+    const storeOrganizationId = validation.storeOrganizationId!;
+    const supabaseAdmin = getSupabaseAdmin();
+    const { data: store, error: storeError } = await supabaseAdmin
       .from('shopify_stores')
       .select('*')
       .eq('id', storeId)
+      .eq('organization_id', storeOrganizationId)
       .single();
 
     if (storeError || !store?.access_token) {
@@ -484,13 +511,14 @@ export async function POST(request: NextRequest) {
     }
 
     // FASE 7: Atualizar estatísticas da loja
-    await supabase
+    await supabaseAdmin
       .from('shopify_stores')
       .update({
         total_customers_imported: (store.total_customers_imported || 0) + stats.created,
         last_import_at: new Date().toISOString(),
       })
-      .eq('id', storeId);
+      .eq('id', storeId)
+      .eq('organization_id', storeOrganizationId);
 
     const duration = Math.round((Date.now() - startTime) / 1000);
     console.log(`[Import] Completed in ${duration}s:`, { created: stats.created, updated: stats.updated, skipped: stats.skipped, errors: stats.errors });

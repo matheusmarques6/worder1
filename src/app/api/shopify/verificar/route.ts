@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError } from '@/lib/api-utils';
+import { getSupabaseAdmin } from '@/lib/supabase-admin';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
@@ -27,10 +28,12 @@ export async function GET(request: NextRequest) {
   // Check 1: Database - já passou se chegou aqui
   results.checks.push({ name: 'Database', status: '✅', message: 'Conectado' });
   
-  // Check 2: Loja conectada - RLS filtra automaticamente
-  const { data: store, error } = await supabase
+  // Check 2: Loja conectada
+  const supabaseAdmin = getSupabaseAdmin();
+  const { data: store, error } = await supabaseAdmin
     .from('shopify_stores')
     .select('*')
+    .eq('organization_id', orgId)
     .maybeSingle();
   
   if (error) {

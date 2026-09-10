@@ -88,14 +88,14 @@ The executor is the only caller of SQL, migration paths, exclusions, and test-en
 | 20260909120000 | `20260909120000_views_security_invoker.sql` | `A576E44F6AF7ECB379060D3FEBCA518FF685948B17551A578301243846242368` |
 | 20260909130000 | `20260909130000_revoke_definer_functions.sql` | `A44015515E74CC61800268D2D11E390D1980CE2010BF9CBA14ED75B8FA39E421` |
 | 20260909140000 | `20260909140000_definer_search_path.sql` | `1DCBB5819031C770A3C88B49A40378F6FA6BF7D01EDE0FCAD544C150AF89DCB6` |
-| 20260909230000 | `20260909230000_app_baseline_forward_compat.sql` | `4F181C21F67419B32E33AE19AB74CC72FEB9FDD132D1AD00C778FF5B1875B6C1` |
+| 20260909230000 | `20260909230000_app_baseline_forward_compat.sql` | `12BE1631D07228EC8B6047CC04BAB7EF6ECC170DDA7B65A30242EC8147F4893B` |
 | 20260910000000 | `20260910000000_auth_user_created_trigger.sql` | `D1E1026B4C4153E569DBC048D102A381FB871E1E0404B0F6EF3B827F11CEA97E` |
 
 ## Upgrade manifest
 
 `PrepareUpgrade` creates the approved old history through `20260909140000_definer_search_path.sql`, excluding exactly `20260812000005_app_baseline_prereqs.sql`. It applies the fixed legacy fixture, then `Upgrade` may append only these two reviewed files, in order:
 
-1. `20260909230000_app_baseline_forward_compat.sql` (`4F181C21F67419B32E33AE19AB74CC72FEB9FDD132D1AD00C778FF5B1875B6C1`)
+1. `20260909230000_app_baseline_forward_compat.sql` (`12BE1631D07228EC8B6047CC04BAB7EF6ECC170DDA7B65A30242EC8147F4893B`)
 2. `20260910000000_auth_user_created_trigger.sql` (`D1E1026B4C4153E569DBC048D102A381FB871E1E0404B0F6EF3B827F11CEA97E`)
 
 The sealed `Upgrade` action owns this projection and history check. Do not pass a migration limit, SQL path, exclusion, or caller-selected mapping. The upgraded history must be the old prefix plus exactly this suffix.

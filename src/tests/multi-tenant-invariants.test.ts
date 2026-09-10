@@ -102,3 +102,47 @@ describe('as telas não falam com o banco direto', () => {
     expect(culpadas).toEqual([])
   })
 })
+
+describe('segredos Shopify ficam atrás da autorização do servidor', () => {
+  const rotas = [
+    'src/app/api/integrations/connected/route.ts',
+    'src/app/api/shopify/check-connection/route.ts',
+    'src/app/api/shopify/import-customers/route.ts',
+    'src/app/api/shopify/import-jobs/route.ts',
+    'src/app/api/shopify/pixel/route.ts',
+    'src/app/api/shopify/sync/route.ts',
+    'src/app/api/shopify/verificar/route.ts',
+  ]
+  const validacoesPorLoja = new Map([
+    ['src/app/api/shopify/check-connection/route.ts', 1],
+    ['src/app/api/shopify/import-customers/route.ts', 2],
+    ['src/app/api/shopify/import-jobs/route.ts', 1],
+    ['src/app/api/shopify/pixel/route.ts', 1],
+    ['src/app/api/shopify/sync/route.ts', 1],
+  ])
+
+  it('cada leitura secreta e escrita admin é autorizada e escopada pela organização', () => {
+    for (const rota of rotas) {
+      const src = readFileSync(rota, 'utf8')
+      expect(src, rota).toContain('getSupabaseAdmin')
+
+      const validacoes = src.match(/validateStoreAccess\([^;]*auth\.user\.id\s*,?\s*\)/g) ?? []
+      expect(validacoes.length, `${rota}: validações`).toBeGreaterThanOrEqual(
+        validacoesPorLoja.get(rota) ?? 0,
+      )
+
+      const consultas = src.matchAll(
+        /await\s+(\w+)\s*\n?\s*\.from\('shopify_stores'\)([\s\S]*?);/g,
+      )
+      for (const [, cliente, cadeia] of consultas) {
+        const leSegredo = cadeia.includes('access_token') ||
+          /\.select\(\s*['"]\*['"]\s*\)/.test(cadeia)
+        const escreve = cadeia.includes('.update(')
+        if (!leSegredo && !escreve) continue
+
+        expect(cliente, `${rota}: cliente privilegiado`).toBe('supabaseAdmin')
+        expect(cadeia, `${rota}: escopo da organização`).toContain(".eq('organization_id',")
+      }
+    }
+  })
+})

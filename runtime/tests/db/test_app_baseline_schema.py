@@ -882,6 +882,91 @@ def test_replay_dependencies_exist_with_pk_and_rls(admin, table):
     ).fetchone() == (True, False)
 
 
+def test_replay_dependency_table_privileges_are_least_privilege(admin):
+    operations = ("SELECT", "INSERT", "UPDATE", "DELETE")
+    expected = {
+        ("shopify_products", "service_role"): frozenset(operations),
+        ("shopify_products", "authenticated"): frozenset(),
+        ("api_keys", "service_role"): frozenset(operations),
+        ("api_keys", "authenticated"): frozenset(),
+        ("email_templates", "service_role"): frozenset(operations),
+        ("email_templates", "authenticated"): frozenset(("SELECT", "INSERT", "UPDATE")),
+        ("deals", "service_role"): frozenset(operations),
+        ("deals", "authenticated"): frozenset(operations),
+        ("deal_activities", "service_role"): frozenset(operations),
+        ("deal_activities", "authenticated"): frozenset(("SELECT",)),
+        ("events", "service_role"): frozenset(),
+        ("events", "authenticated"): frozenset(),
+        ("pipeline_stage_transitions", "service_role"): frozenset(("SELECT",)),
+        ("pipeline_stage_transitions", "authenticated"): frozenset(operations),
+        ("email_clicks", "service_role"): frozenset(),
+        ("email_clicks", "authenticated"): frozenset(),
+        ("automation_executions", "service_role"): frozenset(("SELECT", "INSERT")),
+        ("automation_executions", "authenticated"): frozenset(("SELECT", "DELETE")),
+        ("automation_versions", "service_role"): frozenset(),
+        ("automation_versions", "authenticated"): frozenset(),
+        ("automation_run_steps", "service_role"): frozenset(("SELECT", "INSERT", "UPDATE")),
+        ("automation_run_steps", "authenticated"): frozenset(("SELECT",)),
+        ("automation_pending_steps", "service_role"): frozenset(),
+        ("automation_pending_steps", "authenticated"): frozenset(),
+        ("whatsapp_campaign_recipients", "service_role"):
+            frozenset(("SELECT", "INSERT", "UPDATE")),
+        ("whatsapp_campaign_recipients", "authenticated"): frozenset(),
+    }
+    expected.update(
+        ((table, "anon"), frozenset()) for table in REPLAY_DEPENDENCY_RELATIONS
+    )
+    actual = {
+        key: frozenset(
+            operation for operation in operations
+            if admin.execute(
+                "select has_table_privilege(%s, %s, %s)",
+                (key[1], f"public.{key[0]}", operation),
+            ).fetchone()[0]
+        )
+        for key in expected
+    }
+    assert actual == expected
+
+
+def test_shopify_store_and_api_key_secrets_have_no_authenticated_acl(admin):
+    metadata = {
+        "id", "organization_id", "shop_name", "shop_domain", "is_active", "created_at",
+        "default_pipeline_id", "default_stage_id", "status", "connection_status",
+        "status_message", "health_checked_at", "consecutive_failures", "last_sync_at",
+        "contact_type", "sync_orders", "sync_customers", "sync_checkouts", "sync_refunds",
+        "auto_tags", "stage_mapping", "is_configured", "total_orders", "total_revenue",
+    }
+    authenticated_columns = {
+        row[0] for row in admin.execute(
+            """select a.attname
+                 from pg_attribute a
+                where a.attrelid='public.shopify_stores'::regclass
+                  and a.attnum > 0 and not a.attisdropped
+                  and has_column_privilege('authenticated', a.attrelid, a.attnum, 'select')"""
+        )
+    }
+    worker_columns = {
+        row[0] for row in admin.execute(
+            """select a.attname
+                 from pg_attribute a
+                where a.attrelid='public.shopify_stores'::regclass
+                  and a.attnum > 0 and not a.attisdropped
+                  and has_column_privilege('worker_role', a.attrelid, a.attnum, 'select')"""
+        )
+    }
+    assert authenticated_columns == metadata
+    assert worker_columns == {"id", "organization_id"}
+    assert admin.execute(
+        """select has_table_privilege('authenticated', 'public.shopify_stores', 'select'),
+                  has_table_privilege('authenticated', 'public.shopify_stores', 'update'),
+                  has_table_privilege('worker_role', 'public.shopify_stores', 'select'),
+                  has_column_privilege('authenticated', 'public.api_keys', 'key', 'select'),
+                  has_column_privilege('authenticated', 'public.api_keys', 'key_hash', 'select'),
+                  has_table_privilege('service_role', 'public.api_keys', 'select')"""
+    ).fetchone() == (False, False, False, False, False, True)
+
+
 @pytest.mark.parametrize("table,column,target,delete", REPLAY_DEPENDENCY_FOREIGN_KEYS)
 def test_replay_dependency_foreign_keys(admin, table, column, target, delete):
     definition = f"FOREIGN KEY ({column}) REFERENCES {target}(id)"
@@ -988,11 +1073,15 @@ def test_child_replay_dependencies_have_the_exact_parent_policy(
     assert _normalized_policy_rows(admin, table) == tuple(rows)
 
 
-@pytest.mark.parametrize("table", (
-    "deals", "deal_activities", "events", "pipeline_stage_transitions",
+@pytest.mark.parametrize(("table", "can_select", "can_update"), (
+    ("deals", True, True),
+    ("deal_activities", True, False),
+    ("events", False, False),
+    ("pipeline_stage_transitions", True, True),
 ))
 @pytest.mark.rls
-def test_crm_replay_dependencies_enforce_store_scope(dsn, admin, two_tenants, table):
+def test_crm_replay_dependencies_enforce_store_scope(
+        dsn, admin, two_tenants, table, can_select, can_update):
     rows = []
     stores = []
     parent_deals = []
@@ -1050,22 +1139,37 @@ def test_crm_replay_dependencies_enforce_store_scope(dsn, admin, two_tenants, ta
                 ).fetchone()[0]
             rows.append(row)
 
-        assert admin.execute(
-            "select has_table_privilege('authenticated', %s, 'update')",
-            (f"public.{table}",),
-        ).fetchone()[0] is True
         with as_authenticated_user(dsn, two_tenants.a.user_id) as authenticated:
-            assert authenticated.execute(
-                f"select id::text from public.{table} where id=%s", (rows[0],),
-            ).fetchone() == (str(rows[0]),)
-            assert authenticated.execute(
-                f"select id from public.{table} where id=%s", (rows[1],),
-            ).fetchone() is None
+            if can_select:
+                assert authenticated.execute(
+                    f"select id::text from public.{table} where id=%s", (rows[0],),
+                ).fetchone() == (str(rows[0]),)
+                assert authenticated.execute(
+                    f"select id from public.{table} where id=%s", (rows[1],),
+                ).fetchone() is None
+            else:
+                with pytest.raises(psycopg.errors.InsufficientPrivilege):
+                    with authenticated.transaction():
+                        authenticated.execute(
+                            f"select id from public.{table} where id=%s", (rows[0],),
+                        )
+                return
+
             assignment = "store_id=%s"
             values = (stores[1], rows[0])
             if table != "events":
                 assignment = "organization_id=%s, store_id=%s"
                 values = (two_tenants.b.id, stores[1], rows[0])
+            if can_update:
+                own_assignment = "store_id=%s"
+                own_values = (stores[0], rows[0])
+                if table != "events":
+                    own_assignment = "organization_id=%s, store_id=%s"
+                    own_values = (two_tenants.a.id, stores[0], rows[0])
+                assert authenticated.execute(
+                    f"update public.{table} set {own_assignment} where id=%s returning id::text",
+                    own_values,
+                ).fetchone() == (str(rows[0]),)
             with pytest.raises(psycopg.errors.InsufficientPrivilege):
                 with authenticated.transaction():
                     authenticated.execute(
@@ -1179,17 +1283,26 @@ def test_child_replay_dependencies_enforce_parent_scope(
                 ).fetchone()[0]
             rows.append(row)
 
-        assert admin.execute(
-            "select has_table_privilege('authenticated', %s, 'update')",
-            (f"public.{table}",),
-        ).fetchone()[0] is True
         with as_authenticated_user(dsn, two_tenants.a.user_id) as authenticated:
-            assert authenticated.execute(
-                f"select id::text from public.{table} where id=%s", (rows[0],),
-            ).fetchone() == (str(rows[0]),)
-            assert authenticated.execute(
-                f"select id from public.{table} where id=%s", (rows[1],),
-            ).fetchone() is None
+            if table in ("automation_executions", "automation_run_steps"):
+                assert authenticated.execute(
+                    f"select id::text from public.{table} where id=%s", (rows[0],),
+                ).fetchone() == (str(rows[0]),)
+                assert authenticated.execute(
+                    f"select id from public.{table} where id=%s", (rows[1],),
+                ).fetchone() is None
+            else:
+                with pytest.raises(psycopg.errors.InsufficientPrivilege):
+                    with authenticated.transaction():
+                        authenticated.execute(
+                            f"select id from public.{table} where id=%s", (rows[0],),
+                        )
+                return
+
+            if table == "automation_executions":
+                assert authenticated.execute(
+                    f"delete from public.{table} where id=%s returning id", (rows[1],),
+                ).fetchone() is None
             assignment = f"{parent_key}=%s"
             values = (parents[1], rows[0])
             if table == "automation_executions":
@@ -1339,11 +1452,14 @@ def test_api_keys_org_policy_hides_and_protects_other_tenant(dsn, admin, two_ten
         (own_id, two_tenants.a.id, other_id, two_tenants.b.id),
     )
     with as_authenticated_user(dsn, two_tenants.a.user_id) as authenticated:
-        assert authenticated.execute(
-            "select id::text from public.api_keys where id in (%s, %s) order by id",
-            (own_id, other_id),
-        ).fetchall() == [(own_id,)]
-        assert authenticated.execute(
-            "update public.api_keys set name='blocked' where id=%s returning id",
-            (other_id,),
-        ).fetchone() is None
+        for column in ("id", "key", "key_hash"):
+            with pytest.raises(psycopg.errors.InsufficientPrivilege):
+                with authenticated.transaction():
+                    authenticated.execute(
+                        f"select {column} from public.api_keys where id=%s", (own_id,),
+                    )
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            with authenticated.transaction():
+                authenticated.execute(
+                    "update public.api_keys set name='blocked' where id=%s", (own_id,),
+                )

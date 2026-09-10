@@ -6,14 +6,15 @@
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthClient, authError } from '@/lib/api-utils';
+import { getAuthClient, authError, validateStoreAccess } from '@/lib/api-utils';
+import { getSupabaseAdmin } from '@/lib/supabase-admin';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   const auth = await getAuthClient();
   if (!auth) return authError();
-  const { supabase } = auth;
+  const { supabase, user } = auth;
 
   const storeId = request.nextUrl.searchParams.get('storeId');
 
@@ -22,11 +23,23 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // 1. Buscar dados da loja - RLS filtra automaticamente
-    const { data: store, error: storeError } = await supabase
+    const validation = await validateStoreAccess(
+      supabase, user.organization_id, storeId, auth.user.id,
+    );
+    if (!validation.valid) {
+      return NextResponse.json(
+        { error: validation.error },
+        { status: validation.status || 403 },
+      );
+    }
+
+    const storeOrganizationId = validation.storeOrganizationId!;
+    const supabaseAdmin = getSupabaseAdmin();
+    const { data: store, error: storeError } = await supabaseAdmin
       .from('shopify_stores')
       .select('*')
       .eq('id', storeId)
+      .eq('organization_id', storeOrganizationId)
       .single();
 
     if (storeError || !store) {
@@ -63,13 +76,14 @@ export async function GET(request: NextRequest) {
       // Log the error but DON'T deactivate the store — a temporary API
       // glitch shouldn't hide the store from the sidebar. The store stays
       // active; the user can manually disconnect if needed.
-      await supabase
+      await supabaseAdmin
         .from('shopify_stores')
         .update({
           last_error: `API error: ${response.status}`,
           updated_at: new Date().toISOString(),
         })
-        .eq('id', storeId);
+        .eq('id', storeId)
+        .eq('organization_id', storeOrganizationId);
 
       return NextResponse.json({ 
         ok: false, 
@@ -81,8 +95,8 @@ export async function GET(request: NextRequest) {
 
     const shopData = await response.json();
 
-    // 4. Atualizar status da loja como ativa - RLS filtra automaticamente
-    await supabase
+    // 4. Atualizar status da loja como ativa
+    await supabaseAdmin
       .from('shopify_stores')
       .update({
         // NÃO reativa a loja: um teste de conexão é diagnóstico, não
@@ -95,7 +109,8 @@ export async function GET(request: NextRequest) {
         last_error: null,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', storeId);
+      .eq('id', storeId)
+      .eq('organization_id', storeOrganizationId);
 
     return NextResponse.json({ 
       ok: true, 

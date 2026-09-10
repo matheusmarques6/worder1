@@ -8,6 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError } from '@/lib/api-utils';
+import { getSupabaseAdmin } from '@/lib/supabase-admin';
 
 export const dynamic = 'force-dynamic';
 
@@ -81,7 +82,7 @@ const INTEGRATION_FILTERS: Record<string, Array<{
 export async function GET(request: NextRequest) {
   const auth = await getAuthClient();
   if (!auth) return authError();
-  const { supabase } = auth;
+  const { supabase, user } = auth;
   
   try {
     const connectedIntegrations: Array<{
@@ -96,10 +97,12 @@ export async function GET(request: NextRequest) {
       filters: typeof INTEGRATION_FILTERS[string];
     }> = [];
     
-    // 1. Verificar Shopify - RLS filtra automaticamente
-    const { data: shopifyStores } = await supabase
+    // 1. Verificar Shopify
+    const supabaseAdmin = getSupabaseAdmin();
+    const { data: shopifyStores } = await supabaseAdmin
       .from('shopify_stores')
       .select('id, shop_domain, shop_name, is_active, access_token')
+      .eq('organization_id', user.organization_id)
       .eq('is_active', true);
     
     if (shopifyStores && shopifyStores.length > 0) {

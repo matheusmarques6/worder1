@@ -1335,7 +1335,7 @@ alter view public.ai_runtime_activity set (security_invoker = off);
 alter view public.ai_runtime_activity_calls set (security_invoker = off);
 alter view public.ai_runtime_activity_tools set (security_invoker = off);
 
-grant select, insert, update, delete on
+revoke all privileges on
   public.shopify_products,
   public.api_keys,
   public.email_templates,
@@ -1349,9 +1349,66 @@ grant select, insert, update, delete on
   public.automation_run_steps,
   public.automation_pending_steps,
   public.whatsapp_campaign_recipients
-to authenticated, service_role;
+from anon, authenticated, service_role;
 
-grant select on public.shopify_stores to authenticated;
+grant select, insert, update, delete on
+  public.shopify_products,
+  public.api_keys,
+  public.email_templates,
+  public.deals,
+  public.deal_activities
+to service_role;
+
+grant select, insert, update on public.email_templates to authenticated;
+grant select, insert, update, delete on public.deals to authenticated;
+grant select on public.deal_activities to authenticated;
+
+grant select on public.pipeline_stage_transitions to service_role;
+grant select, insert, update, delete on public.pipeline_stage_transitions to authenticated;
+
+grant select, insert on public.automation_executions to service_role;
+grant select, delete on public.automation_executions to authenticated;
+
+grant select, insert, update on public.automation_run_steps to service_role;
+grant select on public.automation_run_steps to authenticated;
+
+grant select, insert, update on public.whatsapp_campaign_recipients to service_role;
+
+revoke all privileges on public.email_universal_usage
+  from anon, authenticated, service_role;
 grant select on public.email_universal_usage to service_role;
+
+revoke all privileges on public.shopify_stores
+  from anon, authenticated, service_role;
+revoke all privileges on public.shopify_stores from worker_role;
+
+grant select, insert, update, delete on public.shopify_stores to service_role;
+grant select (id, organization_id) on public.shopify_stores to worker_role;
+grant select (
+  id,
+  organization_id,
+  shop_name,
+  shop_domain,
+  is_active,
+  created_at,
+  default_pipeline_id,
+  default_stage_id,
+  status,
+  connection_status,
+  status_message,
+  health_checked_at,
+  consecutive_failures,
+  last_sync_at,
+  contact_type,
+  sync_orders,
+  sync_customers,
+  sync_checkouts,
+  sync_refunds,
+  auto_tags,
+  stage_mapping,
+  is_configured,
+  total_orders,
+  total_revenue
+) on public.shopify_stores to authenticated;
 
 commit;
