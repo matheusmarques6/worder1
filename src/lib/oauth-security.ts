@@ -164,34 +164,20 @@ export async function consumeOAuthState(
   const data = validateOAuthState(state, expectedProvider);
   if (!data) return null;
   
-  const supabase = getSupabaseAdmin();
-  
   try {
-    // Verificar se nonce já foi usado (tabela oauth_states)
-    const { data: existingState } = await supabase
-      .from('oauth_states')
-      .select('id')
-      .eq('nonce', data.nonce)
-      .single();
-    
-    if (existingState) {
-      console.warn('[OAuth] State já utilizado (replay attack?)');
-      return null;
-    }
-    
-    // Marcar nonce como usado
-    await supabase.from('oauth_states').insert({
-      nonce: data.nonce,
+    const supabase = getSupabaseAdmin();
+    // UNIQUE(state) permite apenas um consumidor do nonce.
+    const { error } = await supabase.from('oauth_states').insert({
+      state: `nonce:${data.nonce}`,
       provider: data.provider,
       organization_id: data.organizationId,
-      user_id: data.userId,
-      used_at: new Date().toISOString(),
       expires_at: new Date(data.createdAt + STATE_EXPIRY_MS).toISOString(),
     });
+    if (error) return null;
     
     return data;
   } catch (error) {
-    // ✅ FAIL-CLOSED: se não conseguimos consultar/marcar o state (tabela
+    // ✅ FAIL-CLOSED: se não conseguimos marcar o state (tabela
     // indisponível, erro de rede, etc.), REJEITAMOS o state. Retornar `data`
     // aqui abriria um buraco de replay: um atacante poderia reutilizar um
     // state válido sempre que o storage estivesse indisponível.
