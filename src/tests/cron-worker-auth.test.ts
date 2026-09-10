@@ -60,6 +60,9 @@ const effects = vi.hoisted(() => {
     evaluateWorkerHealth: vi.fn(() => ({ healthy: true })),
     wlogError: vi.fn(),
     wlogWarn: vi.fn(),
+    runBrowseAbandonedDetection: vi.fn(async () => ({ processed: 0 })),
+    enqueueAutomationRun: vi.fn(async () => null),
+    getAuthClient: vi.fn(async () => null),
     reserve: vi.fn(async () => []),
     complete: vi.fn(async () => undefined),
     fail: vi.fn(async () => ({ retrying: false, nextAttemptAt: null })),
@@ -124,6 +127,7 @@ vi.mock('@/lib/automation/node-results', () => ({
 vi.mock('@/lib/queue', () => ({
   enqueueWhatsAppWebhook: effects.enqueueWhatsAppWebhook,
   enqueueWhatsAppAiRespond: effects.enqueueWhatsAppAiRespond,
+  enqueueAutomationRun: effects.enqueueAutomationRun,
 }))
 vi.mock('@/lib/whatsapp/recipient-claim', () => ({
   quarantineStuckSending: effects.quarantineStuckSending,
@@ -145,6 +149,12 @@ vi.mock('@/lib/whatsapp/worker-heartbeat', () => ({
 }))
 vi.mock('@/lib/observability/whatsapp-logger', () => ({
   wlog: { error: effects.wlogError, warn: effects.wlogWarn },
+}))
+vi.mock('@/lib/services/browse-abandoned/detector', () => ({
+  runBrowseAbandonedDetection: effects.runBrowseAbandonedDetection,
+}))
+vi.mock('@/lib/api-utils', () => ({
+  getAuthClient: effects.getAuthClient,
 }))
 vi.mock('@/lib/queue/durable-queue', () => ({
   reserve: effects.reserve,
@@ -243,6 +253,13 @@ refusesWithoutSecret('cron-header-fallback-2', [
   'whatsapp-messaging-limit-check',
   'whatsapp-quality-check',
   'whatsapp-webhook-heartbeat',
+])
+
+refusesWithoutSecret('cron-inline-development', [
+  'browse-abandoned',
+  'check-dates',
+  'check-delayed-runs',
+  'compute-recommendations',
 ])
 
 describe('configured Bearer reaches the existing business seam', () => {
@@ -354,5 +371,38 @@ describe('configured Bearer reaches the existing business seam', () => {
 
     expect(response.status).not.toBe(401)
     expect(effects.checkAndAlertQualityRating).toHaveBeenCalled()
+  })
+
+  it('reaches browse-abandoned detection with a configured Bearer', async () => {
+    vi.stubEnv('CRON_SECRET', 's3cret')
+    const load = routes['../app/api/cron/browse-abandoned/route.ts']
+    const handlers = await load() as Record<string, (req: NextRequest) => Promise<Response>>
+
+    const response = await handlers.GET(request('GET', { authorization: 'Bearer s3cret' }))
+
+    expect(response.status).not.toBe(401)
+    expect(effects.runBrowseAbandonedDetection).toHaveBeenCalled()
+  })
+
+  it('creates the delayed-run client only with a configured Bearer', async () => {
+    vi.stubEnv('CRON_SECRET', 's3cret')
+    const load = routes['../app/api/cron/check-delayed-runs/route.ts']
+    const handlers = await load() as Record<string, (req: NextRequest) => Promise<Response>>
+
+    const response = await handlers.GET(request('GET', { authorization: 'Bearer s3cret' }))
+
+    expect(response.status).not.toBe(401)
+    expect(effects.createClient).toHaveBeenCalled()
+  })
+
+  it('creates the recommendation admin client only with a configured Bearer', async () => {
+    vi.stubEnv('CRON_SECRET', 's3cret')
+    const load = routes['../app/api/cron/compute-recommendations/route.ts']
+    const handlers = await load() as Record<string, (req: NextRequest) => Promise<Response>>
+
+    const response = await handlers.POST(request('POST', { authorization: 'Bearer s3cret' }))
+
+    expect(response.status).not.toBe(401)
+    expect(effects.getSupabaseAdmin).toHaveBeenCalled()
   })
 })
