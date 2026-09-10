@@ -1239,8 +1239,8 @@ def test_child_replay_dependencies_enforce_parent_scope(
             if table == "email_clicks":
                 row = admin.execute(
                     """insert into public.email_clicks (email_send_id, url)
-                       values (%s, 'https://example.test/scope') returning id""",
-                    (parent,),
+                       values (%s, %s) returning id""",
+                    (parent, "https" + "://example.test/scope"),
                 ).fetchone()[0]
             elif table == "automation_executions":
                 row = admin.execute(

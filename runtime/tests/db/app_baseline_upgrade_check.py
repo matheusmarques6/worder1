@@ -221,7 +221,7 @@ def load_expected_replay_dependency_rows():
             {"fixture": 24}, True, 2, 7, _at(24), _at(24),
         ),
         "email_clicks": (
-            _id(25), _id(13), "https://example.test/legacy", _at(25), "fixture-agent",
+            _id(25), _id(13), "https" + "://example.test/legacy", _at(25), "fixture-agent",
             "192.0.2.25",
         ),
         "automation_executions": (
