@@ -74,6 +74,55 @@ PRESERVATION_QUERIES = {
     ),
 }
 
+REPLAY_DEPENDENCY_PRESERVATION_QUERIES = {
+    "shopify_products": (
+        "id, store_id, organization_id, shopify_product_id, title, description, body_html, "
+        "collections, hidden_from_feeds, available, created_at, updated_at"
+    ),
+    "api_keys": (
+        "id, organization_id, created_by, user_id, name, key, expires_at, created_at, "
+        "permissions, key_hash, key_prefix, last_used_at, is_active"
+    ),
+    "email_templates": (
+        "id, organization_id, store_id, name, description, category, design_json, design, html, "
+        "thumbnail_url, is_prebuilt, is_active, editor_type, created_at, updated_at"
+    ),
+    "deals": (
+        "id, organization_id, store_id, pipeline_id, stage_id, contact_id, title, value, "
+        "currency, probability, status, position, tags, custom_fields, created_at, updated_at"
+    ),
+    "deal_activities": (
+        "id, organization_id, store_id, deal_id, contact_id, user_id, activity_type, title, "
+        "description, metadata, is_pinned, due_at, completed_at, created_at, updated_at"
+    ),
+    "events": "id, store_id",
+    "pipeline_stage_transitions": (
+        "id, organization_id, store_id, pipeline_id, from_stage_id, to_stage_id, source_type, "
+        "trigger_event, filters, is_enabled, position, transitions_count, created_at, updated_at"
+    ),
+    "email_clicks": "id, email_send_id, url, clicked_at, user_agent, ip_address",
+    "automation_executions": (
+        "id, automation_id, organization_id, status, trigger_type, trigger_data, contact_id, "
+        "deal_id, node_results, final_context, duration_ms, started_at, completed_at"
+    ),
+    "automation_versions": (
+        "id, automation_id, version, nodes, edges, settings, change_note, created_by, created_at"
+    ),
+    "automation_run_steps": (
+        "id, run_id, node_id, node_type, node_label, step_order, status, input_data, output_data, "
+        "config_used, variables_resolved, error_message, error_details, duration_ms, started_at, "
+        "completed_at, created_at"
+    ),
+    "automation_pending_steps": (
+        "id, run_id, node_id, scheduled_for, context, status, qstash_message_id, lock_token, "
+        "locked_at, locked_by, created_at"
+    ),
+    "whatsapp_campaign_recipients": (
+        "id, campaign_id::text, contact_id, phone_number, contact_name, status, queued_at, "
+        "sending_at, sent_at, retry_count, resolved_variables, created_at"
+    ),
+}
+
 
 def _id(suffix):
     return UUID(f"00000000-0000-4000-8000-{suffix:012d}")
@@ -141,12 +190,79 @@ def load_expected_fixture_rows():
     }
 
 
+def load_expected_replay_dependency_rows():
+    org, store, contact = _id(1), _id(16), _id(2)
+    return {
+        "shopify_products": (
+            _id(17), store, org, "17001", "Legacy Product", "Legacy description",
+            "<p>Legacy body</p>", [{"id": "legacy-collection"}], False, None, _at(17), _at(17),
+        ),
+        "api_keys": (
+            _id(20), org, None, _id(120), "Legacy API Key",
+            "fixture_plaintext_not_a_credential", datetime(2027, 1, 20, tzinfo=UTC), _at(20),
+            [], None, None, None, True,
+        ),
+        "email_templates": (
+            _id(18), org, store, "Legacy Template", "Fixture template", "custom", None,
+            {"sections": [{"_savedSectionId": str(_id(19)), "columns": []}]},
+            "<p>Legacy template</p>", None, False, True, "visual", _at(18), _at(18),
+        ),
+        "deals": (
+            _id(21), org, store, _id(4), _id(5), contact, "Legacy Deal", Decimal("21.50"),
+            "BRL", 65, "open", 3, ["fixture"], {"source": "fixture"}, _at(21), _at(21),
+        ),
+        "deal_activities": (
+            _id(22), org, store, _id(21), contact, None, "note", "Legacy note",
+            "Fixture activity", {"fixture": 22}, True, None, None, _at(22), _at(22),
+        ),
+        "events": (_id(23), store),
+        "pipeline_stage_transitions": (
+            _id(24), org, store, _id(4), _id(5), _id(5), "shopify", "order_paid",
+            {"fixture": 24}, True, 2, 7, _at(24), _at(24),
+        ),
+        "email_clicks": (
+            _id(25), _id(13), "https://example.test/legacy", _at(25), "fixture-agent",
+            "192.0.2.25",
+        ),
+        "automation_executions": (
+            "legacy-exec-26", _id(6), org, "success", "manual", {"fixture": 26}, contact,
+            _id(21), {"start": "success"}, {"result": "preserved"}, 126, _at(26), _at(26, 1),
+        ),
+        "automation_versions": (
+            _id(27), _id(6), 1, [{"id": "start"}], [{"from": "start", "to": "end"}],
+            {"fixture": 27}, "Legacy version", None, _at(27),
+        ),
+        "automation_run_steps": (
+            _id(28), _id(7), "start", "trigger", "Legacy step", 1, "success",
+            {"fixture": "input"}, {"fixture": "output"}, {"fixture": "config"},
+            {"fixture": "variables"}, None, None, 28, _at(28), _at(28, 1), _at(28),
+        ),
+        "automation_pending_steps": (
+            _id(29), _id(8), "delay-1", datetime(2026, 2, 1, tzinfo=UTC), {"fixture": 29},
+            "pending", "qstash-fixture-29", _id(129), _at(29, 1), "worker-29", _at(29),
+        ),
+        "whatsapp_campaign_recipients": (
+            _id(30), str(_id(10)), contact, "+15550000030", "Legacy Recipient", "pending",
+            _at(30), None, None, 2, {"first_name": "Legacy"}, _at(30),
+        ),
+    }
+
+
 def preservation_rows(admin):
     return {
         table: tuple(admin.execute(
             f"select {PRESERVATION_QUERIES[table]} from public.{table} order by id"
         ).fetchall())
         for table in SCOPED_TABLES
+    }
+
+
+def replay_dependency_preservation_rows(admin):
+    return {
+        table: admin.execute(
+            f"select {query} from public.{table}",
+        ).fetchone()
+        for table, query in REPLAY_DEPENDENCY_PRESERVATION_QUERIES.items()
     }
 
 
@@ -171,6 +287,10 @@ def execute_compensation_against_unknown_status_inside_transaction(admin):
 
 def test_upgrade_preserves_fixture_primary_keys_and_values(admin):
     assert preservation_rows(admin) == load_expected_fixture_rows()
+
+
+def test_upgrade_preserves_replay_dependency_rows(admin):
+    assert replay_dependency_preservation_rows(admin) == load_expected_replay_dependency_rows()
 
 
 def test_upgrade_catalog_matches_canonical_contract(admin):

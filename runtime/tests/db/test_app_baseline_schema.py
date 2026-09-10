@@ -8,6 +8,8 @@ import hashlib
 
 import pytest
 
+from tests.db.conftest import as_authenticated_user
+
 RELATIONS = (
     "organization_members", "pipelines", "pipeline_stages",
     "automations", "automation_runs",
@@ -562,3 +564,466 @@ def test_product_feeds_final_contract(admin):
                 "USING btree (store_id)"
             ),
         }
+
+
+# Replay prerequisites consumed unconditionally after the app bootstrap. They
+# stay outside RELATIONS so the reviewed eleven-table catalog remains stable.
+REPLAY_DEPENDENCY_RELATIONS = (
+    "shopify_products", "api_keys", "email_templates", "deals", "deal_activities",
+    "events", "pipeline_stage_transitions", "email_clicks", "automation_executions",
+    "automation_versions", "automation_run_steps", "automation_pending_steps",
+    "whatsapp_campaign_recipients",
+)
+
+REPLAY_DEPENDENCY_COLUMN_GROUPS = (
+    ("shopify_products", "id", "uuid", False, "uuid_generate_v4()"),
+    ("shopify_products", "store_id organization_id", "uuid", False, None),
+    ("shopify_products", "shopify_product_id title", "text", False, None),
+    ("shopify_products", "handle product_type vendor description body_html sku barcode image_url",
+     "text", True, None),
+    ("shopify_products", "status", "text", True, "'active'::text"),
+    ("shopify_products", "price cost_per_item", "numeric(12,2)", True, "0"),
+    ("shopify_products", "compare_at_price", "numeric(12,2)", True, None),
+    ("shopify_products", "inventory_quantity", "integer", True, "0"),
+    ("shopify_products", "images variants collections", "jsonb", True, "'[]'::jsonb"),
+    ("shopify_products", "created_at updated_at", "timestamp with time zone", True, "now()"),
+    ("shopify_products", "published_at", "timestamp with time zone", True, None),
+    ("shopify_products", "hidden_from_feeds", "boolean", False, "false"),
+    ("shopify_products", "available", "boolean", True, None),
+    ("api_keys", "id", "uuid", False, "uuid_generate_v4()"),
+    ("api_keys", "organization_id", "uuid", False, None),
+    ("api_keys", "created_by user_id", "uuid", True, None),
+    ("api_keys", "name", "text", False, None),
+    ("api_keys", "key key_hash key_prefix", "text", True, None),
+    ("api_keys", "permissions", "text[]", True, "'{}'::text[]"),
+    ("api_keys", "expires_at last_used_at", "timestamp with time zone", True, None),
+    ("api_keys", "created_at", "timestamp with time zone", True, "now()"),
+    ("api_keys", "is_active", "boolean", True, "true"),
+    ("email_templates", "id", "uuid", False, "gen_random_uuid()"),
+    ("email_templates", "organization_id", "uuid", False, None),
+    ("email_templates", "store_id", "uuid", True, None),
+    ("email_templates", "name", "text", False, None),
+    ("email_templates", "editor_type", "text", False, "'visual'::text"),
+    ("email_templates", "description html thumbnail_url", "text", True, None),
+    ("email_templates", "category", "text", True, "'custom'::text"),
+    ("email_templates", "design_json design", "jsonb", True, None),
+    ("email_templates", "is_prebuilt", "boolean", True, "false"),
+    ("email_templates", "is_active", "boolean", True, "true"),
+    ("email_templates", "created_at updated_at", "timestamp with time zone", True, "now()"),
+    ("deals", "id", "uuid", False, "uuid_generate_v4()"),
+    ("deals", "organization_id pipeline_id", "uuid", False, None),
+    ("deals", "store_id stage_id contact_id assigned_to", "uuid", True, None),
+    ("deals", "title", "text", False, None),
+    ("deals", "currency", "text", True, "'BRL'::text"),
+    ("deals", "status", "text", True, "'open'::text"),
+    ("deals", "value", "numeric(12,2)", True, "0"),
+    ("deals", "probability", "integer", True, "50"),
+    ("deals", "position", "integer", True, "0"),
+    ("deals", "tags", "text[]", True, "'{}'::text[]"),
+    ("deals", "custom_fields", "jsonb", True, "'{}'::jsonb"),
+    ("deals", "created_at updated_at", "timestamp with time zone", True, "now()"),
+    ("deal_activities", "id", "uuid", False, "gen_random_uuid()"),
+    ("deal_activities", "organization_id deal_id", "uuid", False, None),
+    ("deal_activities", "store_id contact_id user_id", "uuid", True, None),
+    ("deal_activities", "activity_type", "text", False, None),
+    ("deal_activities", "title description", "text", True, None),
+    ("deal_activities", "metadata", "jsonb", True, "'{}'::jsonb"),
+    ("deal_activities", "is_pinned", "boolean", True, "false"),
+    ("deal_activities", "due_at completed_at", "timestamp with time zone", True, None),
+    ("deal_activities", "created_at updated_at", "timestamp with time zone", True, "now()"),
+    ("events", "id", "uuid", False, "gen_random_uuid()"),
+    ("events", "store_id", "uuid", True, None),
+    ("pipeline_stage_transitions", "id", "uuid", False, "uuid_generate_v4()"),
+    ("pipeline_stage_transitions", "organization_id pipeline_id to_stage_id", "uuid", False,
+     None),
+    ("pipeline_stage_transitions", "store_id from_stage_id", "uuid", True, None),
+    ("pipeline_stage_transitions", "source_type trigger_event", "text", False, None),
+    ("pipeline_stage_transitions", "name description", "text", True, None),
+    ("pipeline_stage_transitions", "filters", "jsonb", True, "'{}'::jsonb"),
+    ("pipeline_stage_transitions", "is_enabled", "boolean", True, "true"),
+    ("pipeline_stage_transitions", "position transitions_count", "integer", True, "0"),
+    ("pipeline_stage_transitions", "created_at updated_at", "timestamp with time zone", True,
+     "now()"),
+    ("email_clicks", "id", "uuid", False, "gen_random_uuid()"),
+    ("email_clicks", "email_send_id", "uuid", False, None),
+    ("email_clicks", "url", "text", False, None),
+    ("email_clicks", "clicked_at", "timestamp with time zone", True, "now()"),
+    ("email_clicks", "user_agent ip_address", "text", True, None),
+    ("automation_executions", "id", "character varying(100)", False, None),
+    ("automation_executions", "automation_id", "uuid", False, None),
+    ("automation_executions", "organization_id contact_id deal_id", "uuid", True, None),
+    ("automation_executions", "status", "character varying(20)", False,
+     "'running'::character varying"),
+    ("automation_executions", "trigger_type error_node_id", "character varying(100)", True,
+     None),
+    ("automation_executions", "trigger_data final_context resume_data", "jsonb", True, None),
+    ("automation_executions", "node_results", "jsonb", True, "'{}'::jsonb"),
+    ("automation_executions", "duration_ms", "integer", True, None),
+    ("automation_executions", "retry_count", "integer", True, "0"),
+    ("automation_executions", "started_at", "timestamp with time zone", False, "now()"),
+    ("automation_executions", "completed_at wait_till", "timestamp with time zone", True, None),
+    ("automation_versions", "id", "uuid", False, "gen_random_uuid()"),
+    ("automation_versions", "automation_id", "uuid", False, None),
+    ("automation_versions", "version", "integer", False, None),
+    ("automation_versions", "nodes edges", "jsonb", False, None),
+    ("automation_versions", "settings", "jsonb", True, None),
+    ("automation_versions", "change_note", "text", True, None),
+    ("automation_versions", "created_by", "uuid", True, None),
+    ("automation_versions", "created_at", "timestamp with time zone", True, "now()"),
+    ("automation_run_steps", "id", "uuid", False, "gen_random_uuid()"),
+    ("automation_run_steps", "run_id", "uuid", False, None),
+    ("automation_run_steps", "node_id node_type", "text", False, None),
+    ("automation_run_steps", "node_label", "text", True, None),
+    ("automation_run_steps", "status", "text", False, "'pending'::text"),
+    ("automation_run_steps", "input_data output_data config_used variables_resolved", "jsonb",
+     True, "'{}'::jsonb"),
+    ("automation_run_steps", "error_details", "jsonb", True, None),
+    ("automation_run_steps", "step_order", "integer", False, "0"),
+    ("automation_run_steps", "started_at completed_at", "timestamp with time zone", True, None),
+    ("automation_run_steps", "created_at", "timestamp with time zone", True, "now()"),
+    ("automation_pending_steps", "id", "uuid", False, "uuid_generate_v4()"),
+    ("automation_pending_steps", "run_id", "uuid", False, None),
+    ("automation_pending_steps", "node_id", "text", False, None),
+    ("automation_pending_steps", "scheduled_for", "timestamp with time zone", False, None),
+    ("automation_pending_steps", "context", "jsonb", True, "'{}'::jsonb"),
+    ("automation_pending_steps", "status", "text", True, "'pending'::text"),
+    ("automation_pending_steps", "qstash_message_id locked_by", "text", True, None),
+    ("automation_pending_steps", "lock_token", "uuid", True, None),
+    ("automation_pending_steps", "locked_at", "timestamp with time zone", True, None),
+    ("automation_pending_steps", "created_at", "timestamp with time zone", True, "now()"),
+    ("whatsapp_campaign_recipients", "id", "uuid", False, "gen_random_uuid()"),
+    ("whatsapp_campaign_recipients", "contact_id message_id", "uuid", True, None),
+    ("whatsapp_campaign_recipients", "phone_number", "character varying(20)", False, None),
+    ("whatsapp_campaign_recipients", "status", "character varying(20)", True,
+     "'pending'::character varying"),
+    ("whatsapp_campaign_recipients", "retry_count", "integer", True, "0"),
+    ("whatsapp_campaign_recipients", "resolved_variables", "jsonb", True, "'{}'::jsonb"),
+    ("whatsapp_campaign_recipients", "queued_at sending_at sent_at delivered_at read_at "
+     "clicked_at replied_at failed_at opted_out_at", "timestamp with time zone", True, None),
+    ("whatsapp_campaign_recipients", "created_at", "timestamp with time zone", True, "now()"),
+)
+
+REPLAY_DEPENDENCY_FOREIGN_KEYS = (
+    ("shopify_products", "store_id", "shopify_stores", "CASCADE"),
+    ("shopify_products", "organization_id", "organizations", "CASCADE"),
+    ("api_keys", "organization_id", "organizations", "CASCADE"),
+    ("api_keys", "created_by", "profiles", "SET NULL"),
+    ("deals", "organization_id", "organizations", "CASCADE"),
+    ("deals", "pipeline_id", "pipelines", "CASCADE"),
+    ("deals", "stage_id", "pipeline_stages", "SET NULL"),
+    ("deals", "contact_id", "contacts", "SET NULL"),
+    ("deal_activities", "deal_id", "deals", "CASCADE"),
+    ("pipeline_stage_transitions", "pipeline_id", "pipelines", "CASCADE"),
+    ("pipeline_stage_transitions", "from_stage_id", "pipeline_stages", "CASCADE"),
+    ("pipeline_stage_transitions", "to_stage_id", "pipeline_stages", "CASCADE"),
+    ("email_clicks", "email_send_id", "email_sends", "CASCADE"),
+    ("automation_executions", "automation_id", "automations", "CASCADE"),
+    ("automation_versions", "automation_id", "automations", "CASCADE"),
+    ("automation_run_steps", "run_id", "automation_runs", "CASCADE"),
+    ("automation_pending_steps", "run_id", "automation_runs", "CASCADE"),
+)
+
+REPLAY_DEPENDENCY_INDEXES = {
+    "shopify_products": {
+        "idx_shopify_products_store", "idx_shopify_products_sku",
+        "idx_shopify_products_org", "idx_shopify_products_feed_visible",
+    },
+    "api_keys": {"api_keys_prefix_idx"},
+    "email_templates": {
+        "idx_email_templates_org", "idx_email_templates_store",
+        "email_templates_editor_type_idx",
+    },
+    "deals": {
+        "idx_deals_org", "idx_deals_store", "idx_deals_pipeline", "idx_deals_stage",
+        "idx_deals_contact", "idx_deals_status",
+    },
+    "deal_activities": {
+        "deal_activities_deal_idx", "deal_activities_org_idx", "deal_activities_contact_idx",
+    },
+    "pipeline_stage_transitions": {
+        "idx_stage_transitions_org", "idx_stage_transitions_pipeline",
+        "idx_stage_transitions_source", "idx_stage_transitions_enabled",
+    },
+    "email_clicks": {"idx_email_clicks_send", "idx_email_clicks_at"},
+    "automation_executions": {
+        "idx_automation_executions_automation", "idx_automation_executions_org",
+        "idx_automation_executions_status", "idx_automation_executions_started",
+        "idx_automation_executions_contact", "idx_automation_executions_waiting",
+    },
+    "automation_versions": {"idx_automation_versions_automation"},
+    "automation_run_steps": {"idx_run_steps_run", "idx_run_steps_status"},
+    "automation_pending_steps": {
+        "idx_pending_steps_scheduled", "idx_pending_steps_status", "idx_pending_steps_run",
+        "automation_pending_steps_locked_idx",
+    },
+    "whatsapp_campaign_recipients": {
+        "idx_recipients_campaign", "idx_recipients_status", "idx_recipients_meta_msg",
+        "idx_wcr_stuck_sending",
+    },
+}
+
+
+@pytest.mark.parametrize("table,columns,pg_type,nullable,default",
+                         REPLAY_DEPENDENCY_COLUMN_GROUPS)
+def test_replay_dependency_columns(admin, table, columns, pg_type, nullable, default):
+    with admin.transaction():
+        admin.execute("set local search_path = public, extensions")
+        for column in columns.split():
+            assert admin.execute(
+                """select format_type(a.atttypid, a.atttypmod), not a.attnotnull,
+                          pg_get_expr(d.adbin, d.adrelid)
+                     from pg_attribute a
+                     left join pg_attrdef d on d.adrelid=a.attrelid and d.adnum=a.attnum
+                    where a.attrelid=to_regclass(%s) and a.attname=%s and not a.attisdropped""",
+                (f"public.{table}", column),
+            ).fetchone() == (pg_type, nullable, default), (table, column)
+
+
+@pytest.mark.parametrize("table", REPLAY_DEPENDENCY_RELATIONS)
+def test_replay_dependencies_exist_with_pk_and_rls(admin, table):
+    assert admin.execute("select to_regclass(%s)", (f"public.{table}",)).fetchone()[0] == table
+    assert "PRIMARY KEY (id)" in constraint_definitions(admin, table).values()
+    assert admin.execute(
+        "select relrowsecurity, relforcerowsecurity from pg_class where oid=to_regclass(%s)",
+        (f"public.{table}",),
+    ).fetchone() == (True, False)
+
+
+@pytest.mark.parametrize("table,column,target,delete", REPLAY_DEPENDENCY_FOREIGN_KEYS)
+def test_replay_dependency_foreign_keys(admin, table, column, target, delete):
+    definition = f"FOREIGN KEY ({column}) REFERENCES {target}(id) ON DELETE {delete}"
+    assert definition in constraint_definitions(admin, table).values()
+
+
+def test_api_keys_user_id_remains_a_compatibility_link_without_fk(admin):
+    assert not any(
+        definition.startswith("FOREIGN KEY (user_id)")
+        for definition in constraint_definitions(admin, "api_keys").values()
+    )
+
+
+@pytest.mark.parametrize("table,names", REPLAY_DEPENDENCY_INDEXES.items())
+def test_replay_dependency_indexes(admin, table, names):
+    actual = {row[0] for row in admin.execute(
+        "select indexname from pg_indexes where schemaname='public' and tablename=%s",
+        (table,),
+    ).fetchall()}
+    assert names <= actual
+
+
+def test_shopify_product_and_template_unique_checks(admin):
+    assert "UNIQUE (store_id, shopify_product_id)" in constraint_definitions(
+        admin, "shopify_products"
+    ).values()
+    assert "CHECK (editor_type = ANY (ARRAY['visual'::text, 'text'::text]))" in (
+        constraint_definitions(admin, "email_templates").values()
+    )
+    assert "UNIQUE (automation_id, version)" in constraint_definitions(
+        admin, "automation_versions"
+    ).values()
+
+
+def test_recipient_key_preserves_both_reviewed_lanes(admin):
+    key_type, nullable, default = admin.execute(
+        """select format_type(a.atttypid, a.atttypmod), not a.attnotnull,
+                  pg_get_expr(d.adbin, d.adrelid)
+             from pg_attribute a
+             left join pg_attrdef d on d.adrelid=a.attrelid and d.adnum=a.attnum
+            where a.attrelid='public.whatsapp_campaign_recipients'::regclass
+              and a.attname='campaign_id'"""
+    ).fetchone()
+    assert (key_type, nullable, default) in (("uuid", False, None), ("text", False, None))
+    campaign_fk = "FOREIGN KEY (campaign_id) REFERENCES whatsapp_campaigns(id) ON DELETE CASCADE"
+    definitions = constraint_definitions(admin, "whatsapp_campaign_recipients").values()
+    assert (campaign_fk in definitions) is (key_type == "uuid")
+
+
+def _normalized_policy_rows(admin, table):
+    return tuple(admin.execute(
+        """select policyname, cmd, roles, permissive,
+                  regexp_replace(qual, '\\s+', '', 'g'),
+                  regexp_replace(with_check, '\\s+', '', 'g')
+             from pg_policies
+            where schemaname='public' and tablename=%s
+            order by policyname""",
+        (table,),
+    ).fetchall())
+
+
+@pytest.mark.parametrize("table", ("shopify_products", "api_keys", "email_templates"))
+def test_org_replay_dependencies_have_only_the_org_policy(admin, table):
+    predicate = "(organization_id=get_user_organization_id())"
+    assert _normalized_policy_rows(admin, table) == (
+        ("org_isolation_rls", "ALL", ["authenticated"], "PERMISSIVE", predicate, predicate),
+    )
+
+
+@pytest.mark.parametrize("table,has_org_policy", (
+    ("deals", True),
+    ("deal_activities", True),
+    ("events", False),
+    ("pipeline_stage_transitions", True),
+))
+def test_crm_replay_dependencies_have_the_exact_store_policy(admin, table, has_org_policy):
+    store = ("(store_idIN(SELECTs.idFROMshopify_storessWHERE"
+             "(s.organization_id=get_user_organization_id())))")
+    rows = [("org_via_loja", "ALL", ["authenticated"], "PERMISSIVE", store, store)]
+    if has_org_policy:
+        org = "(organization_id=get_user_organization_id())"
+        rows.insert(0, ("org_isolation_rls", "ALL", ["authenticated"], "PERMISSIVE", org, org))
+    assert _normalized_policy_rows(admin, table) == tuple(rows)
+
+
+@pytest.mark.parametrize("table,key,parent,has_org_policy", (
+    ("email_clicks", "email_send_id", "email_sends", False),
+    ("automation_executions", "automation_id", "automations", True),
+    ("automation_versions", "automation_id", "automations", False),
+    ("automation_run_steps", "run_id", "automation_runs", False),
+    ("automation_pending_steps", "run_id", "automation_runs", False),
+    ("whatsapp_campaign_recipients", "campaign_id", "whatsapp_campaigns", False),
+))
+def test_child_replay_dependencies_have_the_exact_parent_policy(
+        admin, table, key, parent, has_org_policy):
+    parent_predicate = (f"(EXISTS(SELECT1FROM{parent}pWHERE"
+                        f"((p.id)::text=({table}.{key})::text)))")
+    rows = [("org_via_pai", "ALL", ["authenticated"], "PERMISSIVE",
+             parent_predicate, parent_predicate)]
+    if has_org_policy:
+        org = "(organization_id=get_user_organization_id())"
+        rows.insert(0, ("org_isolation_rls", "ALL", ["authenticated"], "PERMISSIVE", org, org))
+    assert _normalized_policy_rows(admin, table) == tuple(rows)
+
+
+def test_email_universal_usage_final_contract(admin):
+    assert admin.execute("select to_regclass('public.email_universal_usage')").fetchone()[0] == (
+        "email_universal_usage"
+    )
+    assert admin.execute(
+        "select reloptions from pg_class where oid='public.email_universal_usage'::regclass"
+    ).fetchone()[0] == ["security_invoker=true"]
+    assert admin.execute(
+        """select column_name, data_type
+             from information_schema.columns
+            where table_schema='public' and table_name='email_universal_usage'
+            order by ordinal_position"""
+    ).fetchall() == [
+        ("organization_id", "uuid"),
+        ("template_id", "uuid"),
+        ("template_name", "text"),
+        ("template_updated_at", "timestamp with time zone"),
+        ("saved_block_id", "uuid"),
+        ("kind", "text"),
+    ]
+    assert admin.execute(
+        "select has_table_privilege('anon', 'public.email_universal_usage', 'select'), "
+        "has_table_privilege('authenticated', 'public.email_universal_usage', 'select')"
+    ).fetchone() == (False, False)
+
+
+def test_email_universal_usage_reads_current_and_legacy_design(admin):
+    current_id = "10000000-0000-4000-8000-000000000001"
+    legacy_id = "10000000-0000-4000-8000-000000000002"
+    current_saved = "10000000-0000-4000-8000-000000000003"
+    legacy_saved = "10000000-0000-4000-8000-000000000004"
+    with admin.transaction(force_rollback=True):
+        admin.execute(
+            """insert into public.email_templates
+                 (id, organization_id, name, design_json, design)
+               values (%s, %s, 'Current design', %s::jsonb, null),
+                      (%s, %s, 'Legacy design', null, %s::jsonb)""",
+            (current_id, current_id,
+             f'{{"sections":[{{"columns":[{{"blocks":[{{"_savedBlockId":"{current_saved}"}}]}}]}}]}}',
+             legacy_id, legacy_id,
+             f'{{"sections":[{{"_savedSectionId":"{legacy_saved}"}}]}}'),
+        )
+        assert admin.execute(
+            """select template_id::text, saved_block_id::text, kind
+                 from public.email_universal_usage
+                where template_id in (%s::uuid, %s::uuid)
+                order by template_id""",
+            (current_id, legacy_id),
+        ).fetchall() == [
+            (current_id, current_saved, "block"),
+            (legacy_id, legacy_saved, "section"),
+        ]
+
+
+def test_saved_block_usage_counts_contract_and_acl(admin):
+    contract = admin.execute(
+        """select p.provolatile, p.prosecdef, p.proconfig,
+                  pg_get_function_result(p.oid)
+             from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+            where n.nspname='public' and p.proname='saved_block_usage_counts'
+              and oidvectortypes(p.proargtypes)='uuid'"""
+    ).fetchone()
+    assert contract == (
+        "s", True, ["search_path=public"],
+        "TABLE(saved_block_id uuid, email_count integer)",
+    )
+    assert admin.execute(
+        """select has_function_privilege('service_role',
+                                          'public.saved_block_usage_counts(uuid)', 'execute'),
+                  has_function_privilege('anon',
+                                          'public.saved_block_usage_counts(uuid)', 'execute'),
+                  has_function_privilege('authenticated',
+                                          'public.saved_block_usage_counts(uuid)', 'execute')"""
+    ).fetchone() == (True, False, False)
+    org_id = "30000000-0000-4000-8000-000000000001"
+    saved_id = "30000000-0000-4000-8000-000000000002"
+    design = (
+        f'{{"sections":[{{"_savedSectionId":"{saved_id}","columns":['
+        f'{{"blocks":[{{"_savedBlockId":"{saved_id}"}}]}}]}}]}}'
+    )
+    with admin.transaction(force_rollback=True):
+        admin.execute(
+            """insert into public.email_templates
+                 (organization_id, name, design_json)
+               values (%s, 'Duplicate usage fixture', %s::jsonb)""",
+            (org_id, design),
+        )
+        assert admin.execute(
+            "select saved_block_id::text, email_count "
+            "from public.saved_block_usage_counts(%s) where saved_block_id=%s",
+            (org_id, saved_id),
+        ).fetchone() == (saved_id, 1)
+
+
+def test_api_keys_accept_hash_only_rows(admin):
+    org_id = "20000000-0000-4000-8000-000000000001"
+    with admin.transaction(force_rollback=True):
+        admin.execute(
+            "insert into public.organizations (id, name, slug) values (%s, 'Hash only', %s)",
+            (org_id, f"hash-only-{org_id}"),
+        )
+        key_id = admin.execute(
+            """insert into public.api_keys
+                 (organization_id, name, key_hash, key_prefix, permissions)
+               values (%s, 'Modern hash-only fixture', repeat('a', 64), 'wrd_test_',
+                       array['events:write'])
+               returning id""",
+            (org_id,),
+        ).fetchone()[0]
+        assert admin.execute(
+            "select key, key_hash, key_prefix, permissions from public.api_keys where id=%s",
+            (key_id,),
+        ).fetchone() == (None, "a" * 64, "wrd_test_", ["events:write"])
+
+
+def test_api_keys_org_policy_hides_and_protects_other_tenant(dsn, admin, two_tenants):
+    own_id = "40000000-0000-4000-8000-000000000001"
+    other_id = "40000000-0000-4000-8000-000000000002"
+    admin.execute(
+        """insert into public.api_keys (id, organization_id, name, key_hash)
+           values (%s, %s, 'Own key', repeat('a', 64)),
+                  (%s, %s, 'Other key', repeat('b', 64))""",
+        (own_id, two_tenants.a.id, other_id, two_tenants.b.id),
+    )
+    with as_authenticated_user(dsn, two_tenants.a.user_id) as authenticated:
+        assert authenticated.execute(
+            "select id::text from public.api_keys where id in (%s, %s) order by id",
+            (own_id, other_id),
+        ).fetchall() == [(own_id,)]
+        assert authenticated.execute(
+            "update public.api_keys set name='blocked' where id=%s returning id",
+            (other_id,),
+        ).fetchone() is None

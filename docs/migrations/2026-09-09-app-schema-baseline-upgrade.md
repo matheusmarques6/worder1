@@ -17,7 +17,7 @@ The executor is the only caller of SQL, migration paths, exclusions, and test-en
 | 20260812000002 | `20260812000002_runtime_roles_and_internal.sql` | `DF4A849999D0A407B07792BFC26C2DAB533664AB417DC6D56665A3D23E2803D3` |
 | 20260812000003 | `20260812000003_identity_conversations.sql` | `52C96186B085C52C3DFC1C17508A147408D90246972BD6D59F5E55BCB0E2ABD6` |
 | 20260812000004 | `20260812000004_engine_functions.sql` | `B1C92756190FFA67D201615EF7B0212DBC4676C2D8EAEFBD467747B450C0D304` |
-| 20260812000005 | `20260812000005_app_baseline_prereqs.sql` | `80517ED4B6729789B13B3FA5632F33A5F2120D712953BA4B06D9415A97B04F07` |
+| 20260812000005 | `20260812000005_app_baseline_prereqs.sql` | `F75C6880BC94B6CCD14DF2F1B4E7EB9B375B9C15EDF15DD1C378BCBAFDAD58C0` |
 | 20260813000001 | `20260813000001_ai_missions.sql` | `BE978E08303E5B498275F7BD2BB4896D9A84DC1E9EAB100E0CD45360645C1A75` |
 | 20260813000002 | `20260813000002_internal_llm_trail.sql` | `ABFADC5DD7A3F4005CC994602ACEF39CB41857BC6C0B7757D15989D70FEB29F9` |
 | 20260813000003 | `20260813000003_sender_preflight.sql` | `4057DDC1DA472E07FAB4DE6C597A7E7A3CA0017D2FC1D4F087271B47550444B1` |
@@ -167,7 +167,7 @@ The following are prohibited in this local proof and are not workarounds: `--inc
 - Every executed suite is non-empty with zero skips, failures, errors, and warning-masked failures.
 - `manifest.json` hashes match this inventory, and database migration history matches the exact manifest in order; the upgrade history excludes the bootstrap and ends with only the two approved suffix versions.
 - Fresh and upgraded `scoped_catalog(admin)` equal the shared `expected_scoped_catalog()`, including columns, constraints, indexes, RLS/policies, functions/triggers, enum order, and ACLs.
-- Upgrade preservation rows retain primary keys and values across all 11 scoped relations; the legacy `email_sends` pending row remains pending while the new default is queued.
+- Upgrade preservation rows retain primary keys and values across all 11 scoped relations and all 13 replay prerequisites; this includes legacy template JSON, plaintext test-key compatibility, and the text campaign key. The legacy `email_sends` pending row remains pending while the new default is queued.
 - Auth tests prove normal signup owner provisioning, invited signup membership consumption without an extra organization/pipeline, and duplicate/noncanonical trigger rejection without partial change.
 - `gates.json` reaches `ready` before tests and `stopped` after cleanup; `identity.json` remains consistent; there are no project-labeled containers, networks, or volumes, no recorded IDs remain, all three ports are free, and the executor lock is absent.
 

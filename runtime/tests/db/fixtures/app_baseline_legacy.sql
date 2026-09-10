@@ -15,6 +15,74 @@ create table public.organization_members (
   unique (organization_id, user_id)
 );
 
+create table public.shopify_products (
+  id uuid primary key default uuid_generate_v4(),
+  store_id uuid not null references public.shopify_stores(id) on delete cascade,
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  shopify_product_id text not null,
+  title text not null,
+  handle text,
+  product_type text,
+  vendor text,
+  status text default 'active',
+  price numeric(12,2) default 0,
+  compare_at_price numeric(12,2),
+  cost_per_item numeric(12,2) default 0,
+  sku text,
+  barcode text,
+  inventory_quantity integer default 0,
+  image_url text,
+  images jsonb default '[]'::jsonb,
+  variants jsonb default '[]'::jsonb,
+  description text,
+  body_html text,
+  collections jsonb default '[]'::jsonb,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  published_at timestamptz,
+  unique (store_id, shopify_product_id)
+);
+
+create index idx_shopify_products_store on public.shopify_products(store_id);
+create index idx_shopify_products_sku on public.shopify_products(sku);
+create index idx_shopify_products_org on public.shopify_products(organization_id);
+
+create table public.api_keys (
+  id uuid primary key default uuid_generate_v4(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  created_by uuid references public.profiles(id) on delete set null,
+  user_id uuid,
+  name text not null,
+  key text,
+  expires_at timestamptz,
+  created_at timestamptz default now()
+);
+
+create table public.email_templates (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null,
+  store_id uuid,
+  name text not null,
+  description text,
+  category text default 'custom',
+  design_json jsonb,
+  design jsonb,
+  html text,
+  thumbnail_url text,
+  is_prebuilt boolean default false,
+  is_active boolean default true,
+  editor_type text not null default 'visual'
+    check (editor_type in ('visual', 'text')),
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create index idx_email_templates_org on public.email_templates(organization_id);
+create index idx_email_templates_store
+  on public.email_templates(store_id) where store_id is not null;
+create index email_templates_editor_type_idx
+  on public.email_templates(organization_id, editor_type);
+
 create table public.pipelines (
   id uuid primary key default uuid_generate_v4(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
@@ -37,6 +105,106 @@ create table public.pipeline_stages (
   probability integer default 50,
   created_at timestamptz default now()
 );
+
+create table public.deals (
+  id uuid primary key default uuid_generate_v4(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  store_id uuid,
+  pipeline_id uuid not null references public.pipelines(id) on delete cascade,
+  stage_id uuid references public.pipeline_stages(id) on delete set null,
+  contact_id uuid references public.contacts(id) on delete set null,
+  assigned_to uuid references public.profiles(id) on delete set null,
+  contact_phone varchar(50),
+  contact_name varchar(255),
+  contact_email varchar(255),
+  title text not null,
+  value numeric(12,2) default 0,
+  currency text default 'BRL',
+  probability integer default 50 check (probability between 0 and 100),
+  expected_close_date date,
+  status text default 'open' check (status in ('open', 'won', 'lost')),
+  won_at timestamptz,
+  lost_at timestamptz,
+  lost_reason text,
+  notes text,
+  tags text[] default '{}',
+  custom_fields jsonb default '{}'::jsonb,
+  position integer default 0,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create index idx_deals_org on public.deals(organization_id);
+create index idx_deals_store on public.deals(store_id);
+create index idx_deals_pipeline on public.deals(pipeline_id);
+create index idx_deals_stage on public.deals(stage_id);
+create index idx_deals_contact on public.deals(contact_id);
+create index idx_deals_status on public.deals(status);
+
+create table public.deal_activities (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null,
+  store_id uuid,
+  deal_id uuid not null references public.deals(id) on delete cascade,
+  contact_id uuid,
+  user_id uuid,
+  activity_type text not null check (activity_type in (
+    'note', 'call', 'email', 'meeting', 'task', 'stage_change', 'value_change', 'custom'
+  )),
+  title text,
+  description text,
+  metadata jsonb default '{}'::jsonb,
+  is_pinned boolean default false,
+  due_at timestamptz,
+  completed_at timestamptz,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create index deal_activities_deal_idx
+  on public.deal_activities(deal_id, created_at desc);
+create index deal_activities_org_idx
+  on public.deal_activities(organization_id, created_at desc);
+create index deal_activities_contact_idx
+  on public.deal_activities(contact_id) where contact_id is not null;
+
+-- Compatibility stub: no historical domain contract exists for public.events.
+create table public.events (
+  id uuid primary key default gen_random_uuid(),
+  store_id uuid
+);
+
+create table public.pipeline_stage_transitions (
+  id uuid primary key default uuid_generate_v4(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  store_id uuid,
+  pipeline_id uuid not null references public.pipelines(id) on delete cascade,
+  name text,
+  description text,
+  is_enabled boolean default true,
+  position integer default 0,
+  source_type text not null,
+  trigger_event text not null,
+  filters jsonb default '{}'::jsonb,
+  from_stage_id uuid references public.pipeline_stages(id) on delete cascade,
+  to_stage_id uuid not null references public.pipeline_stages(id) on delete cascade,
+  mark_as_won boolean default false,
+  mark_as_lost boolean default false,
+  transitions_count integer default 0,
+  last_triggered_at timestamptz,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create index idx_stage_transitions_org
+  on public.pipeline_stage_transitions(organization_id);
+create index idx_stage_transitions_pipeline
+  on public.pipeline_stage_transitions(pipeline_id);
+create index idx_stage_transitions_source
+  on public.pipeline_stage_transitions(source_type, trigger_event);
+create index idx_stage_transitions_enabled
+  on public.pipeline_stage_transitions(organization_id, source_type, trigger_event)
+  where is_enabled = true;
 
 create table public.automations (
   id uuid primary key default uuid_generate_v4(),
@@ -88,6 +256,107 @@ create table public.automation_runs (
   locked_by text,
   created_at timestamptz default now()
 );
+
+create table public.automation_executions (
+  id varchar(100) primary key,
+  automation_id uuid not null references public.automations(id) on delete cascade,
+  organization_id uuid references public.organizations(id) on delete cascade,
+  status varchar(20) not null default 'running'
+    check (status in ('running', 'success', 'error', 'waiting', 'cancelled')),
+  trigger_type varchar(100),
+  trigger_data jsonb,
+  contact_id uuid references public.contacts(id) on delete set null,
+  deal_id uuid references public.deals(id) on delete set null,
+  node_results jsonb default '{}',
+  final_context jsonb,
+  error_message text,
+  error_node_id varchar(100),
+  duration_ms integer,
+  started_at timestamptz not null default now(),
+  completed_at timestamptz,
+  wait_till timestamptz,
+  resume_data jsonb,
+  retry_of varchar(100),
+  retry_count integer default 0,
+  created_at timestamptz default now()
+);
+
+create index idx_automation_executions_automation
+  on public.automation_executions(automation_id);
+create index idx_automation_executions_org
+  on public.automation_executions(organization_id);
+create index idx_automation_executions_status
+  on public.automation_executions(status);
+create index idx_automation_executions_started
+  on public.automation_executions(started_at desc);
+create index idx_automation_executions_contact
+  on public.automation_executions(contact_id);
+create index idx_automation_executions_waiting
+  on public.automation_executions(wait_till) where status = 'waiting';
+
+create table public.automation_versions (
+  id uuid primary key default gen_random_uuid(),
+  automation_id uuid not null references public.automations(id) on delete cascade,
+  version integer not null,
+  nodes jsonb not null,
+  edges jsonb not null,
+  settings jsonb,
+  change_note text,
+  created_at timestamptz default now(),
+  created_by uuid references auth.users(id),
+  unique (automation_id, version)
+);
+
+create index idx_automation_versions_automation
+  on public.automation_versions(automation_id);
+
+create table public.automation_run_steps (
+  id uuid primary key default gen_random_uuid(),
+  run_id uuid not null references public.automation_runs(id) on delete cascade,
+  node_id text not null,
+  node_type text not null,
+  node_label text,
+  status text not null default 'pending'
+    check (status in ('pending', 'running', 'success', 'error', 'skipped')),
+  input_data jsonb default '{}',
+  output_data jsonb default '{}',
+  config_used jsonb default '{}',
+  variables_resolved jsonb default '{}',
+  started_at timestamptz,
+  completed_at timestamptz,
+  duration_ms integer,
+  error_message text,
+  error_details jsonb,
+  step_order integer not null default 0,
+  created_at timestamptz default now()
+);
+
+create index idx_run_steps_run on public.automation_run_steps(run_id);
+create index idx_run_steps_status on public.automation_run_steps(status);
+
+create table public.automation_pending_steps (
+  id uuid primary key default uuid_generate_v4(),
+  run_id uuid not null references public.automation_runs(id) on delete cascade,
+  node_id text not null,
+  scheduled_for timestamptz not null,
+  context jsonb default '{}',
+  status text default 'pending'
+    check (status in ('pending', 'processing', 'completed', 'cancelled')),
+  qstash_message_id text,
+  lock_token uuid,
+  locked_at timestamptz,
+  locked_by text,
+  created_at timestamptz default now()
+);
+
+create index idx_pending_steps_scheduled
+  on public.automation_pending_steps(scheduled_for);
+create index idx_pending_steps_status
+  on public.automation_pending_steps(status);
+create index idx_pending_steps_run
+  on public.automation_pending_steps(run_id);
+create index automation_pending_steps_locked_idx
+  on public.automation_pending_steps(locked_at) where lock_token is not null;
 
 create table public.email_campaigns (
   id uuid primary key default gen_random_uuid(),
@@ -203,6 +472,47 @@ create table public.whatsapp_campaigns (
   updated_at timestamptz default now()
 );
 
+-- Historical live rows used a text campaign key; the fixed parent policy
+-- deliberately compares both sides as text.
+create table public.whatsapp_campaign_recipients (
+  id uuid primary key default gen_random_uuid(),
+  campaign_id text not null,
+  contact_id uuid,
+  phone_number varchar(20) not null,
+  contact_name varchar(255),
+  status varchar(20) default 'pending'
+    check (status in (
+      'pending', 'queued', 'sending', 'sent', 'delivered', 'read', 'clicked', 'replied',
+      'failed', 'skipped'
+    )),
+  queued_at timestamptz,
+  sending_at timestamptz,
+  sent_at timestamptz,
+  delivered_at timestamptz,
+  read_at timestamptz,
+  clicked_at timestamptz,
+  replied_at timestamptz,
+  failed_at timestamptz,
+  opted_out_at timestamptz,
+  error_code varchar(50),
+  error_message text,
+  retry_count integer default 0,
+  message_id uuid,
+  meta_message_id varchar(255),
+  resolved_variables jsonb default '{}',
+  conversion_value numeric(12,2),
+  conversion_order_id varchar(255),
+  converted_at timestamptz,
+  created_at timestamptz default now()
+);
+
+create index idx_recipients_campaign
+  on public.whatsapp_campaign_recipients(campaign_id);
+create index idx_recipients_status
+  on public.whatsapp_campaign_recipients(status);
+create index idx_recipients_meta_msg
+  on public.whatsapp_campaign_recipients(meta_message_id);
+
 create table public.sms_campaigns (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
@@ -261,6 +571,18 @@ create table public.email_sends (
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
+
+create table public.email_clicks (
+  id uuid primary key default gen_random_uuid(),
+  email_send_id uuid not null references public.email_sends(id) on delete cascade,
+  url text not null,
+  clicked_at timestamptz default now(),
+  user_agent text,
+  ip_address text
+);
+
+create index idx_email_clicks_send on public.email_clicks(email_send_id);
+create index idx_email_clicks_at on public.email_clicks(clicked_at);
 
 create table public.whatsapp_sends (
   id uuid primary key default gen_random_uuid(),
@@ -352,6 +674,45 @@ insert into public.organizations (id, name, slug, settings, created_at, updated_
 values ('00000000-0000-4000-8000-000000000001', 'Legacy Fixture', 'legacy-fixture',
         '{"fixture":true}', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
 
+insert into public.shopify_stores
+  (id, organization_id, shop_domain, shop_name, access_token, created_at, updated_at)
+values
+  ('00000000-0000-4000-8000-000000000016',
+   '00000000-0000-4000-8000-000000000001', 'legacy-fixture.myshopify.com',
+   'Legacy Fixture Store', 'fixture-token-not-a-secret',
+   '2026-01-16T00:00:00Z', '2026-01-16T00:00:00Z');
+
+insert into public.shopify_products
+  (id, store_id, organization_id, shopify_product_id, title, description, body_html,
+   collections, created_at, updated_at)
+values
+  ('00000000-0000-4000-8000-000000000017',
+   '00000000-0000-4000-8000-000000000016',
+   '00000000-0000-4000-8000-000000000001', '17001', 'Legacy Product',
+   'Legacy description', '<p>Legacy body</p>', '[{"id":"legacy-collection"}]',
+   '2026-01-17T00:00:00Z', '2026-01-17T00:00:00Z');
+
+insert into public.email_templates
+  (id, organization_id, store_id, name, description, category, design_json, design, html,
+   is_prebuilt, is_active, editor_type, created_at, updated_at)
+values
+  ('00000000-0000-4000-8000-000000000018',
+   '00000000-0000-4000-8000-000000000001',
+   '00000000-0000-4000-8000-000000000016', 'Legacy Template', 'Fixture template',
+   'custom', null,
+   '{"sections":[{"_savedSectionId":"00000000-0000-4000-8000-000000000019","columns":[]}]}',
+   '<p>Legacy template</p>', false, true, 'visual',
+   '2026-01-18T00:00:00Z', '2026-01-18T00:00:00Z');
+
+insert into public.api_keys
+  (id, organization_id, created_by, user_id, name, key, expires_at, created_at)
+values
+  ('00000000-0000-4000-8000-000000000020',
+   '00000000-0000-4000-8000-000000000001', null,
+   '00000000-0000-4000-8000-000000000120', 'Legacy API Key',
+   'fixture_plaintext_not_a_credential', '2027-01-20T00:00:00Z',
+   '2026-01-20T00:00:00Z');
+
 insert into public.contacts
   (id, organization_id, email, phone, first_name, last_name, custom_fields,
    created_at, updated_at)
@@ -384,6 +745,48 @@ values
   ('00000000-0000-4000-8000-000000000005',
    '00000000-0000-4000-8000-000000000004', 'Legacy Stage', '#654321', 2, 65,
    '2026-01-05T00:00:00Z');
+
+insert into public.deals
+  (id, organization_id, store_id, pipeline_id, stage_id, contact_id, title, value,
+   currency, probability, status, position, tags, custom_fields, created_at, updated_at)
+values
+  ('00000000-0000-4000-8000-000000000021',
+   '00000000-0000-4000-8000-000000000001',
+   '00000000-0000-4000-8000-000000000016',
+   '00000000-0000-4000-8000-000000000004',
+   '00000000-0000-4000-8000-000000000005',
+   '00000000-0000-4000-8000-000000000002', 'Legacy Deal', 21.50, 'BRL', 65,
+   'open', 3, array['fixture'], '{"source":"fixture"}',
+   '2026-01-21T00:00:00Z', '2026-01-21T00:00:00Z');
+
+insert into public.deal_activities
+  (id, organization_id, store_id, deal_id, contact_id, user_id, activity_type, title,
+   description, metadata, is_pinned, due_at, completed_at, created_at, updated_at)
+values
+  ('00000000-0000-4000-8000-000000000022',
+   '00000000-0000-4000-8000-000000000001',
+   '00000000-0000-4000-8000-000000000016',
+   '00000000-0000-4000-8000-000000000021',
+   '00000000-0000-4000-8000-000000000002', null, 'note', 'Legacy note',
+   'Fixture activity', '{"fixture":22}', true, null, null,
+   '2026-01-22T00:00:00Z', '2026-01-22T00:00:00Z');
+
+insert into public.events (id, store_id)
+values ('00000000-0000-4000-8000-000000000023',
+        '00000000-0000-4000-8000-000000000016');
+
+insert into public.pipeline_stage_transitions
+  (id, organization_id, store_id, pipeline_id, from_stage_id, to_stage_id, source_type,
+   trigger_event, filters, is_enabled, position, transitions_count, created_at, updated_at)
+values
+  ('00000000-0000-4000-8000-000000000024',
+   '00000000-0000-4000-8000-000000000001',
+   '00000000-0000-4000-8000-000000000016',
+   '00000000-0000-4000-8000-000000000004',
+   '00000000-0000-4000-8000-000000000005',
+   '00000000-0000-4000-8000-000000000005', 'shopify', 'order_paid',
+   '{"fixture":24}', true, 2, 7,
+   '2026-01-24T00:00:00Z', '2026-01-24T00:00:00Z');
 
 insert into public.automations
   (id, organization_id, name, description, status, trigger_type, trigger_config,
@@ -418,6 +821,46 @@ values
    '00000000-0000-4000-8000-000000000108', '2026-01-08T00:01:00Z', 'worker-8',
    '2026-01-08T00:00:00Z');
 
+insert into public.automation_executions
+  (id, automation_id, organization_id, status, trigger_type, trigger_data, contact_id,
+   deal_id, node_results, final_context, duration_ms, started_at, completed_at)
+values
+  ('legacy-exec-26', '00000000-0000-4000-8000-000000000006',
+   '00000000-0000-4000-8000-000000000001', 'success', 'manual', '{"fixture":26}',
+   '00000000-0000-4000-8000-000000000002',
+   '00000000-0000-4000-8000-000000000021', '{"start":"success"}',
+   '{"result":"preserved"}', 126,
+   '2026-01-26T00:00:00Z', '2026-01-26T00:01:00Z');
+
+insert into public.automation_versions
+  (id, automation_id, version, nodes, edges, settings, change_note, created_by, created_at)
+values
+  ('00000000-0000-4000-8000-000000000027',
+   '00000000-0000-4000-8000-000000000006', 1, '[{"id":"start"}]',
+   '[{"from":"start","to":"end"}]', '{"fixture":27}', 'Legacy version', null,
+   '2026-01-27T00:00:00Z');
+
+insert into public.automation_run_steps
+  (id, run_id, node_id, node_type, node_label, step_order, status, input_data, output_data,
+   config_used, variables_resolved, error_message, error_details, duration_ms, started_at,
+   completed_at, created_at)
+values
+  ('00000000-0000-4000-8000-000000000028',
+   '00000000-0000-4000-8000-000000000007', 'start', 'trigger', 'Legacy step', 1,
+   'success', '{"fixture":"input"}', '{"fixture":"output"}',
+   '{"fixture":"config"}', '{"fixture":"variables"}', null, null, 28,
+   '2026-01-28T00:00:00Z', '2026-01-28T00:01:00Z', '2026-01-28T00:00:00Z');
+
+insert into public.automation_pending_steps
+  (id, run_id, node_id, scheduled_for, context, status, qstash_message_id, lock_token,
+   locked_at, locked_by, created_at)
+values
+  ('00000000-0000-4000-8000-000000000029',
+   '00000000-0000-4000-8000-000000000008', 'delay-1', '2026-02-01T00:00:00Z',
+   '{"fixture":29}', 'pending', 'qstash-fixture-29',
+   '00000000-0000-4000-8000-000000000129', '2026-01-29T00:01:00Z', 'worker-29',
+   '2026-01-29T00:00:00Z');
+
 insert into public.email_campaigns
   (id, organization_id, name, subject, status, total_recipients, total_sent,
    total_opened, total_clicked, opens, clicks, settings, metadata, created_at, updated_at)
@@ -443,6 +886,16 @@ values
    'RUNNING', 'legacy_fixture', '{}', '["Legacy"]', 0, 0, 0, 0, 7, 6, 5, 2, 1,
    '2026-01-11T00:00:00Z', '2026-01-11T00:00:00Z');
 
+insert into public.whatsapp_campaign_recipients
+  (id, campaign_id, contact_id, phone_number, contact_name, status, queued_at, sending_at,
+   sent_at, retry_count, resolved_variables, created_at)
+values
+  ('00000000-0000-4000-8000-000000000030',
+   '00000000-0000-4000-8000-000000000010',
+   '00000000-0000-4000-8000-000000000002', '+15550000030', 'Legacy Recipient',
+   'pending', '2026-01-30T00:00:00Z', null, null, 2, '{"first_name":"Legacy"}',
+   '2026-01-30T00:00:00Z');
+
 insert into public.sms_campaigns
   (id, organization_id, name, status, message_body, audience_count, sent_count,
    delivered_count, failed_count, replied_count, revenue, conversions,
@@ -467,6 +920,13 @@ values
    '00000000-0000-4000-8000-000000000006', 'email-1', 'recipient@example.test',
    'sender@example.test', 'Legacy pending', 'pending', 3, 1, 'fixture', 'msg-13',
    'resend-13', '{"fixture":13}', '2026-01-13T00:00:00Z', '2026-01-13T00:00:00Z');
+
+insert into public.email_clicks
+  (id, email_send_id, url, clicked_at, user_agent, ip_address)
+values
+  ('00000000-0000-4000-8000-000000000025',
+   '00000000-0000-4000-8000-000000000013', 'https://example.test/legacy',
+   '2026-01-25T00:00:00Z', 'fixture-agent', '192.0.2.25');
 
 insert into public.whatsapp_sends
   (id, organization_id, contact_id, campaign_id, automation_id, automation_run_id,
