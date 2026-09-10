@@ -217,6 +217,9 @@ def test_service_role_cannot_update_or_truncate(admin, operation):
 
 def test_replay_preserves_modern_rows_ids_metadata_and_defaults(admin):
     with admin.transaction(force_rollback=True):
+        admin.execute(
+            "create index oauth_states_expiry_lookup on public.oauth_states (expires_at)"
+        )
         _seed(admin)
         admin.execute(
             """insert into public.oauth_states
