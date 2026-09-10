@@ -120,6 +120,18 @@ describe('segredos Shopify ficam atrás da autorização do servidor', () => {
     ['src/app/api/shopify/pixel/route.ts', 1],
     ['src/app/api/shopify/sync/route.ts', 1],
   ])
+  const consumidoresJwt = [
+    'src/app/api/meta/accounts/route.ts',
+    'src/app/api/meta/campaigns/route.ts',
+    'src/app/api/meta/sync/route.ts',
+  ]
+  const colunasJwtPermitidas = new Set([
+    'id', 'organization_id', 'shop_name', 'shop_domain', 'is_active', 'created_at',
+    'default_pipeline_id', 'default_stage_id', 'status', 'connection_status',
+    'status_message', 'health_checked_at', 'consecutive_failures', 'last_sync_at',
+    'contact_type', 'sync_orders', 'sync_customers', 'sync_checkouts', 'sync_refunds',
+    'auto_tags', 'stage_mapping', 'is_configured', 'total_orders', 'total_revenue',
+  ])
 
   it('cada leitura secreta e escrita admin é autorizada e escopada pela organização', () => {
     for (const rota of rotas) {
@@ -142,6 +154,24 @@ describe('segredos Shopify ficam atrás da autorização do servidor', () => {
 
         expect(cliente, `${rota}: cliente privilegiado`).toBe('supabaseAdmin')
         expect(cadeia, `${rota}: escopo da organização`).toContain(".eq('organization_id',")
+      }
+    }
+  })
+
+  it('consumidores JWT conhecidos pedem apenas colunas canônicas permitidas', () => {
+    for (const rota of consumidoresJwt) {
+      const src = readFileSync(rota, 'utf8')
+      const consultas = [...src.matchAll(
+        /\.from\('shopify_stores'\)\s*\.select\(\s*['"]([^'"]+)['"]\s*\)/g,
+      )]
+      expect(consultas.length, rota).toBeGreaterThan(0)
+
+      for (const [, selecao] of consultas) {
+        const colunas = selecao.split(',').map((coluna) => coluna.trim())
+        expect(
+          colunas.every((coluna) => colunasJwtPermitidas.has(coluna)),
+          `${rota}: ${selecao}`,
+        ).toBe(true)
       }
     }
   })

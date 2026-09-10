@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     // Validar que a loja pertence à organização
     const { data: store, error: storeError } = await supabase
       .from('shopify_stores')
-      .select('id, name')
+      .select('id, shop_name')
       .eq('id', storeId)
       .eq('organization_id', organizationId)
       .single();
@@ -91,7 +91,7 @@ export async function GET(request: NextRequest) {
       total: accountsWithWarnings.length,
       store: {
         id: store.id,
-        name: store.name,
+        name: store.shop_name,
       }
     });
 
