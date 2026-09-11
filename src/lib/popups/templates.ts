@@ -75,7 +75,13 @@ const radio = (id: string, label: string, options: string[], over: Record<string
 // nível progressivo pelo id, ou nada). O sorteio é do servidor.
 const wheel = (id: string, segments: any[], over: Record<string, any> = {}) => ({
   id, type: 'wheel',
-  props: { segments, buttonText: 'Girar a roleta', size: 320, labelSize: 13, labelColor: '#FFFFFF', strokeColor: '#FFFFFF', pointerColor: '#111827', rimColor: '#111827', sound: true, bgColor: '#111827', textColor: '#FFFFFF', fontSize: 15, borderRadius: 8, fullWidth: true, ...over },
+  props: {
+    segments, buttonText: 'Girar a roleta', size: 330, labelSize: 12, labelColor: '#FFFFFF',
+    strokeColor: '#FFFFFF', pointerColor: '#FFFFFF', rimColor: '#F2C200', rimWidth: 14, rimLights: false, dividerWidth: 2, sound: true,
+    // O anel com o convite no meio: tocar no miolo é o que gira.
+    hubRadius: 74, hubMode: 'tap', hubText: 'Toque para girar', hubBg: '#FFFFFF', hubColor: '#111827', hubFontSize: 14,
+    bgColor: '#111827', textColor: '#FFFFFF', fontSize: 15, borderRadius: 8, fullWidth: true, ...over,
+  },
 })
 // Cartas viradas para baixo: escolher é o jogo, e a escolhida vira em 3D
 // no envio mostrando o prêmio que o servidor sorteou.
@@ -90,7 +96,7 @@ const cards = (id: string, segments: any[], over: Record<string, any> = {}) => (
 })
 const scratch = (id: string, segments: any[], over: Record<string, any> = {}) => ({
   id, type: 'scratch',
-  props: { segments, showButton: false, width: 360, height: 200, coverColor: '#C0C6CF', coverText: 'Raspe com o dedo', coverTextColor: '#FFFFFF', prizeBg: '#111827', prizeColor: '#FFFFFF', prizeSize: 30, cardRadius: 16, ...over },
+  props: { segments, showButton: false, width: 360, height: 200, coverStyle: 'gold', coverColor: '#C9A227', coverText: 'Raspe aqui', coverTextColor: '#FFFFFF', prizeBg: '#111827', prizeColor: '#FFFFFF', prizeSize: 30, cardRadius: 16, ...over },
 })
 
 const baseStyles = {

@@ -6,7 +6,7 @@ import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type D
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { TRAFFIC_TYPES, PAGE_TEMPLATES } from '@/lib/popups/targeting'
-import { wheelSectorPath, wheelLabelPos, wheelPinPos, WHEEL_R, WHEEL_RIM_R, WHEEL_RIM_W } from '@/lib/popups/games'
+import { wheelSectorPath, wheelLabelPos, wheelPinPos, WHEEL_R, WHEEL_C, WHEEL_RIM_W } from '@/lib/popups/games'
 import { splitLines } from '@/lib/popups/lines'
 import {
   ArrowLeft, Save, Loader2, Monitor, Smartphone, Plus, Trash2, X, Undo2, Redo2, Copy,
@@ -361,6 +361,10 @@ const defaultProps: Record<string, Record<string, any>> = {
       { id: 's4', label: 'Tente de novo', prize: 'none', weight: 15, color: '#374151' },
     ],
     buttonText: 'Girar a roleta', size: 320, labelSize: 13, labelColor: '#FFFFFF', strokeColor: '#FFFFFF', pointerColor: '#111827', rimColor: '#111827', sound: true,
+    dividerWidth: 2, rimWidth: 17, rimLights: true,
+    // Miolo vazado e tocável por padrão: o convite fica no centro, onde o
+    // olho já está, em vez de num botão embaixo que disputa com o e-mail.
+    hubRadius: 72, hubMode: 'tap', hubText: 'Toque para girar', hubBg: '#FFFFFF', hubColor: '#111827', hubFontSize: 14,
     bgColor: '#F97316', textColor: '#FFFFFF', fontSize: 15, borderRadius: 8, fullWidth: false,
   },
   // Cartas: viradas para baixo, o visitante escolhe uma e ela vira em 3D
@@ -374,6 +378,8 @@ const defaultProps: Record<string, Record<string, any>> = {
     buttonText: 'Revelar', count: 3, cardWidth: 96, cardHeight: 128, cardRadius: 12, gap: 12,
     backColor: '#FFFFFF', backText: '?', backTextColor: '#F97316',
     faceBg: '#111827', faceColor: '#FFFFFF', faceSize: 15,
+    teaserText: '★', teaserBg: '#F3F4F6', teaserColor: '#9CA3AF',
+    lockedText: 'Deixe seu e-mail para virar a última carta', lockedColor: '#6B7280',
     bgColor: '#F97316', textColor: '#FFFFFF', fontSize: 15, borderRadius: 8, fullWidth: false,
   },
   scratch: {
@@ -381,7 +387,7 @@ const defaultProps: Record<string, Record<string, any>> = {
       { id: 's1', label: '10% OFF', prize: 'base', weight: 80, color: '#F97316' },
       { id: 's2', label: 'Não foi dessa vez', prize: 'none', weight: 20, color: '#111827' },
     ],
-    buttonText: 'Raspar', width: 320, height: 190, coverColor: '#C0C6CF', coverText: 'Raspe aqui', coverTextColor: '#FFFFFF', prizeBg: '#FFF7ED', prizeColor: '#F97316', prizeSize: 26, cardRadius: 14,
+    buttonText: 'Raspar', width: 320, height: 190, coverStyle: 'foil', coverImage: '', coverColor: '#C0C6CF', coverText: 'Raspe aqui', coverTextColor: '#FFFFFF', prizeBg: '#FFF7ED', prizeColor: '#F97316', prizeSize: 26, cardRadius: 14,
     bgColor: '#F97316', textColor: '#FFFFFF', fontSize: 15, borderRadius: 8, fullWidth: false,
   },
 }
@@ -1011,6 +1017,22 @@ function GameButtonPreview({ p, fallback }: { p: any; fallback: string }) {
 }
 
 /** Clareia (amt>0) ou escurece um #rrggbb. Espelha wfShade do runtime. */
+// O acabamento da lâmina da raspadinha em CSS — o mesmo que paintFoil
+// pinta no canvas do runtime. Os dois têm de casar: a pré-visualização
+// que mostra outra coisa é o bug que esta tela já pagou caro.
+function laminaCss(p: any, cor: string): string {
+  const estilo = p?.coverStyle || 'foil'
+  if (estilo === 'image') {
+    return p?.coverImage ? `url("${String(p.coverImage).replace(/"/g, '%22')}")` : 'none'
+  }
+  if (estilo === 'solid') return 'none'
+  if (estilo === 'gold') {
+    // Ouro não é uma cor só: é uma sequência de claros e escuros. Um
+    // dourado chapado lê como amarelo mostarda.
+    return 'linear-gradient(135deg, #8C6D1F 0%, #E8C766 22%, #FFF3C4 42%, #D8AE3E 55%, #B8892A 78%, #F0D07A 100%), repeating-linear-gradient(135deg, rgba(255,255,255,.16) 0 1px, transparent 1px 7px)'
+  }
+  return `linear-gradient(135deg, ${shadeHex(cor, 20)} 0%, ${cor} 45%, ${shadeHex(cor, 12)} 55%, ${shadeHex(cor, -16)} 100%), repeating-linear-gradient(135deg, rgba(255,255,255,.10) 0 1px, transparent 1px 12px)`
+}
 function shadeHex(hex: string, amt: number): string {
   const m = /^#([0-9a-fA-F]{6})$/.exec(String(hex || ''))
   if (!m) return String(hex || '#C0C6CF')
@@ -1197,6 +1219,11 @@ function BlockPreview({ block, selected, onContentChange, onSelect, offerLabel, 
       const ptr = p.pointerColor || '#111827'
       const hub = p.strokeColor || '#FFFFFF'
       const gid = `wprev-${String(block.id).replace(/[^a-zA-Z0-9_-]/g, "")}`
+      // Miolo vazado: a roleta vira anel e o centro pode ser o botão.
+      const hubR = Math.max(0, Math.min(WHEEL_R - 8, Number(p.hubRadius) || 0))
+      const tap = p.hubMode === 'tap' && hubR >= 30
+      const rimW = Math.max(4, Math.min(34, Number(p.rimWidth) || WHEEL_RIM_W))
+      const rimR = WHEEL_R + rimW / 2 - 2.5
       return <div style={{ ...blockStyle, textAlign: 'center' }}>
         <div style={{ position: 'relative', display: 'inline-block', width: size, maxWidth: '100%', filter: 'drop-shadow(0 14px 28px rgba(0,0,0,.24))' }}>
           <svg viewBox="0 0 300 300" role="img" aria-label="Roleta de prêmios" style={{ width: '100%', height: 'auto', display: 'block', overflow: 'visible' }}>
@@ -1212,12 +1239,12 @@ function BlockPreview({ block, selected, onContentChange, onSelect, offerLabel, 
                 <stop offset="1" stopColor="#000000" stopOpacity=".16" />
               </radialGradient>
             </defs>
-            <circle cx={150} cy={150} r={WHEEL_RIM_R} fill="none" stroke={`url(#${gid}-rim)`} strokeWidth={WHEEL_RIM_W} />
+            <circle cx={150} cy={150} r={rimR} fill="none" stroke={`url(#${gid}-rim)`} strokeWidth={rimW} />
             <g>
               {segs.map((sg, i) => {
-                const lp = wheelLabelPos(i, segs.length)
+                const lp = wheelLabelPos(i, segs.length, WHEEL_R, WHEEL_C, hubR)
                 return <g key={sg.id + i}>
-                  <path d={wheelSectorPath(i, segs.length)} fill={sg.color} stroke={hub} strokeWidth={2} />
+                  <path d={wheelSectorPath(i, segs.length, WHEEL_R, WHEEL_C, hubR)} fill={sg.color} stroke={hub} strokeWidth={p.dividerWidth ?? 2} />
                   <text x={lp.x} y={lp.y} transform={`rotate(${lp.angle} ${lp.x} ${lp.y})`} textAnchor="middle" dominantBaseline="middle" fontSize={p.labelSize || 13} fontWeight={800} fill={sg.textColor || p.labelColor || '#FFFFFF'}>{sg.label}</text>
                 </g>
               })}
@@ -1230,14 +1257,26 @@ function BlockPreview({ block, selected, onContentChange, onSelect, offerLabel, 
             <circle cx={150} cy={150} r={WHEEL_R + 0.5} fill="none" stroke="rgba(255,255,255,.45)" strokeWidth={1.5} />
             {/* As luzinhas do aro não giram: é o que faz o aro parecer a
                 moldura da máquina, e não a borda do desenho que roda. */}
-            {Array.from({ length: Math.min(24, Math.max(12, segs.length * 3)) }).map((_, i, arr) => {
+            {p.rimLights !== false && Array.from({ length: Math.min(24, Math.max(12, segs.length * 3)) }).map((_, i, arr) => {
               const a = (i * 360 / arr.length - 90) * Math.PI / 180
-              return <circle key={`luz${i}`} cx={(150 + WHEEL_RIM_R * Math.cos(a)).toFixed(2)} cy={(150 + WHEEL_RIM_R * Math.sin(a)).toFixed(2)} r={2.3} fill="#FFFFFF" fillOpacity={i % 2 ? 0.32 : 0.62} />
+              return <circle key={`luz${i}`} cx={(150 + rimR * Math.cos(a)).toFixed(2)} cy={(150 + rimR * Math.sin(a)).toFixed(2)} r={2.3} fill="#FFFFFF" fillOpacity={i % 2 ? 0.32 : 0.62} />
             })}
-            <circle cx={150} cy={150} r={26} fill={hub} />
-            <circle cx={150} cy={150} r={26} fill="none" stroke="rgba(0,0,0,.12)" strokeWidth={1} />
-            <circle cx={150} cy={150} r={8.5} fill={ptr} />
+            {hubR <= 0 && <>
+              <circle cx={150} cy={150} r={26} fill={hub} />
+              <circle cx={150} cy={150} r={26} fill="none" stroke="rgba(0,0,0,.12)" strokeWidth={1} />
+              <circle cx={150} cy={150} r={8.5} fill={ptr} />
+            </>}
           </svg>
+          {tap && (
+            <div style={{ position: 'absolute', left: '50%', top: '50%', width: `${(200 * hubR / 300).toFixed(2)}%`, transform: 'translate(-50%,-50%)', zIndex: 3 }}>
+              <div style={{
+                width: '100%', padding: '50% 0', position: 'relative', borderRadius: '50%',
+                background: p.hubBg || '#FFFFFF', color: p.hubColor || '#111827', boxShadow: '0 4px 14px rgba(0,0,0,.22)',
+              }}>
+                <span style={{ position: 'absolute', left: '10%', right: '10%', top: '50%', transform: 'translateY(-50%)', fontSize: p.hubFontSize || 14, fontWeight: 800, lineHeight: 1.15, letterSpacing: '.4px', textTransform: 'uppercase', textAlign: 'center' }}>{p.hubText || 'Toque para girar'}</span>
+              </div>
+            </div>
+          )}
           <div style={{ position: 'absolute', left: '50%', top: -3, width: 30, height: 46, marginLeft: -15, zIndex: 2, pointerEvents: 'none' }}>
             <svg viewBox="0 0 30 46" width={30} height={46} aria-hidden="true" style={{ display: 'block', filter: 'drop-shadow(0 3px 4px rgba(0,0,0,.32))' }}>
               <path d="M15 46 L4.4 17.5 A11 11 0 1 1 25.6 17.5 Z" fill={ptr} stroke="#FFFFFF" strokeWidth={2.6} strokeLinejoin="round" />
@@ -1283,11 +1322,13 @@ function BlockPreview({ block, selected, onContentChange, onSelect, offerLabel, 
       return <div style={{ ...blockStyle, textAlign: 'center' }}>
         <div style={{ position: 'relative', display: 'inline-block', width: w, maxWidth: '100%', height: h, borderRadius: p.cardRadius ?? 14, overflow: 'hidden', background: p.prizeBg || '#FFF7ED', boxShadow: '0 6px 20px rgba(0,0,0,.14)' }}>
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12, fontSize: p.prizeSize || 26, fontWeight: 800, color: p.prizeColor || '#F97316', lineHeight: 1.2 }}>{segs[0]?.label || '?'}</div>
-          {/* A lâmina: o mesmo gradiente + listras finas que o runtime pinta no canvas. */}
+          {/* A lâmina: o MESMO acabamento que o runtime pinta no canvas —
+              metalizado, dourado escovado, cor chapada ou uma foto. */}
           <div style={{
             position: 'absolute', inset: 0,
             backgroundColor: foil,
-            backgroundImage: `linear-gradient(135deg, ${shadeHex(foil, 20)} 0%, ${foil} 45%, ${shadeHex(foil, 12)} 55%, ${shadeHex(foil, -16)} 100%), repeating-linear-gradient(135deg, rgba(255,255,255,.10) 0 1px, transparent 1px 12px)`,
+            backgroundImage: laminaCss(p, foil),
+            backgroundSize: 'cover', backgroundPosition: 'center',
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
             color: p.coverTextColor || '#FFFFFF', fontWeight: 800, fontSize: 13, letterSpacing: 1.6, textTransform: 'uppercase', textShadow: '0 1px 2px rgba(0,0,0,.28)',
           }}>
@@ -1603,7 +1644,7 @@ function SmartOfferEditor({ p, up }: { p: any; up: (k: string, v: any) => void }
 // Roleta e raspadinha: segmentos com rótulo, prêmio (oferta base, nível
 // progressivo ou nada) e peso. O sorteio é do servidor no envio; aqui só
 // se descreve o que pode sair e com que chance.
-function GameEditor({ type, p, up, hints }: { type: string; p: any; up: (k: string, v: any) => void; hints: { hasCoupon: boolean; couponTiers: any[]; baseOfferLabel: string; gameBlocks: number } }) {
+function GameEditor({ type, p, up, hints, onOpenMedia }: { type: string; p: any; up: (k: string, v: any) => void; hints: { hasCoupon: boolean; couponTiers: any[]; baseOfferLabel: string; gameBlocks: number }; onOpenMedia?: (cb: (url: string) => void) => void }) {
   const isWheel = type === 'wheel'
   const isCards = type === 'cards'
   const nomeDoJogo = isWheel ? 'Roleta' : isCards ? 'Cartas' : 'Raspadinha'
@@ -1684,6 +1725,49 @@ function GameEditor({ type, p, up, hints }: { type: string; p: any; up: (k: stri
         </>
       )}
     </div>
+    {isCards && (
+      <div className="pt-4 border-t border-gray-100 space-y-3">
+        <SectionHeader title="A trava do e-mail" icon={<AtSign className="w-3 h-3" />} />
+        <p className="text-[11px] text-gray-400 leading-snug">As primeiras cartas viram de graça e mostram só um brinde. A última cobra o e-mail — e é ela que traz o prêmio. É o que transforma curiosidade em inscrição: a pessoa já gastou dois cliques, e parar ali custa mais do que preencher um campo.</p>
+        <LabeledField label="Viram de graça" hint={`Sempre sobra pelo menos uma. Máximo: ${Math.max(1, (Number(p.count) || 3) - 1)}.`}>
+          <Slider value={p.freeFlips == null ? (Number(p.count) || 3) - 1 : p.freeFlips} onChange={v => up('freeFlips', v)} min={0} max={Math.max(1, (Number(p.count) || 3) - 1)} unit="" />
+        </LabeledField>
+        <LabeledField label="Marca do brinde" hint="O que aparece nas cartas viradas de graça. Nunca um prêmio — prêmio quem decide é o servidor.">
+          <input className={inp} value={p.teaserText || ''} onChange={e => up('teaserText', e.target.value.slice(0, 16))} placeholder="★" />
+        </LabeledField>
+        <ColorRow label="Fundo do brinde" value={p.teaserBg || '#F3F4F6'} onChange={v => up('teaserBg', v)} />
+        <ColorRow label="Texto do brinde" value={p.teaserColor || '#9CA3AF'} onChange={v => up('teaserColor', v)} />
+        <LabeledField label="Aviso da trava">
+          <input className={inp} value={p.lockedText || ''} onChange={e => up('lockedText', e.target.value.slice(0, 120))} placeholder="Deixe seu e-mail para virar a última carta" />
+        </LabeledField>
+        <ColorRow label="Cor do aviso" value={p.lockedColor || '#6B7280'} onChange={v => up('lockedColor', v)} />
+      </div>
+    )}
+    {isWheel && (
+      <div className="pt-4 border-t border-gray-100 space-y-3">
+        <SectionHeader title="Miolo" icon={<Disc3 className="w-3 h-3" />} />
+        <p className="text-[11px] text-gray-400 leading-snug">Com o miolo vazado a roleta vira um anel e o centro pode ser o próprio botão — o convite fica onde o olho já está, em vez de num botão embaixo.</p>
+        <LabeledField label="Miolo vazado" hint="0 mantém o disco cheio, com o cubo no centro.">
+          <Slider value={p.hubRadius ?? 0} onChange={v => up('hubRadius', v)} min={0} max={110} unit="px" />
+        </LabeledField>
+        {(p.hubRadius ?? 0) >= 30 && (
+          <>
+            <Toggle label="Tocar no miolo gira" checked={p.hubMode === 'tap'} onChange={v => up('hubMode', v ? 'tap' : 'plain')} />
+            {p.hubMode === 'tap' && (
+              <>
+                <LabeledField label="Texto do miolo">
+                  <input className={inp} value={p.hubText || ''} onChange={e => up('hubText', e.target.value.slice(0, 30))} placeholder="Toque para girar" />
+                </LabeledField>
+                <ColorRow label="Fundo do miolo" value={p.hubBg || '#FFFFFF'} onChange={v => up('hubBg', v)} />
+                <ColorRow label="Texto do miolo" value={p.hubColor || '#111827'} onChange={v => up('hubColor', v)} />
+                <LabeledField label="Tamanho do texto"><Slider value={p.hubFontSize || 14} onChange={v => up('hubFontSize', v)} min={9} max={24} unit="px" /></LabeledField>
+                <Toggle label="Manter também o botão embaixo" checked={p.showButton === true} onChange={v => up('showButton', v ? true : undefined)} />
+              </>
+            )}
+          </>
+        )}
+      </div>
+    )}
     <div className="pt-4 border-t border-gray-100 space-y-3">
       <SectionHeader title="Aparência" icon={<Palette className="w-3 h-3" />} />
       {isWheel ? (
@@ -1694,6 +1778,9 @@ function GameEditor({ type, p, up, hints }: { type: string; p: any; up: (k: stri
           <ColorRow label="Aro" value={p.rimColor || '#111827'} onChange={v => up('rimColor', v)} />
           <ColorRow label="Ponteiro e cubo" value={p.pointerColor || '#111827'} onChange={v => up('pointerColor', v)} />
           <ColorRow label="Divisórias" value={p.strokeColor || '#FFFFFF'} onChange={v => up('strokeColor', v)} />
+          <LabeledField label="Espessura das divisórias"><Slider value={p.dividerWidth ?? 2} onChange={v => up('dividerWidth', v)} min={0} max={8} unit="px" /></LabeledField>
+          <LabeledField label="Espessura do aro"><Slider value={p.rimWidth ?? 17} onChange={v => up('rimWidth', v)} min={4} max={34} unit="px" /></LabeledField>
+          <Toggle label="Luzinhas no aro" checked={p.rimLights !== false} onChange={v => up('rimLights', v)} />
           {/* O tique de cada pino que passa é o que faz o giro parecer
               mecânico. Quem não quiser som na loja desliga aqui. */}
           <Toggle label="Tique ao girar" checked={p.sound !== false} onChange={v => up('sound', v)} />
@@ -1718,7 +1805,35 @@ function GameEditor({ type, p, up, hints }: { type: string; p: any; up: (k: stri
         <>
           <LabeledField label="Altura"><Slider value={p.height || 150} onChange={v => up('height', v)} min={80} max={320} unit="px" /></LabeledField>
           <LabeledField label="Texto da cobertura"><input className={inp} value={p.coverText || ''} onChange={e => up('coverText', e.target.value.slice(0, 40))} placeholder="Raspe aqui" /></LabeledField>
-          <ColorRow label="Cobertura" value={p.coverColor || '#9CA3AF'} onChange={v => up('coverColor', v)} />
+          {/* O acabamento da lâmina. "Foto" é o que as marcas boas fazem:
+              o que se raspa é a embalagem do produto, e o produto aparece
+              antes do desconto. */}
+          <LabeledField label="Acabamento">
+            <div className="grid grid-cols-2 gap-1.5">
+              {([['foil', 'Metalizado'], ['gold', 'Dourado'], ['solid', 'Cor chapada'], ['image', 'Foto']] as const).map(([v, rot]) => (
+                <button key={v} onClick={() => up('coverStyle', v)}
+                  className={`py-2 text-[12px] font-medium rounded-lg border transition-colors ${(p.coverStyle || 'foil') === v ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>{rot}</button>
+              ))}
+            </div>
+          </LabeledField>
+          {p.coverStyle === 'image' ? (
+            p.coverImage ? (
+              <div className="space-y-2">
+                <img src={p.coverImage} alt="" className="w-full h-24 object-cover rounded-lg border border-gray-200" />
+                <div className="flex gap-2">
+                  <button onClick={() => onOpenMedia?.(url => up('coverImage', url))} className="flex-1 py-2 text-[12px] font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">Trocar</button>
+                  <button onClick={() => up('coverImage', '')} className="flex-1 py-2 text-[12px] font-medium text-red-600 bg-white border border-gray-200 rounded-lg hover:bg-red-50">Remover</button>
+                </div>
+              </div>
+            ) : (
+              <button onClick={() => onOpenMedia?.(url => up('coverImage', url))}
+                className="w-full border-2 border-dashed border-gray-200 rounded-lg p-5 text-center hover:border-gray-400 hover:bg-gray-100/40 transition-colors">
+                <Upload className="w-5 h-5 text-gray-300 mx-auto mb-1.5" />
+                <span className="text-[12px] text-gray-500">Escolher a foto da lâmina</span>
+              </button>
+            )
+          ) : null}
+          {(p.coverStyle || 'foil') !== 'gold' && <ColorRow label="Cobertura" value={p.coverColor || '#9CA3AF'} onChange={v => up('coverColor', v)} />}
           <ColorRow label="Texto da cobertura" value={p.coverTextColor || '#FFFFFF'} onChange={v => up('coverTextColor', v)} />
           <ColorRow label="Fundo do prêmio" value={p.prizeBg || '#FFF7ED'} onChange={v => up('prizeBg', v)} />
           <ColorRow label="Texto do prêmio" value={p.prizeColor || '#F97316'} onChange={v => up('prizeColor', v)} />
@@ -2799,7 +2914,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
       case 'wheel':
       case 'scratch':
       case 'cards':
-        return <GameEditor type={block.type} p={p} up={up} hints={hints || { hasCoupon: true, couponTiers: [], baseOfferLabel: '', gameBlocks: 1 }} />
+        return <GameEditor type={block.type} p={p} up={up} onOpenMedia={onOpenMedia} hints={hints || { hasCoupon: true, couponTiers: [], baseOfferLabel: '', gameBlocks: 1 }} />
       case 'countdown':
         return <div className="space-y-5">
           <div className="space-y-3">

@@ -917,52 +917,135 @@ describe('gamificação: roleta e raspadinha', () => {
     expect(formEl(id)!.querySelector('[data-game="wheel"]')!.getAttribute('data-sound')).toBe('0')
   })
 
-  // AS CARTAS: escolher é o jogo. A escolhida vira primeiro, sozinha; as
-  // outras só depois e apagadas, mostrando o que dava para ter tirado.
-  it('cartas: a escolhida vira com o prêmio do servidor e as outras com o que sobrou', async () => {
+  // O miolo vazado: a roleta vira um anel e o centro é o próprio botão.
+  // Um botão embaixo obriga o visitante a procurar onde clicar depois de
+  // já ter olhado para o centro — e cada clique a mais é gente que some.
+  it('roleta: com o miolo tocável, o centro é o botão e some o de baixo', async () => {
+    freshPage()
+    withSubmit({ game: { type: 'wheel', segment: 0, segment_id: 's1', label: '10% OFF', prize: 'base' } })
+    const id = run(gameDesign({ id: 'w1', type: 'wheel', props: { segments, hubRadius: 74, hubMode: 'tap', hubText: 'Toque para girar' } }))
+    await vi.advanceTimersByTimeAsync(1500)
+    const form = formEl(id)!
+    const hub = form.querySelector('[id^="wf-whub-"]') as HTMLButtonElement
+    expect(hub).toBeTruthy()
+    expect(hub.type).toBe('submit')
+    expect(hub.textContent).toBe('Toque para girar')
+    // Um botão só: o miolo. O de baixo não é renderizado.
+    expect(form.querySelectorAll('[data-action="submit"]').length).toBe(1)
+    // Setor de anel: o caminho tem os dois arcos (externo e interno).
+    const d = form.querySelector('path[id^="wf-wsec-"]')!.getAttribute('d') || ''
+    expect((d.match(/A/g) || []).length).toBe(2)
+    // E o cubo cheio não é desenhado — quem cobre o miolo é o botão.
+    expect(Array.from(form.querySelectorAll('circle')).some(c => c.getAttribute('r') === '8.5')).toBe(false)
+
+    // Tocar no miolo envia: é ele que dispara o sorteio.
+    ;(form.querySelector('input[name="email"]') as HTMLInputElement).value = 'ana@example.com'
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await vi.advanceTimersByTimeAsync(6000)
+    expect(root(id)!.textContent).toContain('Você ganhou 10% OFF')
+  })
+
+  it('roleta: sem miolo vazado, continua o disco cheio com cubo e botão embaixo', async () => {
+    freshPage()
+    withSubmit({ game: { type: 'wheel', segment: 0, segment_id: 's1', label: '10% OFF', prize: 'base' } })
+    const id = run(gameDesign({ id: 'w1', type: 'wheel', props: { segments } }))
+    await vi.advanceTimersByTimeAsync(1500)
+    const form = formEl(id)!
+    expect(form.querySelector('[id^="wf-whub-"]')).toBeNull()
+    expect(Array.from(form.querySelectorAll('circle')).some(c => c.getAttribute('r') === '8.5')).toBe(true)
+    const d = form.querySelector('path[id^="wf-wsec-"]')!.getAttribute('d') || ''
+    expect((d.match(/A/g) || []).length).toBe(1)
+  })
+
+  // O acabamento da lâmina. "Foto" é o que as marcas boas fazem: o que se
+  // raspa é a embalagem do produto.
+  it('raspadinha: o acabamento da lâmina vai para o canvas, e foto sem arquivo volta ao metalizado', async () => {
+    freshPage()
+    withSubmit({ game: { type: 'scratch', segment: 0, segment_id: 's1', label: '10% OFF', prize: 'base' } })
+    const ouro = run(gameDesign({ id: 'sc1', type: 'scratch', props: { segments, coverStyle: 'gold' } }))
+    await vi.advanceTimersByTimeAsync(1500)
+    expect(formEl(ouro)!.querySelector('canvas')!.getAttribute('data-style')).toBe('gold')
+
+    freshPage()
+    withSubmit({ game: { type: 'scratch', segment: 0, segment_id: 's1', label: '10% OFF', prize: 'base' } })
+    const foto = run(gameDesign({ id: 'sc1', type: 'scratch', props: { segments, coverStyle: 'image', coverImage: 'https://cdn.test/pouch.png' } }))
+    await vi.advanceTimersByTimeAsync(1500)
+    const cv = formEl(foto)!.querySelector('canvas')!
+    expect(cv.getAttribute('data-style')).toBe('image')
+    expect(cv.getAttribute('data-img-src')).toBe('https://cdn.test/pouch.png')
+
+    // Sem arquivo, "foto" não pode virar um cartão transparente: volta
+    // para o metalizado, que sempre cobre.
+    freshPage()
+    withSubmit({ game: { type: 'scratch', segment: 0, segment_id: 's1', label: '10% OFF', prize: 'base' } })
+    const vazio = run(gameDesign({ id: 'sc1', type: 'scratch', props: { segments, coverStyle: 'image' } }))
+    await vi.advanceTimersByTimeAsync(1500)
+    const cv2 = formEl(vazio)!.querySelector('canvas')!
+    expect(cv2.getAttribute('data-style')).toBe('foil')
+    expect(cv2.getAttribute('data-img-src')).toBeNull()
+  })
+
+  // AS CARTAS: as primeiras viram de graça, a última cobra o e-mail. É a
+  // trava que transforma curiosidade em inscrição — a pessoa já gastou
+  // dois cliques, e parar ali custa mais do que preencher um campo.
+  it('cartas: duas viram de graça, a terceira cobra o e-mail e traz o prêmio', async () => {
     freshPage()
     withSubmit({
       game: { type: 'cards', segment: 2, segment_id: 's3', label: 'Frete grátis', prize: 't-ship' },
       coupon: { code: 'SHIP-1', kind: 'free_shipping', value: 0, ends_at: null, auto_apply: false, show_code: true },
     })
     const escolhas = listen('gameCardPick')
+    const travas = listen('gameCardLocked')
     const reveladas = listen('gameCardsRevealed')
     const id = run(gameDesign({ id: 'k1', type: 'cards', props: { segments, count: 3 } }))
     await vi.advanceTimersByTimeAsync(1500)
     const form = formEl(id)!
     const cartas = Array.from(form.querySelectorAll('.wf-cd')) as HTMLElement[]
+    const viradas = () => Array.from(form.querySelectorAll('.wf-cd-in')).map(el => el.className.includes('wf-flip'))
+    const faces = () => Array.from(form.querySelectorAll('[id^="wf-cdb-"]')).map(el => el.textContent)
+    const dica = form.querySelector('[id^="wf-cdh-"]') as HTMLElement
     expect(cartas.length).toBe(3)
-    // Viradas para baixo: a frente do prêmio está vazia até o envio.
-    expect(Array.from(form.querySelectorAll('[id^="wf-cdb-"]')).every(el => !el.textContent)).toBe(true)
+    expect(faces().every(t => !t)).toBe(true)
+    expect(dica.style.display).toBe('none')
 
-    // Escolher a segunda carta marca só ela e leva o cursor ao e-mail.
+    // Primeira de graça: vira e mostra o brinde, nunca um prêmio.
+    cartas[0].dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(viradas()).toEqual([true, false, false])
+    expect(faces()[0]).toBe('★')
+    expect(dica.style.display).toBe('none')
+    expect(escolhas[0]).toMatchObject({ card: 0, restantes: 1 })
+
+    // Segunda de graça: acabou a franquia — a dica aparece e o cursor vai
+    // para o campo que falta.
     cartas[1].dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    expect(cartas.map(c => c.getAttribute('data-sel'))).toEqual([null, '1', null])
-    expect(escolhas[0]).toMatchObject({ game: 'cards', card: 1 })
+    expect(viradas()).toEqual([true, true, false])
+    expect(dica.style.display).toBe('block')
     expect((root(id)!.activeElement as HTMLInputElement)?.name).toBe('email')
+
+    // A terceira não vira: é ela que cobra o e-mail.
+    cartas[2].dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(viradas()).toEqual([true, true, false])
+    expect(travas.length).toBe(1)
 
     ;(form.querySelector('input[name="email"]') as HTMLInputElement).value = 'ana@example.com'
     form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
     await vi.advanceTimersByTimeAsync(50)
-    // A escolhida virou sozinha; as outras ainda não.
-    const viradas = () => Array.from(form.querySelectorAll('.wf-cd-in')).map(el => el.className.includes('wf-flip'))
-    expect(viradas()).toEqual([false, true, false])
-    // O prêmio da escolhida é o do servidor; as outras pegam o que sobrou,
-    // sem repetir o prêmio ganho.
-    const faces = Array.from(form.querySelectorAll('[id^="wf-cdb-"]')).map(el => el.textContent)
-    expect(faces[1]).toBe('Frete grátis')
-    expect(faces.filter(t => t === 'Frete grátis').length).toBe(1)
+    // A que estava presa vira sozinha, com o prêmio do servidor. As que já
+    // estavam viradas mantêm o brinde — trocar o texto na cara da pessoa
+    // seria pior do que não mostrar nada.
+    expect(viradas()).toEqual([true, true, true])
+    expect(faces()).toEqual(['★', '★', 'Frete grátis'])
+    expect(dica.style.display).toBe('none')
 
     await vi.advanceTimersByTimeAsync(1700)
-    expect(viradas()).toEqual([true, true, true])
     expect(form.querySelector('[id^="wf-cdsr-"]')!.textContent).toBe('Frete grátis')
-    expect(reveladas[0]).toMatchObject({ game: 'cards', card: 1, label: 'Frete grátis' })
+    expect(reveladas[0]).toMatchObject({ game: 'cards', card: 2, label: 'Frete grátis' })
     await vi.advanceTimersByTimeAsync(2000)
     expect(root(id)!.textContent).toContain('Você ganhou Frete grátis')
     expect(root(id)!.textContent).toContain('SHIP-1')
   })
 
-  it('cartas: quem envia sem escolher ainda recebe o prêmio', async () => {
+  it('cartas: quem envia sem virar nada recebe o prêmio na primeira, e as outras mostram o que sobrou', async () => {
     freshPage()
     withSubmit({ game: { type: 'cards', segment: 0, segment_id: 's1', label: '10% OFF', prize: 'base' } })
     const id = run(gameDesign({ id: 'k1', type: 'cards', props: { segments, count: 3 } }))
@@ -972,25 +1055,41 @@ describe('gamificação: roleta e raspadinha', () => {
     form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
     await vi.advanceTimersByTimeAsync(3000)
     const faces = Array.from(form.querySelectorAll('[id^="wf-cdb-"]')).map(el => el.textContent)
+    expect(faces[0]).toBe('10% OFF')
+    // O prêmio ganho não aparece duas vezes: quem viu o mesmo prêmio ao
+    // lado acha que foi roubado.
     expect(faces.filter(t => t === '10% OFF').length).toBe(1)
     expect(Array.from(form.querySelectorAll('.wf-cd-in')).every(el => el.className.includes('wf-flip'))).toBe(true)
     await vi.advanceTimersByTimeAsync(2000)
     expect(root(id)!.textContent).toContain('Você ganhou 10% OFF')
   })
 
-  it('cartas: depois de revelado, clicar não troca mais a escolha', async () => {
+  it('cartas: sem franquia (freeFlips 0) a primeira já cobra o e-mail', async () => {
+    freshPage()
+    withSubmit({ game: { type: 'cards', segment: 0, segment_id: 's1', label: '10% OFF', prize: 'base' } })
+    const travas = listen('gameCardLocked')
+    const id = run(gameDesign({ id: 'k1', type: 'cards', props: { segments, count: 3, freeFlips: 0 } }))
+    await vi.advanceTimersByTimeAsync(1500)
+    const form = formEl(id)!
+    const cartas = Array.from(form.querySelectorAll('.wf-cd')) as HTMLElement[]
+    cartas[0].dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(Array.from(form.querySelectorAll('.wf-cd-in')).some(el => el.className.includes('wf-flip'))).toBe(false)
+    expect(travas.length).toBe(1)
+  })
+
+  it('cartas: depois de revelado, clicar não vira mais nada', async () => {
     freshPage()
     withSubmit({ game: { type: 'cards', segment: 0, segment_id: 's1', label: '10% OFF', prize: 'base' } })
     const id = run(gameDesign({ id: 'k1', type: 'cards', props: { segments, count: 3 } }))
     await vi.advanceTimersByTimeAsync(1500)
     const form = formEl(id)!
     const cartas = Array.from(form.querySelectorAll('.wf-cd')) as HTMLElement[]
-    cartas[0].dispatchEvent(new MouseEvent('click', { bubbles: true }))
     ;(form.querySelector('input[name="email"]') as HTMLInputElement).value = 'ana@example.com'
     form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
     await vi.advanceTimersByTimeAsync(60)
+    const antes = Array.from(form.querySelectorAll('[id^="wf-cdb-"]')).map(el => el.textContent)
     cartas[2].dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    expect(cartas.map(c => c.getAttribute('data-sel'))).toEqual(['1', null, null])
+    expect(Array.from(form.querySelectorAll('[id^="wf-cdb-"]')).map(el => el.textContent)).toEqual(antes)
   })
 
   // A raspadinha tem de RASPAR: arrastar o dedo (ou o mouse) apaga a

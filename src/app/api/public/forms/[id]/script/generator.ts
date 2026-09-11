@@ -183,7 +183,7 @@ var shown=false,ck="_wf_"+FID;
 // keyframes moram aqui dentro porque animação não atravessa a fronteira.
 var ROOT=null,HOST=null;
 function $(id){try{if(ROOT){var e=ROOT.getElementById(id);if(e)return e}return document.getElementById(id)}catch(e){return null}}
-var BASE_CSS=":host{all:initial}*,*::before,*::after{box-sizing:border-box}@keyframes wfFade{from{opacity:0}to{opacity:1}}@keyframes wfSlide{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}@keyframes wfHand{0%,100%{transform:translate(-5px,0) rotate(-8deg)}50%{transform:translate(5px,-2px) rotate(6deg)}}.wf-hand{animation:wfHand 1.5s ease-in-out infinite}@keyframes wfWGlow{0%,100%{opacity:.25}50%{opacity:.95}}.wf-wglow{animation:wfWGlow 1s ease-in-out 2}.wf-cd{cursor:pointer;transition:transform .18s ease-out;-webkit-tap-highlight-color:transparent}.wf-cd:hover{transform:translateY(-6px)}.wf-cd[data-sel='1']{transform:translateY(-10px)}.wf-cd-in{position:relative;width:100%;height:100%;transform-style:preserve-3d;transition:transform .75s cubic-bezier(.2,.75,.2,1)}.wf-cd-in.wf-flip{transform:rotateY(180deg)}.wf-cd-f,.wf-cd-b{position:absolute;left:0;top:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;text-align:center;border-radius:inherit;-webkit-backface-visibility:hidden;backface-visibility:hidden;overflow:hidden}.wf-cd-b{transform:rotateY(180deg);overflow-wrap:anywhere}[data-done] .wf-cd:hover{transform:none}@media (prefers-reduced-motion:reduce){.wf-hand{animation:none}.wf-wglow{animation:none;opacity:.9}.wf-cd,.wf-cd-in{transition:none}}.wf-pop{color:#111827;line-height:1.4;font-size:14px;-webkit-font-smoothing:antialiased;text-align:left}.wf-pop button,.wf-pop input,.wf-pop select,.wf-pop textarea{font:inherit;color:inherit;margin:0}.wf-pop input::placeholder{opacity:1}.wf-pop a{color:inherit}.wf-pop p,.wf-pop h1,.wf-pop h2,.wf-pop h3{margin:0}";
+var BASE_CSS=":host{all:initial}*,*::before,*::after{box-sizing:border-box}@keyframes wfFade{from{opacity:0}to{opacity:1}}@keyframes wfSlide{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}@keyframes wfHand{0%,100%{transform:translate(-5px,0) rotate(-8deg)}50%{transform:translate(5px,-2px) rotate(6deg)}}.wf-hand{animation:wfHand 1.5s ease-in-out infinite}@keyframes wfWGlow{0%,100%{opacity:.25}50%{opacity:.95}}.wf-wglow{animation:wfWGlow 1s ease-in-out 2}.wf-cd{cursor:pointer;transition:transform .18s ease-out;-webkit-tap-highlight-color:transparent}.wf-cd:hover{transform:translateY(-6px)}.wf-cd[data-sel='1']{transform:translateY(-10px)}.wf-cd-in{position:relative;width:100%;height:100%;transform-style:preserve-3d;transition:transform .75s cubic-bezier(.2,.75,.2,1)}.wf-cd-in.wf-flip{transform:rotateY(180deg)}.wf-cd-f,.wf-cd-b{position:absolute;left:0;top:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;text-align:center;border-radius:inherit;-webkit-backface-visibility:hidden;backface-visibility:hidden;overflow:hidden}.wf-cd-b{transform:rotateY(180deg);overflow-wrap:anywhere}[data-done] .wf-cd:hover{transform:none}[data-flip] .wf-cd-f{pointer-events:none}@keyframes wfCdNo{0%,100%{transform:translateX(0)}20%{transform:translateX(-7px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(3px)}}@media (prefers-reduced-motion:reduce){.wf-hand{animation:none}.wf-wglow{animation:none;opacity:.9}.wf-cd,.wf-cd-in{transition:none}}.wf-pop{color:#111827;line-height:1.4;font-size:14px;-webkit-font-smoothing:antialiased;text-align:left}.wf-pop button,.wf-pop input,.wf-pop select,.wf-pop textarea{font:inherit;color:inherit;margin:0}.wf-pop input::placeholder{opacity:1}.wf-pop a{color:inherit}.wf-pop p,.wf-pop h1,.wf-pop h2,.wf-pop h3{margin:0}";
 function mountRoot(target){
   var host=document.createElement("div");
   host.id="wf-host-"+FID;
@@ -753,7 +753,18 @@ function gameBtn(p,def){
 //
 // O canvas é dimensionado em pixels de dispositivo: com width/height
 // fixos no HTML, a lâmina saía borrada em tela retina.
-function paintFoil(cv,cor,lw,lh){
+// A lâmina da raspadinha, em quatro acabamentos:
+//
+//   foil    o metalizado de sempre: gradiente diagonal e listras finas;
+//   gold    dourado escovado — o cartão de arranhar clássico;
+//   solid   uma cor chapada, para quem quer a marca e nada mais;
+//   image   uma FOTO como cobertura. É o que as marcas boas fazem: a
+//           embalagem do produto é o que se raspa, e o produto aparece
+//           antes do desconto.
+//
+// O canvas é dimensionado em pixels de dispositivo: com width/height
+// fixos no HTML, a lâmina saía borrada em tela retina.
+function paintFoil(cv,cor,lw,lh,estilo,urlImg){
   if(!cv)return;
   var cx=null;try{cx=cv.getContext?cv.getContext("2d"):null}catch(e){}
   if(!cx)return;
@@ -762,12 +773,44 @@ function paintFoil(cv,cor,lw,lh){
   var w=Math.max(1,Math.round((r.width||lw||300)*dpr));
   var h=Math.max(1,Math.round((r.height||lh||160)*dpr));
   cv.width=w;cv.height=h;
-  var g=cx.createLinearGradient(0,0,w,h);
-  g.addColorStop(0,wfShade(cor,20));g.addColorStop(.45,cor);g.addColorStop(.55,wfShade(cor,12));g.addColorStop(1,wfShade(cor,-16));
-  cx.fillStyle=g;cx.fillRect(0,0,w,h);
-  cx.globalAlpha=.10;cx.strokeStyle="#FFFFFF";cx.lineWidth=Math.max(1,dpr);
-  for(var x=-h;x<w+h;x+=Math.max(8,12*dpr)){cx.beginPath();cx.moveTo(x,0);cx.lineTo(x+h,h);cx.stroke()}
-  cx.globalAlpha=1;
+  var est=estilo||"foil";
+  function base(){
+    if(est==="solid"){cx.fillStyle=cor;cx.fillRect(0,0,w,h);return}
+    var g=cx.createLinearGradient(0,0,w,h);
+    if(est==="gold"){
+      // Ouro não é uma cor só: é uma sequência de claros e escuros. Um
+      // dourado chapado lê como amarelo mostarda.
+      g.addColorStop(0,"#8C6D1F");g.addColorStop(.22,"#E8C766");g.addColorStop(.42,"#FFF3C4");
+      g.addColorStop(.55,"#D8AE3E");g.addColorStop(.78,"#B8892A");g.addColorStop(1,"#F0D07A");
+    }else{
+      g.addColorStop(0,wfShade(cor,20));g.addColorStop(.45,cor);g.addColorStop(.55,wfShade(cor,12));g.addColorStop(1,wfShade(cor,-16));
+    }
+    cx.fillStyle=g;cx.fillRect(0,0,w,h);
+    // O escovado: listras finas por cima do gradiente.
+    cx.globalAlpha=est==="gold"?.16:.10;
+    cx.strokeStyle="#FFFFFF";cx.lineWidth=Math.max(1,dpr);
+    for(var x=-h;x<w+h;x+=Math.max(8,(est==="gold"?7:12)*dpr)){cx.beginPath();cx.moveTo(x,0);cx.lineTo(x+h,h);cx.stroke()}
+    cx.globalAlpha=1;
+  }
+  if(est==="image"&&urlImg){
+    // Enquanto a foto não chega, a lâmina já está pintada: nunca existe
+    // um instante com o prêmio à mostra.
+    base();
+    var im=new Image();
+    try{im.crossOrigin="anonymous"}catch(e){}
+    im.onload=function(){
+      try{
+        // "cover": preenche sem distorcer, cortando o que sobra.
+        var esc2=Math.max(w/im.width,h/im.height);
+        var dw=im.width*esc2,dh=im.height*esc2;
+        cx.drawImage(im,(w-dw)/2,(h-dh)/2,dw,dh);
+        cv.setAttribute("data-img","1");
+      }catch(e){}
+    };
+    im.src=urlImg;
+    return;
+  }
+  base();
 }
 function wfShade(hex,amt){
   var m=/^#([0-9a-fA-F]{6})$/.exec(String(hex||""));if(!m)return String(hex||"#C0C6CF");
@@ -932,11 +975,20 @@ function playGameAnim(el,g,done){
     if(type==="cards"){
       var kn=parseInt(el.getAttribute("data-n"),10)||0;
       if(kn<1){end(0);return}
-      var kpickAttr=el.getAttribute("data-pick");
-      // Ninguém escolheu (mandou o formulário direto): a casa escolhe.
-      var kpick=kpickAttr!==null&&kpickAttr!==""?parseInt(kpickAttr,10):Math.floor(Math.random()*kn);
-      if(!(kpick>=0&&kpick<kn))kpick=0;
+      // As cartas que a pessoa já virou mostram o brinde e ficam como
+      // estão. O prêmio vai na PRIMEIRA que sobrou virada para baixo —
+      // aquela que a trava do e-mail estava segurando.
+      var kfeitas=[],kfaltam=[];
+      for(var kq=0;kq<kn;kq++){
+        var kel=$("wf-cdi-"+gid+"-"+kq),kcdq=kel&&kel.parentNode;
+        var jaFoi=!!(kcdq&&kcdq.getAttribute&&kcdq.getAttribute("data-flip"));
+        kfeitas.push(jaFoi);
+        if(!jaFoi)kfaltam.push(kq);
+      }
+      var kpick=kfaltam.length?kfaltam[0]:0;
       el.setAttribute("data-done","1");
+      var kdicaEl=$("wf-cdh-"+gid);
+      if(kdicaEl)kdicaEl.style.display="none";
       var krot=[];
       try{krot=JSON.parse(el.getAttribute("data-labels")||"[]")}catch(e){krot=[]}
       // O rótulo da carta escolhida é o do servidor. Os das outras são os
@@ -951,7 +1003,9 @@ function playGameAnim(el,g,done){
       var kcaixas=[],ksobraIdx=0;
       for(var kc=0;kc<kn;kc++){
         var kface=$("wf-cdb-"+gid+"-"+kc);
-        if(kface)kface.textContent=kc===kpick?String(g.label||""):String(ksobra[ksobraIdx++]||"");
+        // Carta que a pessoa já virou fica com o brinde que está à mostra:
+        // trocar o texto na cara dela é pior do que não mostrar nada.
+        if(kface&&!kfeitas[kc])kface.textContent=kc===kpick?String(g.label||""):String(ksobra[ksobraIdx++]||"");
         var kin=$("wf-cdi-"+gid+"-"+kc);
         kcaixas.push(kin);
         var kcd=kin&&kin.parentNode;
@@ -989,7 +1043,7 @@ function playGameAnim(el,g,done){
       var cx=null;try{cx=cv&&cv.getContext?cv.getContext("2d"):null}catch(e){}
       // Sem canvas (navegador antigo, leitor de tela): revela direto.
       if(!cv||!cx){if(cv)cv.style.display="none";if(badge)badge.style.display="none";end(1200);return}
-      if(!cv.width||!cv.height)paintFoil(cv,cv.getAttribute("data-cover")||"#C0C6CF");
+      if(!cv.width||!cv.height)paintFoil(cv,cv.getAttribute("data-cover")||"#C0C6CF",0,0,cv.getAttribute("data-style")||"foil",cv.getAttribute("data-img-src")||"");
       var W=cv.width,H=cv.height,riscando=false,ultimo=null,passos=0,comecou=false,ocioso=null,auto=null;
       // O pincel acompanha o tamanho do cartão: num cartão pequeno, um
       // pincel fixo apagaria tudo num traço; num grande, levaria uma
@@ -1009,12 +1063,18 @@ function playGameAnim(el,g,done){
       }
       // Quanto da lâmina já saiu. Amostra 1 pixel a cada 64 — o suficiente
       // para a proporção e barato o bastante para rodar durante o arrasto.
+      // Com uma FOTO como lâmina, o canvas pode ficar "sujo" (a imagem vem
+      // de outro domínio) e o navegador proíbe ler os pixels. Antes isso
+      // caía no catch e revelava o prêmio no primeiro toque — o jogo
+      // acabava antes de começar. Sem poder medir, conta-se o traço.
+      var cego=false;
       function conferir(){
+        if(cego){if(passos>=45)revelar();return}
         try{
           var d=cx.getImageData(0,0,W,H).data,vazios=0,tot=0;
           for(var k=3;k<d.length;k+=64){tot++;if(d[k]===0)vazios++}
           if(tot&&vazios/tot>0.5)revelar();
-        }catch(e){revelar()}
+        }catch(e){cego=true;if(passos>=45)revelar()}
       }
       // O traço é uma LINHA entre o ponto anterior e o atual, não um
       // círculo solto por evento: com o dedo rápido, os arcos soltos
@@ -1243,10 +1303,29 @@ function renderBlock(b){
       // qualquer roleta desenhada fica feia.
       var wn=wsg.length,wid=bid(b.id),WR=132,WC=150,wsz=Math.max(200,Math.min(460,nv(p.size,320))),wp="",wpin="";
       var wStroke=sv(p.strokeColor,"#FFFFFF"),wRim=sv(p.rimColor,"#111827"),wPtr=sv(p.pointerColor,"#111827");
+      // O miolo vazado. Com hubRadius > 0 a roleta vira um ANEL e o centro
+      // passa a ser o convite ("toque para girar"), onde o olho já está —
+      // em vez de um botão embaixo disputando espaço com o campo de
+      // e-mail. hubRadius 0 mantém o disco cheio de sempre.
+      var WHR=Math.max(0,Math.min(WR-8,nv(p.hubRadius,0)));
+      var wTap=p.hubMode==="tap"&&WHR>=30;
+      var wRimW=Math.max(4,Math.min(34,nv(p.rimWidth,17)));
+      var wRimR=WR+wRimW/2-2.5;
       for(var wi=0;wi<wn;wi++){
         var a0=(wi*360/wn-90)*Math.PI/180,a1=((wi+1)*360/wn-90-(wn===2?0.01:0))*Math.PI/180;
-        wp+='<path id="wf-wsec-'+wid+'-'+wi+'" d="M'+WC+' '+WC+' L'+(WC+WR*Math.cos(a0)).toFixed(2)+' '+(WC+WR*Math.sin(a0)).toFixed(2)+' A'+WR+' '+WR+' 0 0 1 '+(WC+WR*Math.cos(a1)).toFixed(2)+' '+(WC+WR*Math.sin(a1)).toFixed(2)+' Z" fill="'+wsg[wi].color+'" stroke="'+wStroke+'" stroke-width="2" style="transition:fill-opacity .45s"></path>';
-        var am=(wi+0.5)*360/wn-90,ar=am*Math.PI/180,tx=(WC+WR*0.63*Math.cos(ar)).toFixed(2),ty=(WC+WR*0.63*Math.sin(ar)).toFixed(2);
+        var wd;
+        if(WHR>0){
+          wd='M'+(WC+WHR*Math.cos(a0)).toFixed(2)+' '+(WC+WHR*Math.sin(a0)).toFixed(2)
+            +' L'+(WC+WR*Math.cos(a0)).toFixed(2)+' '+(WC+WR*Math.sin(a0)).toFixed(2)
+            +' A'+WR+' '+WR+' 0 0 1 '+(WC+WR*Math.cos(a1)).toFixed(2)+' '+(WC+WR*Math.sin(a1)).toFixed(2)
+            +' L'+(WC+WHR*Math.cos(a1)).toFixed(2)+' '+(WC+WHR*Math.sin(a1)).toFixed(2)
+            +' A'+WHR+' '+WHR+' 0 0 0 '+(WC+WHR*Math.cos(a0)).toFixed(2)+' '+(WC+WHR*Math.sin(a0)).toFixed(2)+' Z';
+        }else{
+          wd='M'+WC+' '+WC+' L'+(WC+WR*Math.cos(a0)).toFixed(2)+' '+(WC+WR*Math.sin(a0)).toFixed(2)+' A'+WR+' '+WR+' 0 0 1 '+(WC+WR*Math.cos(a1)).toFixed(2)+' '+(WC+WR*Math.sin(a1)).toFixed(2)+' Z';
+        }
+        wp+='<path id="wf-wsec-'+wid+'-'+wi+'" d="'+wd+'" fill="'+wsg[wi].color+'" stroke="'+wStroke+'" stroke-width="'+nv(p.dividerWidth,2)+'" style="transition:fill-opacity .45s"></path>';
+        var am=(wi+0.5)*360/wn-90,ar=am*Math.PI/180,wrr=WHR>0?(WHR+WR)/2:WR*0.63;
+        var tx=(WC+wrr*Math.cos(ar)).toFixed(2),ty=(WC+wrr*Math.sin(ar)).toFixed(2);
         wp+='<text x="'+tx+'" y="'+ty+'" transform="rotate('+am.toFixed(2)+' '+tx+' '+ty+')" text-anchor="middle" dominant-baseline="middle" font-size="'+nv(p.labelSize,13)+'" font-weight="800" font-family="inherit" fill="'+(wsg[wi].textColor||sv(p.labelColor,"#FFFFFF"))+'">'+esc(wsg[wi].label)+'</text>';
         // O pino fica na divisão, na borda do disco: gira com ele e é o
         // que passa por baixo do ponteiro.
@@ -1258,8 +1337,9 @@ function renderBlock(b){
       var wluz="",wnl=Math.min(24,Math.max(12,wn*3));
       for(var wl=0;wl<wnl;wl++){
         var wla=(wl*360/wnl-90)*Math.PI/180;
-        wluz+='<circle cx="'+(WC+141*Math.cos(wla)).toFixed(2)+'" cy="'+(WC+141*Math.sin(wla)).toFixed(2)+'" r="2.3" fill="#FFFFFF" fill-opacity="'+(wl%2?".32":".62")+'"></circle>';
+        wluz+='<circle cx="'+(WC+wRimR*Math.cos(wla)).toFixed(2)+'" cy="'+(WC+wRimR*Math.sin(wla)).toFixed(2)+'" r="2.3" fill="#FFFFFF" fill-opacity="'+(wl%2?".32":".62")+'"></circle>';
       }
+      if(p.rimLights===false)wluz="";
       h='<div data-game="wheel" data-game-id="'+wid+'" data-n="'+wn+'"'+(p.sound===false?' data-sound="0"':'')+' style="'+blockStyleStr(p,true,true)+'text-align:center">'
         +'<div style="position:relative;display:inline-block;width:'+wsz+'px;max-width:100%;filter:drop-shadow(0 14px 28px rgba(0,0,0,.24))">'
         +'<svg id="wf-wheel-'+wid+'" viewBox="0 0 300 300" role="img" aria-label="'+esc(p.ariaLabel||"Roleta de pr\\u00eamios")+'" style="width:100%;height:auto;display:block;overflow:visible">'
@@ -1267,29 +1347,43 @@ function renderBlock(b){
         +'<linearGradient id="wf-wrim-'+wid+'" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="'+wfShade(wRim,46)+'"></stop><stop offset=".48" stop-color="'+wRim+'"></stop><stop offset="1" stop-color="'+wfShade(wRim,-30)+'"></stop></linearGradient>'
         +'<radialGradient id="wf-wsh-'+wid+'" cx=".33" cy=".24" r=".8"><stop offset="0" stop-color="#FFFFFF" stop-opacity=".3"></stop><stop offset=".52" stop-color="#FFFFFF" stop-opacity=".05"></stop><stop offset="1" stop-color="#000000" stop-opacity=".16"></stop></radialGradient>'
         +'</defs>'
-        +'<circle cx="150" cy="150" r="141" fill="none" stroke="url(#wf-wrim-'+wid+')" stroke-width="17"></circle>'
+        +'<circle cx="150" cy="150" r="'+wRimR.toFixed(2)+'" fill="none" stroke="url(#wf-wrim-'+wid+')" stroke-width="'+wRimW+'"></circle>'
         +'<g id="wf-wdisc-'+wid+'" transform="rotate(0 150 150)">'+wp+wpin+'</g>'
         +'<circle cx="150" cy="150" r="132" fill="url(#wf-wsh-'+wid+')" pointer-events="none"></circle>'
         +'<circle cx="150" cy="150" r="132.5" fill="none" stroke="rgba(255,255,255,.45)" stroke-width="1.5"></circle>'
         +wluz
-        +'<circle cx="150" cy="150" r="26" fill="'+wStroke+'"></circle><circle cx="150" cy="150" r="26" fill="none" stroke="rgba(0,0,0,.12)" stroke-width="1"></circle><circle cx="150" cy="150" r="8.5" fill="'+wPtr+'"></circle>'
+        +(WHR>0?'':'<circle cx="150" cy="150" r="26" fill="'+wStroke+'"></circle><circle cx="150" cy="150" r="26" fill="none" stroke="rgba(0,0,0,.12)" stroke-width="1"></circle><circle cx="150" cy="150" r="8.5" fill="'+wPtr+'"></circle>')
         +'</svg>'
         // O ponteiro fica FORA do svg que gira, com o pivô no topo: é ele
         // que a batida dos pinos empurra.
         +'<div id="wf-wptr-'+wid+'" style="position:absolute;left:50%;top:-3px;width:30px;height:46px;margin-left:-15px;z-index:2;transform-origin:50% 13%;transform:rotate(0deg);pointer-events:none"><svg viewBox="0 0 30 46" width="30" height="46" aria-hidden="true" style="display:block;filter:drop-shadow(0 3px 4px rgba(0,0,0,.32))"><path d="M15 46 L4.4 17.5 A11 11 0 1 1 25.6 17.5 Z" fill="'+wPtr+'" stroke="#FFFFFF" stroke-width="2.6" stroke-linejoin="round"></path><circle cx="15" cy="14.5" r="3.4" fill="#FFFFFF" fill-opacity=".92"></circle></svg></div>'
+        // O miolo é o convite E o gatilho: tocar nele envia o formulário,
+        // que é o que sorteia. Um botão embaixo da roleta obriga o
+        // visitante a procurar onde clicar depois de já ter olhado para o
+        // centro — e cada clique a mais é gente que desiste no caminho.
+        +(wTap?'<div style="position:absolute;left:50%;top:50%;width:'+(200*WHR/300).toFixed(2)+'%;transform:translate(-50%,-50%);z-index:3">'
+          +'<button id="wf-whub-'+wid+'" type="submit" data-action="submit" style="box-sizing:border-box;display:block;width:100%;padding:50% 0;margin:0;position:relative;border:none;border-radius:50%;background:'+sv(p.hubBg,"#FFFFFF")+';color:'+sv(p.hubColor,"#111827")+';cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.22);font-family:inherit;transition:transform .15s,box-shadow .15s">'
+          +'<span style="position:absolute;left:10%;right:10%;top:50%;transform:translateY(-50%);font-size:'+nv(p.hubFontSize,14)+'px;font-weight:800;line-height:1.15;letter-spacing:.4px;text-transform:uppercase">'+esc(applyOffer(p.hubText||"Toque para girar"))+'</span>'
+          +'</button></div>':'')
         +'<div id="wf-wcf-'+wid+'" style="position:absolute;left:0;top:0;right:0;bottom:0;pointer-events:none;overflow:visible"></div>'
         +'<div id="wf-wsr-'+wid+'" role="status" aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;white-space:nowrap;clip:rect(0 0 0 0)"></div>'
-        +'</div>'+gameBtn(p,"Girar")+'</div>';
+        +'</div>'+(wTap&&p.showButton!==true?"":gameBtn(p,"Girar"))+'</div>';
       break;
     }
     case"scratch":{
       var ssg=gameSegs(p);if(!ssg.length)break;
       var scid=bid(b.id),SW=Math.max(160,Math.min(480,nv(p.width,320))),SH=Math.max(80,Math.min(360,nv(p.height,190)));
       var scCov=sv(p.coverColor,"#C0C6CF"),scTxc=sv(p.coverTextColor,"#FFFFFF"),scTxt=String(p.coverText||"Raspe aqui").slice(0,40);
+      // O acabamento da lâmina: metalizado, dourado escovado, cor chapada
+      // ou uma FOTO (a embalagem do produto, que é o que as marcas boas
+      // mandam raspar).
+      var scEst=({foil:1,gold:1,solid:1,image:1})[p.coverStyle]?p.coverStyle:"foil";
+      var scImg=scEst==="image"?(safeImg(p.coverImage)||""):"";
+      if(scEst==="image"&&!scImg)scEst="foil";
       h='<div data-game="scratch" data-game-id="'+scid+'" style="'+blockStyleStr(p,true,true)+'text-align:center">'
         +'<div id="wf-scr-'+scid+'" style="position:relative;display:inline-block;width:'+SW+'px;max-width:100%;height:'+SH+'px;border-radius:'+nv(p.cardRadius,14)+'px;overflow:hidden;background:'+sv(p.prizeBg,"#FFF7ED")+';box-shadow:0 6px 20px rgba(0,0,0,.14);-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent">'
         +'<div id="wf-scr-p-'+scid+'" style="position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;padding:12px;font-size:'+nv(p.prizeSize,26)+'px;font-weight:800;color:'+sv(p.prizeColor,"#F97316")+';text-align:center;line-height:1.2">?</div>'
-        +'<canvas id="wf-scr-c-'+scid+'" data-cover="'+scCov+'" aria-hidden="true" style="position:absolute;top:0;left:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab"></canvas>'
+        +'<canvas id="wf-scr-c-'+scid+'" data-cover="'+scCov+'" data-style="'+esc(scEst)+'"'+(scImg?' data-img-src="'+esc(scImg)+'"':'')+' aria-hidden="true" style="position:absolute;top:0;left:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab"></canvas>'
         +'<div id="wf-scr-b-'+scid+'" style="position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);pointer-events:none;display:flex;align-items:center;justify-content:center;gap:9px;color:'+scTxc+';font-weight:800;font-size:13px;letter-spacing:1.6px;text-transform:uppercase;text-shadow:0 1px 2px rgba(0,0,0,.28);transition:opacity .25s">'
         +'<svg class="wf-hand" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11V6a1.5 1.5 0 0 1 3 0v5"></path><path d="M12 11V4.5a1.5 1.5 0 0 1 3 0V11"></path><path d="M15 11V6.5a1.5 1.5 0 0 1 3 0V13"></path><path d="M9 11V9.5a1.5 1.5 0 0 0-3 0V14c0 3.3 2.7 6 6 6h1.5a4.5 4.5 0 0 0 4.5-4.5V13"></path></svg>'
         +'<span>'+esc(scTxt)+'</span></div>'
@@ -1298,7 +1392,7 @@ function renderBlock(b){
         +gameBtn(p,"Raspar")+'</div>';
       (function(cid,cor,lw,lh){setTimeout(function(){
         var cv=$(cid);if(!cv)return;
-        paintFoil(cv,cor,lw,lh);
+        paintFoil(cv,cor,lw,lh,cv.getAttribute("data-style")||"foil",cv.getAttribute("data-img-src")||"");
         // Antes do envio o prêmio ainda não foi sorteado, então raspar não
         // teria o que revelar. Em vez de deixar o arrasto morrer no vazio
         // (ou, pior, de pintar um "cursor: não permitido" no cartão), o
@@ -1332,6 +1426,12 @@ function renderBlock(b){
       var krad=nv(p.cardRadius,12),kgap=nv(p.gap,12);
       var kback=sv(p.backColor,"#FFFFFF"),kmark=String(p.backText||"?").slice(0,3),kmarkc=sv(p.backTextColor,"#F97316");
       var kfaceBg=sv(p.faceBg,"#111827"),kfaceFg=sv(p.faceColor,"#FFFFFF"),kfaceFs=nv(p.faceSize,15);
+      // Quantas cartas viram de graça. Sempre sobra pelo menos uma — é ela
+      // que cobra o e-mail, e é ela que traz o prêmio.
+      var klivres=Math.max(0,Math.min(kn-1,p.freeFlips==null?kn-1:nv(p.freeFlips,kn-1)));
+      var kteaser=String(p.teaserText||"\u2605").slice(0,16);
+      var kteaserBg=sv(p.teaserBg,"#F3F4F6"),kteaserFg=sv(p.teaserColor,"#9CA3AF");
+      var ktrava=String(p.lockedText||"Deixe seu e-mail para virar a \u00faltima carta").slice(0,120);
       // Os rótulos vão no container: na hora de virar, a carta escolhida
       // recebe o prêmio que o servidor sorteou e as outras recebem os
       // rótulos que sobraram.
@@ -1344,27 +1444,69 @@ function renderBlock(b){
           +'<div class="wf-cd-b" id="wf-cdb-'+kid+'-'+ki+'" style="background:'+kfaceBg+';color:'+kfaceFg+';font-size:'+kfaceFs+'px;font-weight:800;line-height:1.2;padding:10px;box-shadow:0 6px 16px rgba(0,0,0,.16)"></div>'
           +'</div></div>';
       }
-      h='<div data-game="cards" data-game-id="'+kid+'" data-n="'+kn+'" data-labels="'+esc(JSON.stringify(klabels))+'" style="'+blockStyleStr(p,true,true)+'text-align:center">'
+      h='<div data-game="cards" data-game-id="'+kid+'" data-n="'+kn+'" data-labels="'+esc(JSON.stringify(klabels))+'"'
+        +' data-free="'+klivres+'" data-teaser="'+esc(kteaser)+'" data-teaser-bg="'+kteaserBg+'" data-teaser-fg="'+kteaserFg+'"'
+        +' style="'+blockStyleStr(p,true,true)+'text-align:center">'
         +'<div id="wf-cdw-'+kid+'" style="display:flex;flex-wrap:wrap;justify-content:center;gap:'+kgap+'px">'+kcards+'</div>'
+        +'<div id="wf-cdh-'+kid+'" style="display:none;margin-top:12px;font-size:13px;font-weight:600;color:'+sv(p.lockedColor,"#6B7280")+';transition:opacity .25s">'+esc(applyOffer(ktrava))+'</div>'
         +'<div id="wf-cdsr-'+kid+'" role="status" aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;white-space:nowrap;clip:rect(0 0 0 0)"></div>'
         +'<div id="wf-cdcf-'+kid+'" style="position:relative;height:0;pointer-events:none"></div>'
         +gameBtn(p,"Revelar")+'</div>';
       (function(gid){setTimeout(function(){
         var wrap=$("wf-cdw-"+gid);if(!wrap)return;
         var caixa=wrap.parentNode;
+        var livres=parseInt(caixa.getAttribute("data-free"),10);
+        var dica=$("wf-cdh-"+gid);
+        var tremendo=null;
+        function viradas(){return wrap.querySelectorAll(".wf-cd[data-flip]").length}
+        function campoQueFalta(){
+          var f=wrap.closest?wrap.closest("form"):null;
+          if(!f||!f.querySelectorAll)return null;
+          var ins=f.querySelectorAll('input:not([type=hidden]):not([disabled]):not([name="_wf_hp"]):not([tabindex="-1"])');
+          for(var i=0;i<ins.length;i++){if(!ins[i].value)return ins[i]}
+          return ins.length?ins[0]:null;
+        }
+        // A trava: as primeiras cartas viram de graça, a última cobra o
+        // e-mail. É o que transforma curiosidade em inscrição — a pessoa
+        // já investiu dois cliques, e parar ali custa mais do que
+        // preencher um campo.
+        function travar(cd){
+          if(dica){dica.style.display="block";dica.style.opacity="1"}
+          if(cd){
+            cd.style.animation="none";
+            void cd.offsetWidth;
+            cd.style.animation="wfCdNo .4s";
+          }
+          var alvo=campoQueFalta();
+          if(alvo&&alvo.focus)try{alvo.focus()}catch(e){}
+          try{if(navigator.vibrate)navigator.vibrate([8,40,8])}catch(e){}
+          try{wfEmit("gameCardLocked",{game:"cards"})}catch(e){}
+        }
         function escolher(cd){
           if(caixa.getAttribute("data-done"))return;
-          var todas=wrap.querySelectorAll(".wf-cd");
-          for(var i=0;i<todas.length;i++)todas[i].removeAttribute("data-sel");
+          if(cd.getAttribute("data-flip"))return;
+          var idx=parseInt(cd.getAttribute("data-i"),10)||0;
+          if(viradas()>=livres){travar(cd);return}
+          // Vira de graça: mostra o brinde, nunca um prêmio. Prêmio quem
+          // decide é o servidor, e ele só decide no envio.
+          cd.setAttribute("data-flip","1");
           cd.setAttribute("data-sel","1");
-          caixa.setAttribute("data-pick",cd.getAttribute("data-i")||"0");
-          try{wfEmit("gameCardPick",{game:"cards",card:parseInt(cd.getAttribute("data-i"),10)||0})}catch(e){}
+          var dentro=$("wf-cdi-"+gid+"-"+idx);
+          if(dentro&&dentro.className.indexOf("wf-flip")<0)dentro.className=dentro.className+" wf-flip";
+          var face=$("wf-cdb-"+gid+"-"+idx);
+          if(face){
+            face.textContent=caixa.getAttribute("data-teaser")||"";
+            face.style.background=caixa.getAttribute("data-teaser-bg")||"#F3F4F6";
+            face.style.color=caixa.getAttribute("data-teaser-fg")||"#9CA3AF";
+          }
+          try{wfEmit("gameCardPick",{game:"cards",card:idx,restantes:Math.max(0,livres-viradas())})}catch(e){}
           try{if(navigator.vibrate)navigator.vibrate(10)}catch(e){}
-          // Escolheu: o que falta é o e-mail. Levar o cursor até ele é o
-          // que fecha a distância entre brincar e se inscrever.
-          var f=wrap.closest?wrap.closest("form"):null;
-          var alvo=f&&f.querySelector?f.querySelector('input:not([type=hidden]):not([disabled]):not([name="_wf_hp"]):not([tabindex="-1"])'):null;
-          if(alvo&&alvo.focus&&!alvo.value)try{alvo.focus()}catch(e){}
+          // Virou o que podia: o que falta é o e-mail.
+          if(viradas()>=livres){
+            if(dica){dica.style.display="block";dica.style.opacity="1"}
+            var alvo=campoQueFalta();
+            if(alvo&&alvo.focus&&!alvo.value)try{alvo.focus()}catch(e){}
+          }
         }
         wrap.addEventListener("click",function(ev){
           var cd=ev.target&&ev.target.closest?ev.target.closest(".wf-cd"):null;
@@ -1377,6 +1519,7 @@ function renderBlock(b){
           if(!cd||!wrap.contains(cd))return;
           ev.preventDefault();escolher(cd);
         });
+        if(tremendo)clearTimeout(tremendo);
       },60)})(kid);
       break;
     }

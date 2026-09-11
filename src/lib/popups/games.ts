@@ -120,20 +120,34 @@ export const WHEEL_C = 150
 export const WHEEL_RIM_R = 141
 export const WHEEL_RIM_W = 17
 
-export function wheelSectorPath(i: number, n: number, r = WHEEL_R, c = WHEEL_C): string {
+/**
+ * O setor. Com `innerR` > 0 ele vira um ANEL — a roleta fica vazada no
+ * meio, e o miolo passa a ser um botão ("toque para girar"). É o formato
+ * que as marcas usam hoje: o convite fica no centro, onde o olho já
+ * está, em vez de num botão embaixo que compete com o campo de e-mail.
+ */
+export function wheelSectorPath(i: number, n: number, r = WHEEL_R, c = WHEEL_C, innerR = 0): string {
   const step = 360 / Math.max(2, n)
   const a0 = (i * step - 90) * Math.PI / 180
   // Dois setores = arcos de 180°: um pingo a menos evita o arco ambíguo.
   const a1 = ((i + 1) * step - 90 - (n === 2 ? 0.01 : 0)) * Math.PI / 180
   const f = (v: number) => v.toFixed(2)
-  return `M${c} ${c} L${f(c + r * Math.cos(a0))} ${f(c + r * Math.sin(a0))} A${r} ${r} 0 0 1 ${f(c + r * Math.cos(a1))} ${f(c + r * Math.sin(a1))} Z`
+  const ri = Math.max(0, Math.min(r - 8, innerR))
+  if (ri <= 0) {
+    return `M${c} ${c} L${f(c + r * Math.cos(a0))} ${f(c + r * Math.sin(a0))} A${r} ${r} 0 0 1 ${f(c + r * Math.cos(a1))} ${f(c + r * Math.sin(a1))} Z`
+  }
+  return `M${f(c + ri * Math.cos(a0))} ${f(c + ri * Math.sin(a0))} L${f(c + r * Math.cos(a0))} ${f(c + r * Math.sin(a0))} A${r} ${r} 0 0 1 ${f(c + r * Math.cos(a1))} ${f(c + r * Math.sin(a1))} L${f(c + ri * Math.cos(a1))} ${f(c + ri * Math.sin(a1))} A${ri} ${ri} 0 0 0 ${f(c + ri * Math.cos(a0))} ${f(c + ri * Math.sin(a0))} Z`
 }
 
-export function wheelLabelPos(i: number, n: number, r = WHEEL_R, c = WHEEL_C): { x: number; y: number; angle: number } {
+export function wheelLabelPos(i: number, n: number, r = WHEEL_R, c = WHEEL_C, innerR = 0): { x: number; y: number; angle: number } {
   const step = 360 / Math.max(2, n)
   const angle = (i + 0.5) * step - 90
   const rad = angle * Math.PI / 180
-  return { x: Number((c + r * 0.63 * Math.cos(rad)).toFixed(2)), y: Number((c + r * 0.63 * Math.sin(rad)).toFixed(2)), angle: Number(angle.toFixed(2)) }
+  const ri = Math.max(0, Math.min(r - 8, innerR))
+  // No anel, o rótulo fica no meio da faixa; no disco cheio, a 63% do
+  // raio — que é onde ele não encosta nem no cubo nem na borda.
+  const rr = ri > 0 ? (ri + r) / 2 : r * 0.63
+  return { x: Number((c + rr * Math.cos(rad)).toFixed(2)), y: Number((c + rr * Math.sin(rad)).toFixed(2)), angle: Number(angle.toFixed(2)) }
 }
 
 /**
