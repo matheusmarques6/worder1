@@ -198,4 +198,7 @@ class TestPreview:
         assert "descobrir o que a pessoa precisa" in mission_block["text"]
         assert payload["source_ids"]["mission_version_id"] == str(mission_id)
         conversation_block = next(b for b in payload["blocks"] if b["kind"] == "CONVERSATION")
-        assert "tênis 42" in conversation_block["text"]
+        assert json.dumps(
+            {"author": "contact", "text": "oi, vocês têm tênis 42?"},
+            ensure_ascii=True,
+        ) in conversation_block["text"]

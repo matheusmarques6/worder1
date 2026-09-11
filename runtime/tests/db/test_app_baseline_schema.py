@@ -115,6 +115,13 @@ COLUMN_GROUPS = (
     ("email_campaigns", "settings metadata", "jsonb", True, "'{}'::jsonb"),
     ("email_campaigns", "scheduled_at sent_at completed_at", "timestamp with time zone",
      True, None),
+    ("email_campaigns", "paused_at ab_resolved_at", "timestamp with time zone", True, None),
+    ("email_campaigns", "ab_test_enabled", "boolean", True, "false"),
+    ("email_campaigns", "ab_test_percent", "integer", True, "50"),
+    ("email_campaigns", "ab_duration_hours", "integer", True, "4"),
+    ("email_campaigns", "ab_variant_b", "jsonb", True, None),
+    ("email_campaigns", "ab_winner_metric", "text", True, "'open_rate'::text"),
+    ("email_campaigns", "ab_winner", "text", True, None),
     ("email_campaigns", "created_at updated_at", "timestamp with time zone", True, "now()"),
     ("email_campaigns", "timezone_mode", "text", False, "'fixed'::text"),
     ("whatsapp_campaigns", "id", "uuid", False, "gen_random_uuid()"),
@@ -218,6 +225,7 @@ FOREIGN_KEYS = (
     ("email_campaigns", "organization_id", "organizations", "CASCADE"),
     ("email_campaigns", "template_id", "email_templates", "SET NULL"),
     ("whatsapp_campaigns", "organization_id", "organizations", "CASCADE"),
+    ("whatsapp_campaigns", "store_id", "shopify_stores", "SET NULL"),
     ("whatsapp_campaigns", "template_id", "whatsapp_templates", ""),
     ("whatsapp_campaigns", "instance_id", "whatsapp_instances", ""),
     ("sms_campaigns", "organization_id", "organizations", "CASCADE"),
@@ -263,6 +271,11 @@ INDEXES = (
     ("whatsapp_sends", ("store_id",), False, "(store_id IS NOT NULL)"),
     ("sms_sends", ("store_id",), False, "(store_id IS NOT NULL)"),
     ("email_campaigns", ("status", "scheduled_at"), False, "(status = 'scheduled'::text)"),
+    ("email_campaigns", ("sent_at",), False,
+     "(ab_test_enabled AND (ab_resolved_at IS NULL))"),
+    ("whatsapp_campaigns", ("organization_id", "created_at DESC"), False, None),
+    ("whatsapp_campaigns", ("organization_id", "store_id"), False,
+     "(store_id IS NOT NULL)"),
 )
 
 # Reviewed active definitions: normalize line endings and outer whitespace only.
