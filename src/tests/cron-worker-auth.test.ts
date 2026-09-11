@@ -40,6 +40,7 @@ const effects = vi.hoisted(() => {
     dispatchTrigger: vi.fn(async () => undefined),
     resolveSegment: vi.fn(async () => ({ contactIds: [] })),
     loadSegmentAsV2: vi.fn(async () => null),
+    drainSegmentReevalQueue: vi.fn(async () => ({ processed: 0 })),
     extractDependencies: vi.fn(() => ({ fields: [], events: [], lists: [], segments: [] })),
     detectSegmentChanges: vi.fn(async () => ({ processed: 0 })),
     processDueScheduledMessages: vi.fn(async () => ({
@@ -105,6 +106,9 @@ vi.mock('@/lib/automation/trigger-dispatcher', () => ({
 vi.mock('@/lib/segments', () => ({
   resolveSegment: effects.resolveSegment,
   loadSegmentAsV2: effects.loadSegmentAsV2,
+}))
+vi.mock('@/lib/segments/realtime', () => ({
+  drainSegmentReevalQueue: effects.drainSegmentReevalQueue,
 }))
 vi.mock('@/lib/segments/dsl', () => ({
   extractDependencies: effects.extractDependencies,
@@ -197,6 +201,7 @@ vi.mock('@/lib/queue/durable-queue', () => ({
 }))
 
 const routes = import.meta.glob('../app/api/cron/*/route.ts')
+const workerRoutes = import.meta.glob('../app/api/workers/*/route.ts')
 const sideEffects = Object.values(effects).filter(value => typeof value === 'function')
 const unauthorizedHeaders: Record<string, string>[] = [{}, { 'x-vercel-cron': '1' }]
 
@@ -318,6 +323,54 @@ refusesWithoutSecret('cron-remote-new-routes', [
   'replenish-coupon-pools',
   'resolve-popup-experiments',
 ])
+
+describe('worker-cron-auth', () => {
+  it.each(['GET', 'POST'])('segment-reeval %s denies missing and forged auth before I/O', async method => {
+    vi.stubEnv('CRON_SECRET', '')
+    const load = workerRoutes['../app/api/workers/segment-reeval/route.ts']
+    expect(load).toBeTypeOf('function')
+    vi.clearAllMocks()
+    const handlers = await load() as Record<string, (req: NextRequest) => Promise<Response>>
+    expectNoSideEffects()
+
+    for (const headers of [
+      {},
+      { 'x-vercel-cron-signature': 'forged' },
+    ] as Record<string, string>[]) {
+      vi.clearAllMocks()
+      const response = await handlers[method](request(method, headers))
+      expect(response.status).toBe(401)
+      expectNoSideEffects()
+    }
+  })
+
+  it('segment-reeval reaches the drain only with the configured Bearer', async () => {
+    vi.stubEnv('CRON_SECRET', 's3cret')
+    const load = workerRoutes['../app/api/workers/segment-reeval/route.ts']
+    const handlers = await load() as Record<string, (req: NextRequest) => Promise<Response>>
+    vi.clearAllMocks()
+
+    const response = await handlers.GET(request('GET', { authorization: 'Bearer s3cret' }))
+
+    expect(response.status).toBe(200)
+    expect(effects.drainSegmentReevalQueue).toHaveBeenCalledTimes(1)
+  })
+
+  it.each(['GET', 'POST'])('retired campaign %s stays 410 without I/O', async method => {
+    const load = workerRoutes['../app/api/workers/campaign/route.ts']
+    expect(load).toBeTypeOf('function')
+    vi.clearAllMocks()
+    const handlers = await load() as Record<string, (req: NextRequest) => Promise<Response>>
+    expectNoSideEffects()
+
+    const response = await handlers[method](request(method, {}))
+    const body = await response.json()
+
+    expect(response.status).toBe(410)
+    expect(body).toMatchObject({ error: 'Endpoint aposentado' })
+    expectNoSideEffects()
+  })
+})
 
 describe('configured Bearer reaches the existing business seam', () => {
   it('reaches Supabase for a database-backed handler', async () => {
