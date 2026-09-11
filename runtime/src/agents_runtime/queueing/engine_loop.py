@@ -168,19 +168,28 @@ async def _alert_dead_letter(
     is_touch = payload.get("kind") == "mission_touch"
     if is_touch:
         alert_type = "mission_touch_failed"
-        title = "Toque de missão enviado para revisão"
         touch_id = payload.get("touch_id")
-        dedup_key = f"dlq:mission_touch:{touch_id}" if touch_id else None
+        dedup_key = f"dlq:{queue_name}:{touch_id}" if touch_id else None
+        alert_payload = {
+            "queue": queue_name,
+            "error_class": payload.get("error_class"),
+            "touch_id": touch_id,
+        }
     else:
         alert_type = "send_failed"
-        title = "Resposta do motor enviada para revisão"
         conversation_id = payload.get("conversation_id")
         generation = payload.get("generation")
         dedup_key = (
-            f"dlq:inbound:{conversation_id}:{generation}"
+            f"dlq:{queue_name}:{conversation_id}:{generation}"
             if conversation_id is not None and generation is not None
             else None
         )
+        alert_payload = {
+            "queue": queue_name,
+            "error_class": payload.get("error_class"),
+            "conversation_id": conversation_id,
+            "generation": generation,
+        }
 
     try:
         async with conn.transaction():
@@ -190,16 +199,8 @@ async def _alert_dead_letter(
                 organization_id=organization_id,
                 type=alert_type,
                 severity="warning",
-                title=title,
-                payload={
-                    "queue": queue_name,
-                    "failure_kind": payload.get("failure_kind"),
-                    "error_class": payload.get("error_class"),
-                    "last_error": payload.get("last_error"),
-                    "conversation_id": payload.get("conversation_id"),
-                    "generation": payload.get("generation"),
-                    "touch_id": payload.get("touch_id"),
-                },
+                title="Falha no processamento de IA",
+                payload=alert_payload,
                 dedup_key=dedup_key,
             )
     except Exception:
