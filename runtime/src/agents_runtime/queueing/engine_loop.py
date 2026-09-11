@@ -19,9 +19,11 @@ load, not only at rest.
 """
 
 import asyncio
+import logging
 import math
 from collections.abc import Awaitable, Callable
 from enum import Enum
+from uuid import UUID
 
 from agents_runtime.clock import Clock
 from agents_runtime.config import QueueingConfig
@@ -29,8 +31,12 @@ from agents_runtime.queueing.failures import classify
 from agents_runtime.queueing.polling import next_queue
 from agents_runtime.queueing.retries import DeadLetter, Retry, decide
 from agents_runtime.randomness import Randomness
+from agents_runtime.repository import alerts as alerts_repo
 from agents_runtime.repository import engine
 from agents_runtime.repository.queue import PgmqQueue, QueueMessage
+from agents_runtime.repository.scope import scope_to_organization
+
+LOGGER = logging.getLogger(__name__)
 
 
 class Ack(Enum):
@@ -114,18 +120,20 @@ class EngineLoop:
                     queue.connection, queue_name, message.id, decision.delay
                 )
             elif isinstance(decision, DeadLetter):
+                dead_letter = {
+                    **message.payload,
+                    "error_class": type(error).__name__,
+                    "failure_kind": failure.value,
+                    "replay_count": message.payload.get("replay_count", 0),
+                    "last_error": str(error)[:500],
+                }
                 await engine.send_to_queue(
                     queue.connection,
                     decision.queue,
-                    {
-                        **message.payload,
-                        "error_class": type(error).__name__,
-                        "failure_kind": failure.value,
-                        "replay_count": message.payload.get("replay_count", 0),
-                        "last_error": str(error)[:500],
-                    },
+                    dead_letter,
                 )
                 await queue.archive(message.id)
+                await _alert_dead_letter(queue.connection, queue_name, dead_letter)
             return
 
         if ack is Ack.RETRY_SHORT:
@@ -146,3 +154,53 @@ class EngineLoop:
         )
         for task in pending:
             task.cancel()
+
+
+async def _alert_dead_letter(
+    conn, queue_name: str, payload: dict
+) -> None:
+    try:
+        organization_id = UUID(str(payload["organization_id"]))
+    except (KeyError, TypeError, ValueError):
+        LOGGER.warning("dead-letter alert skipped: malformed organization_id")
+        return
+
+    is_touch = payload.get("kind") == "mission_touch"
+    if is_touch:
+        alert_type = "mission_touch_failed"
+        title = "Toque de missão enviado para revisão"
+        touch_id = payload.get("touch_id")
+        dedup_key = f"dlq:mission_touch:{touch_id}" if touch_id else None
+    else:
+        alert_type = "send_failed"
+        title = "Resposta do motor enviada para revisão"
+        conversation_id = payload.get("conversation_id")
+        generation = payload.get("generation")
+        dedup_key = (
+            f"dlq:inbound:{conversation_id}:{generation}"
+            if conversation_id is not None and generation is not None
+            else None
+        )
+
+    try:
+        async with conn.transaction():
+            await scope_to_organization(conn, organization_id)
+            await alerts_repo.open_alert(
+                conn,
+                organization_id=organization_id,
+                type=alert_type,
+                severity="warning",
+                title=title,
+                payload={
+                    "queue": queue_name,
+                    "failure_kind": payload.get("failure_kind"),
+                    "error_class": payload.get("error_class"),
+                    "last_error": payload.get("last_error"),
+                    "conversation_id": payload.get("conversation_id"),
+                    "generation": payload.get("generation"),
+                    "touch_id": payload.get("touch_id"),
+                },
+                dedup_key=dedup_key,
+            )
+    except Exception:
+        LOGGER.exception("dead-letter alert failed", extra={"queue": queue_name})
