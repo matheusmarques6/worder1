@@ -5634,7 +5634,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   inventário de DLQs e o item 57 cita RNF-022 pela metade do `q_evals` — nenhum dos dois é dono da
   decisão; os hits de "arbitragem" são sobre `mission_resolver.arbitrate()`, mecanismo diferente.
 
-- [ ] **90. O nó "IA Responder" já é no-op para org no canal Cloud** `[confirmado]` · *(descoberto no item 61)*
+- [x] **90. O nó "IA Responder" já é no-op para org no canal Cloud** `[corrigido na Onda 2]` · *(descoberto no item 61)*
   Citações ancoradas em `b87992f1`. **Destinatário: o dono do cutover D8, não a limpeza.**
   O executor `action_whatsapp_ai` (`src/lib/automation/node-executors.ts:1857`) escreve
   `whatsapp_conversations.bot_active` (`:1868-1871`, com `supabaseAdmin`) — **tabela legada e coluna
@@ -5660,6 +5660,11 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `tabela legada`): os hits de "no-op" são de outros mecanismos, e `whatsapp_conversations` só
   aparece no item 58 num contexto que é *"esta deleção não libera tabela nenhuma"*. **Território sem
   dono.**
+  **Correção:** o executor agora resolve a organização confiável da execução, valida que o agente
+  pertence a ela, limita o `UPDATE` da conversa legada pelo mesmo tenant e exige que uma linha seja
+  retornada. Conversa Cloud, conversa de outro tenant ou agente alheio devolvem erro explícito sem
+  anunciar `ai_activated:true`; fluxos legados válidos continuam funcionando. Prova focal em
+  `src/lib/automation/__tests__/flow-fixes.test.ts` (26 casos verdes).
 
 - [ ] **91. `src/lib/route-permissions.ts` é arquivo morto com cara de configuração viva** `[confirmado]` · *(descoberto no item 61)*
   Citações ancoradas em `b87992f1`. **77 linhas**, `reachable=false` pelo grafo do CI e
@@ -6058,10 +6063,13 @@ você decidir se entram na fila.
   `src/` (régua de tipos do webhook), fora do escopo do item 31.
   *(descoberto no review do item 31)*
 
-- [ ] **O download de mídia continua gravando storage para org migrada, e ninguém lê o resultado.**
-  O pipeline de download roda ANTES da bifurcação de rollout — confirmado no review —, então a
-  loja migrada paga bytes e storage por áudio e imagem que o runtime nunca vai abrir enquanto o
-  porte de STT/visão não vier. Custo por mensagem sem contrapartida.
+- [x] **O download de mídia continua gravando storage para org migrada, e ninguém lê o resultado.**
+  `[reclassificado na Onda 2: há consumidor humano]`
+  Reavaliado na Onda 2: o runtime não consome bytes de mídia, mas o inbox humano consome
+  `media_storage_path` e renova URLs assinadas. Manter download preserva atendimento humano após
+  takeover; otimização de armazenamento depende de política de produto, não de desligar o pipeline
+  por rollout. A prova cobre enqueue e fallback inline no webhook, além da URL assinada devolvida ao
+  atendente autenticado com filtros de organização, conversa e mensagem.
   *(descoberto no item 31)*
 
 - [ ] **`supabase/.branches/` e `supabase/.temp/` não estão no `.gitignore`.**

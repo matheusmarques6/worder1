@@ -1082,7 +1082,7 @@ git commit -m "perf: simplify equivalent opt-out lookup"
 - Produces: resultado error quando update legado não atinge conversa própria; nó nunca informa `ai_activated:true` por UPDATE sem linha.
 - Preserva: pipeline de mídia, porque inbox assina media_storage_path e humanos são consumidores confirmados.
 
-- [ ] **Step 1: RED de UPDATE sem linha**
+- [x] **Step 1: RED de UPDATE sem linha**
 
 No harness dos executores, simular Supabase update em `whatsapp_conversations` com retorno `{data:null,error:null}`; executar action_whatsapp_ai com conversationId da Cloud e agentId válido. Assert:
 ```ts
@@ -1091,12 +1091,12 @@ expect(result.output?.ai_activated).not.toBe(true)
 ```
 Expected RED: executor atual ignora contagem e retorna success.
 
-- [ ] **Step 2: Executar RED**
+- [x] **Step 2: Executar RED**
 
 Run: `pnpm exec vitest run src/lib/automation/__tests__/flow-fixes.test.ts`.
 Expected: success recebido em vez de error.
 
-- [ ] **Step 3: Checar posse e linha atualizada**
+- [x] **Step 3: Checar posse e linha atualizada**
 
 No executor, resolver org da execução confiável, e:
 ```ts
@@ -1114,7 +1114,7 @@ if (!data) {
 ```
 Validar que aiAgentId pertence à org antes do update. Não ativar automaticamente missão para nó antigo, pois eventFamily não existe nesse contrato.
 
-- [ ] **Step 4: Reclassificar mídia com prova existente**
+- [x] **Step 4: Reclassificar mídia com prova existente**
 
 Adicionar teste ao webhook runtime que verifica enqueue/processInboundMedia com mediaId, e ao caminho inbox existente que signed URL é retornada a atendente autorizado. Texto do checklist:
 ```markdown
@@ -1122,7 +1122,7 @@ Reavaliado na Onda 2: o runtime não consome bytes de mídia, mas o inbox humano
 ```
 Não afirmar economia de storage que não aconteceu.
 
-- [ ] **Step 5: GREEN e commit**
+- [x] **Step 5: GREEN e commit**
 
 Run: executores e webhook focais; typecheck. Expected: legacy válido ativa, Cloud/tenant alheio/agent alheio falham sem mutação; mídia segue acessível aos humanos.
 ```powershell
@@ -1130,6 +1130,10 @@ git add src/lib/automation/node-executors.ts src/lib/automation/__tests__/flow-f
 git commit -m "fix: report unsupported legacy AI nodes and retain inbox media"
 ```
 **Gate:** prova de consumidor humano impede remoção equivocada. **Rollback:** reverter mensagem de erro não autoriza voltar a sucesso falso; mídia não recebe mudança destrutiva.
+
+**Evidência executada em 2026-09-11:** RED controlado com 3 falhas novas e 23 casos antigos verdes;
+GREEN com 59/59 nos testes focais de executor, webhook e rota do inbox; `pnpm typecheck` verde. A
+mídia não recebeu alteração produtiva: os testes fixam o consumidor humano já existente.
 
 ### Task 9: W2-T8 — item 70, RPCs históricas sem escopo
 

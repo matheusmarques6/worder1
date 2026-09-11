@@ -139,9 +139,15 @@ vi.mock('@/lib/observability/whatsapp-logger', () => ({
 }));
 
 const enqueueWhatsAppAiRespond = vi.fn(async (..._a: any[]) => 'qstash-msg-1');
+const enqueueWhatsAppInboundMedia = vi.fn(async (..._a: any[]) => 'qstash-media-1');
 vi.mock('@/lib/queue', () => ({
   enqueueWhatsAppAiRespond: (...a: any[]) => enqueueWhatsAppAiRespond(...a),
-  enqueueWhatsAppInboundMedia: vi.fn(async () => 'qstash-media-1'),
+  enqueueWhatsAppInboundMedia: (...a: any[]) => enqueueWhatsAppInboundMedia(...a),
+}));
+
+const processInboundMedia = vi.fn(async (..._a: any[]) => ({ ok: true }));
+vi.mock('../inbound-media', () => ({
+  processInboundMedia: (...a: any[]) => processInboundMedia(...a),
 }));
 
 const recordAiStep = vi.fn(async (_input: any) => undefined);
@@ -282,6 +288,9 @@ beforeEach(() => {
   state.messageAlreadySeen = false;
   rpc.mockClear();
   enqueueWhatsAppAiRespond.mockClear();
+  enqueueWhatsAppInboundMedia.mockReset();
+  enqueueWhatsAppInboundMedia.mockResolvedValue('qstash-media-1');
+  processInboundMedia.mockClear();
   recordAiStep.mockClear();
   getDeliveryDebounceSeconds.mockClear();
   getRuntimeMode.mockReset();
@@ -399,6 +408,32 @@ describe('org migrada (runtime) — o caminho canônico', () => {
       media_id: 'media-img-1',
       mime_type: 'image/jpeg',
       caption: 'olha isso',
+    });
+  });
+
+  it('enfileira o download da mídia também para organização no runtime', async () => {
+    await processWebhookPayload(inboundAudioPayload());
+
+    expect(rec.inserts[0]).toMatchObject({
+      table: 'whatsapp_cloud_messages',
+      row: { media_id: 'media-audio-1', media_download_status: 'pending' },
+    });
+    expect(enqueueWhatsAppInboundMedia).toHaveBeenCalledWith({
+      cloudMessageId: 'msg-row-1',
+      accountId: ACCOUNT_ID,
+      organizationId: ORG,
+    });
+  });
+
+  it('processa a mídia inline quando a fila não está disponível', async () => {
+    enqueueWhatsAppInboundMedia.mockResolvedValueOnce(null as any);
+
+    await processWebhookPayload(inboundImagePayload());
+
+    expect(processInboundMedia).toHaveBeenCalledWith({
+      cloudMessageId: 'msg-row-1',
+      accountId: ACCOUNT_ID,
+      organizationId: ORG,
     });
   });
 

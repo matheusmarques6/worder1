@@ -2268,7 +2268,7 @@ const actionExecutors: Record<string, NodeExecutor> = {
           return {
             status: 'error',
             output: null,
-            error: 'Conversa não encontrada no canal legado da organização',
+            error: 'Esta conversa não suporta o nó IA Responder legado. Use uma missão de IA.',
           };
         }
         return { status: 'success', output: { ai_activated: true } };
