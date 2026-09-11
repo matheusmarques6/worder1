@@ -131,7 +131,10 @@ export async function GET(request: NextRequest) {
         // pick up anything that doesn't complete on this trip.
         fetch(workerUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Internal-Request': 'true' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${process.env.CRON_SECRET}`,
+          },
           body: JSON.stringify({ action: 'execute_run', runId: run.id }),
         }).catch((fetchErr) => {
           console.warn(`[Check Delayed] direct fetch failed for ${run.id}:`, fetchErr?.message || fetchErr);

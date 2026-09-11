@@ -1,6 +1,6 @@
 /**
  * API: Process Pending Events
- * Endpoint para processar eventos pendentes (chamado via cron ou QStash)
+ * Endpoint para processar eventos pendentes (chamado via cron)
  * 
  * POST /api/workers/process-events
  * GET  /api/workers/process-events (Vercel Cron)
@@ -8,29 +8,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { EventProcessor } from '@/lib/automation/event-processor';
-import { verifyQStashSignature } from '@/lib/queue';
+import { authorizeCronRequest } from '@/lib/cron-auth';
 export const dynamic = 'force-dynamic';
-
-// ============================================
-// VERIFICAÇÃO DE AUTORIZAÇÃO
-// ============================================
-
-function isAuthorized(request: NextRequest): boolean {
-  // Vercel Cron envia esse header
-  const isVercelCron = request.headers.get('x-vercel-cron') === '1';
-  if (isVercelCron) return true;
-
-  // Request interno
-  const isInternal = request.headers.get('X-Internal-Request') === 'true';
-  if (isInternal) return true;
-
-  // CRON_SECRET no Authorization header
-  const authHeader = request.headers.get('authorization');
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && authHeader === `Bearer ${cronSecret}`) return true;
-
-  return false;
-}
 
 // ============================================
 // GET - Vercel Cron handler
@@ -38,7 +17,7 @@ function isAuthorized(request: NextRequest): boolean {
 
 export async function GET(request: NextRequest) {
   // Verificar se é Vercel Cron ou requisição autorizada
-  if (!isAuthorized(request)) {
+  if (!authorizeCronRequest(request)) {
     console.log('[ProcessEvents] Unauthorized GET request');
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -64,21 +43,11 @@ export async function GET(request: NextRequest) {
 }
 
 // ============================================
-// POST - Process pending events (QStash/manual)
+// POST - Process pending events (manual/cron)
 // ============================================
 
 export async function POST(request: NextRequest) {
-  // Verificar QStash signature
-  const isQStash = request.headers.has('upstash-signature');
-  
-  if (isQStash) {
-    const clonedRequest = request.clone();
-    const { isValid } = await verifyQStashSignature(clonedRequest);
-    if (!isValid) {
-      console.log('[ProcessEvents] Invalid QStash signature');
-      return NextResponse.json({ error: 'Invalid QStash signature' }, { status: 401 });
-    }
-  } else if (!isAuthorized(request)) {
+  if (!authorizeCronRequest(request)) {
     console.log('[ProcessEvents] Unauthorized POST request');
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }

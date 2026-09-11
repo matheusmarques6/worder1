@@ -18,6 +18,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { verifyQStashSignature, enqueueShopifySync } from '@/lib/queue';
+import { authorizeCronRequest } from '@/lib/cron-auth';
 import { runFullSyncGraphQL } from '@/lib/services/shopify/full-sync-graphql';
 
 export const dynamic = 'force-dynamic';
@@ -32,22 +33,14 @@ interface SyncJobPayload {
 }
 
 export async function POST(request: NextRequest) {
-  // Same auth shape as /api/workers/automation — QStash signature or
-  // internal request header. Lets us call the worker directly during
-  // local dev without QStash configured.
   const hasQStashSig = request.headers.has('upstash-signature');
-  const isInternal = request.headers.get('X-Internal-Request') === 'true';
   if (hasQStashSig) {
     const { isValid } = await verifyQStashSignature(request.clone());
     if (!isValid) {
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
     }
-  } else if (!isInternal) {
-    const authHeader = request.headers.get('authorization');
-    const cronSecret = process.env.CRON_SECRET;
-    if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+  } else if (!authorizeCronRequest(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const body = await request.json().catch(() => ({} as any));

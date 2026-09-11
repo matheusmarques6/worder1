@@ -8,6 +8,8 @@
  * - Escalabilidade automática
  */
 
+import { Receiver } from '@upstash/qstash';
+
 // ============================================
 // TIPOS
 // ============================================
@@ -85,64 +87,10 @@ class QStashClient {
 }
 
 // ============================================
-// VERIFICADOR DE ASSINATURA
-// ============================================
-
-class QStashReceiver {
-  private currentSigningKey: string;
-  private nextSigningKey: string;
-
-  constructor(keys: { currentSigningKey: string; nextSigningKey: string }) {
-    this.currentSigningKey = keys.currentSigningKey;
-    this.nextSigningKey = keys.nextSigningKey;
-  }
-
-  async verify(options: { signature: string; body: string }): Promise<boolean> {
-    const { signature, body } = options;
-
-    // Try current key first
-    if (await this.verifyWithKey(signature, body, this.currentSigningKey)) {
-      return true;
-    }
-
-    // Try next key (for key rotation)
-    if (await this.verifyWithKey(signature, body, this.nextSigningKey)) {
-      return true;
-    }
-
-    return false;
-  }
-
-  private async verifyWithKey(signature: string, body: string, key: string): Promise<boolean> {
-    try {
-      const encoder = new TextEncoder();
-      const keyData = encoder.encode(key);
-      const bodyData = encoder.encode(body);
-
-      const cryptoKey = await crypto.subtle.importKey(
-        'raw',
-        keyData,
-        { name: 'HMAC', hash: 'SHA-256' },
-        false,
-        ['sign']
-      );
-
-      const signatureBuffer = await crypto.subtle.sign('HMAC', cryptoKey, bodyData);
-      const expectedSignature = btoa(String.fromCharCode(...new Uint8Array(signatureBuffer)));
-
-      return signature === expectedSignature;
-    } catch {
-      return false;
-    }
-  }
-}
-
-// ============================================
 // SINGLETONS
 // ============================================
 
 let qstashClient: QStashClient | null = null;
-let qstashReceiver: QStashReceiver | null = null;
 
 function getQStashClient(): QStashClient | null {
   if (!qstashClient) {
@@ -155,21 +103,13 @@ function getQStashClient(): QStashClient | null {
   return qstashClient;
 }
 
-function getQStashReceiver(): QStashReceiver | null {
-  if (!qstashReceiver) {
-    const currentSigningKey = process.env.QSTASH_CURRENT_SIGNING_KEY;
-    const nextSigningKey = process.env.QSTASH_NEXT_SIGNING_KEY;
-    
-    if (!currentSigningKey || !nextSigningKey) {
-      return null;
-    }
-    
-    qstashReceiver = new QStashReceiver({
-      currentSigningKey,
-      nextSigningKey,
-    });
+function getQStashReceiver(): Receiver | null {
+  const currentSigningKey = process.env.QSTASH_CURRENT_SIGNING_KEY;
+  const nextSigningKey = process.env.QSTASH_NEXT_SIGNING_KEY;
+  if (!currentSigningKey || !nextSigningKey) {
+    return null;
   }
-  return qstashReceiver;
+  return new Receiver({ currentSigningKey, nextSigningKey });
 }
 
 // ============================================
@@ -499,58 +439,23 @@ export async function enqueueWhatsAppSend(
 export async function verifyQStashSignature(
   request: Request
 ): Promise<{ isValid: boolean; body: any }> {
+  const signature = request.headers.get('upstash-signature');
   const receiver = getQStashReceiver();
-  
-  console.log('[Queue] Verifying signature. Receiver configured:', !!receiver);
-  console.log('[Queue] Has upstash-signature:', request.headers.has('upstash-signature'));
-  
-  // Se QStash não está configurado, aceita internal requests
-  if (!receiver) {
-    console.log('[Queue] No receiver configured');
-    const isInternal = request.headers.get('X-Internal-Request') === 'true';
-    if (isInternal) {
-      const body = await request.text();
-      return { isValid: true, body: JSON.parse(body) };
-    }
-    // Em produção sem receiver, aceitar se tem CRON_SECRET
-    const authHeader = request.headers.get('authorization');
-    const cronSecret = process.env.CRON_SECRET;
-    if (cronSecret && authHeader === `Bearer ${cronSecret}`) {
-      const body = await request.text();
-      return { isValid: true, body: JSON.parse(body) };
-    }
+  if (!signature || !receiver) {
     return { isValid: false, body: null };
   }
 
   try {
-    const signature = request.headers.get('upstash-signature');
     const body = await request.text();
-    
-    console.log('[Queue] Body length:', body.length);
-    
-    if (!signature) {
-      // Verificar se é request interno
-      const isInternal = request.headers.get('X-Internal-Request') === 'true';
-      if (isInternal) {
-        return { isValid: true, body: JSON.parse(body) };
-      }
-      console.log('[Queue] No signature and not internal');
-      return { isValid: false, body: null };
-    }
-
     const isValid = await receiver.verify({
       signature,
       body,
     });
-
-    console.log('[Queue] Signature validation result:', isValid);
-
     return {
       isValid,
       body: isValid ? JSON.parse(body) : null,
     };
-  } catch (error) {
-    console.error('[Queue] Signature verification error:', error);
+  } catch {
     return { isValid: false, body: null };
   }
 }

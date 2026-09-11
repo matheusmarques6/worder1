@@ -264,7 +264,7 @@ class EventProcessorClass {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Internal-Request': 'true',
+          Authorization: `Bearer ${process.env.CRON_SECRET}`,
         },
         body: JSON.stringify({
           action: 'execute_run',

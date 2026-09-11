@@ -44,6 +44,20 @@ const effects = vi.hoisted(() => {
     qstashVerify: vi.fn(async (_args: unknown) => false),
     processWebhookPayload: vi.fn(async () => ({ ok: true })),
     processInboundMedia: vi.fn(async () => ({ ok: true })),
+    verifyQStashSignature: vi.fn(async () => ({ isValid: false, body: null })),
+    processPendingEvents: vi.fn(async () => ({ processed: 0, errors: 0, results: [] })),
+    processEvent: vi.fn(async () => ({
+      success: true,
+      automationsTriggered: 0,
+      runIds: [],
+    })),
+    resumeExecution: vi.fn(async () => ({ status: 'success' })),
+    runFullSyncGraphQL: vi.fn(async () => ({
+      ordersCount: 0,
+      customersCount: 0,
+      productsCount: 0,
+    })),
+    enqueueShopifySync: vi.fn(async () => null),
     extractDependencies: vi.fn(() => ({ fields: [], events: [], lists: [], segments: [] })),
     detectSegmentChanges: vi.fn(async () => ({ processed: 0 })),
     processDueScheduledMessages: vi.fn(async () => ({
@@ -126,6 +140,15 @@ vi.mock('@/lib/whatsapp/webhook-processor', () => ({
 vi.mock('@/lib/whatsapp/inbound-media', () => ({
   processInboundMedia: effects.processInboundMedia,
 }))
+vi.mock('@/lib/automation/event-processor', () => ({
+  EventProcessor: {
+    processPendingEvents: effects.processPendingEvents,
+    processEvent: effects.processEvent,
+  },
+}))
+vi.mock('@/lib/services/shopify/full-sync-graphql', () => ({
+  runFullSyncGraphQL: effects.runFullSyncGraphQL,
+}))
 vi.mock('@/lib/segments/dsl', () => ({
   extractDependencies: effects.extractDependencies,
 }))
@@ -161,15 +184,18 @@ vi.mock('@/lib/shopify/store-url', () => ({
 }))
 vi.mock('@/lib/automation/execution-engine', () => ({
   executeWorkflow: effects.executeWorkflow,
+  resumeExecution: effects.resumeExecution,
 }))
 vi.mock('@/lib/automation/node-results', () => ({
   mergeNodeResults: effects.mergeNodeResults,
 }))
 vi.mock('@/lib/queue', () => ({
+  verifyQStashSignature: effects.verifyQStashSignature,
   enqueueWhatsAppWebhook: effects.enqueueWhatsAppWebhook,
   enqueueWhatsAppAiRespond: effects.enqueueWhatsAppAiRespond,
   enqueueAutomationRun: effects.enqueueAutomationRun,
   enqueueWebhookDelivery: effects.enqueueWebhookDelivery,
+  enqueueShopifySync: effects.enqueueShopifySync,
 }))
 vi.mock('@/lib/whatsapp/recipient-claim', () => ({
   quarantineStuckSending: effects.quarantineStuckSending,
@@ -234,7 +260,9 @@ function expectNoSideEffects() {
 
 function expectNoBusinessSideEffects() {
   for (const effect of sideEffects) {
-    if (effect !== effects.qstashVerify) expect(effect).not.toHaveBeenCalled()
+    if (effect !== effects.qstashVerify && effect !== effects.verifyQStashSignature) {
+      expect(effect).not.toHaveBeenCalled()
+    }
   }
   expect(fetch).not.toHaveBeenCalled()
 }
@@ -470,6 +498,52 @@ describe('qstash-worker-auth', () => {
     expect(effects.qstashVerify).toHaveBeenCalledWith({ signature: 'valid', body })
     expect(effects.processInboundMedia).toHaveBeenCalledTimes(1)
   })
+})
+
+describe('remaining-worker-auth', () => {
+  it.each([
+    ['process-events', 'GET'],
+    ['process-events', 'POST'],
+    ['abandoned-cart', 'GET'],
+    ['automation-delay', 'GET'],
+  ])('%s %s rejects presence-only cron and internal headers', async (name, method) => {
+    vi.stubEnv('CRON_SECRET', '')
+    const load = workerRoutes[`../app/api/workers/${name}/route.ts`]
+    expect(load).toBeTypeOf('function')
+    const handlers = await load() as Record<string, (req: NextRequest) => Promise<Response>>
+
+    for (const headers of [
+      { 'x-vercel-cron': '1' },
+      { 'x-internal-request': 'true' },
+    ] as Record<string, string>[]) {
+      vi.clearAllMocks()
+      const response = await handlers[method](request(method, headers))
+      expect(response.status).toBe(401)
+      expectNoSideEffects()
+    }
+  })
+
+  it.each(['automation', 'shopify-sync'])(
+    '%s rejects the internal header and forged QStash signatures',
+    async name => {
+      vi.stubEnv('CRON_SECRET', '')
+      const load = workerRoutes[`../app/api/workers/${name}/route.ts`]
+      expect(load).toBeTypeOf('function')
+      const handlers = await load() as Record<string, (req: NextRequest) => Promise<Response>>
+
+      vi.clearAllMocks()
+      let response = await handlers.POST(request('POST', { 'x-internal-request': 'true' }))
+      expect(response.status).toBe(401)
+      expectNoSideEffects()
+
+      vi.clearAllMocks()
+      effects.verifyQStashSignature.mockResolvedValue({ isValid: false, body: null })
+      response = await handlers.POST(request('POST', { 'upstash-signature': 'forged' }))
+      expect(response.status).toBe(401)
+      expect(effects.verifyQStashSignature).toHaveBeenCalledTimes(1)
+      expectNoBusinessSideEffects()
+    },
+  )
 })
 
 describe('configured Bearer reaches the existing business seam', () => {

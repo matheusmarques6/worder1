@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { executeWorkflow, resumeExecution, Workflow } from '@/lib/automation/execution-engine';
 import { mergeNodeResults } from '@/lib/automation/node-results';
 import { verifyQStashSignature } from '@/lib/queue';
+import { authorizeCronRequest } from '@/lib/cron-auth';
 export const dynamic = 'force-dynamic';
 // Per-run worker — needs the full Pro cap so action_email (60s timeout)
 // plus enrichment + Resend send + DB writes never get killed mid-flight.
@@ -31,8 +32,6 @@ const supabase = new Proxy({} as any, {
 // ============================================
 
 export async function POST(request: NextRequest) {
-  // Verify QStash signature or internal request
-  const isInternal = request.headers.get('X-Internal-Request') === 'true';
   const hasQStashSig = request.headers.has('upstash-signature');
   
   if (hasQStashSig) {
@@ -41,13 +40,8 @@ export async function POST(request: NextRequest) {
     if (!isValid) {
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
     }
-  } else if (!isInternal) {
-    // Require some form of auth
-    const authHeader = request.headers.get('authorization');
-    const cronSecret = process.env.CRON_SECRET;
-    if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+  } else if (!authorizeCronRequest(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {

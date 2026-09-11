@@ -475,7 +475,7 @@ class EventBusClass {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Internal-Request': 'true', // Marker para bypass de auth
+          Authorization: `Bearer ${process.env.CRON_SECRET}`,
         },
         body: JSON.stringify({
           type: 'automation_run',
