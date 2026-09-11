@@ -27,7 +27,10 @@ export interface GameConfig {
   buttonText: string
 }
 
-const DEFAULT_COLORS = ['#F97316', '#111827', '#FDBA74', '#374151', '#FB923C', '#1F2937', '#FED7AA', '#4B5563']
+// Alternância estrita entre a cor da marca e o escuro. Seis tons
+// diferentes viram uma roleta suja: o olho não acha o padrão, e sem
+// padrão não há roda.
+const DEFAULT_COLORS = ['#F97316', '#111827', '#F97316', '#111827', '#F97316', '#111827', '#F97316', '#111827']
 
 function prize(v: unknown): PrizeChoice {
   if (v === 'none' || v === 'base') return v

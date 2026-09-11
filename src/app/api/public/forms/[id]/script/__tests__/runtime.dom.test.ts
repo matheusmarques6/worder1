@@ -846,6 +846,11 @@ describe('gamificação: roleta e raspadinha', () => {
     expect(ptr).toBeTruthy()
     expect(ptr.parentElement!.contains(svg)).toBe(true)
     expect(ptr.style.transformOrigin).toBe('50% 13%')
+    // As luzinhas do aro ficam fora do disco: se girassem, o aro deixaria
+    // de ser a moldura da máquina e viraria borda do desenho.
+    const luzes = Array.from(svg.querySelectorAll('circle')).filter((c) => c.getAttribute('r') === '2.3')
+    expect(luzes.length).toBeGreaterThanOrEqual(12)
+    expect(luzes.some((c) => disc.contains(c))).toBe(false)
     expect(form.querySelector('[id^="wf-wcf-"]')).toBeTruthy()
     expect(form.querySelector('[id^="wf-wsr-"]')!.getAttribute('role')).toBe('status')
   })

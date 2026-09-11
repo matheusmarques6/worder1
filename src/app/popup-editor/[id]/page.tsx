@@ -19,7 +19,7 @@ import {
   BarChart3,
   SlidersHorizontal, Layers, Square, Sun, CornerDownRight,
   MoveHorizontal, MoveVertical, Check, MoreHorizontal, Pencil,
-  AlertTriangle,
+  AlertTriangle, RotateCcw, Rows,
 } from 'lucide-react'
 import {
   type HistoryState, historySeed, historyPush, historyUndo, historyRedo, canUndo, canRedo,
@@ -48,6 +48,13 @@ interface PopupDesign {
     overlay: { enabled: boolean; color: string; opacity: number; closeOnClick: boolean }
     closeButton: { show: boolean; color: string; size: number }
     sideImage: { enabled: boolean; src: string; position: 'left' | 'right'; width: number }
+    // A foto sangrando atrás do conteúdo inteiro — o formato dos popups
+    // que convertem hoje. Diferente da imagem LATERAL, que é formato de
+    // e-mail: aqui o texto fica POR CIMA da foto, e o véu é o que mantém
+    // ele legível.
+    backgroundImage?: { enabled: boolean; src: string; overlay?: { enabled?: boolean; color?: string; opacity?: number; style?: 'gradient' | 'flat' } }
+    /** No celular o popup ocupa a tela inteira, sem cantos nem margem. */
+    fullscreenMobile?: boolean
     animation: 'fade' | 'slide-up' | 'none'
     // Barra de progresso entre etapas (só aparece com 2+ etapas).
     progress?: { enabled: boolean; color?: string; trackColor?: string; height?: number }
@@ -232,6 +239,9 @@ const BLOCK_CATEGORIES: Array<{ name: string; items: Array<{ type: string; label
     name: 'Campos',
     items: [
       { type: 'email', label: 'Email', icon: AtSign },
+      // Botões empilhados que respondem E avançam num clique só — o
+      // primeiro passo de quase todo popup que converte por aí.
+      { type: 'choice', label: 'Escolhas', icon: Rows },
       { type: 'name-input', label: 'Nome', icon: User },
       { type: 'phone', label: 'Telefone', icon: Phone },
       { type: 'text-input', label: 'Texto', icon: TextCursorInput },
@@ -319,6 +329,22 @@ const defaultProps: Record<string, Record<string, any>> = {
   text: { content: 'Ganhe 10% de desconto!', fontSize: 28, color: '#111827', fontWeight: 'bold', align: 'center', tag: 'h2', lineHeight: 1.3 },
   button: { text: 'QUERO MEU DESCONTO', bgColor: '#F97316', textColor: '#fff', fontSize: 15, borderRadius: 8, fullWidth: true, action: 'submit', paddingV: 14, paddingH: 28 },
   image: { src: '', alt: '', imgWidth: 100, maxHeight: 300, borderRadius: 0, align: 'center', padding: 0 },
+  // Escolhas: os botões empilhados que abrem quase todo popup bom que
+  // existe por aí ("O que você está procurando?"). Clicar é a resposta E o
+  // avanço — sem bolinha de rádio e sem um segundo botão "continuar".
+  choice: {
+    label: 'O que você está procurando?', showLabel: true, labelSize: 17, labelColor: '#111827', labelGap: 16,
+    options: [
+      { id: 'o1', label: 'Opção 1', value: 'opcao-1', next: '' },
+      { id: 'o2', label: 'Opção 2', value: 'opcao-2', next: '' },
+      { id: 'o3', label: 'Opção 3', value: 'opcao-3', next: '' },
+    ],
+    mapTo: 'custom', mapToCustom: 'escolha',
+    optionBg: '#FFFFFF', optionColor: '#111827', hoverBg: '#F3F4F6',
+    fontSize: 16, fontWeight: '600', paddingV: 16, paddingH: 18,
+    borderRadius: 4, gap: 10, borderWidth: 1, borderColor: '#E5E7EB', uppercase: false,
+    declineText: '', declineColor: '#6B7280', declineSize: 13, declineGap: 16,
+  },
   spacer: { height: 24 },
   line: { color: '#E5E7EB', thickness: 1, style: 'solid', width: 100 },
   coupon: { code: 'DESCONTO10', description: 'Seu cupom de desconto:', bgColor: '#FFF7ED', borderColor: '#F97316', borderStyle: 'dashed', fontSize: 20 },
@@ -361,6 +387,8 @@ const defaultDesign: PopupDesign = {
     overlay: { enabled: true, color: '#000000', opacity: 50, closeOnClick: true },
     closeButton: { show: true, color: '#6B7280', size: 24 },
     sideImage: { enabled: false, src: '', position: 'left', width: 50 },
+    backgroundImage: { enabled: false, src: '', overlay: { enabled: true, color: '#000000', opacity: 45, style: 'gradient' } },
+    fullscreenMobile: false,
     animation: 'fade',
   },
   behavior: {
@@ -919,10 +947,6 @@ function offerLabelOf(cp: any): string {
   if (cp.discountType === 'fixed_amount' || cp.discountType === 'fixed') return `R$ ${Math.round(Number(cp.discountValue) * 100) / 100} OFF`
   return `${Math.round(Number(cp.discountValue) || 0)}% OFF`
 }
-function designOfferLabel(steps: Step[]): string {
-  for (const st of steps) for (const b of st.blocks) if (b.type === 'coupon') return offerLabelOf(b.props)
-  return ''
-}
 function applyOfferPreview(text: string, label: string | undefined, prize?: string): string {
   if (label === undefined) return text
   return String(text || '').replace(/\{\{\s*offer\s*\}\}/g, label).replace(/\{\{\s*prize\s*\}\}/g, prize || '')
@@ -951,13 +975,10 @@ function publishProblems(design: PopupDesign): string[] {
   }
   return Array.from(new Set(out))
 }
-// O rótulo do primeiro segmento do primeiro jogo: é o que a visualização
-// mostra onde o lojista escreveu {{prize}}.
-function designPrizeLabel(steps: Step[]): string {
-  for (const st of steps) for (const b of st.blocks) if (b.type === 'wheel' || b.type === 'scratch') return String(b.props?.segments?.[0]?.label || '')
-  return ''
-}
-const GAME_PALETTE = ['#F97316', '#111827', '#FDBA74', '#374151', '#FB923C', '#1F2937', '#FED7AA', '#4B5563']
+// Alternância estrita entre a cor da marca e o escuro. Seis tons
+// diferentes (laranja, preto, laranja claro, cinza…) viram uma roleta
+// suja: o olho não acha o padrão, e sem padrão não há roda.
+const GAME_PALETTE = ['#F97316', '#111827', '#F97316', '#111827', '#F97316', '#111827', '#F97316', '#111827']
 function gameSegments(p: any): Array<{ id: string; label: string; prize: string; weight: number; color: string; textColor?: string }> {
   const list: any[] = Array.isArray(p?.segments) ? p.segments.slice(0, 12) : []
   return list.map((s, i) => ({
@@ -1101,6 +1122,33 @@ function BlockPreview({ block, selected, onContentChange, onSelect, offerLabel, 
     // Prop-less spacers render 24px on the storefront (generator.ts
     // nv(p.height,24)); match that default here so the canvas doesn't
     // under-draw the gap. New inserts already carry height: 24.
+    // Escolhas: o mesmo empilhado que o runtime desenha. Clicar responde
+    // E avança — na tela de edição os botões são só a forma.
+    case 'choice': {
+      const opts: any[] = Array.isArray(p.options) ? p.options.slice(0, 8) : []
+      if (!opts.length) return <div style={{ ...blockStyle, padding: 16, textAlign: 'center', border: '1px dashed #FCA5A5', borderRadius: 8, color: '#B91C1C', fontSize: 12 }}>Adicione pelo menos uma opção.</div>
+      return <div style={blockStyle}>
+        {p.showLabel !== false && p.label && (
+          <div style={{ fontSize: p.labelSize || 17, color: p.labelColor || '#111827', textAlign: 'center', margin: `0 0 ${p.labelGap ?? 16}px` }}>{p.label}</div>
+        )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: p.gap ?? 10 }}>
+          {opts.map((o: any, i: number) => (
+            <button key={o?.id || i} type="button" style={{
+              boxSizing: 'border-box', display: 'block', width: '100%',
+              padding: `${p.paddingV ?? 16}px ${p.paddingH ?? 18}px`,
+              background: p.optionBg || '#FFFFFF', color: p.optionColor || '#111827',
+              fontSize: p.fontSize || 16, fontWeight: (p.fontWeight as any) || 600, lineHeight: 1.25, textAlign: 'center',
+              textTransform: p.uppercase ? 'uppercase' : 'none', letterSpacing: p.uppercase ? (p.letterSpacing ?? 1) : undefined,
+              border: (p.borderWidth ?? 1) > 0 ? `${p.borderWidth ?? 1}px solid ${p.borderColor || '#E5E7EB'}` : 'none',
+              borderRadius: p.borderRadius ?? 4, cursor: 'pointer',
+            }}>{String(o?.label ?? o ?? '')}</button>
+          ))}
+        </div>
+        {p.declineText && (
+          <button type="button" style={{ display: 'block', margin: `${p.declineGap ?? 16}px auto 0`, background: 'none', border: 'none', padding: 4, fontSize: p.declineSize || 13, color: p.declineColor || '#6B7280', textDecoration: 'underline', cursor: 'pointer' }}>{p.declineText}</button>
+        )}
+      </div>
+    }
     case 'spacer': return <div style={{ ...blockStyle, height: p.height ?? 24 }} />
     case 'line': return <div style={blockStyle}><hr style={{ border: 'none', borderTop: `${p.thickness || 1}px ${p.style || 'solid'} ${p.color || '#E5E7EB'}`, margin: '0 auto', width: `${p.width ?? 100}%` }} /></div>
     case 'coupon': {
@@ -1163,6 +1211,13 @@ function BlockPreview({ block, selected, onContentChange, onSelect, offerLabel, 
               })}
             </g>
             <circle cx={150} cy={150} r={WHEEL_R} fill={`url(#${gid}-sheen)`} pointerEvents="none" />
+            <circle cx={150} cy={150} r={WHEEL_R + 0.5} fill="none" stroke="rgba(255,255,255,.45)" strokeWidth={1.5} />
+            {/* As luzinhas do aro não giram: é o que faz o aro parecer a
+                moldura da máquina, e não a borda do desenho que roda. */}
+            {Array.from({ length: Math.min(24, Math.max(12, segs.length * 3)) }).map((_, i, arr) => {
+              const a = (i * 360 / arr.length - 90) * Math.PI / 180
+              return <circle key={`luz${i}`} cx={(150 + WHEEL_RIM_R * Math.cos(a)).toFixed(2)} cy={(150 + WHEEL_RIM_R * Math.sin(a)).toFixed(2)} r={2.3} fill="#FFFFFF" fillOpacity={i % 2 ? 0.32 : 0.62} />
+            })}
             <circle cx={150} cy={150} r={26} fill={hub} />
             <circle cx={150} cy={150} r={26} fill="none" stroke="rgba(0,0,0,.12)" strokeWidth={1} />
             <circle cx={150} cy={150} r={8.5} fill={ptr} />
@@ -1614,6 +1669,78 @@ function GameEditor({ type, p, up, hints }: { type: string; p: any; up: (k: stri
   </div>
 }
 
+// ── Escolhas ─────────────────────────────────────────────────────────
+// Um clique é a resposta E o avanço. É por isso que este bloco não tem
+// "botão continuar": pedir dois cliques onde um basta é o que separa um
+// popup que converte de um formulário.
+function ChoiceEditor({ p, up, steps }: { p: any; up: (k: string, v: any) => void; steps: Array<{ id: string; name: string }> }) {
+  const opts: any[] = Array.isArray(p.options) ? p.options : []
+  const setOpt = (i: number, patch: Record<string, any>) => up('options', opts.map((o, j) => (j === i ? { ...(typeof o === 'string' ? { label: o, value: o } : o), ...patch } : o)))
+  const rotulo = (o: any) => String(typeof o === 'string' ? o : o?.label ?? '')
+  return <div className="space-y-5">
+    <div className="space-y-3">
+      <SectionHeader title="Escolhas" icon={<Rows className="w-3 h-3" />} />
+      <p className="text-[11px] text-gray-400 leading-snug">O visitante clica numa opção e já avança — a resposta entra na submissão no campo abaixo. Cada opção pode levar a uma etapa própria.</p>
+      <LabeledField label="Pergunta">
+        <input className={inp} value={p.label || ''} onChange={e => up('label', e.target.value.slice(0, 120))} placeholder="O que você está procurando?" />
+      </LabeledField>
+      <Toggle label="Mostrar a pergunta" checked={p.showLabel !== false} onChange={v => up('showLabel', v)} />
+      <LabeledField label="Nome do campo" hint="É como a resposta aparece no contato e nos segmentos.">
+        <input className={inp} value={p.mapToCustom || ''} onChange={e => up('mapToCustom', e.target.value.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 30))} placeholder="escolha" />
+      </LabeledField>
+    </div>
+
+    <div className="space-y-2">
+      <SectionHeader title="Opções" icon={<LayoutGrid className="w-3 h-3" />} />
+      {opts.map((o, i) => (
+        <div key={(typeof o === 'object' && o?.id) || i} className="p-2.5 rounded-lg border border-gray-200 bg-white space-y-2">
+          <div className="flex items-center gap-2">
+            <input className={inp} value={rotulo(o)} onChange={e => setOpt(i, { label: e.target.value.slice(0, 60), value: (typeof o === 'object' && o?.value) || e.target.value.slice(0, 60) })} placeholder={`Opção ${i + 1}`} />
+            <button onClick={() => up('options', opts.filter((_, j) => j !== i))} disabled={opts.length <= 1}
+              className="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-gray-400" title="Remover opção">
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <select className={inp} value={(typeof o === 'object' && o?.next) || ''} onChange={e => setOpt(i, { next: e.target.value })}>
+            <option value="">Avançar para a próxima etapa</option>
+            {steps.map(st => <option key={st.id} value={st.id}>Ir para: {st.name}</option>)}
+          </select>
+        </div>
+      ))}
+      {opts.length < 8 && (
+        <button onClick={() => up('options', [...opts, { id: `o${Date.now().toString(36)}`, label: `Opção ${opts.length + 1}`, value: `opcao-${opts.length + 1}`, next: '' }])}
+          className="w-full py-2 text-[12px] font-medium text-gray-600 bg-white border border-dashed border-gray-300 rounded-lg hover:bg-gray-50">
+          + Adicionar opção
+        </button>
+      )}
+    </div>
+
+    <div className="pt-4 border-t border-gray-100 space-y-3">
+      <SectionHeader title="Aparência" icon={<Palette className="w-3 h-3" />} />
+      <ColorRow label="Fundo do botão" value={p.optionBg || '#FFFFFF'} onChange={v => up('optionBg', v)} />
+      <ColorRow label="Texto do botão" value={p.optionColor || '#111827'} onChange={v => up('optionColor', v)} />
+      <ColorRow label="Fundo ao passar o mouse" value={p.hoverBg || '#F3F4F6'} onChange={v => up('hoverBg', v)} />
+      <ColorRow label="Cor da pergunta" value={p.labelColor || '#111827'} onChange={v => up('labelColor', v)} />
+      <LabeledField label="Tamanho do texto"><Slider value={p.fontSize || 16} onChange={v => up('fontSize', v)} min={12} max={24} unit="px" /></LabeledField>
+      <LabeledField label="Altura do botão"><Slider value={p.paddingV ?? 16} onChange={v => up('paddingV', v)} min={8} max={28} unit="px" /></LabeledField>
+      <LabeledField label="Cantos"><Slider value={p.borderRadius ?? 4} onChange={v => up('borderRadius', v)} min={0} max={30} unit="px" /></LabeledField>
+      <LabeledField label="Espaço entre botões"><Slider value={p.gap ?? 10} onChange={v => up('gap', v)} min={0} max={24} unit="px" /></LabeledField>
+      <LabeledField label="Borda"><Slider value={p.borderWidth ?? 1} onChange={v => up('borderWidth', v)} min={0} max={4} unit="px" /></LabeledField>
+      {(p.borderWidth ?? 1) > 0 && <ColorRow label="Cor da borda" value={p.borderColor || '#E5E7EB'} onChange={v => up('borderColor', v)} />}
+      <Toggle label="Tudo em maiúsculas" checked={!!p.uppercase} onChange={v => up('uppercase', v)} />
+    </div>
+
+    <div className="pt-4 border-t border-gray-100 space-y-3">
+      <SectionHeader title="Recusar" icon={<X className="w-3 h-3" />} />
+      <p className="text-[11px] text-gray-400 leading-snug">O link discreto de saída. Vazio, não aparece — e quem quiser sair usa o X do popup.</p>
+      <LabeledField label="Texto">
+        <input className={inp} value={p.declineText || ''} onChange={e => up('declineText', e.target.value.slice(0, 40))} placeholder="Não, obrigado" />
+      </LabeledField>
+      {p.declineText && <ColorRow label="Cor" value={p.declineColor || '#6B7280'} onChange={v => up('declineColor', v)} />}
+    </div>
+  </div>
+}
+
 function RewardTiersEditor({ p, up, steps }: { p: any; up: (k: string, v: any) => void; steps: Array<{ id: string; name: string }> }) {
   const tiers: any[] = Array.isArray(p.tiers) ? p.tiers : []
   const setTier = (i: number, patch: Record<string, any>) => up('tiers', tiers.map((t, j) => (j === i ? { ...t, ...patch } : t)))
@@ -1763,7 +1890,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
     email: 'Email', phone: 'Telefone', 'name-input': 'Nome', 'text-input': 'Campo',
     'date-input': 'Data', dropdown: 'Dropdown', radio: 'Radio', checkbox: 'Checkbox',
     'legal-consent': 'Consentimento', text: 'Conteúdo', button: 'Botão', image: 'Imagem',
-    spacer: 'Espaçador', line: 'Linha', coupon: 'Cupom', countdown: 'Contagem', wheel: 'Roleta', scratch: 'Raspadinha',
+    spacer: 'Espaçador', line: 'Linha', coupon: 'Cupom', countdown: 'Contagem', wheel: 'Roleta', scratch: 'Raspadinha', choice: 'Escolhas',
   }
 
   // Unified input "Input" tab renderer (Omnisend-style clean sections)
@@ -2607,6 +2734,8 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
           </div>
         </div>
 
+      case 'choice':
+        return <ChoiceEditor p={p} up={up} steps={steps} />
       case 'wheel':
       case 'scratch':
         return <GameEditor type={block.type} p={p} up={up} hints={hints || { hasCoupon: true, couponTiers: [], baseOfferLabel: '', gameBlocks: 1 }} />
@@ -3584,6 +3713,10 @@ function ThemePanel({ design, onChange, onOpenMedia }: { design: PopupDesign; on
   const setS = (val: Partial<PopupDesign['styles']>) => onChange({ ...design, styles: { ...s, ...val } })
   const setOv = (val: Partial<PopupDesign['styles']['overlay']>) => onChange({ ...design, styles: { ...s, overlay: { ...s.overlay, ...val } } })
   const setSi = (val: Partial<PopupDesign['styles']['sideImage']>) => onChange({ ...design, styles: { ...s, sideImage: { ...s.sideImage, ...val } } })
+  const bgi = s.backgroundImage || { enabled: false, src: '' }
+  const bgOv = bgi.overlay || {}
+  const setBgi = (val: Partial<NonNullable<PopupDesign['styles']['backgroundImage']>>) => onChange({ ...design, styles: { ...s, backgroundImage: { ...bgi, ...val } } })
+  const setBgOv = (val: Partial<NonNullable<NonNullable<PopupDesign['styles']['backgroundImage']>['overlay']>>) => onChange({ ...design, styles: { ...s, backgroundImage: { ...bgi, overlay: { ...bgOv, ...val } } } })
   const setCb = (val: Partial<PopupDesign['styles']['closeButton']>) => onChange({ ...design, styles: { ...s, closeButton: { ...s.closeButton, ...val } } })
 
   // Resolve per-side padding (fallback to legacy single value)
@@ -3677,6 +3810,56 @@ function ThemePanel({ design, onChange, onOpenMedia }: { design: PopupDesign; on
               </Field>
             </div>
           )}
+        </div>
+      </Section>
+
+      {/* A foto sangrando atrás de tudo. É o formato dos popups que
+          convertem hoje — logo pequena, título gigante e a foto inteira
+          por trás —, e até agora o runtime sabia desenhar e o editor não
+          sabia pedir. */}
+      <Section title="Imagem de fundo">
+        <ToggleRow label="Foto atrás do conteúdo" checked={!!bgi.enabled} onChange={v => setBgi({ enabled: v })} />
+        {bgi.enabled && (
+          <div className="mt-3 space-y-3">
+            {bgi.src ? (
+              <div className="space-y-2">
+                <img src={bgi.src} alt="" className="w-full h-28 object-cover rounded-lg border border-gray-200" />
+                <div className="flex gap-2">
+                  <button onClick={() => onOpenMedia?.(url => setBgi({ src: url }))}
+                    className="flex-1 py-2 text-[12px] font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">Trocar</button>
+                  <button onClick={() => setBgi({ src: '' })} className="flex-1 py-2 text-[12px] font-medium text-red-600 bg-white border border-gray-200 rounded-lg hover:bg-red-50">Remover</button>
+                </div>
+              </div>
+            ) : (
+              <button onClick={() => onOpenMedia?.(url => setBgi({ src: url }))}
+                className="w-full border-2 border-dashed border-gray-200 rounded-lg p-6 text-center hover:border-gray-400 hover:bg-gray-100/40 transition-colors">
+                <Upload className="w-6 h-6 text-gray-300 mx-auto mb-2" />
+                <span className="text-[12px] text-gray-500">Escolher imagem da biblioteca</span>
+              </button>
+            )}
+            {/* Sem véu, texto branco sobre foto clara some. Com véu demais,
+                a foto vira fundo cinza e não valeu a pena. */}
+            <ToggleRow label="Escurecer a foto" checked={bgOv.enabled !== false} onChange={v => setBgOv({ enabled: v })} />
+            {bgOv.enabled !== false && (
+              <div className="space-y-3">
+                <Field label="Cor do véu"><ColorPicker value={bgOv.color || '#000000'} onChange={v => setBgOv({ color: v })} /></Field>
+                <Field label={`Intensidade: ${bgOv.opacity ?? 45}%`}>
+                  <input type="range" min={0} max={100} value={bgOv.opacity ?? 45} onChange={e => setBgOv({ opacity: +e.target.value })} className="w-full accent-orange-500" />
+                </Field>
+                <Field label="Como escurecer">
+                  <div className="flex border border-gray-200 rounded-lg overflow-hidden">
+                    <button onClick={() => setBgOv({ style: 'gradient' })} className={`flex-1 py-2 text-[12px] font-medium transition-colors ${(bgOv.style || 'gradient') === 'gradient' ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>Degradê</button>
+                    <button onClick={() => setBgOv({ style: 'flat' })} className={`flex-1 py-2 text-[12px] font-medium transition-colors ${bgOv.style === 'flat' ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>Chapado</button>
+                  </div>
+                </Field>
+                <p className="text-[11px] text-gray-400 leading-snug">Degradê escurece só onde o texto fica, preservando a foto em cima. Chapado é para foto muito clara.</p>
+              </div>
+            )}
+          </div>
+        )}
+        <div className="mt-3">
+          <ToggleRow label="Tela cheia no celular" checked={!!s.fullscreenMobile} onChange={v => setS({ fullscreenMobile: v })} />
+          <p className="mt-1 text-[11px] text-gray-400 leading-snug">O popup ocupa a tela inteira do celular, sem cantos nem margem — é o que as lojas grandes fazem com foto de fundo.</p>
         </div>
       </Section>
 
@@ -3966,6 +4149,11 @@ export default function PopupEditorPage() {
   const [leftTab, setLeftTab] = useState<'blocks' | 'styles' | 'targeting'>('blocks')
   const [showPreview, setShowPreview] = useState(false)
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop')
+  // A pré-visualização roda o popup DE VERDADE num iframe (/popup-preview).
+  // O nonce remonta o iframe: é o "rodar de novo" depois de fechar o popup
+  // ou de jogar uma vez.
+  const [previewNonce, setPreviewNonce] = useState(0)
+  const previewFrameRef = useRef<HTMLIFrameElement>(null)
   const [showMediaLibrary, setShowMediaLibrary] = useState(false)
   const mediaCallbackRef = useRef<((url: string) => void) | null>(null)
   // Undo/Redo — index-consistent history (seeded on load, trimmed with the
@@ -3977,9 +4165,62 @@ export default function PopupEditorPage() {
   // crash the canvas. Steps are also repaired on load — this is the belt.
   const activeStep: Step = (showSuccess ? design.successStep : (design.steps[activeStepIdx] ?? design.steps[0])) ?? EMPTY_FALLBACK_STEP
   const selectedBlock = activeStep?.blocks.find(b => b.id === selectedBlockId) ?? null
-  // No modo de visualização, {{offer}} vira a oferta base (o runtime troca pela oferta escolhida).
-  const previewOfferLabel = useMemo(() => designOfferLabel([...design.steps, design.successStep].filter(Boolean) as Step[]), [design.steps, design.successStep])
-  const previewPrizeLabel = useMemo(() => designPrizeLabel(design.steps), [design.steps])
+
+  // ── A bancada de teste ──────────────────────────────────────────────
+  // O que o lojista vê ao clicar em "Visualizar" é o POPUP DE VERDADE: o
+  // mesmo script que o snippet carrega na loja, rodando dentro de um
+  // iframe com a rede encenada (/popup-preview). Antes, aqui, havia uma
+  // segunda implementação em React que só DESENHAVA o popup — não dava
+  // para avançar de etapa, nem raspar, nem girar, e qualquer diferença
+  // entre as duas só aparecia na loja do cliente.
+  //
+  // Os gatilhos e as travas de frequência são neutralizados na cópia
+  // enviada: teste tem de abrir na hora e quantas vezes for preciso.
+  const previewDadosRef = useRef({ design, formId, formName })
+  previewDadosRef.current = { design, formId, formName }
+  useEffect(() => {
+    if (!showPreview) return
+    let vivo = true
+    let carga: { script: string; design: any } | null = null
+    let quadroPronto = false
+    const enviar = () => {
+      const w = previewFrameRef.current?.contentWindow
+      if (!vivo || !quadroPronto || !carga || !w) return
+      w.postMessage({ type: 'wf-preview-script', script: carga.script, design: carga.design, formId: previewDadosRef.current.formId }, window.location.origin)
+    }
+    const aoReceber = (ev: MessageEvent) => {
+      if (ev.origin !== window.location.origin) return
+      if ((ev.data as any)?.type !== 'wf-preview-ready') return
+      quadroPronto = true
+      enviar()
+    }
+    window.addEventListener('message', aoReceber)
+    void (async () => {
+      try {
+        const { buildPopupScript } = await import('@/app/api/public/forms/[id]/script/generator')
+        const { design: d, formId: fid, formName: fname } = previewDadosRef.current
+        const comportamento = {
+          ...(d.behavior || {}),
+          display: { timeEnabled: true, delay: 0, exitEnabled: false, scrollEnabled: false, pageViewEnabled: false, matchAll: false },
+          visibility: { devices: 'all', visitorType: 'all', hideFromSubscribers: false },
+          frequency: { showAfterDays: 0, stopAfterSubmission: false },
+          // Segmento, carrinho, país, agenda, UTM, re-disparo inteligente e
+          // gatilho por código: todos fora. Nenhum deles se pode conferir
+          // aqui, e qualquer um deles seguraria o popup para sempre.
+          audienceTargeting: null, cart: null, location: null, page: null,
+          scheduling: null, smartTrigger: null, targeting: null, traffic: null,
+          urls: null, utm: null, customTrigger: null, experiment: null,
+        }
+        const script = buildPopupScript({ id: fid, name: fname, design_json: d, behavior: comportamento }, window.location.origin)
+        if (!vivo) return
+        carga = { script, design: d }
+        enviar()
+      } catch (e) {
+        console.error('[preview] não deu para montar o script do popup', e)
+      }
+    })()
+    return () => { vivo = false; window.removeEventListener('message', aoReceber) }
+  }, [showPreview, previewNonce])
   // O que o editor de blocos precisa saber do popup inteiro: o bloco de
   // cupom (níveis e oferta base, para os prêmios do jogo) e quantos jogos há.
   const designHints = useMemo(() => {
@@ -4079,6 +4320,7 @@ export default function PopupEditorPage() {
             overlay: { ...defaultDesign.styles.overlay, ...(saved.styles?.overlay || {}) },
             closeButton: { ...defaultDesign.styles.closeButton, ...(saved.styles?.closeButton || {}) },
             sideImage: { ...defaultDesign.styles.sideImage, ...(saved.styles?.sideImage || {}) },
+            backgroundImage: { ...defaultDesign.styles.backgroundImage, ...(saved.styles?.backgroundImage || {}), overlay: { ...defaultDesign.styles.backgroundImage?.overlay, ...(saved.styles?.backgroundImage?.overlay || {}) } },
           },
           behavior: {
             ...defaultDesign.behavior,
@@ -4432,48 +4674,10 @@ export default function PopupEditorPage() {
 
   const s = design.styles
 
-  // Canvas-preview parity with the storefront script (generator.ts
-  // popCss()/ovStyle): the box size, its position and the backdrop all
-  // depend on formType. Without this the editor drew EVERY type as a
-  // centered popup, so a merchant designing a banner/flyout/fullpage/embed
-  // saw a layout that didn't match what publishes.
-  const ft = design.formType || 'popup'
-  const isBannerFt = ft === 'banner'
-  const isFlyoutFt = ft === 'flyout'
-  const isFullpageFt = ft === 'fullpage'
-  const isEmbedFt = ft === 'embed'
-  // Dark backdrop only for the two types that dim the page.
-  const showBackdrop = (ft === 'popup' || ft === 'fullpage') && s.overlay.enabled
-  // Where the box sits within the canvas viewport.
-  const canvasAlign: React.CSSProperties =
-    isFlyoutFt ? { alignItems: 'flex-end', justifyContent: 'flex-end', padding: 16 }
-    : isBannerFt ? { alignItems: 'flex-start', justifyContent: 'center' }
-    : { alignItems: 'center', justifyContent: 'center' }
-  const boxWidth: number | string =
-    isBannerFt || isFullpageFt || isEmbedFt ? '100%'
-    : previewDevice === 'mobile' ? 360
-    : isFlyoutFt ? Math.min(s.width, 400)
-    : s.width
-  const boxStyle: React.CSSProperties = {
-    width: boxWidth,
-    maxWidth: isBannerFt || isFullpageFt || isEmbedFt ? '100%' : '95%',
-    height: isFullpageFt ? '100%' : undefined,
-    minHeight: isBannerFt || isFlyoutFt || isEmbedFt ? undefined : (s.minHeight ?? 500),
-    borderRadius: isBannerFt || isFullpageFt ? 0 : s.borderRadius,
-    // Inline shadow wins over the shadow-2xl class for non-popup types;
-    // popup leaves it undefined so the class applies.
-    boxShadow: isFullpageFt || isEmbedFt ? 'none'
-      : isBannerFt ? '0 2px 8px rgba(0,0,0,0.08)'
-      : isFlyoutFt ? '0 20px 40px -10px rgba(0,0,0,0.3)'
-      : undefined,
-    animation: s.animation === 'fade' ? 'fadeIn 0.3s ease' : s.animation === 'slide-up' ? 'slideUp 0.3s ease' : undefined,
-  }
-  // Banner/flyout flow top-aligned; popup/fullpage/embed keep the
-  // vertically-centered column.
-  const contentVCenter = !(isBannerFt || isFlyoutFt)
-  // Side image never renders on banner/flyout or on mobile (matches the
-  // script's hasSideAt()).
-  const sideAllowed = !isBannerFt && !isFlyoutFt && previewDevice !== 'mobile'
+  // A paridade entre editor e loja não mora mais aqui: a
+  // pré-visualização roda o script de verdade (/popup-preview), então
+  // tipo de formulário, fundo, tamanho e alinhamento são calculados uma
+  // vez só — no runtime. O que sobra nesta tela é a tela de edição.
 
   return (
     <div className="h-screen flex flex-col bg-gray-100">
@@ -4587,7 +4791,7 @@ export default function PopupEditorPage() {
                         'text-input': 'Campo de texto', 'date-input': 'Data',
                         dropdown: 'Dropdown', radio: 'Radio', checkbox: 'Checkbox',
                         'legal-consent': 'Consentimento', text: 'Texto', button: 'Botão', image: 'Imagem',
-                        spacer: 'Espaçador', line: 'Linha', coupon: 'Cupom', countdown: 'Contagem', wheel: 'Roleta', scratch: 'Raspadinha',
+                        spacer: 'Espaçador', line: 'Linha', coupon: 'Cupom', countdown: 'Contagem', wheel: 'Roleta', scratch: 'Raspadinha', choice: 'Escolhas',
                       }
                       return labels[selectedBlock.type] || selectedBlock.type
                     })()}
@@ -4890,52 +5094,33 @@ export default function PopupEditorPage() {
                   <Smartphone className="w-4 h-4 inline mr-1" />Mobile
                 </button>
               </div>
+              {/* Fechou o popup, jogou uma vez, quer testar outro caminho:
+                  recarregar devolve tudo ao começo. */}
+              <button onClick={() => setPreviewNonce(n => n + 1)} className="px-3 py-1.5 rounded text-xs font-medium text-gray-300 hover:text-white hover:bg-gray-800" title="Rodar de novo">
+                <RotateCcw className="w-4 h-4 inline mr-1" />Rodar de novo
+              </button>
             </div>
             <button autoFocus onClick={() => setShowPreview(false)} className="flex items-center gap-2 px-4 py-1.5 bg-white text-gray-900 rounded-lg text-sm font-medium hover:bg-gray-100">
               <X className="w-4 h-4" /> Fechar Preview
             </button>
           </div>
-          {/* Simulated website background */}
-          <div className="flex-1 overflow-auto bg-gray-200" style={{ backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 40px, #d1d5db 40px, #d1d5db 41px)' }}>
-            {/* Fake website content */}
-            <div className="max-w-4xl mx-auto px-8 py-12">
-              <div className="h-8 w-48 bg-gray-300 rounded mb-8" />
-              <div className="flex gap-6 mb-6">
-                <div className="h-4 flex-1 bg-gray-300 rounded" /><div className="h-4 w-24 bg-gray-300 rounded" /><div className="h-4 w-32 bg-gray-300 rounded" />
-              </div>
-              <div className="space-y-3 mb-8">
-                <div className="h-3 w-full bg-gray-300/60 rounded" /><div className="h-3 w-5/6 bg-gray-300/60 rounded" /><div className="h-3 w-4/6 bg-gray-300/60 rounded" />
-              </div>
-              <div className="h-48 bg-gray-300/40 rounded-lg mb-8" />
-              <div className="space-y-3">
-                <div className="h-3 w-full bg-gray-300/60 rounded" /><div className="h-3 w-3/4 bg-gray-300/60 rounded" /><div className="h-3 w-5/6 bg-gray-300/60 rounded" />
-              </div>
-            </div>
-            {/* Popup overlay — position/backdrop/box mirror the storefront per formType */}
-            <div className="fixed inset-0 top-[52px] flex" style={{ zIndex: 10, ...canvasAlign }}>
-              {showBackdrop && <div className="absolute inset-0" style={{ backgroundColor: s.overlay.color, opacity: s.overlay.opacity / 100 }} />}
-              <div className="relative flex overflow-hidden shadow-2xl" style={boxStyle}>
-                {s.closeButton.show && (
-                  <button className="absolute top-3 right-3 rounded-full bg-black/30 flex items-center justify-center z-20"
-                    style={{ width: s.closeButton.size ?? 24, height: s.closeButton.size ?? 24 }}>
-                    <X style={{ color: s.closeButton.color || '#FFFFFF', width: Math.round((s.closeButton.size ?? 24) * 0.58), height: Math.round((s.closeButton.size ?? 24) * 0.58) }} />
-                  </button>
-                )}
-                {s.sideImage.enabled && s.sideImage.position === 'left' && s.sideImage.src && sideAllowed && (
-                  <div style={{ flex: 1, flexBasis: 0, minWidth: 0 }} className="overflow-hidden">
-                    <img src={s.sideImage.src} className="w-full h-full object-cover" alt="" />
-                  </div>
-                )}
-                <div style={{ backgroundColor: s.backgroundColor, paddingTop: s.paddingTop ?? s.padding ?? 32, paddingRight: s.paddingRight ?? s.padding ?? 32, paddingBottom: s.paddingBottom ?? s.padding ?? 32, paddingLeft: s.paddingLeft ?? s.padding ?? 32, fontFamily: s.fontFamily, flex: 1, flexBasis: 0, minWidth: 0, minHeight: (isBannerFt || isFlyoutFt) ? undefined : (s.minHeight ?? 500), display: 'flex', flexDirection: 'column', justifyContent: contentVCenter ? 'center' : 'flex-start' }}>
-                  {activeStep.blocks.filter(b => previewDevice === 'mobile' ? !b.props?.hideOnMobile : !b.props?.hideOnDesktop).map(block => <BlockPreview key={block.id} block={block} offerLabel={previewOfferLabel} prizeLabel={previewPrizeLabel} />)}
-                </div>
-                {s.sideImage.enabled && s.sideImage.position === 'right' && s.sideImage.src && sideAllowed && (
-                  <div style={{ flex: 1, flexBasis: 0, minWidth: 0 }} className="overflow-hidden">
-                    <img src={s.sideImage.src} className="w-full h-full object-cover" alt="" />
-                  </div>
-                )}
-              </div>
-            </div>
+          {/* O popup DE VERDADE, num iframe: mesmo script que a loja
+              carrega, com a rede encenada. É onde se avança de etapa, se
+              raspa e se gira — não há segunda implementação para mentir. */}
+          <div className="flex-1 overflow-hidden bg-gray-200 flex justify-center">
+            <iframe
+              key={previewNonce}
+              ref={previewFrameRef}
+              src="/popup-preview?wf_debug=1"
+              title="Pré-visualização do popup"
+              className="border-0 bg-gray-200"
+              style={{
+                width: previewDevice === 'mobile' ? 390 : '100%',
+                height: '100%',
+                maxWidth: '100%',
+                boxShadow: previewDevice === 'mobile' ? '0 0 0 1px rgba(0,0,0,.18)' : undefined,
+              }}
+            />
           </div>
           <style>{`
             @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }

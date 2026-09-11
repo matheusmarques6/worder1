@@ -1196,6 +1196,13 @@ function renderBlock(b){
         var ap=(wi*360/wn-90)*Math.PI/180;
         wpin+='<circle cx="'+(WC+(WR-4)*Math.cos(ap)).toFixed(2)+'" cy="'+(WC+(WR-4)*Math.sin(ap)).toFixed(2)+'" r="3.2" fill="#FFFFFF" fill-opacity=".92"></circle>';
       }
+      // As luzinhas do aro. Elas NÃO giram — é o que faz o aro parecer a
+      // moldura da máquina, e não a borda do desenho que roda.
+      var wluz="",wnl=Math.min(24,Math.max(12,wn*3));
+      for(var wl=0;wl<wnl;wl++){
+        var wla=(wl*360/wnl-90)*Math.PI/180;
+        wluz+='<circle cx="'+(WC+141*Math.cos(wla)).toFixed(2)+'" cy="'+(WC+141*Math.sin(wla)).toFixed(2)+'" r="2.3" fill="#FFFFFF" fill-opacity="'+(wl%2?".32":".62")+'"></circle>';
+      }
       h='<div data-game="wheel" data-game-id="'+wid+'" data-n="'+wn+'"'+(p.sound===false?' data-sound="0"':'')+' style="'+blockStyleStr(p,true,true)+'text-align:center">'
         +'<div style="position:relative;display:inline-block;width:'+wsz+'px;max-width:100%;filter:drop-shadow(0 14px 28px rgba(0,0,0,.24))">'
         +'<svg id="wf-wheel-'+wid+'" viewBox="0 0 300 300" role="img" aria-label="'+esc(p.ariaLabel||"Roleta de pr\\u00eamios")+'" style="width:100%;height:auto;display:block;overflow:visible">'
@@ -1206,6 +1213,8 @@ function renderBlock(b){
         +'<circle cx="150" cy="150" r="141" fill="none" stroke="url(#wf-wrim-'+wid+')" stroke-width="17"></circle>'
         +'<g id="wf-wdisc-'+wid+'" transform="rotate(0 150 150)">'+wp+wpin+'</g>'
         +'<circle cx="150" cy="150" r="132" fill="url(#wf-wsh-'+wid+')" pointer-events="none"></circle>'
+        +'<circle cx="150" cy="150" r="132.5" fill="none" stroke="rgba(255,255,255,.45)" stroke-width="1.5"></circle>'
+        +wluz
         +'<circle cx="150" cy="150" r="26" fill="'+wStroke+'"></circle><circle cx="150" cy="150" r="26" fill="none" stroke="rgba(0,0,0,.12)" stroke-width="1"></circle><circle cx="150" cy="150" r="8.5" fill="'+wPtr+'"></circle>'
         +'</svg>'
         // O ponteiro fica FORA do svg que gira, com o pivô no topo: é ele

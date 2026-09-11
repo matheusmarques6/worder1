@@ -52,6 +52,21 @@ const coupon = (id: string, over: Record<string, any> = {}) => ({
   },
 })
 const spacer = (id: string, height = 8) => ({ id, type: 'spacer', props: { height } })
+// Escolhas: um clique responde E avança. É o primeiro passo de quase todo
+// popup que converte por aí — e a resposta vira segmento depois.
+const choice = (id: string, label: string, options: Array<{ label: string; next?: string }>, over: Record<string, any> = {}) => ({
+  id, type: 'choice',
+  props: {
+    label, showLabel: true, labelSize: 17, labelColor: '#FFFFFF', labelGap: 16,
+    options: options.map((o, i) => ({ id: `o${i + 1}`, label: o.label, value: o.label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 30), next: o.next || '' })),
+    mapTo: 'custom', mapToCustom: 'interesse',
+    optionBg: '#FFFFFF', optionColor: '#111827', hoverBg: '#F3F4F6',
+    fontSize: 16, fontWeight: '600', paddingV: 16, paddingH: 18,
+    borderRadius: 2, gap: 10, borderWidth: 0, uppercase: false,
+    declineText: '', declineColor: '#E5E7EB', declineSize: 13, declineGap: 16,
+    ...over,
+  },
+})
 const radio = (id: string, label: string, options: string[], over: Record<string, any> = {}) => ({
   id, type: 'radio',
   props: { label, options, layout: 'vertical', showLabel: true, required: true, mapTo: 'custom', mapToCustom: label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/(^_|_$)/g, '').slice(0, 30), ...over },
@@ -258,6 +273,54 @@ export const POPUP_TEMPLATES: PopupTemplate[] = [
     ),
   },
   {
+    id: 'foto-escolha',
+    name: 'Foto de fundo + escolhas',
+    formType: 'popup',
+    category: 'capture',
+    description: 'O formato das lojas grandes: foto sangrando, título gigante e botões empilhados. A escolha vira segmento e o e-mail vem na etapa seguinte.',
+    design: design('popup',
+      [
+        [
+          // Sem espaço em branco, sem caixa branca: a foto é o fundo, o
+          // texto vive por cima dela e o primeiro clique é a resposta.
+          sub('m1', 'SUA MARCA', { fontSize: 12, color: '#FFFFFF', letterSpacing: 3, fontWeight: 'bold' }),
+          spacer('sp0', 120),
+          text('t1', 'VOCÊ GANHOU UMA OFERTA EXCLUSIVA', { fontSize: 40, lineHeight: 1, letterSpacing: -0.5, color: '#FFFFFF' }),
+          spacer('sp1', 10),
+          choice('c1', 'O que você está procurando?', [
+            { label: 'Novidades' },
+            { label: 'Mais vendidos' },
+            { label: 'Promoções' },
+          ], { declineText: 'Só estou olhando' }),
+        ],
+        [
+          text('t2', 'QUASE LÁ', { fontSize: 34, lineHeight: 1.05, color: '#FFFFFF' }),
+          sub('t3', 'Deixe seu e-mail e o desconto é seu.', { fontSize: 15, color: '#F3F4F6' }),
+          spacer('sp2', 14),
+          email('e1', { placeholder: 'Seu melhor e-mail', showLabel: false }),
+          consent('cs1', ['email'], EMAIL_CONSENT),
+          button('b1', 'QUERO MEU DESCONTO', { bgColor: '#FFFFFF', textColor: '#111827', fontSize: 15, paddingV: 16, borderRadius: 2 }),
+        ],
+      ],
+      [
+        text('s1', 'Pronto', { fontSize: 32, color: '#FFFFFF' }),
+        sub('s2', 'Seu cupom já está no carrinho e vale por 7 dias.', { color: '#F3F4F6' }),
+        coupon('k1', { code: 'EXCLUSIVO10', codePrefix: 'EXCLUSIVO' }),
+      ],
+      {
+        styles: {
+          width: 460, minHeight: 560, padding: 28, borderRadius: 4,
+          backgroundColor: '#111827',
+          // A foto entra pela biblioteca de mídia — o template já vem com
+          // o formato montado para ela.
+          backgroundImage: { enabled: true, src: '', overlay: { enabled: true, color: '#000000', opacity: 45, style: 'gradient' } },
+          fullscreenMobile: true,
+          closeButton: { show: true, color: '#FFFFFF', size: 28 },
+        },
+      },
+    ),
+  },
+  {
     id: 'spin-to-win',
     name: 'Roleta de prêmios',
     formType: 'popup',
@@ -275,10 +338,10 @@ export const POPUP_TEMPLATES: PopupTemplate[] = [
         wheel('w1', [
           { id: 's1', label: '10% OFF', prize: 'base', weight: 35, color: '#F97316' },
           { id: 's2', label: 'Quase!', prize: 'none', weight: 15, color: '#111827' },
-          { id: 's3', label: 'Frete grátis', prize: 't-frete', weight: 15, color: '#FDBA74' },
-          { id: 's4', label: '10% OFF', prize: 'base', weight: 20, color: '#374151' },
-          { id: 's5', label: 'Tente de novo', prize: 'none', weight: 5, color: '#FB923C' },
-          { id: 's6', label: '10% OFF', prize: 'base', weight: 10, color: '#1F2937' },
+          { id: 's3', label: 'Frete grátis', prize: 't-frete', weight: 15, color: '#F97316' },
+          { id: 's4', label: '10% OFF', prize: 'base', weight: 20, color: '#111827' },
+          { id: 's5', label: 'Tente de novo', prize: 'none', weight: 5, color: '#F97316' },
+          { id: 's6', label: '10% OFF', prize: 'base', weight: 10, color: '#111827' },
         ], { showButton: false, size: 300 }),
         spacer('sp2', 16),
         email('e1', { placeholder: 'Seu melhor e-mail' }),
