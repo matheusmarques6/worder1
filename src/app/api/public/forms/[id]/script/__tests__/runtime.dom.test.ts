@@ -917,6 +917,82 @@ describe('gamificação: roleta e raspadinha', () => {
     expect(formEl(id)!.querySelector('[data-game="wheel"]')!.getAttribute('data-sound')).toBe('0')
   })
 
+  // AS CARTAS: escolher é o jogo. A escolhida vira primeiro, sozinha; as
+  // outras só depois e apagadas, mostrando o que dava para ter tirado.
+  it('cartas: a escolhida vira com o prêmio do servidor e as outras com o que sobrou', async () => {
+    freshPage()
+    withSubmit({
+      game: { type: 'cards', segment: 2, segment_id: 's3', label: 'Frete grátis', prize: 't-ship' },
+      coupon: { code: 'SHIP-1', kind: 'free_shipping', value: 0, ends_at: null, auto_apply: false, show_code: true },
+    })
+    const escolhas = listen('gameCardPick')
+    const reveladas = listen('gameCardsRevealed')
+    const id = run(gameDesign({ id: 'k1', type: 'cards', props: { segments, count: 3 } }))
+    await vi.advanceTimersByTimeAsync(1500)
+    const form = formEl(id)!
+    const cartas = Array.from(form.querySelectorAll('.wf-cd')) as HTMLElement[]
+    expect(cartas.length).toBe(3)
+    // Viradas para baixo: a frente do prêmio está vazia até o envio.
+    expect(Array.from(form.querySelectorAll('[id^="wf-cdb-"]')).every(el => !el.textContent)).toBe(true)
+
+    // Escolher a segunda carta marca só ela e leva o cursor ao e-mail.
+    cartas[1].dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(cartas.map(c => c.getAttribute('data-sel'))).toEqual([null, '1', null])
+    expect(escolhas[0]).toMatchObject({ game: 'cards', card: 1 })
+    expect((root(id)!.activeElement as HTMLInputElement)?.name).toBe('email')
+
+    ;(form.querySelector('input[name="email"]') as HTMLInputElement).value = 'ana@example.com'
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await vi.advanceTimersByTimeAsync(50)
+    // A escolhida virou sozinha; as outras ainda não.
+    const viradas = () => Array.from(form.querySelectorAll('.wf-cd-in')).map(el => el.className.includes('wf-flip'))
+    expect(viradas()).toEqual([false, true, false])
+    // O prêmio da escolhida é o do servidor; as outras pegam o que sobrou,
+    // sem repetir o prêmio ganho.
+    const faces = Array.from(form.querySelectorAll('[id^="wf-cdb-"]')).map(el => el.textContent)
+    expect(faces[1]).toBe('Frete grátis')
+    expect(faces.filter(t => t === 'Frete grátis').length).toBe(1)
+
+    await vi.advanceTimersByTimeAsync(1700)
+    expect(viradas()).toEqual([true, true, true])
+    expect(form.querySelector('[id^="wf-cdsr-"]')!.textContent).toBe('Frete grátis')
+    expect(reveladas[0]).toMatchObject({ game: 'cards', card: 1, label: 'Frete grátis' })
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(root(id)!.textContent).toContain('Você ganhou Frete grátis')
+    expect(root(id)!.textContent).toContain('SHIP-1')
+  })
+
+  it('cartas: quem envia sem escolher ainda recebe o prêmio', async () => {
+    freshPage()
+    withSubmit({ game: { type: 'cards', segment: 0, segment_id: 's1', label: '10% OFF', prize: 'base' } })
+    const id = run(gameDesign({ id: 'k1', type: 'cards', props: { segments, count: 3 } }))
+    await vi.advanceTimersByTimeAsync(1500)
+    const form = formEl(id)!
+    ;(form.querySelector('input[name="email"]') as HTMLInputElement).value = 'bia@example.com'
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await vi.advanceTimersByTimeAsync(3000)
+    const faces = Array.from(form.querySelectorAll('[id^="wf-cdb-"]')).map(el => el.textContent)
+    expect(faces.filter(t => t === '10% OFF').length).toBe(1)
+    expect(Array.from(form.querySelectorAll('.wf-cd-in')).every(el => el.className.includes('wf-flip'))).toBe(true)
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(root(id)!.textContent).toContain('Você ganhou 10% OFF')
+  })
+
+  it('cartas: depois de revelado, clicar não troca mais a escolha', async () => {
+    freshPage()
+    withSubmit({ game: { type: 'cards', segment: 0, segment_id: 's1', label: '10% OFF', prize: 'base' } })
+    const id = run(gameDesign({ id: 'k1', type: 'cards', props: { segments, count: 3 } }))
+    await vi.advanceTimersByTimeAsync(1500)
+    const form = formEl(id)!
+    const cartas = Array.from(form.querySelectorAll('.wf-cd')) as HTMLElement[]
+    cartas[0].dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    ;(form.querySelector('input[name="email"]') as HTMLInputElement).value = 'ana@example.com'
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await vi.advanceTimersByTimeAsync(60)
+    cartas[2].dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(cartas.map(c => c.getAttribute('data-sel'))).toEqual(['1', null, null])
+  })
+
   // A raspadinha tem de RASPAR: arrastar o dedo (ou o mouse) apaga a
   // lâmina, e o traço acompanha o movimento. Antes, cada evento pintava um
   // círculo solto — com o dedo rápido sobravam buracos — e o cartão só

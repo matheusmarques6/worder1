@@ -9,7 +9,7 @@
 // submissão (game_prize).
 // =============================================
 
-export type GameType = 'wheel' | 'scratch'
+export type GameType = 'wheel' | 'scratch' | 'cards'
 export type PrizeChoice = 'base' | 'none' | string // string = id de um nível progressivo
 
 export interface GameSegment {
@@ -54,7 +54,10 @@ export function sanitizeSegments(raw: unknown, type: GameType): GameSegment[] {
   })
   // Um jogo precisa de ao menos dois segmentos e algum peso; a raspadinha
   // aceita um só (o prêmio é sempre o mesmo, só a revelação é o jogo).
-  const min = type === 'wheel' ? 2 : 1
+  // Roleta e cartas precisam de pelo menos dois (uma carta só não é
+  // escolha); a raspadinha aceita um — o prêmio é sempre o mesmo, o jogo
+  // é a revelação.
+  const min = type === 'scratch' ? 1 : 2
   if (out.length < min) return []
   if (out.every((s) => s.weight <= 0)) out.forEach((s) => { s.weight = 1 })
   return out
@@ -65,11 +68,12 @@ export function readGameBlock(design: any): GameConfig | null {
   const steps = Array.isArray(design?.steps) ? design.steps : []
   for (const st of steps) {
     for (const b of Array.isArray(st?.blocks) ? st.blocks : []) {
-      if (b?.type !== 'wheel' && b?.type !== 'scratch') continue
+      if (b?.type !== 'wheel' && b?.type !== 'scratch' && b?.type !== 'cards') continue
       const type: GameType = b.type
       const segments = sanitizeSegments(b.props?.segments, type)
       if (!segments.length) return null
-      return { type, blockId: String(b.id || ''), segments, buttonText: String(b.props?.buttonText || (type === 'wheel' ? 'Girar' : 'Raspar')).slice(0, 40) }
+      const padrao = type === 'wheel' ? 'Girar' : type === 'cards' ? 'Revelar' : 'Raspar'
+      return { type, blockId: String(b.id || ''), segments, buttonText: String(b.props?.buttonText || padrao).slice(0, 40) }
     }
   }
   return null

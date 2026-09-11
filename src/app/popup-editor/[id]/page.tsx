@@ -233,6 +233,7 @@ const BLOCK_CATEGORIES: Array<{ name: string; items: Array<{ type: string; label
     items: [
       { type: 'wheel', label: 'Roleta', icon: Disc3 },
       { type: 'scratch', label: 'Raspadinha', icon: Eraser },
+      { type: 'cards', label: 'Cartas', icon: Layers },
     ],
   },
   {
@@ -360,6 +361,19 @@ const defaultProps: Record<string, Record<string, any>> = {
       { id: 's4', label: 'Tente de novo', prize: 'none', weight: 15, color: '#374151' },
     ],
     buttonText: 'Girar a roleta', size: 320, labelSize: 13, labelColor: '#FFFFFF', strokeColor: '#FFFFFF', pointerColor: '#111827', rimColor: '#111827', sound: true,
+    bgColor: '#F97316', textColor: '#FFFFFF', fontSize: 15, borderRadius: 8, fullWidth: false,
+  },
+  // Cartas: viradas para baixo, o visitante escolhe uma e ela vira em 3D
+  // no envio. Escolher é o jogo — e o prêmio continua sendo do servidor.
+  cards: {
+    segments: [
+      { id: 's1', label: '10% OFF', prize: 'base', weight: 50, color: '#F97316' },
+      { id: 's2', label: 'Frete grátis', prize: 'none', weight: 30, color: '#111827' },
+      { id: 's3', label: 'Não foi dessa vez', prize: 'none', weight: 20, color: '#374151' },
+    ],
+    buttonText: 'Revelar', count: 3, cardWidth: 96, cardHeight: 128, cardRadius: 12, gap: 12,
+    backColor: '#FFFFFF', backText: '?', backTextColor: '#F97316',
+    faceBg: '#111827', faceColor: '#FFFFFF', faceSize: 15,
     bgColor: '#F97316', textColor: '#FFFFFF', fontSize: 15, borderRadius: 8, fullWidth: false,
   },
   scratch: {
@@ -951,6 +965,7 @@ function applyOfferPreview(text: string, label: string | undefined, prize?: stri
   if (label === undefined) return text
   return String(text || '').replace(/\{\{\s*offer\s*\}\}/g, label).replace(/\{\{\s*prize\s*\}\}/g, prize || '')
 }
+const GAME_TYPES = new Set(['wheel', 'scratch', 'cards'])
 // O que impede publicar: erros que o visitante veria como popup quebrado.
 function publishProblems(design: PopupDesign): string[] {
   const out: string[] = []
@@ -960,7 +975,8 @@ function publishProblems(design: PopupDesign): string[] {
     const segs = gameSegments(b.props)
     if (b.type === 'wheel' && segs.length < 2) out.push('A roleta precisa de pelo menos dois segmentos para ir ao ar.')
     if (b.type === 'scratch' && segs.length < 1) out.push('A raspadinha precisa de pelo menos um prêmio para ir ao ar.')
-    if ((b.type === 'wheel' || b.type === 'scratch') && !hasCoupon) out.push('O jogo promete um prêmio, mas não há bloco de cupom na etapa de sucesso.')
+    if (b.type === 'cards' && segs.length < 2) out.push('As cartas precisam de pelo menos dois prêmios para ir ao ar.')
+    if (GAME_TYPES.has(b.type) && !hasCoupon) out.push('O jogo promete um prêmio, mas não há bloco de cupom na etapa de sucesso.')
     if (b.type === 'countdown' && !b.props?.endDate) out.push('A contagem regressiva está sem data final — ficaria zerada na loja.')
   }
   // Jogo sem botão próprio depende do botão da etapa. Se a etapa não tem
@@ -968,7 +984,7 @@ function publishProblems(design: PopupDesign): string[] {
   // fica de enfeite, sem nada quebrado à vista.
   for (const st of design.steps) {
     const blocks = st.blocks || []
-    if (!blocks.some(b => (b.type === 'wheel' || b.type === 'scratch') && b.props?.showButton === false)) continue
+    if (!blocks.some(b => GAME_TYPES.has(b.type) && b.props?.showButton === false)) continue
     if (!blocks.some(b => b.type === 'button' && (b.props?.action || 'submit') === 'submit')) {
       out.push('O jogo está sem botão próprio e a etapa não tem botão de envio — ninguém conseguiria jogar.')
     }
@@ -1004,8 +1020,8 @@ function shadeHex(hex: string, amt: number): string {
   return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)
 }
 
-const NO_LAYOUT_BORDER = new Set(['email', 'phone', 'name-input', 'text-input', 'date-input', 'dropdown', 'radio', 'checkbox', 'legal-consent', 'coupon', 'countdown', 'wheel', 'scratch'])
-const NO_LAYOUT_SHADOW = new Set(['wheel', 'scratch', 'image'])
+const NO_LAYOUT_BORDER = new Set(['email', 'phone', 'name-input', 'text-input', 'date-input', 'dropdown', 'radio', 'checkbox', 'legal-consent', 'coupon', 'countdown', 'wheel', 'scratch', 'cards'])
+const NO_LAYOUT_SHADOW = new Set(['wheel', 'scratch', 'cards', 'image'])
 
 function BlockPreview({ block, selected, onContentChange, onSelect, offerLabel, prizeLabel }: { block: Block; selected?: boolean; onContentChange?: (key: string, value: string) => void; onSelect?: () => void; offerLabel?: string; prizeLabel?: string }) {
   const p = block.props
@@ -1230,6 +1246,29 @@ function BlockPreview({ block, selected, onContentChange, onSelect, offerLabel, 
           </div>
         </div>
         <GameButtonPreview p={p} fallback="Girar" />
+      </div>
+    }
+    // Cartas: viradas para baixo, como o visitante vê antes de escolher.
+    // Aqui na tela de edição elas não viram — quem vira é o runtime, no
+    // envio, e a pré-visualização roda o runtime.
+    case 'cards': {
+      const segs = gameSegments(p)
+      if (segs.length < 2) return <div style={{ ...blockStyle, padding: 16, textAlign: 'center', border: '1px dashed #FCA5A5', borderRadius: 8, color: '#B91C1C', fontSize: 12 }}>As cartas precisam de pelo menos dois prêmios.</div>
+      const n = Math.max(2, Math.min(5, Number(p.count) || 3))
+      const cw = Math.max(60, Math.min(160, Number(p.cardWidth) || 96))
+      const ch = Math.max(80, Math.min(220, Number(p.cardHeight) || 128))
+      return <div style={{ ...blockStyle, textAlign: 'center' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: p.gap ?? 12 }}>
+          {Array.from({ length: n }).map((_, i) => (
+            <div key={`cd${i}`} style={{
+              width: cw, height: ch, flex: '0 0 auto', borderRadius: p.cardRadius ?? 12,
+              background: p.backColor || '#FFFFFF', color: p.backTextColor || '#F97316',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: Math.round(ch * 0.34), fontWeight: 800, boxShadow: '0 6px 16px rgba(0,0,0,.16)',
+            }}>{String(p.backText || '?').slice(0, 3)}</div>
+          ))}
+        </div>
+        <GameButtonPreview p={p} fallback="Revelar" />
       </div>
     }
     case 'scratch': {
@@ -1566,9 +1605,13 @@ function SmartOfferEditor({ p, up }: { p: any; up: (k: string, v: any) => void }
 // se descreve o que pode sair e com que chance.
 function GameEditor({ type, p, up, hints }: { type: string; p: any; up: (k: string, v: any) => void; hints: { hasCoupon: boolean; couponTiers: any[]; baseOfferLabel: string; gameBlocks: number } }) {
   const isWheel = type === 'wheel'
+  const isCards = type === 'cards'
+  const nomeDoJogo = isWheel ? 'Roleta' : isCards ? 'Cartas' : 'Raspadinha'
+  const acaoPadrao = isWheel ? 'Girar' : isCards ? 'Revelar' : 'Raspar'
+  const oQueFaz = isWheel ? 'a roleta para' : isCards ? 'a carta escolhida vira' : 'a raspadinha revela'
   const segs: any[] = Array.isArray(p.segments) ? p.segments : []
   const total = segs.reduce((a, s) => a + Math.max(0, Number(s?.weight) || 0), 0)
-  const minSegs = isWheel ? 2 : 1
+  const minSegs = type === 'scratch' ? 1 : 2
   const setSeg = (i: number, patch: Record<string, any>) => up('segments', segs.map((s, j) => (j === i ? { ...s, ...patch } : s)))
   const addSeg = () => up('segments', [...segs, { id: 's' + Math.random().toString(36).slice(2, 8), label: hints.baseOfferLabel || 'Prêmio', prize: 'base', weight: 10, color: GAME_PALETTE[segs.length % GAME_PALETTE.length] }])
   const tierText = (t: any) => t.discountType === 'free_shipping' ? 'Frete grátis' : `${t.discountValue ?? 0}${t.discountType === 'fixed_amount' ? '' : '%'} OFF`
@@ -1580,13 +1623,14 @@ function GameEditor({ type, p, up, hints }: { type: string; p: any; up: (k: stri
   )
   return <div className="space-y-5">
     <div className="space-y-3">
-      <SectionHeader title={isWheel ? 'Roleta' : 'Raspadinha'} icon={<Gift className="w-3 h-3" />} />
+      <SectionHeader title={nomeDoJogo} icon={<Gift className="w-3 h-3" />} />
       <p className="text-[11px] text-gray-500 leading-snug bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
-        O visitante preenche, clica em "{p.buttonText || (isWheel ? 'Girar' : 'Raspar')}" e o servidor sorteia pelo peso — {isWheel ? 'a roleta para' : 'a raspadinha revela'} no prêmio decidido. O cupom sai pelo bloco de cupom, no nível escolhido aqui. Na etapa de sucesso, <code className="px-1 bg-white border border-gray-200 rounded text-[10px]">{'{{prize}}'}</code> vira o prêmio sorteado.
+        {isCards ? 'O visitante escolhe uma carta, preenche e envia' : 'O visitante preenche e envia'} — o servidor sorteia pelo peso e {oQueFaz} no prêmio decidido. O cupom sai pelo bloco de cupom, no nível escolhido aqui. Na etapa de sucesso, <code className="px-1 bg-white border border-gray-200 rounded text-[10px]">{'{{prize}}'}</code> vira o prêmio sorteado.
       </p>
       {!hints.hasCoupon && <Warn>Sem bloco de cupom neste popup: o jogo mostra o prêmio, mas nenhum código é emitido. Adicione um bloco de cupom na etapa de sucesso.</Warn>}
       {hints.gameBlocks > 1 && <Warn>Há {hints.gameBlocks} jogos neste popup. Só o primeiro sorteia; os outros ficam decorativos.</Warn>}
-      {segs.length < minSegs && <Warn>{isWheel ? 'A roleta precisa de pelo menos dois segmentos.' : 'A raspadinha precisa de pelo menos um prêmio.'}</Warn>}
+      {segs.length < minSegs && <Warn>{type === 'scratch' ? 'A raspadinha precisa de pelo menos um prêmio.' : `${nomeDoJogo} ${isCards ? 'precisam' : 'precisa'} de pelo menos dois prêmios.`}</Warn>}
+      {isCards && segs.length < (Number(p.count) || 3) && <Warn>Há {Number(p.count) || 3} cartas e só {segs.length} prêmios. As cartas que sobram viram vazias — cadastre um prêmio por carta.</Warn>}
       <div className="flex items-center justify-between">
         <p className="text-[11px] font-bold text-gray-500 uppercase tracking-[0.08em]">Segmentos</p>
         <button type="button" onClick={addSeg} disabled={segs.length >= 12} className="text-[11px] font-semibold text-zinc-900 underline underline-offset-2 disabled:opacity-40">Adicionar</button>
@@ -1632,7 +1676,7 @@ function GameEditor({ type, p, up, hints }: { type: string; p: any; up: (k: stri
       ) : (
         <>
           <LabeledField label="Texto">
-            <input className={inp} value={p.buttonText || ''} onChange={e => up('buttonText', e.target.value.slice(0, 40))} placeholder={isWheel ? 'Girar a roleta' : 'Raspar'} />
+            <input className={inp} value={p.buttonText || ''} onChange={e => up('buttonText', e.target.value.slice(0, 40))} placeholder={acaoPadrao} />
           </LabeledField>
           <ColorRow label="Fundo" value={p.bgColor || '#F97316'} onChange={v => up('bgColor', v)} />
           <ColorRow label="Texto" value={p.textColor || '#FFFFFF'} onChange={v => up('textColor', v)} />
@@ -1653,6 +1697,22 @@ function GameEditor({ type, p, up, hints }: { type: string; p: any; up: (k: stri
           {/* O tique de cada pino que passa é o que faz o giro parecer
               mecânico. Quem não quiser som na loja desliga aqui. */}
           <Toggle label="Tique ao girar" checked={p.sound !== false} onChange={v => up('sound', v)} />
+        </>
+      ) : isCards ? (
+        <>
+          <LabeledField label="Quantas cartas"><Slider value={Number(p.count) || 3} onChange={v => up('count', v)} min={2} max={5} unit="" /></LabeledField>
+          <LabeledField label="Largura da carta"><Slider value={p.cardWidth || 96} onChange={v => up('cardWidth', v)} min={60} max={160} unit="px" /></LabeledField>
+          <LabeledField label="Altura da carta"><Slider value={p.cardHeight || 128} onChange={v => up('cardHeight', v)} min={80} max={220} unit="px" /></LabeledField>
+          <LabeledField label="Cantos"><Slider value={p.cardRadius ?? 12} onChange={v => up('cardRadius', v)} min={0} max={28} unit="px" /></LabeledField>
+          <LabeledField label="Espaço entre cartas"><Slider value={p.gap ?? 12} onChange={v => up('gap', v)} min={0} max={28} unit="px" /></LabeledField>
+          <LabeledField label="Marca do verso" hint="O que aparece na carta virada para baixo.">
+            <input className={inp} value={p.backText || ''} onChange={e => up('backText', e.target.value.slice(0, 3))} placeholder="?" />
+          </LabeledField>
+          <ColorRow label="Verso da carta" value={p.backColor || '#FFFFFF'} onChange={v => up('backColor', v)} />
+          <ColorRow label="Marca do verso" value={p.backTextColor || '#F97316'} onChange={v => up('backTextColor', v)} />
+          <ColorRow label="Frente (prêmio)" value={p.faceBg || '#111827'} onChange={v => up('faceBg', v)} />
+          <ColorRow label="Texto do prêmio" value={p.faceColor || '#FFFFFF'} onChange={v => up('faceColor', v)} />
+          <LabeledField label="Tamanho do prêmio"><Slider value={p.faceSize || 15} onChange={v => up('faceSize', v)} min={11} max={28} unit="px" /></LabeledField>
         </>
       ) : (
         <>
@@ -1890,7 +1950,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
     email: 'Email', phone: 'Telefone', 'name-input': 'Nome', 'text-input': 'Campo',
     'date-input': 'Data', dropdown: 'Dropdown', radio: 'Radio', checkbox: 'Checkbox',
     'legal-consent': 'Consentimento', text: 'Conteúdo', button: 'Botão', image: 'Imagem',
-    spacer: 'Espaçador', line: 'Linha', coupon: 'Cupom', countdown: 'Contagem', wheel: 'Roleta', scratch: 'Raspadinha', choice: 'Escolhas',
+    spacer: 'Espaçador', line: 'Linha', coupon: 'Cupom', countdown: 'Contagem', wheel: 'Roleta', scratch: 'Raspadinha', choice: 'Escolhas', cards: 'Cartas',
   }
 
   // Unified input "Input" tab renderer (Omnisend-style clean sections)
@@ -2738,6 +2798,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
         return <ChoiceEditor p={p} up={up} steps={steps} />
       case 'wheel':
       case 'scratch':
+      case 'cards':
         return <GameEditor type={block.type} p={p} up={up} hints={hints || { hasCoupon: true, couponTiers: [], baseOfferLabel: '', gameBlocks: 1 }} />
       case 'countdown':
         return <div className="space-y-5">
@@ -4231,7 +4292,7 @@ export default function PopupEditorPage() {
       // A mesma leitura do servidor: nível sem id não existe para o jogo.
       couponTiers: (Array.isArray(cp?.props?.tiers) ? cp!.props.tiers.filter((t: any) => t && String(t.id || '').replace(/[^a-zA-Z0-9_-]/g, '')) : []) as any[],
       baseOfferLabel: cp ? offerLabelOf(cp.props) : '',
-      gameBlocks: all.filter(b => b.type === 'wheel' || b.type === 'scratch').length,
+      gameBlocks: all.filter(b => GAME_TYPES.has(b.type)).length,
     }
   }, [design.steps, design.successStep])
 
@@ -4791,7 +4852,7 @@ export default function PopupEditorPage() {
                         'text-input': 'Campo de texto', 'date-input': 'Data',
                         dropdown: 'Dropdown', radio: 'Radio', checkbox: 'Checkbox',
                         'legal-consent': 'Consentimento', text: 'Texto', button: 'Botão', image: 'Imagem',
-                        spacer: 'Espaçador', line: 'Linha', coupon: 'Cupom', countdown: 'Contagem', wheel: 'Roleta', scratch: 'Raspadinha', choice: 'Escolhas',
+                        spacer: 'Espaçador', line: 'Linha', coupon: 'Cupom', countdown: 'Contagem', wheel: 'Roleta', scratch: 'Raspadinha', choice: 'Escolhas', cards: 'Cartas',
                       }
                       return labels[selectedBlock.type] || selectedBlock.type
                     })()}

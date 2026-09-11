@@ -45,6 +45,17 @@ describe('bancada da pré-visualização', () => {
     expect(c!.code).toMatch(/^ROLETA-TESTE\d{4}$/)
   })
 
+  it('cartas também são jogo: a bancada sorteia e devolve o tipo certo', () => {
+    const d = design({ steps: [{ blocks: [
+      { id: 'e1', type: 'email', props: {} },
+      { id: 'k1', type: 'cards', props: { count: 3, segments: [
+        { id: 'c1', label: '10% OFF', prize: 'base', weight: 50, color: '#F97316' },
+        { id: 'c2', label: 'Frete grátis', prize: 'base', weight: 50, color: '#111827' },
+      ] } },
+    ] }] })
+    expect(respostaDeEnvioDePreview(d, 0.9).game).toMatchObject({ type: 'cards', segment: 1, label: 'Frete grátis' })
+  })
+
   it('design sem bloco de cupom não inventa código', () => {
     const d = design({ successStep: { blocks: [{ id: 't1', type: 'text', props: { content: 'Obrigado' } }] } })
     expect(cupomDePreview(d, 0.5)).toBeNull()

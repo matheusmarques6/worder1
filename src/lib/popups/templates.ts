@@ -77,6 +77,17 @@ const wheel = (id: string, segments: any[], over: Record<string, any> = {}) => (
   id, type: 'wheel',
   props: { segments, buttonText: 'Girar a roleta', size: 320, labelSize: 13, labelColor: '#FFFFFF', strokeColor: '#FFFFFF', pointerColor: '#111827', rimColor: '#111827', sound: true, bgColor: '#111827', textColor: '#FFFFFF', fontSize: 15, borderRadius: 8, fullWidth: true, ...over },
 })
+// Cartas viradas para baixo: escolher é o jogo, e a escolhida vira em 3D
+// no envio mostrando o prêmio que o servidor sorteou.
+const cards = (id: string, segments: any[], over: Record<string, any> = {}) => ({
+  id, type: 'cards',
+  props: {
+    segments, showButton: false, count: 3, cardWidth: 104, cardHeight: 138, cardRadius: 14, gap: 12,
+    backColor: '#FFFFFF', backText: '?', backTextColor: '#DC2626',
+    faceBg: '#FFFFFF', faceColor: '#111827', faceSize: 15,
+    ...over,
+  },
+})
 const scratch = (id: string, segments: any[], over: Record<string, any> = {}) => ({
   id, type: 'scratch',
   props: { segments, showButton: false, width: 360, height: 200, coverColor: '#C0C6CF', coverText: 'Raspe com o dedo', coverTextColor: '#FFFFFF', prizeBg: '#111827', prizeColor: '#FFFFFF', prizeSize: 30, cardRadius: 16, ...over },
@@ -354,6 +365,48 @@ export const POPUP_TEMPLATES: PopupTemplate[] = [
         coupon('k1', { code: 'ROLETA10', codePrefix: 'ROLETA', tiers: [{ id: 't-frete', label: 'Frete grátis', afterStepId: '', discountType: 'free_shipping', discountValue: 0, code: 'FRETEGRATIS' }] }),
       ],
       { styles: { width: 460, minHeight: 0, fullscreenMobile: true } },
+    ),
+  },
+  {
+    id: 'try-your-luck',
+    name: 'Cartas da sorte',
+    formType: 'popup',
+    category: 'game',
+    description: 'Três cartas viradas para baixo. O visitante escolhe uma, ela vira em 3D no envio e mostra o desconto que o servidor sorteou.',
+    design: design('popup',
+      [[
+        text('t1', 'Tente a sorte', { fontSize: 38, lineHeight: 1.05, letterSpacing: -0.5, color: '#FFFFFF' }),
+        sub('t2', 'Escolha uma carta para descobrir o seu desconto.', { fontSize: 16, color: '#F3F4F6' }),
+        spacer('sp1', 18),
+        cards('cd1', [
+          { id: 's1', label: '10% OFF', prize: 'base', weight: 55, color: '#F97316' },
+          { id: 's2', label: 'Frete grátis', prize: 't-frete', weight: 30, color: '#FDBA74' },
+          { id: 's3', label: '20% OFF', prize: 't-vinte', weight: 15, color: '#111827' },
+        ]),
+        spacer('sp2', 18),
+        email('e1', { placeholder: 'Seu melhor e-mail', showLabel: false }),
+        consent('c1', ['email'], EMAIL_CONSENT),
+        button('b1', 'REVELAR MEU PRÊMIO', { bgColor: '#FFFFFF', textColor: '#111827', fontSize: 15, paddingV: 16, borderRadius: 40 }),
+      ]],
+      [
+        text('s1', 'Você ganhou {{prize}}', { fontSize: 32, color: '#FFFFFF' }),
+        sub('s2', 'Seu cupom já está no carrinho e vale por 7 dias.', { color: '#F3F4F6' }),
+        coupon('k1', {
+          code: 'SORTE10', codePrefix: 'SORTE',
+          tiers: [
+            { id: 't-frete', label: 'Frete grátis', afterStepId: '', discountType: 'free_shipping', discountValue: 0, code: 'FRETEGRATIS' },
+            { id: 't-vinte', label: '20% OFF', afterStepId: '', discountType: 'percentage', discountValue: 20, code: 'SORTE20' },
+          ],
+        }),
+      ],
+      {
+        styles: {
+          width: 480, minHeight: 0, padding: 30, borderRadius: 16,
+          backgroundColor: '#B91C1C',
+          fullscreenMobile: true,
+          closeButton: { show: true, color: '#FFFFFF', size: 28 },
+        },
+      },
     ),
   },
   {

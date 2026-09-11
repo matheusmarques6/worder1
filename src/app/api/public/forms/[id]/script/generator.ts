@@ -183,7 +183,7 @@ var shown=false,ck="_wf_"+FID;
 // keyframes moram aqui dentro porque animação não atravessa a fronteira.
 var ROOT=null,HOST=null;
 function $(id){try{if(ROOT){var e=ROOT.getElementById(id);if(e)return e}return document.getElementById(id)}catch(e){return null}}
-var BASE_CSS=":host{all:initial}*,*::before,*::after{box-sizing:border-box}@keyframes wfFade{from{opacity:0}to{opacity:1}}@keyframes wfSlide{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}@keyframes wfHand{0%,100%{transform:translate(-5px,0) rotate(-8deg)}50%{transform:translate(5px,-2px) rotate(6deg)}}.wf-hand{animation:wfHand 1.5s ease-in-out infinite}@keyframes wfWGlow{0%,100%{opacity:.25}50%{opacity:.95}}.wf-wglow{animation:wfWGlow 1s ease-in-out 2}@media (prefers-reduced-motion:reduce){.wf-hand{animation:none}.wf-wglow{animation:none;opacity:.9}}.wf-pop{color:#111827;line-height:1.4;font-size:14px;-webkit-font-smoothing:antialiased;text-align:left}.wf-pop button,.wf-pop input,.wf-pop select,.wf-pop textarea{font:inherit;color:inherit;margin:0}.wf-pop input::placeholder{opacity:1}.wf-pop a{color:inherit}.wf-pop p,.wf-pop h1,.wf-pop h2,.wf-pop h3{margin:0}";
+var BASE_CSS=":host{all:initial}*,*::before,*::after{box-sizing:border-box}@keyframes wfFade{from{opacity:0}to{opacity:1}}@keyframes wfSlide{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}@keyframes wfHand{0%,100%{transform:translate(-5px,0) rotate(-8deg)}50%{transform:translate(5px,-2px) rotate(6deg)}}.wf-hand{animation:wfHand 1.5s ease-in-out infinite}@keyframes wfWGlow{0%,100%{opacity:.25}50%{opacity:.95}}.wf-wglow{animation:wfWGlow 1s ease-in-out 2}.wf-cd{cursor:pointer;transition:transform .18s ease-out;-webkit-tap-highlight-color:transparent}.wf-cd:hover{transform:translateY(-6px)}.wf-cd[data-sel='1']{transform:translateY(-10px)}.wf-cd-in{position:relative;width:100%;height:100%;transform-style:preserve-3d;transition:transform .75s cubic-bezier(.2,.75,.2,1)}.wf-cd-in.wf-flip{transform:rotateY(180deg)}.wf-cd-f,.wf-cd-b{position:absolute;left:0;top:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;text-align:center;border-radius:inherit;-webkit-backface-visibility:hidden;backface-visibility:hidden;overflow:hidden}.wf-cd-b{transform:rotateY(180deg);overflow-wrap:anywhere}[data-done] .wf-cd:hover{transform:none}@media (prefers-reduced-motion:reduce){.wf-hand{animation:none}.wf-wglow{animation:none;opacity:.9}.wf-cd,.wf-cd-in{transition:none}}.wf-pop{color:#111827;line-height:1.4;font-size:14px;-webkit-font-smoothing:antialiased;text-align:left}.wf-pop button,.wf-pop input,.wf-pop select,.wf-pop textarea{font:inherit;color:inherit;margin:0}.wf-pop input::placeholder{opacity:1}.wf-pop a{color:inherit}.wf-pop p,.wf-pop h1,.wf-pop h2,.wf-pop h3{margin:0}";
 function mountRoot(target){
   var host=document.createElement("div");
   host.id="wf-host-"+FID;
@@ -926,6 +926,63 @@ function playGameAnim(el,g,done){
       cleanup=function(){clearTimeout(trava)};
       return;
     }
+    // CARTAS: a escolhida vira primeiro, sozinha. As outras só depois —
+    // e apagadas. Virar todas juntas transformaria o momento do prêmio
+    // numa tabela.
+    if(type==="cards"){
+      var kn=parseInt(el.getAttribute("data-n"),10)||0;
+      if(kn<1){end(0);return}
+      var kpickAttr=el.getAttribute("data-pick");
+      // Ninguém escolheu (mandou o formulário direto): a casa escolhe.
+      var kpick=kpickAttr!==null&&kpickAttr!==""?parseInt(kpickAttr,10):Math.floor(Math.random()*kn);
+      if(!(kpick>=0&&kpick<kn))kpick=0;
+      el.setAttribute("data-done","1");
+      var krot=[];
+      try{krot=JSON.parse(el.getAttribute("data-labels")||"[]")}catch(e){krot=[]}
+      // O rótulo da carta escolhida é o do servidor. Os das outras são os
+      // que sobraram — tirando UMA ocorrência do prêmio ganho, para a
+      // pessoa não ver o mesmo prêmio duas vezes e achar que foi roubada.
+      var ksobra=[],kjaTirou=false;
+      for(var kx=0;kx<krot.length;kx++){
+        if(!kjaTirou&&krot[kx]===String(g.label||"")){kjaTirou=true;continue}
+        ksobra.push(krot[kx]);
+      }
+      var klento=false;try{klento=!!(window.matchMedia&&window.matchMedia("(prefers-reduced-motion:reduce)").matches)}catch(e){}
+      var kcaixas=[],ksobraIdx=0;
+      for(var kc=0;kc<kn;kc++){
+        var kface=$("wf-cdb-"+gid+"-"+kc);
+        if(kface)kface.textContent=kc===kpick?String(g.label||""):String(ksobra[ksobraIdx++]||"");
+        var kin=$("wf-cdi-"+gid+"-"+kc);
+        kcaixas.push(kin);
+        var kcd=kin&&kin.parentNode;
+        // Acabou o jogo: as cartas deixam de convidar o clique.
+        if(kcd){kcd.style.cursor="default";kcd.removeAttribute("tabindex")}
+      }
+      var ksr=$("wf-cdsr-"+gid);
+      function kvirar(idx){var n2=kcaixas[idx];if(!n2)return;if(n2.className.indexOf("wf-flip")<0)n2.className=n2.className+" wf-flip"}
+      function kfim(){
+        if(ksr)ksr.textContent=String(g.label||"");
+        try{wfEmit("gameCardsRevealed",{game:"cards",card:kpick,label:g.label||null})}catch(e){}
+        end(1000);
+      }
+      if(klento){for(var kk=0;kk<kn;kk++)kvirar(kk);kfim();return}
+      var ktimers=[];
+      kvirar(kpick);
+      try{if(navigator.vibrate)navigator.vibrate(18)}catch(e){}
+      ktimers.push(setTimeout(function(){
+        for(var kj=0;kj<kn;kj++){
+          if(kj===kpick)continue;
+          (function(idx){ktimers.push(setTimeout(function(){
+            var cd=kcaixas[idx]&&kcaixas[idx].parentNode;
+            if(cd){cd.style.transition="opacity .4s";cd.style.opacity="0.45"}
+            kvirar(idx);
+          },idx*110))})(kj);
+        }
+      },760));
+      ktimers.push(setTimeout(kfim,760+kn*110+520));
+      cleanup=function(){for(var kt=0;kt<ktimers.length;kt++)clearTimeout(ktimers[kt])};
+      return;
+    }
     if(type==="scratch"){
       var cv=$("wf-scr-c-"+gid),pz=$("wf-scr-p-"+gid),hint=$("wf-scr-h-"+gid),badge=$("wf-scr-b-"+gid);
       if(pz)pz.textContent=String(g.label||"");
@@ -1256,6 +1313,71 @@ function renderBlock(b){
           if(alvo&&alvo.focus)try{alvo.focus()}catch(e){}
         });
       },60)})("wf-scr-c-"+scid,scCov,SW,SH);
+      break;
+    }
+    // AS CARTAS
+    //
+    // Três (ou quatro) cartas viradas para baixo. O visitante escolhe uma
+    // — escolher é o jogo — e, no envio, ela vira em 3D e mostra o
+    // prêmio. As outras viram depois, apagadas, mostrando o que dava para
+    // ter tirado: é o que transforma "ganhei 10%" em "ganhei 10% e quase
+    // peguei o frete grátis".
+    //
+    // O prêmio continua sendo do servidor. O que o navegador decide é só
+    // QUAL carta a pessoa escolheu — que não muda nada do que ela ganha.
+    case"cards":{
+      var kseg=gameSegs(p);if(kseg.length<2)break;
+      var kid=bid(b.id),kn=Math.max(2,Math.min(5,nv(p.count,3)));
+      var kw=Math.max(60,Math.min(160,nv(p.cardWidth,96))),kh=Math.max(80,Math.min(220,nv(p.cardHeight,128)));
+      var krad=nv(p.cardRadius,12),kgap=nv(p.gap,12);
+      var kback=sv(p.backColor,"#FFFFFF"),kmark=String(p.backText||"?").slice(0,3),kmarkc=sv(p.backTextColor,"#F97316");
+      var kfaceBg=sv(p.faceBg,"#111827"),kfaceFg=sv(p.faceColor,"#FFFFFF"),kfaceFs=nv(p.faceSize,15);
+      // Os rótulos vão no container: na hora de virar, a carta escolhida
+      // recebe o prêmio que o servidor sorteou e as outras recebem os
+      // rótulos que sobraram.
+      var klabels=[];for(var ka=0;ka<kseg.length;ka++)klabels.push(String(kseg[ka].label||""));
+      var kcards="";
+      for(var ki=0;ki<kn;ki++){
+        kcards+='<div class="wf-cd" data-i="'+ki+'" role="button" tabindex="0" aria-label="'+esc(p.cardLabel||"Escolher carta")+' '+(ki+1)+'" style="width:'+kw+'px;height:'+kh+'px;border-radius:'+krad+'px;perspective:900px;flex:0 0 auto">'
+          +'<div class="wf-cd-in" id="wf-cdi-'+kid+'-'+ki+'" style="border-radius:'+krad+'px">'
+          +'<div class="wf-cd-f" style="background:'+kback+';color:'+kmarkc+';font-size:'+Math.round(kh*0.34)+'px;font-weight:800;box-shadow:0 6px 16px rgba(0,0,0,.16)">'+esc(kmark)+'</div>'
+          +'<div class="wf-cd-b" id="wf-cdb-'+kid+'-'+ki+'" style="background:'+kfaceBg+';color:'+kfaceFg+';font-size:'+kfaceFs+'px;font-weight:800;line-height:1.2;padding:10px;box-shadow:0 6px 16px rgba(0,0,0,.16)"></div>'
+          +'</div></div>';
+      }
+      h='<div data-game="cards" data-game-id="'+kid+'" data-n="'+kn+'" data-labels="'+esc(JSON.stringify(klabels))+'" style="'+blockStyleStr(p,true,true)+'text-align:center">'
+        +'<div id="wf-cdw-'+kid+'" style="display:flex;flex-wrap:wrap;justify-content:center;gap:'+kgap+'px">'+kcards+'</div>'
+        +'<div id="wf-cdsr-'+kid+'" role="status" aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;white-space:nowrap;clip:rect(0 0 0 0)"></div>'
+        +'<div id="wf-cdcf-'+kid+'" style="position:relative;height:0;pointer-events:none"></div>'
+        +gameBtn(p,"Revelar")+'</div>';
+      (function(gid){setTimeout(function(){
+        var wrap=$("wf-cdw-"+gid);if(!wrap)return;
+        var caixa=wrap.parentNode;
+        function escolher(cd){
+          if(caixa.getAttribute("data-done"))return;
+          var todas=wrap.querySelectorAll(".wf-cd");
+          for(var i=0;i<todas.length;i++)todas[i].removeAttribute("data-sel");
+          cd.setAttribute("data-sel","1");
+          caixa.setAttribute("data-pick",cd.getAttribute("data-i")||"0");
+          try{wfEmit("gameCardPick",{game:"cards",card:parseInt(cd.getAttribute("data-i"),10)||0})}catch(e){}
+          try{if(navigator.vibrate)navigator.vibrate(10)}catch(e){}
+          // Escolheu: o que falta é o e-mail. Levar o cursor até ele é o
+          // que fecha a distância entre brincar e se inscrever.
+          var f=wrap.closest?wrap.closest("form"):null;
+          var alvo=f&&f.querySelector?f.querySelector('input:not([type=hidden]):not([disabled]):not([name="_wf_hp"]):not([tabindex="-1"])'):null;
+          if(alvo&&alvo.focus&&!alvo.value)try{alvo.focus()}catch(e){}
+        }
+        wrap.addEventListener("click",function(ev){
+          var cd=ev.target&&ev.target.closest?ev.target.closest(".wf-cd"):null;
+          if(cd&&wrap.contains(cd))escolher(cd);
+        });
+        // Teclado: as cartas são botões de verdade, não divs clicáveis.
+        wrap.addEventListener("keydown",function(ev){
+          if(ev.key!=="Enter"&&ev.key!==" ")return;
+          var cd=ev.target&&ev.target.closest?ev.target.closest(".wf-cd"):null;
+          if(!cd||!wrap.contains(cd))return;
+          ev.preventDefault();escolher(cd);
+        });
+      },60)})(kid);
       break;
     }
     case"countdown":{
