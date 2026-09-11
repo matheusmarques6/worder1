@@ -1000,6 +1000,13 @@ git commit -m "fix: preserve WhatsApp account identity across runtime delivery"
 
 ### Task 7: W2-T6 — opt-out equivalente e índice justificado
 
+**Status 2026-09-11: concluída.** Provas de equivalência `72de1230` (baseline
+27/27), catálogo RED `8ac4ad17` (27/28) e migration `80ec0ef9` (28/28).
+EXPLAIN controlado com 100.000 linhas na mesma organização: seq scan atual
+26,6 ms/1.667 blocos; índice versionado 0,028 ms/4 blocos e D3 retornando
+`opt_out`. Só a função viva de cinco argumentos foi substituída; a versão
+histórica removida não foi recriada. Zero recursos Docker residuais.
+
 **Papéis:** implementador Sol; revisor Astra; guardião DB Astra.
 
 **Files:**
@@ -1011,7 +1018,7 @@ git commit -m "fix: preserve WhatsApp account identity across runtime delivery"
 - Consumes: mesmo contrato preflight existente.
 - Produces: único disjunto `ltrim(o.phone,'+')=ltrim(p_to_phone,'+')` em ambos os guards; índice funcional somente após EXPLAIN mostrar utilidade.
 
-- [ ] **Step 1: Acrescentar prova negativa e D3**
+- [x] **Step 1: Acrescentar prova negativa e D3**
 
 Reusar imports/factories/preflight do teste existente:
 ```python
@@ -1028,7 +1035,7 @@ def test_opt_out_matches_stored_plus_and_unprefixed_input(admin,dsn,two_tenants)
         assert preflight(sender,org,"5511999990003")[0] == "opt_out"
 ```
 
-- [ ] **Step 2: Baseline e RED válido do índice**
+- [x] **Step 2: Baseline e RED válido do índice**
 
 Run focal via W0: os dois comportamentos devem passar antes da mudança, pois equivalência é o requisito. Não alegar falha inexistente. Se o EXPLAIN justificar índice, escrever teste de catálogo:
 ```python
@@ -1039,7 +1046,7 @@ def test_normalized_opt_out_index_exists(admin):
 ```
 Expected RED: índice ausente. Se não houver ganho de plano, não criar esse teste/índice; usar mutation local temporária no predicado do teste (telefone diferente) para provar que o negativo detecta ampliação indevida e desfazer antes da implementação.
 
-- [ ] **Step 3: Migration mínima**
+- [x] **Step 3: Migration mínima**
 
 Reproduzir os dois corpos atuais na migration nova trocando só os três ORs por:
 ```sql
@@ -1052,7 +1059,7 @@ on public.whatsapp_opt_status(organization_id,ltrim(phone,'+'),status);
 ```
 Não aplicar a álgebra ao mirror, cujo predicado antigo não contém D3.
 
-- [ ] **Step 4: GREEN, EXPLAIN e commit**
+- [x] **Step 4: GREEN, EXPLAIN e commit**
 
 Run: sender_preflight focal, moment preflight tests, replay. Medir `EXPLAIN (ANALYZE,BUFFERS)` com fixtures sintéticas de escala controlada no DB descartável; comparar plano/linhas/blocos, sem usar custo estimado como prova de tempo real. Expected: D1/D2/D3 e negativo preservados nos dois guards.
 ```powershell
