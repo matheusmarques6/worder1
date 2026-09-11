@@ -135,6 +135,8 @@ async def test_a_permanent_failure_goes_to_the_dead_letter_queue(
     payload = (await dead.fetchone())[0]
     assert payload["conversation_id"] == JOB["conversation_id"]
     assert payload["error_class"] == "ValueError"
+    assert payload["failure_kind"] == "permanent"
+    assert payload["replay_count"] == 0
 
 
 async def test_a_busy_conversation_comes_back_shortly(

@@ -101,10 +101,11 @@ class EngineLoop:
         try:
             ack = await self._handlers[queue_name](queue_name, message)
         except Exception as error:  # the retry rules are the policy
+            failure = classify(error)
             decision = decide(
                 queue_name,
                 attempt=message.read_count,
-                failure=classify(error),
+                failure=failure,
                 config=self._config,
                 randomness=self._randomness,
             )
@@ -116,8 +117,13 @@ class EngineLoop:
                 await engine.send_to_queue(
                     queue.connection,
                     decision.queue,
-                    {**message.payload, "error_class": type(error).__name__,
-                     "last_error": str(error)[:500]},
+                    {
+                        **message.payload,
+                        "error_class": type(error).__name__,
+                        "failure_kind": failure.value,
+                        "replay_count": message.payload.get("replay_count", 0),
+                        "last_error": str(error)[:500],
+                    },
                 )
                 await queue.archive(message.id)
             return
