@@ -78,6 +78,24 @@ class TestPreflightCascade:
         with as_app_role(dsn, "sender_role", org) as sender:
             assert preflight(sender, org, phone)[0] == "opt_out"
 
+    def test_opt_out_matches_stored_plus_and_unprefixed_input(
+        self, dsn: str, admin: psycopg.Connection, two_tenants: TwoTenants
+    ) -> None:
+        org = two_tenants.a.id
+        create_opt_out(admin, org, "+5511999990003")
+
+        with as_app_role(dsn, "sender_role", org) as sender:
+            assert preflight(sender, org, "5511999990003")[0] == "opt_out"
+
+    def test_opt_out_does_not_match_a_different_phone(
+        self, dsn: str, admin: psycopg.Connection, two_tenants: TwoTenants
+    ) -> None:
+        org = two_tenants.a.id
+        create_opt_out(admin, org, "+5511999990001")
+
+        with as_app_role(dsn, "sender_role", org) as sender:
+            assert preflight(sender, org, "5511999990002")[0] != "opt_out"
+
     def test_open_window_is_ok(
         self, dsn: str, admin: psycopg.Connection, two_tenants: TwoTenants
     ) -> None:
