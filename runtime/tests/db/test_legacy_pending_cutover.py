@@ -78,6 +78,17 @@ class TestLegacyPendingCutover:
         assert state(admin, other) == (True, False)
         assert claim(dsn, target) is False
 
+        admin.execute(
+            """
+            update public.whatsapp_cloud_conversations
+               set ai_pending = true,
+                   ai_debounce_until = now() + interval '30 seconds'
+             where id = %s
+            """,
+            (target,),
+        )
+        assert state(admin, target) == (False, True)
+
     def test_release_cannot_reopen_pending_after_runtime_flip(
         self, dsn: str, admin: psycopg.Connection, two_tenants: TwoTenants
     ) -> None:
