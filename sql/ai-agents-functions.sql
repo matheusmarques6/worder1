@@ -6,140 +6,26 @@
 -- =====================================================
 -- FUNÇÃO: BUSCA SEMÂNTICA (RAG)
 -- =====================================================
-CREATE OR REPLACE FUNCTION search_agent_knowledge(
-  p_agent_id UUID,
-  p_query_embedding vector(1536),
-  p_match_threshold FLOAT DEFAULT 0.7,
-  p_match_count INT DEFAULT 5
-)
-RETURNS TABLE (
-  chunk_id UUID,
-  source_id UUID,
-  content TEXT,
-  metadata JSONB,
-  similarity FLOAT
-)
-LANGUAGE plpgsql
-AS $$
-BEGIN
-  RETURN QUERY
-  SELECT
-    c.id AS chunk_id,
-    c.source_id,
-    c.content,
-    c.metadata,
-    1 - (c.embedding <=> p_query_embedding) AS similarity
-  FROM ai_agent_chunks c
-  WHERE c.agent_id = p_agent_id
-    AND c.embedding IS NOT NULL
-    AND 1 - (c.embedding <=> p_query_embedding) >= p_match_threshold
-  ORDER BY c.embedding <=> p_query_embedding
-  LIMIT p_match_count;
-END;
-$$;
+-- Definição canônica:
+-- supabase/migrations/20260902000004_search_agent_knowledge_org_scoped.sql
+-- Este arquivo histórico não cria overload sem organização.
 
 -- =====================================================
 -- FUNÇÃO: INCREMENTAR CONTADOR DE AÇÃO
 -- =====================================================
-CREATE OR REPLACE FUNCTION increment_action_trigger(
-  action_id UUID
-)
-RETURNS void
-LANGUAGE plpgsql
-AS $$
-BEGIN
-  UPDATE ai_agent_actions
-  SET 
-    times_triggered = times_triggered + 1,
-    last_triggered_at = NOW()
-  WHERE id = action_id;
-END;
-$$;
+-- RPC aposentada: não há consumidor de produção.
 
 -- =====================================================
 -- FUNÇÃO: ATUALIZAR ESTATÍSTICAS DO AGENTE
 -- =====================================================
-CREATE OR REPLACE FUNCTION update_agent_stats(
-  p_agent_id UUID,
-  p_tokens INT DEFAULT 0,
-  p_response_time INT DEFAULT 0
-)
-RETURNS void
-LANGUAGE plpgsql
-AS $$
-DECLARE
-  current_total_messages INT;
-  current_avg_time FLOAT;
-BEGIN
-  -- Buscar valores atuais
-  SELECT total_messages, avg_response_time_ms 
-  INTO current_total_messages, current_avg_time
-  FROM ai_agents WHERE id = p_agent_id;
-  
-  -- Calcular nova média (média móvel)
-  IF current_total_messages > 0 THEN
-    current_avg_time := (current_avg_time * current_total_messages + p_response_time) / (current_total_messages + 1);
-  ELSE
-    current_avg_time := p_response_time;
-  END IF;
-
-  -- Atualizar
-  UPDATE ai_agents
-  SET 
-    total_messages = total_messages + 1,
-    total_tokens_used = total_tokens_used + p_tokens,
-    avg_response_time_ms = current_avg_time,
-    updated_at = NOW()
-  WHERE id = p_agent_id;
-END;
-$$;
+-- Definição histórica removida; a substituta atômica pertence ao item 67.
 
 -- =====================================================
 -- FUNÇÃO: BUSCAR AGENTE ATIVO PARA CONVERSA
 -- =====================================================
-CREATE OR REPLACE FUNCTION get_active_agent_for_conversation(
-  p_organization_id UUID,
-  p_channel_id UUID DEFAULT NULL,
-  p_pipeline_stage_id UUID DEFAULT NULL
-)
-RETURNS TABLE (
-  agent_id UUID,
-  agent_name TEXT,
-  provider TEXT,
-  model TEXT
-)
-LANGUAGE plpgsql
-AS $$
-BEGIN
-  RETURN QUERY
-  SELECT 
-    a.id AS agent_id,
-    a.name AS agent_name,
-    a.provider,
-    a.model
-  FROM ai_agents a
-  WHERE a.organization_id = p_organization_id
-    AND a.is_active = true
-    -- Verificar canal
-    AND (
-      (a.settings->'channels'->>'all_channels')::boolean = true
-      OR p_channel_id IS NULL
-      OR p_channel_id::text = ANY(
-        SELECT jsonb_array_elements_text(a.settings->'channels'->'channel_ids')
-      )
-    )
-    -- Verificar pipeline/etapa
-    AND (
-      (a.settings->'pipelines'->>'all_pipelines')::boolean = true
-      OR p_pipeline_stage_id IS NULL
-      OR p_pipeline_stage_id::text = ANY(
-        SELECT jsonb_array_elements_text(a.settings->'pipelines'->'stage_ids')
-      )
-    )
-  ORDER BY a.created_at ASC
-  LIMIT 1;
-END;
-$$;
+-- Definição canônica:
+-- supabase/migrations/20260903000002_get_active_agent_for_conversation_versioned.sql
+-- Este arquivo histórico não substitui a função versionada.
 
 -- =====================================================
 -- FUNÇÃO: VERIFICAR COOLDOWN
@@ -230,9 +116,5 @@ ON ai_usage_logs(agent_id, conversation_id, created_at DESC);
 -- =====================================================
 -- GRANT PERMISSIONS
 -- =====================================================
-GRANT EXECUTE ON FUNCTION search_agent_knowledge TO authenticated, service_role;
-GRANT EXECUTE ON FUNCTION increment_action_trigger TO authenticated, service_role;
-GRANT EXECUTE ON FUNCTION update_agent_stats TO authenticated, service_role;
-GRANT EXECUTE ON FUNCTION get_active_agent_for_conversation TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION check_agent_cooldown TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION count_agent_messages_in_conversation TO authenticated, service_role;

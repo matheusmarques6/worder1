@@ -4865,8 +4865,8 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `src/lib/ai/budget.ts::checkAiBudget` (os três `catch` e o bloco que loga `hasUnknownCost` sem agir
   sobre ele); `task-42-report.md`, seção "Fix round 1", tem o raciocínio completo.
 
-- [ ] **70. `search_agent_knowledge` em `sql/` sem escopo de organização, uma com `GRANT` para
-  `authenticated`** `[confirmado]` · *(descoberto no item 43)*
+- [x] **70. `search_agent_knowledge` em `sql/` sem escopo de organização, uma com `GRANT` para
+  `authenticated`** `[corrigido na Onda 2]` · *(descoberto no item 43)*
   As quatro definições de `search_agent_knowledge` fora do stream versionado
   (`sql/ai-agents-rpc-functions.sql:197`, `sql/ai-agents-functions.sql:9`,
   `sql/ai-agents-stored-procedures.sql:11`, `sql/ai-agents-complete-migration.sql:364`) filtram só por
@@ -4930,6 +4930,19 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   lá. A pergunta que fecha isso em um segundo, com Postgres na mão:
   `select count(*), count(*) filter (where is_active) from ai_agent_actions group by
   organization_id`. Mesmo YAGNI de sempre: sem dono, não se inventa script de reconciliação.
+
+  **Correção da Onda 2:** os quatro scripts históricos deixaram de definir ou conceder as RPCs
+  `search_agent_knowledge`, `get_active_agent_for_conversation`, `increment_action_trigger` e
+  `update_agent_stats`. Busca e resolução de agente apontam para as migrations canônicas; a
+  substituta atômica de estatísticas continua pertencendo ao item 67. A compensação
+  `20260910020800_restrict_legacy_agent_rpc_grants.sql` revoga `PUBLIC`, `anon` e `authenticated`
+  de todos os overloads encontrados e também retira `service_role` de `increment_action_trigger`
+  e da busca sem `p_organization_id`, sem apagar função, tabela ou dado. A revisão final corrigiu uma
+  premissa do plano: `update_agent_stats` ainda é chamada por `src/lib/ai/engine.ts:331`, portanto seu
+  grant de `service_role` é preservado; a promoção de uma substituta atômica continua no item 67.
+  Prova descartável: 4/4,
+  incluindo fixture contaminado e tentativa cross-tenant com duas organizações reais. Isso comprova
+  o stream local; o estado do banco remoto continua dependente da aplicação autorizada da migration.
 
 - [ ] **71. `/api/debug` — a décima terceira rota de debug, com o mesmo fail-open que o item 43
   fechou nas outras doze, e leitura cross-tenant sem sessão** `[confirmado]` ·

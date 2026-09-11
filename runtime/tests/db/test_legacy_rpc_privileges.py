@@ -1,5 +1,6 @@
 """Historical agent RPCs cannot reopen public or cross-tenant access."""
 
+import re
 from pathlib import Path
 
 import psycopg
@@ -7,11 +8,19 @@ import pytest
 
 from tests.db.conftest import TwoTenants, as_authenticated_user
 
-MIGRATION = (
-    Path(__file__).resolve().parents[3]
-    / "supabase"
-    / "migrations"
-    / "20260910020800_restrict_legacy_agent_rpc_grants.sql"
+REPO_ROOT = Path(__file__).resolve().parents[3]
+MIGRATION = REPO_ROOT / "supabase/migrations/20260910020800_restrict_legacy_agent_rpc_grants.sql"
+HISTORICAL_SCRIPTS = (
+    REPO_ROOT / "sql/ai-agents-rpc-functions.sql",
+    REPO_ROOT / "sql/ai-agents-functions.sql",
+    REPO_ROOT / "sql/ai-agents-stored-procedures.sql",
+    REPO_ROOT / "sql/ai-agents-complete-migration.sql",
+)
+UNSAFE_HISTORICAL_DEFINITION = re.compile(
+    r"create\s+(?:or\s+replace\s+)?function\s+(?:public\.)?"
+    r"(?:search_agent_knowledge|get_active_agent_for_conversation|"
+    r"increment_action_trigger|update_agent_stats)\b",
+    re.IGNORECASE,
 )
 
 LEGACY_FUNCTIONS = """
@@ -68,6 +77,16 @@ def _grants(admin: psycopg.Connection) -> list[tuple]:
     ).fetchall()
 
 
+def test_historical_scripts_do_not_recreate_retired_rpcs() -> None:
+    for script in HISTORICAL_SCRIPTS:
+        executable = "\n".join(
+            line
+            for line in script.read_text(encoding="utf-8").splitlines()
+            if not line.lstrip().startswith("--")
+        )
+        assert UNSAFE_HISTORICAL_DEFINITION.search(executable) is None, script.name
+
+
 def test_the_contaminated_fixture_exposes_the_old_grants(
     admin: psycopg.Connection,
 ) -> None:
@@ -96,7 +115,7 @@ def test_the_compensation_revokes_contaminated_overloads(
 
         assert all(not anon and not authenticated for _, _, anon, authenticated, _ in rows)
         for name, arguments, _, _, service_role in rows:
-            if name in {"increment_action_trigger", "update_agent_stats"}:
+            if name == "increment_action_trigger":
                 assert not service_role
             if name == "search_agent_knowledge" and "p_organization_id" not in arguments:
                 assert not service_role
@@ -109,6 +128,10 @@ def test_the_compensation_revokes_contaminated_overloads(
         )
         assert any(
             name == "get_active_agent_for_conversation" and service_role
+            for name, _, _, _, service_role in rows
+        )
+        assert any(
+            name == "update_agent_stats" and service_role
             for name, _, _, _, service_role in rows
         )
     finally:

@@ -1148,7 +1148,7 @@ mídia não recebeu alteração produtiva: os testes fixam o consumidor humano j
 - Consumes: RPCs canônicas já versionadas, assinaturas de pg_proc.
 - Produces: scripts históricos não recriam overloads sem org nem grant authenticated de RPC sem consumidor. Não remove tabela ai_agent_actions nem dados.
 
-- [ ] **Step 1: RED de privilégios proibidos**
+- [x] **Step 1: RED de privilégios proibidos**
 
 ```python
 def test_authenticated_has_no_unscoped_knowledge_rpc(admin):
@@ -1163,24 +1163,24 @@ def test_authenticated_has_no_unscoped_knowledge_rpc(admin):
 ```
 Para provar remediação, instalar dentro da transação do teste um overload legado restrito ao fixture, aplicar migration compensatória e verificar revogação. Não carregar script histórico inteiro.
 
-- [ ] **Step 2: Executar RED no fixture contaminado**
+- [x] **Step 2: Executar RED no fixture contaminado**
 
 Run focal via W0. Expected: overload concedido a authenticated aparece na lista antes da remediação.
 
-- [ ] **Step 3: Retirar definições inseguras dos arquivos históricos**
+- [x] **Step 3: Retirar definições inseguras dos arquivos históricos**
 
 Substituir cada corpo/grant legado de search_agent_knowledge e get_active_agent_for_conversation por comentário de referência explícita:
 ```sql
 -- Definição canônica: supabase/migrations/20260902000004_search_agent_knowledge_org_scoped.sql
 -- Este arquivo histórico não cria overload sem organização.
 ```
-Para get_active_agent usar a migration `20260903000002_get_active_agent_for_conversation_versioned.sql`. Retirar grant authenticated de update_agent_stats e increment_action_trigger e suas definições sem consumidor após `rg` confirmar zero call sites. Preservar demais DDL/dados; não promover scripts inteiros.
+Para get_active_agent usar a migration `20260903000002_get_active_agent_for_conversation_versioned.sql`. Retirar grants públicos e definições históricas de `update_agent_stats` e `increment_action_trigger`. A revisão do código atual encontrou consumidor de `update_agent_stats` em `src/lib/ai/engine.ts`; preservar seu grant de `service_role` até a promoção atômica do item 67. `increment_action_trigger` tem zero call sites e perde também `service_role`. Preservar demais DDL/dados; não promover scripts inteiros.
 
-- [ ] **Step 4: Compensação de grants de overloads existentes**
+- [x] **Step 4: Compensação de grants de overloads existentes**
 
-Na migration, iterar `pg_proc` por nomes fechados `increment_action_trigger,update_agent_stats` e revogar de PUBLIC/anon/authenticated via `format('%s',oid::regprocedure)`. search/get_active seguem migrations canônicas; testar que todos os overloads sem org estão ausentes ou sem execute público. `service_role` conserva somente RPC com consumidor comprovado.
+Na migration, iterar `pg_proc` pelos quatro nomes fechados e revogar de PUBLIC/anon/authenticated via `format('%s',oid::regprocedure)`. search/get_active seguem migrations canônicas; testar que todos os overloads sem org estão ausentes ou sem execute público. `service_role` conserva somente RPC com consumidor comprovado: busca/agente canônicos e `update_agent_stats`; perde `increment_action_trigger` e busca sem organização.
 
-- [ ] **Step 5: GREEN, replay e commit**
+- [x] **Step 5: GREEN, replay e commit**
 
 Run: teste de privileges com papéis reais e duas orgs; replay integral; `rg -n "search_agent_knowledge|get_active_agent_for_conversation|increment_action_trigger|update_agent_stats" sql src supabase/migrations`. Expected: canonical única no stream, nenhuma possibilidade de script histórico reabrir grants.
 ```powershell
@@ -1188,6 +1188,13 @@ git add sql/ai-agents-rpc-functions.sql sql/ai-agents-functions.sql sql/ai-agent
 git commit -m "fix: retire unsafe historical agent RPC definitions"
 ```
 **Gate:** estado vivo continua evidência externa W6, não declarado corrigido remotamente. **Rollback:** preservar grants restritos; restaurar definição canônica compatível, nunca overload público sem escopo.
+
+**Evidência executada em 2026-09-11:** RED descartável com 3 casos, 2 verdes e falha única na
+compensação ausente; GREEN final após replay integral com 4/4. A trava adicional inspeciona os quatro
+scripts históricos. Ruff verde e nenhum container/volume descartável residual. Nenhuma migration foi
+aplicada no banco remoto. A autorrevisão encontrou o consumidor vivo de `update_agent_stats` e o gate
+foi corrigido para preservar `service_role`; o novo ciclo descartável após o ajuste passou 4/4 e
+encerrou sem container ou volume residual.
 
 ## Gate da onda e autorrevisão
 

@@ -9,48 +9,9 @@
 -- Retorna o agente que deve atender uma conversa específica
 -- baseado no canal (WhatsApp instance) e estágio do pipeline
 
-CREATE OR REPLACE FUNCTION get_active_agent_for_conversation(
-  p_organization_id UUID,
-  p_channel_id UUID DEFAULT NULL,
-  p_pipeline_stage_id UUID DEFAULT NULL
-)
-RETURNS TABLE (
-  agent_id UUID,
-  agent_name TEXT,
-  priority INT
-)
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-BEGIN
-  RETURN QUERY
-  SELECT 
-    a.id as agent_id,
-    a.name as agent_name,
-    1 as priority
-  FROM ai_agents a
-  WHERE a.organization_id = p_organization_id
-    AND a.is_active = true
-    -- Verificar canal (se especificado e configurado)
-    AND (
-      (a.settings->'channels'->>'all_channels')::boolean = true
-      OR p_channel_id IS NULL
-      OR p_channel_id::text = ANY(
-        SELECT jsonb_array_elements_text(a.settings->'channels'->'channel_ids')
-      )
-    )
-    -- Verificar pipeline/stage (se especificado e configurado)
-    AND (
-      (a.settings->'pipelines'->>'all_pipelines')::boolean = true
-      OR p_pipeline_stage_id IS NULL
-      OR p_pipeline_stage_id::text = ANY(
-        SELECT jsonb_array_elements_text(a.settings->'pipelines'->'stage_ids')
-      )
-    )
-  ORDER BY a.created_at ASC
-  LIMIT 1;
-END;
-$$;
+-- Definição canônica:
+-- supabase/migrations/20260903000002_get_active_agent_for_conversation_versioned.sql
+-- Este arquivo histórico não substitui a função versionada.
 
 -- =====================================================
 -- 2. VERIFICAR COOLDOWN DO AGENTE
@@ -135,97 +96,23 @@ $$;
 -- =====================================================
 -- Atualiza contadores de uso do agente após cada interação
 
-CREATE OR REPLACE FUNCTION update_agent_stats(
-  p_agent_id UUID,
-  p_tokens INT DEFAULT 0,
-  p_response_time INT DEFAULT 0
-)
-RETURNS VOID
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-DECLARE
-  v_current_messages INT;
-  v_current_avg_time INT;
-BEGIN
-  -- Buscar valores atuais
-  SELECT total_messages, COALESCE(avg_response_time_ms, 0)
-  INTO v_current_messages, v_current_avg_time
-  FROM ai_agents
-  WHERE id = p_agent_id;
-
-  -- Atualizar
-  UPDATE ai_agents
-  SET 
-    total_messages = COALESCE(total_messages, 0) + 1,
-    total_tokens_used = COALESCE(total_tokens_used, 0) + p_tokens,
-    avg_response_time_ms = CASE 
-      WHEN v_current_messages = 0 OR v_current_messages IS NULL THEN p_response_time
-      ELSE ((v_current_avg_time * v_current_messages) + p_response_time) / (v_current_messages + 1)
-    END,
-    updated_at = NOW()
-  WHERE id = p_agent_id;
-END;
-$$;
+-- Definição histórica removida; a substituta atômica pertence ao item 67.
 
 -- =====================================================
 -- 5. INCREMENTAR CONTADOR DE AÇÃO DISPARADA
 -- =====================================================
 -- Registra quando uma regra When/Do foi acionada
 
-CREATE OR REPLACE FUNCTION increment_action_trigger(
-  p_action_id UUID
-)
-RETURNS VOID
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-BEGIN
-  UPDATE ai_agent_actions
-  SET 
-    times_triggered = COALESCE(times_triggered, 0) + 1,
-    last_triggered_at = NOW()
-  WHERE id = p_action_id;
-END;
-$$;
+-- RPC aposentada: não há consumidor de produção.
 
 -- =====================================================
 -- 6. BUSCA SEMÂNTICA NO CONHECIMENTO (RAG)
 -- =====================================================
 -- Busca chunks similares usando pgvector
 
-CREATE OR REPLACE FUNCTION search_agent_knowledge(
-  p_agent_id UUID,
-  p_query_embedding vector(1536),
-  p_match_threshold FLOAT DEFAULT 0.7,
-  p_match_count INT DEFAULT 5
-)
-RETURNS TABLE (
-  chunk_id UUID,
-  source_id UUID,
-  content TEXT,
-  metadata JSONB,
-  similarity FLOAT
-)
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-BEGIN
-  RETURN QUERY
-  SELECT 
-    c.id as chunk_id,
-    c.source_id,
-    c.content,
-    c.metadata,
-    (1 - (c.embedding <=> p_query_embedding))::FLOAT as similarity
-  FROM ai_agent_chunks c
-  WHERE c.agent_id = p_agent_id
-    AND c.embedding IS NOT NULL
-    AND (1 - (c.embedding <=> p_query_embedding)) > p_match_threshold
-  ORDER BY c.embedding <=> p_query_embedding
-  LIMIT p_match_count;
-END;
-$$;
+-- Definição canônica:
+-- supabase/migrations/20260902000004_search_agent_knowledge_org_scoped.sql
+-- Este arquivo histórico não cria overload sem organização.
 
 -- =====================================================
 -- 7. VERIFICAR SE HUMANO JÁ RESPONDEU
@@ -400,12 +287,8 @@ ON ai_usage_logs(agent_id, created_at DESC);
 -- permissões do criador. Mas garantir que service role
 -- pode executar:
 
-GRANT EXECUTE ON FUNCTION get_active_agent_for_conversation TO service_role;
 GRANT EXECUTE ON FUNCTION check_agent_cooldown TO service_role;
 GRANT EXECUTE ON FUNCTION count_agent_messages_in_conversation TO service_role;
-GRANT EXECUTE ON FUNCTION update_agent_stats TO service_role;
-GRANT EXECUTE ON FUNCTION increment_action_trigger TO service_role;
-GRANT EXECUTE ON FUNCTION search_agent_knowledge TO service_role;
 GRANT EXECUTE ON FUNCTION check_human_replied TO service_role;
 GRANT EXECUTE ON FUNCTION disable_ai_for_conversation TO service_role;
 GRANT EXECUTE ON FUNCTION enable_ai_for_conversation TO service_role;
@@ -415,12 +298,8 @@ GRANT EXECUTE ON FUNCTION enable_ai_for_conversation TO service_role;
 -- =====================================================
 -- 
 -- Funções criadas:
--- ✅ get_active_agent_for_conversation - Busca agente ativo
 -- ✅ check_agent_cooldown - Verifica cooldown
 -- ✅ count_agent_messages_in_conversation - Conta mensagens
--- ✅ update_agent_stats - Atualiza estatísticas
--- ✅ increment_action_trigger - Incrementa ações
--- ✅ search_agent_knowledge - Busca RAG
 -- ✅ check_human_replied - Verifica resposta humana
 -- ✅ disable_ai_for_conversation - Desabilita IA
 -- ✅ enable_ai_for_conversation - Habilita IA

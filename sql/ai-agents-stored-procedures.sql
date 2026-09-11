@@ -8,81 +8,18 @@
 -- Busca chunks similares usando pgvector
 -- =====================================================
 
-CREATE OR REPLACE FUNCTION search_agent_knowledge(
-  p_agent_id UUID,
-  p_query_embedding VECTOR(1536),
-  p_match_threshold FLOAT DEFAULT 0.7,
-  p_match_count INT DEFAULT 5
-)
-RETURNS TABLE (
-  chunk_id UUID,
-  source_id UUID,
-  content TEXT,
-  metadata JSONB,
-  similarity FLOAT
-) AS $$
-BEGIN
-  RETURN QUERY
-  SELECT 
-    c.id AS chunk_id,
-    c.source_id,
-    c.content,
-    c.metadata,
-    1 - (c.embedding <=> p_query_embedding) AS similarity
-  FROM ai_agent_chunks c
-  JOIN ai_agent_sources s ON s.id = c.source_id
-  WHERE c.agent_id = p_agent_id
-    AND s.status = 'ready'
-    AND 1 - (c.embedding <=> p_query_embedding) > p_match_threshold
-  ORDER BY c.embedding <=> p_query_embedding
-  LIMIT p_match_count;
-END;
-$$ LANGUAGE plpgsql STABLE;
+-- Definição canônica:
+-- supabase/migrations/20260902000004_search_agent_knowledge_org_scoped.sql
+-- Este arquivo histórico não cria overload sem organização.
 
 -- =====================================================
 -- 2. BUSCAR AGENTE ATIVO PARA CONVERSA
 -- Retorna o agente que deve responder baseado nas configurações
 -- =====================================================
 
-CREATE OR REPLACE FUNCTION get_active_agent_for_conversation(
-  p_organization_id UUID,
-  p_channel_id UUID DEFAULT NULL,
-  p_pipeline_stage_id UUID DEFAULT NULL
-)
-RETURNS TABLE (
-  agent_id UUID,
-  agent_name TEXT,
-  priority INT
-) AS $$
-BEGIN
-  RETURN QUERY
-  SELECT 
-    a.id AS agent_id,
-    a.name AS agent_name,
-    0 AS priority
-  FROM ai_agents a
-  WHERE a.organization_id = p_organization_id
-    AND a.is_active = true
-    -- Verificar canal
-    AND (
-      (a.settings->'channels'->>'all_channels')::boolean = true
-      OR p_channel_id IS NULL
-      OR p_channel_id::text = ANY(
-        SELECT jsonb_array_elements_text(a.settings->'channels'->'channel_ids')
-      )
-    )
-    -- Verificar pipeline/stage
-    AND (
-      (a.settings->'pipelines'->>'all_pipelines')::boolean = true
-      OR p_pipeline_stage_id IS NULL
-      OR p_pipeline_stage_id::text = ANY(
-        SELECT jsonb_array_elements_text(a.settings->'pipelines'->'stage_ids')
-      )
-    )
-  ORDER BY a.created_at ASC
-  LIMIT 1;
-END;
-$$ LANGUAGE plpgsql STABLE;
+-- Definição canônica:
+-- supabase/migrations/20260903000002_get_active_agent_for_conversation_versioned.sql
+-- Este arquivo histórico não substitui a função versionada.
 
 -- =====================================================
 -- 3. VERIFICAR COOLDOWN DO AGENTE
@@ -153,65 +90,14 @@ $$ LANGUAGE plpgsql STABLE;
 -- Incrementa o contador de vezes que uma ação foi disparada
 -- =====================================================
 
-CREATE OR REPLACE FUNCTION increment_action_trigger(
-  p_action_id UUID
-)
-RETURNS VOID AS $$
-BEGIN
-  UPDATE ai_agent_actions
-  SET 
-    times_triggered = COALESCE(times_triggered, 0) + 1,
-    last_triggered_at = NOW()
-  WHERE id = p_action_id;
-END;
-$$ LANGUAGE plpgsql;
+-- RPC aposentada: não há consumidor de produção.
 
 -- =====================================================
 -- 6. ATUALIZAR ESTATÍSTICAS DO AGENTE
 -- Atualiza contadores do agente após cada resposta
 -- =====================================================
 
-CREATE OR REPLACE FUNCTION update_agent_stats(
-  p_agent_id UUID,
-  p_tokens INT DEFAULT 0,
-  p_response_time INT DEFAULT 0
-)
-RETURNS VOID AS $$
-DECLARE
-  v_current_messages INT;
-  v_current_tokens BIGINT;
-  v_current_avg_time FLOAT;
-BEGIN
-  -- Buscar valores atuais
-  SELECT 
-    total_messages,
-    total_tokens_used,
-    avg_response_time_ms
-  INTO v_current_messages, v_current_tokens, v_current_avg_time
-  FROM ai_agents
-  WHERE id = p_agent_id;
-  
-  -- Calcular nova média de tempo de resposta
-  DECLARE
-    v_new_avg_time FLOAT;
-  BEGIN
-    IF v_current_messages = 0 THEN
-      v_new_avg_time := p_response_time;
-    ELSE
-      v_new_avg_time := ((v_current_avg_time * v_current_messages) + p_response_time) / (v_current_messages + 1);
-    END IF;
-    
-    -- Atualizar
-    UPDATE ai_agents
-    SET 
-      total_messages = COALESCE(total_messages, 0) + 1,
-      total_tokens_used = COALESCE(total_tokens_used, 0) + p_tokens,
-      avg_response_time_ms = v_new_avg_time,
-      updated_at = NOW()
-    WHERE id = p_agent_id;
-  END;
-END;
-$$ LANGUAGE plpgsql;
+-- Definição histórica removida; a substituta atômica pertence ao item 67.
 
 -- =====================================================
 -- 7. LIMPAR CHUNKS ANTIGOS
@@ -319,26 +205,18 @@ ON ai_usage_logs (agent_id, created_at DESC);
 -- =====================================================
 
 -- Permitir funções para authenticated users
-GRANT EXECUTE ON FUNCTION search_agent_knowledge TO authenticated;
-GRANT EXECUTE ON FUNCTION get_active_agent_for_conversation TO authenticated;
 GRANT EXECUTE ON FUNCTION check_agent_cooldown TO authenticated;
 GRANT EXECUTE ON FUNCTION count_agent_messages_in_conversation TO authenticated;
 GRANT EXECUTE ON FUNCTION get_agent_usage_stats TO authenticated;
 GRANT EXECUTE ON FUNCTION get_ready_sources TO authenticated;
 
 -- Permitir funções para service role
-GRANT EXECUTE ON FUNCTION increment_action_trigger TO service_role;
-GRANT EXECUTE ON FUNCTION update_agent_stats TO service_role;
 GRANT EXECUTE ON FUNCTION cleanup_orphan_chunks TO service_role;
 
 -- =====================================================
 -- COMENTÁRIOS
 -- =====================================================
 
-COMMENT ON FUNCTION search_agent_knowledge IS 'Busca semântica nos chunks do agente usando pgvector';
-COMMENT ON FUNCTION get_active_agent_for_conversation IS 'Retorna o agente ativo para uma conversa baseado nas configurações de canais e pipelines';
 COMMENT ON FUNCTION check_agent_cooldown IS 'Verifica se o agente não está em cooldown após transferência';
 COMMENT ON FUNCTION count_agent_messages_in_conversation IS 'Conta mensagens do agente em uma conversa para limite';
-COMMENT ON FUNCTION increment_action_trigger IS 'Incrementa contador de vezes que uma ação foi disparada';
-COMMENT ON FUNCTION update_agent_stats IS 'Atualiza estatísticas do agente após cada resposta';
 COMMENT ON FUNCTION get_agent_usage_stats IS 'Retorna estatísticas agregadas de uso do agente';
