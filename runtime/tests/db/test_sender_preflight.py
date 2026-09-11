@@ -51,6 +51,12 @@ def preflight(
     ).fetchone()
 
 
+def test_normalized_opt_out_index_exists(admin: psycopg.Connection) -> None:
+    assert admin.execute(
+        "select to_regclass('public.idx_opt_out_normalized_lookup')"
+    ).fetchone() == ("idx_opt_out_normalized_lookup",)
+
+
 class TestPreflightCascade:
     def test_opt_out_wins_over_everything(
         self, dsn: str, admin: psycopg.Connection, two_tenants: TwoTenants
