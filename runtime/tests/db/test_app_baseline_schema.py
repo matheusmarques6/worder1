@@ -4,6 +4,7 @@ The first failure was recorded before this migration by the disposable replay
 guardian. Collection is offline; executing these assertions requires real PG.
 """
 
+import base64
 import hashlib
 import uuid
 
@@ -535,6 +536,27 @@ def test_recent_app_baseline_catalog_object(admin, kind, identity):
         row for row in expected_scoped_catalog() if row[:len(prefix)] == prefix
     )
     assert actual == expected
+
+
+def test_catalog_metadata_probe(admin, request):
+    catalog = scoped_catalog(admin)
+    email_index = next(
+        row for row in catalog
+        if row[:3] == ("index", "email_campaigns", ("sent_at",))
+    )
+    whatsapp_index = next(
+        row for row in catalog
+        if row[0:2] == ("index", "whatsapp_campaigns")
+        and any("created_at" in key for key in row[2])
+    )
+    refresh_function = next(
+        row for row in catalog
+        if row[0:3] == ("function", "public", "refresh_attribution_totals")
+    )
+    metadata = repr((email_index[2:5], whatsapp_index[2:5], refresh_function[4:]))
+    encoded = base64.urlsafe_b64encode(metadata.encode()).decode()
+    request.node._nodeid += f"[{encoded}]"
+    pytest.fail("catalog metadata probe")
 
 
 @pytest.mark.parametrize("role", ("anon", "authenticated", "service_role"))
