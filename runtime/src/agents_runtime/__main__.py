@@ -58,7 +58,10 @@ def _channel_from_env(dsn: str) -> ChannelPort | None:
 
 def _stop_on_shutdown_signals(stop: asyncio.Event) -> None:
     loop = asyncio.get_running_loop()
-    for received in (signal.SIGINT, signal.SIGTERM):
+    signals = (signal.SIGINT, signal.SIGTERM)
+    if hasattr(signal, "SIGBREAK"):
+        signals += (signal.SIGBREAK,)
+    for received in signals:
         try:
             loop.add_signal_handler(received, stop.set)
         except NotImplementedError:  # Windows has no add_signal_handler

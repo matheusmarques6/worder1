@@ -14,6 +14,7 @@ cenário C wants.
 """
 
 import os
+import signal
 import subprocess
 import sys
 import time
@@ -64,6 +65,7 @@ class RuntimeProcess:
             env=env,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0,
         )
 
     def kill(self) -> None:
@@ -73,9 +75,12 @@ class RuntimeProcess:
         self._process.wait(timeout=10)
 
     def terminate(self) -> int:
-        """The clean death — POSIX only, where terminate() is SIGTERM."""
+        """The clean death — SIGTERM on POSIX, Ctrl+Break on Windows."""
         assert self._process is not None
-        self._process.terminate()
+        if os.name == "nt":
+            self._process.send_signal(signal.CTRL_BREAK_EVENT)
+        else:
+            self._process.terminate()
         return self._process.wait(timeout=15)
 
     def still_running(self) -> bool:
