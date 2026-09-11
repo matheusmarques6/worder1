@@ -488,8 +488,25 @@ def expected_scoped_catalog():
     return tuple(sorted(rows, key=repr))
 
 
-def test_app_baseline_scoped_catalog(admin):
-    assert scoped_catalog(admin) == expected_scoped_catalog()
+@pytest.mark.parametrize(
+    "kind",
+    (
+        "column",
+        "enum",
+        "constraint",
+        "index",
+        "rls",
+        "policy",
+        "function",
+        "trigger",
+        "table_acl",
+        "function_acl",
+    ),
+)
+def test_app_baseline_scoped_catalog(admin, kind):
+    actual = tuple(row for row in scoped_catalog(admin) if row[0] == kind)
+    expected = tuple(row for row in expected_scoped_catalog() if row[0] == kind)
+    assert actual == expected
 
 
 @pytest.mark.parametrize("role", ("anon", "authenticated", "service_role"))
