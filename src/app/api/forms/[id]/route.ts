@@ -7,6 +7,8 @@ import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { isVisualPopupForm } from '@/lib/forms/submit-utils'
 
 export const dynamic = 'force-dynamic'
+// Publicar cria os primeiros códigos únicos na Shopify (até 10, ~8 s).
+export const maxDuration = 30
 
 // GET - Obter formulário com campos e eventos
 export async function GET(
@@ -49,11 +51,6 @@ export async function GET(
       console.error('[Forms] Error fetching form:', error)
       return NextResponse.json({ error: 'Formulário não encontrado' }, { status: 404 })
     }
-
-    console.log('[Forms] GET', formId, {
-      design_json_keys: form.design_json ? Object.keys(form.design_json) : null,
-      design_json_steps: form.design_json?.steps?.length,
-    })
 
     // Sort fields and events by position
     if (form.fields) {
@@ -98,8 +95,10 @@ export async function PUT(
     if (name !== undefined) updates.name = name
     if (description !== undefined) updates.description = description
     if (status !== undefined) updates.status = status
-    if (pipeline_id !== undefined) updates.pipeline_id = pipeline_id
-    if (stage_id !== undefined) updates.stage_id = stage_id
+    // pipeline/stage entram no negócio criado a partir da inscrição: um id
+    // de outra org apontaria o deal para o funil do vizinho.
+    if (pipeline_id !== undefined) updates.pipeline_id = pipeline_id || null
+    if (stage_id !== undefined) updates.stage_id = stage_id || null
     if (theme !== undefined) updates.theme = theme
     if (logo_url !== undefined) updates.logo_url = logo_url
     if (success_message !== undefined) updates.success_message = success_message
@@ -136,17 +135,52 @@ export async function PUT(
       }
     }
 
+    // Funil e etapa também são da org: o negócio criado a partir de uma
+    // inscrição não pode cair no pipeline de outro cliente. `pipelines`
+    // não tem organization_id — pertence a uma loja, e a loja à org.
+    const orgStoreIds = async (): Promise<string[]> => {
+      const { data } = await admin.from('shopify_stores').select('id').eq('organization_id', user.organization_id)
+      return (data || []).map((r: any) => r.id as string)
+    }
+    if (pipeline_id || stage_id) {
+      const storeIds = await orgStoreIds()
+      let pipeId: string | null = pipeline_id || null
+      if (stage_id) {
+        const { data: stageRow } = await admin.from('pipeline_stages').select('id, pipeline_id').eq('id', stage_id).maybeSingle()
+        if (!stageRow) return NextResponse.json({ error: 'Etapa inválida: escolha uma etapa da sua organização.' }, { status: 400 })
+        if (pipeId && stageRow.pipeline_id !== pipeId) {
+          return NextResponse.json({ error: 'A etapa escolhida não pertence a esse funil.' }, { status: 400 })
+        }
+        pipeId = pipeId || (stageRow.pipeline_id as string)
+      }
+      if (pipeId) {
+        const { data: pipeRow } = await admin.from('pipelines').select('id, store_id').eq('id', pipeId).maybeSingle()
+        if (!pipeRow || !pipeRow.store_id || !storeIds.includes(pipeRow.store_id as string)) {
+          return NextResponse.json({ error: 'Funil inválido: escolha um funil da sua organização.' }, { status: 400 })
+        }
+      }
+    }
+
     // Publish gate: a visual popup with store_id NULL renders on EVERY
     // storefront of the org (cross-store fan-out). Multi-store orgs must
     // pick a store before publishing; single-store orgs get it
     // auto-filled with their only active store.
-    if (status === 'published') {
-      const { data: current } = await admin
-        .from('crm_forms')
-        .select('store_id, form_type, design_json')
-        .eq('id', formId)
-        .eq('organization_id', user.organization_id)
-        .maybeSingle()
+    const { data: current } = await admin
+      .from('crm_forms')
+      .select('store_id, form_type, design_json, status, ab_parent_id')
+      .eq('id', formId)
+      .eq('organization_id', user.organization_id)
+      .maybeSingle()
+    if (!current) return NextResponse.json({ error: 'Formulário não encontrado' }, { status: 404 })
+    // Variante de experimento não é publicada: entra na loja pelo popup
+    // principal, na fatia que o experimento dá a ela.
+    if (status === 'published' && current.ab_parent_id) {
+      return NextResponse.json({ error: 'Esta é uma variante de experimento. Ative o experimento no popup principal.' }, { status: 400 })
+    }
+    // A regra de "escolha a loja" vale para o estado RESULTANTE: tirar a
+    // loja de um popup já publicado também passa por aqui.
+    const effectiveStatus = status !== undefined ? status : current.status
+    if (effectiveStatus === 'published' && (status === 'published' || store_id !== undefined)) {
 
       const effectiveStoreId = store_id !== undefined ? store_id : current?.store_id
       const effectiveFormType = form_type !== undefined ? form_type : current?.form_type
@@ -172,6 +206,11 @@ export async function PUT(
       }
     }
 
+    // Editou uma variante: o bundle da loja tem ETag pelo pai — encosta
+    // nele para o design novo entrar no ar.
+    if (current.ab_parent_id && design_json !== undefined) {
+      await admin.from('crm_forms').update({ updated_at: new Date().toISOString() }).eq('id', current.ab_parent_id).eq('organization_id', user.organization_id)
+    }
     const { data: form, error } = await admin
       .from('crm_forms')
       .update(updates)
@@ -195,7 +234,39 @@ export async function PUT(
       fireInstallExtrasForPublishedForm(form.store_id)
     }
 
-    return NextResponse.json({ form })
+    // O pool de cupons acompanha o bloco de cupom. Ao publicar, um lote
+    // pequeno é criado agora para o primeiro inscrito não cair no código
+    // estático; o cron repõe o resto. Falha aqui não derruba o save — o
+    // estado vai na resposta para a tela avisar.
+    let couponPool: any = null
+    if (form && (design_json !== undefined || status !== undefined || store_id !== undefined)) {
+      try {
+        const { syncPoolFromForm, replenishPool, listPoolStatuses } = await import('@/lib/coupons/pool-service')
+        const synced = await syncPoolFromForm(form)
+        if (synced.pools.length && form.status === 'published') {
+          // Base e tiers: um lote pequeno em cada, dentro do mesmo orçamento.
+          const budget = Math.max(2000, Math.floor(8000 / synced.pools.length))
+          for (const p of synced.pools) {
+            await replenishPool(p.id, user.organization_id, { maxCreate: 10, timeBudgetMs: budget })
+          }
+        }
+        const statuses = await listPoolStatuses(user.organization_id, form.id)
+        const active = statuses.filter((s) => s.pool?.status === 'active')
+        couponPool = {
+          active: active.length > 0,
+          status: active.length ? (active.some((s) => s.pool?.status === 'error') ? 'error' : 'active') : (statuses[0]?.pool?.status || null),
+          usable: active.reduce((n, s) => n + s.usable, 0),
+          last_error: active.find((s) => s.pool?.last_error)?.pool?.last_error || null,
+          reason: synced.reason || null,
+          pools: statuses.map((s) => ({ tier_key: s.pool?.tier_key || 'base', status: s.pool?.status, usable: s.usable })),
+        }
+      } catch (e: any) {
+        console.warn('[Forms] coupon pool sync failed (non-blocking):', e?.message)
+        couponPool = { active: false, status: 'error', usable: 0, last_error: e?.message || 'erro', reason: null }
+      }
+    }
+
+    return NextResponse.json({ form, coupon_pool: couponPool })
   } catch (error: any) {
     console.error('[Forms] PUT error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
@@ -233,6 +304,14 @@ export async function DELETE(
     const formId = params.id
 
     const admin = getSupabaseAdmin()
+    // Os pools de cupom não têm FK para o popup: sem isto o cron seguiria
+    // criando descontos na Shopify para um popup que não existe mais.
+    try {
+      const { retirePoolsForForm } = await import('@/lib/coupons/pool-service')
+      await retirePoolsForForm(user.organization_id, formId)
+    } catch (e: any) {
+      console.warn('[Forms] retire pools failed (continuing delete):', e?.message)
+    }
     const { error } = await admin
       .from('crm_forms')
       .delete()

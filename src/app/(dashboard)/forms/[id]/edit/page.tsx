@@ -131,7 +131,7 @@ export default function PopupBuilderPage() {
       {/* Toolbar */}
       <div className="flex items-center justify-between px-4 h-[52px] bg-white border-b border-gray-200 flex-shrink-0 z-20">
         <div className="flex items-center gap-3">
-          <button onClick={() => router.push('/forms')} className="p-2 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100"><ArrowLeft size={18} /></button>
+          <button onClick={() => router.push('/site/forms')} className="p-2 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100"><ArrowLeft size={18} /></button>
           <input value={c.name} onChange={e => update('name', e.target.value)}
             className="text-sm font-semibold text-gray-900 border-0 bg-transparent focus:outline-none focus:ring-0 w-48" />
         </div>

@@ -59,7 +59,12 @@ export async function POST(req: NextRequest) {
     const { error } = await supabaseAdmin
       .from('contacts')
       .update({
-        status: 'unsubscribed',
+        // `status` não existe em contacts, e o PostgREST recusa a linha
+        // INTEIRA quando não conhece um campo: o descadastro devolvia 500
+        // e NADA era gravado — nem o email_consent. Quem clicou em
+        // "descadastrar" continuava recebendo.
+        suppressed: true,
+        is_subscribed_email: false,
         email_consent: false,
         email_consent_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),

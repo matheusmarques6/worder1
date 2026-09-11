@@ -44,7 +44,9 @@ export async function POST(req: NextRequest) {
   let finalHtml: string = rawHtml || ''
   let finalSubject: string = subject || ''
   let finalPreheader: string = preheader || ''
-  let baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.worder.com.br'
+  // A prévia mostra o host de rastreamento, que é o que vai no e-mail.
+  const { getTrackingBaseUrl } = await import('@/lib/email/tracking-url')
+  let baseUrl = await getTrackingBaseUrl(auth.user.organization_id, null)
 
   // When campaignId is provided pull the latest saved version.
   let campaignStoreId: string | null = null
@@ -55,17 +57,25 @@ export async function POST(req: NextRequest) {
   if (campaignId) {
     const { data: camp } = await supabaseAdmin
       .from('email_campaigns')
-      .select('id, name, subject, preheader, html, organization_id, store_id, settings')
+      .select('id, name, subject, preview_text, html_content, organization_id, store_id, settings')
       .eq('id', campaignId)
       .eq('organization_id', auth.user.organization_id)
       .maybeSingle()
     if (!camp) {
       return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
     }
-    finalHtml = camp.html || rawHtml || ''
+    // As colunas são html_content e preview_text; pedir `html` e
+    // `preheader` fazia o PostgREST recusar a consulta inteira, e a
+    // prévia caía no que o corpo da requisição trouxesse.
+    finalHtml = camp.html_content || rawHtml || ''
     finalSubject = camp.subject || subject || ''
-    finalPreheader = camp.preheader || preheader || ''
+    finalPreheader = camp.preview_text || preheader || ''
     campaignStoreId = camp.store_id || null
+    // Com a loja conhecida, o host dos links é o dela (a loja pode ter um
+    // domínio de rastreamento próprio, diferente do da organização).
+    if (campaignStoreId) {
+      baseUrl = await getTrackingBaseUrl(auth.user.organization_id, campaignStoreId)
+    }
     campaignName = camp.name || null
     campaignUtmRaw = (camp as any).settings?.utm ?? null
   }

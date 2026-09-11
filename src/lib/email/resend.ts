@@ -61,10 +61,23 @@ export async function sendEmail({
   return data;
 }
 
-export async function createDomain(domain: string) {
+/**
+ * Cria o domínio no Resend já com o rastreamento do jeito que a
+ * arquitetura pede (ver tracking-subdomain.ts): reescrita do Resend
+ * LIGADA — é o host dela que o destinatário vê, e alinhá-lo com o
+ * domínio de envio é o que a entregabilidade pede — e o subdomínio de
+ * links dentro do próprio domínio do lojista.
+ */
+export async function createDomain(
+  domain: string,
+  opts: { trackingSubdomain?: string; clickTracking?: boolean; openTracking?: boolean } = {}
+) {
   const resend = getResend();
 
-  const { data, error } = await resend.domains.create({ name: domain });
+  const { data, error } = await resend.domains.create({
+    name: domain,
+    ...(opts.trackingSubdomain ? { tracking_subdomain: opts.trackingSubdomain } : {}),
+  } as any);
 
   if (error) {
     console.error('[Resend] Error creating domain:', error);
@@ -90,17 +103,26 @@ export async function verifyDomain(domainId: string) {
 }
 
 /**
- * Liga/desliga o click/open tracking DA RESEND para um domínio.
- * O tracking primário é o da Worder (/api/t/*): carrega worderContactID/
- * SendID/CampaignID + UTMs (atribuição de vendas), detecta Apple MPP e
- * sobrevive a uma troca de provedor. Com o da Resend ligado junto, cada
- * link vira redirect duplo (click.<dominio> → worder → loja) e cada
- * abertura conta duas vezes — então domínios gerenciados pela Worder
- * ficam com o tracking da Resend desligado.
+ * Configura o rastreamento DO RESEND para um domínio: liga/desliga
+ * clique e abertura e define o subdomínio de links.
+ *
+ * Os dois rastreamentos convivem de propósito, cada um com um papel:
+ *
+ *   Resend   reescreve o link no envio, então é o host DELE que o
+ *            destinatário vê. Alinhado com o domínio de envio
+ *            (click.sualoja.com.br), é isso que o filtro do Gmail lê
+ *            como "mesma casa" — e a métrica dele fica no painel dele.
+ *   Worder   /api/t/*, o salto seguinte: carrega worderContactID/SendID/
+ *            AutomationID + UTMs (atribuição de venda), detecta Apple
+ *            MPP e não depende de provedor.
+ *
+ * O preço são dois redirects por clique (~100ms). O ganho é o host
+ * visível ser o do lojista sem que o domínio dele precise ser anexado à
+ * nossa hospedagem — um CNAME no DNS dele, ao lado do SPF e do DKIM.
  */
 export async function setDomainTracking(
   domainId: string,
-  opts: { clickTracking: boolean; openTracking: boolean }
+  opts: { clickTracking: boolean; openTracking: boolean; trackingSubdomain?: string }
 ) {
   const apiKey = process.env.RESEND_API_KEY;
   const res = await fetch(`https://api.resend.com/domains/${domainId}`, {
@@ -112,6 +134,7 @@ export async function setDomainTracking(
     body: JSON.stringify({
       click_tracking: opts.clickTracking,
       open_tracking: opts.openTracking,
+      ...(opts.trackingSubdomain ? { tracking_subdomain: opts.trackingSubdomain } : {}),
     }),
   });
   if (!res.ok) {

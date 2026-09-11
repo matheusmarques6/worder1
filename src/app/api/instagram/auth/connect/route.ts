@@ -55,7 +55,6 @@ export async function POST(request: NextRequest) {
           followers_count: instagram_followers,
           token_expires_at,
           status: 'active',
-          last_error_message: null,
           updated_at: new Date().toISOString(),
         })
         .eq('id', existingAccount.id)
@@ -76,7 +75,9 @@ export async function POST(request: NextRequest) {
           organization_id,
           store_id: store_id || null,
           instagram_business_id,
-          instagram_user_id: instagram_business_id,
+          // A coluna é `ig_user_id`; com `instagram_user_id` o PostgREST
+          // recusava a linha inteira e a conta nunca era criada.
+          ig_user_id: instagram_business_id,
           page_id,
           username: instagram_username,
           name: instagram_name,
@@ -114,9 +115,10 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (integration) {
+      // `installed_integrations` não tem store_id: o vínculo com a loja
+      // fica na conta do Instagram (instagram_accounts.store_id).
       await supabase.from('installed_integrations').upsert({
         organization_id,
-        store_id: store_id || null,
         integration_id: integration.id,
         status: 'active',
         configuration: {

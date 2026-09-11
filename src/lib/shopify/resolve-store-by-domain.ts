@@ -148,5 +148,9 @@ export function normalizeDomain(input: string | null | undefined): string {
   d = d.replace(/^https?:\/\//, '');
   d = d.replace(/\/.*$/, '');
   d = d.replace(/^www\./, '');
+  // O domínio entra num filtro do PostgREST: só letras, dígitos, ponto e
+  // hífen. Qualquer outra coisa (vírgula, parênteses) é tentativa de
+  // escrever o filtro — e vira "não achei".
+  if (!/^[a-z0-9.-]{1,253}$/.test(d)) return '';
   return d;
 }

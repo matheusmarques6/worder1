@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
         title: c.title,
         status: c.status,
         template_name: c.template_name || '',
-        total_contacts: c.total_contacts || 0,
+        total_contacts: c.audience_count || 0,
         sent: c.total_sent || 0,
         delivered: c.total_delivered || 0,
         read: c.total_read || 0,
@@ -282,9 +282,12 @@ function calculateTrends(current: CampaignAnalyticsSummary, previous: CampaignAn
 }
 
 async function getChartData(organizationId: string, start: Date, end: Date): Promise<CampaignChartDataPoint[]> {
-  // Buscar logs agregados por dia
+  // O estado de cada destinatário está em whatsapp_campaign_recipients —
+  // é lá que o processador e o webhook da Meta escrevem. Esta consulta
+  // apontava para whatsapp_campaign_logs, que não tem sent_at: dava erro
+  // e a função caía no gráfico vazio, sempre.
   const { data, error } = await supabase
-    .from('whatsapp_campaign_logs')
+    .from('whatsapp_campaign_recipients')
     .select(`
       sent_at,
       status,
@@ -313,14 +316,21 @@ async function getChartData(organizationId: string, start: Date, end: Date): Pro
     const day = byDay.get(date)!;
     day.sent++;
 
-    if (log.status === 'DELIVERED' || log.status === 'READ') {
+    // O status vem em minúsculas de whatsapp_campaign_recipients
+    // ('sent', 'delivered', 'read', 'failed'); a comparação anterior era
+    // com MAIÚSCULAS e nunca casava — entregues e lidas ficavam em zero.
+    const st = String(log.status || '').toLowerCase();
+    if (st === 'delivered' || st === 'read') {
       day.delivered++;
     }
-    if (log.status === 'READ') {
+    if (st === 'read') {
       day.read++;
     }
-    if (log.status === 'FAILED') {
+    if (st === 'failed') {
       day.failed++;
+    }
+    if (st === 'replied') {
+      day.replied++;
     }
   });
 
@@ -401,9 +411,9 @@ function aggregateErrors(campaigns: any[]): ErrorBreakdown {
 }
 
 async function getHourlyDistribution(organizationId: string, start: Date, end: Date): Promise<HourlyDistributionItem[]> {
-  // Buscar logs e agregar por hora
+  // Idem: por destinatário, não pelo log de eventos da campanha.
   const { data, error } = await supabase
-    .from('whatsapp_campaign_logs')
+    .from('whatsapp_campaign_recipients')
     .select(`
       sent_at,
       status,
@@ -436,10 +446,11 @@ async function getHourlyDistribution(organizationId: string, start: Date, end: D
     const h = byHour.get(hour)!;
     h.sent++;
 
-    if (log.status === 'DELIVERED' || log.status === 'READ') {
+    const st = String(log.status || '').toLowerCase();
+    if (st === 'delivered' || st === 'read') {
       h.delivered++;
     }
-    if (log.status === 'READ') {
+    if (st === 'read') {
       h.read++;
     }
   });
@@ -498,17 +509,36 @@ async function getCampaignDetails(campaignId: string, organizationId: string) {
 
   const analytics = campaign.analytics?.[0] || {};
 
-  // Buscar logs recentes
-  const { data: logs } = await supabase
-    .from('whatsapp_campaign_logs')
+  // Últimos destinatários. Antes esta consulta pedia a
+  // whatsapp_campaign_logs colunas que só existem por destinatário
+  // (sent_at, delivered_at, read_at…) e ela nunca devolvia nada.
+  // `delivery_time_seconds` e `read_time_seconds` não são colunas: saem
+  // da diferença entre os carimbos.
+  const { data: recipientRows, error: recipientsError } = await supabase
+    .from('whatsapp_campaign_recipients')
     .select(`
-      id, contact_name, contact_mobile, status, message_id,
+      id, contact_name, phone_number, status, message_id,
       sent_at, delivered_at, read_at, failed_at, replied_at,
-      error_code, error_message, delivery_time_seconds, read_time_seconds
+      error_code, error_message
     `)
     .eq('campaign_id', campaignId)
-    .order('sent_at', { ascending: false })
+    .order('sent_at', { ascending: false, nullsFirst: false })
     .limit(50);
+  if (recipientsError) console.error('[WhatsAppAnalytics] destinatários indisponíveis:', recipientsError.message);
+
+  const segundosEntre = (a?: string | null, b?: string | null): number | null => {
+    if (!a || !b) return null;
+    const d = (new Date(b).getTime() - new Date(a).getTime()) / 1000;
+    return Number.isFinite(d) && d >= 0 ? Math.round(d) : null;
+  };
+
+  const logs = (recipientRows || []).map((r: any) => ({
+    ...r,
+    // A tela chama de contact_mobile o que a tabela chama de phone_number.
+    contact_mobile: r.phone_number,
+    delivery_time_seconds: segundosEntre(r.sent_at, r.delivered_at),
+    read_time_seconds: segundosEntre(r.delivered_at, r.read_at),
+  }));
 
   // Montar funil
   const funnel = [

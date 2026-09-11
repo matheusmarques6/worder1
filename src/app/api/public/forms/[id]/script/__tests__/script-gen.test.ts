@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import {
   buildPopupScript,
+  buildRuntimeScript,
+  buildPopupCall,
+  compactScript,
   escHtml,
   sv,
   safeUrl,
@@ -104,22 +107,56 @@ describe('buildPopupScript (generated string)', () => {
 
   it('R6: dismissal beacon to /events, once per pageview, not after subscribe', () => {
     expect(js).toContain('/events')
-    expect(js).toContain('{type:"dismissed"}')
+    expect(js).toContain('beacon("dismissed"')
     expect(js).toContain('navigator.sendBeacon')
     expect(js).toContain('if(byUser&&!submitted)sendDismiss()')
     expect(js).toContain('if(dismissSent)return')
   })
 
-  it('R6: impressions still tracked via submit _track (no double count)', () => {
-    expect(js).toContain('{_track:"impression"}')
+  it('R6: impressions go through the /events beacon — never the submit _track path', () => {
+    expect(js).toContain('beacon("impression",{bucket:"exposed",traffic:TRAFFIC,page:PAGE.kind,propensity:propensity(),retrigger:RETRIG})')
+    expect(js).not.toContain('_track:"impression"')
+  })
+
+  it('beacon posts text/plain so sendBeacon never needs a CORS preflight', () => {
+    expect(js).toContain('type:"text/plain;charset=UTF-8"')
+    expect(js).not.toContain('type:"application/json"')
+  })
+
+  it('geo gate uses the first-party endpoint, never a third party', () => {
+    expect(js).toContain('/api/public/geo')
+    expect(js).not.toContain('ipapi')
+  })
+
+  it('subscriber and per-visitor gates use the unified visitor id', () => {
+    expect(js).not.toContain('var vid=gc("__worder_id")')
+  })
+
+  it('legal-consent renders one input per block with its channels', () => {
+    expect(js).toContain('name="consent__\'+bid(b.id)+\'"')
+    expect(js).toContain('data-channels=')
+  })
+
+  it('compactScript drops comment lines and indentation but keeps URLs and strings intact', () => {
+    const src = '  // comentário\nvar a="https://x.y/z"; // fim de linha fica\n\n    if(a){\n      b()\n    }\n'
+    const out = compactScript(src)
+    expect(out).toBe('var a="https://x.y/z"; // fim de linha fica\nif(a){\nb()\n}')
+    expect(compactScript(js).length).toBeLessThan(js.length * 0.85)
+    expect(() => new Function(compactScript(js))).not.toThrow()
+  })
+
+  it('fonts are injected on show, not on script load', () => {
+    expect(js).toContain('function ensureFonts()')
+    expect(js).not.toMatch(/\n\}\)\(\);`$/) // trailing font block removed
   })
 
   it('R7: button label escaped, style-sanitizer applied, URL whitelists in place', () => {
-    expect(js).toContain('esc(p.text||"OK")')
+    expect(js).toContain('esc(applyOffer(p.text||"OK"))')
     expect(js).toContain('sv(p.bgColor,"#F97316")')
     expect(js).toContain('safeUrl(p.url)')
     expect(js).toContain('safeUrl(btn.dataset.url)')
-    expect(js).toContain('safeUrl((res&&res.redirect_url)||postSubmit.redirectUrl||"")')
+    // O destino do editor vence a coluna legada redirect_url.
+    expect(js).toContain('safeUrl(postSubmit.redirectUrl||(res&&res.redirect_url)||"")')
     expect(js).toContain('legalHtml(')
   })
 
@@ -173,6 +210,16 @@ describe('buildPopupScript (generated string)', () => {
 
   it('embeds skip suppression cookies on close', () => {
     expect(js).toContain('if(isEmbed)return')
+  })
+
+  it('targeting gates are in the runtime: page context, traffic type, cart contents, audience', () => {
+    expect(js).toContain('var pageCfg=B.page||{}')
+    expect(js).toContain('window.__worder')
+    expect(js).toContain('var trafficCfg=B.traffic||{}')
+    expect(js).toContain('sessionStorage.setItem(key,t)')
+    expect(js).toContain('var cartHas=cartCfg.contains||{}')
+    expect(js).toContain('var audCfg=B.audienceTargeting||{}')
+    expect(js).toContain('audience gate — no visitor id')
   })
 
   it('serializes the design and form id', () => {
@@ -250,5 +297,48 @@ describe('runtime helpers (inlined into the script)', () => {
     expect(normalizePhoneValue('0123456', '+44')).toBe('+44123456')
     expect(normalizePhoneValue('123456', '')).toBe('123456')
     expect(normalizePhoneValue('', '+55')).toBe('')
+  })
+})
+
+describe('runtime compartilhado (um por bundle)', () => {
+  const form = (id: string, name: string) => ({
+    id, name,
+    design_json: { formType: 'popup', styles: { width: 480 }, steps: [{ blocks: [{ id: 'b', type: 'email', props: {} }] }], successStep: { blocks: [] } },
+    behavior: { display: { timeEnabled: true, delay: 1 } },
+    success_message: `obrigado ${name}`,
+  })
+
+  it('a chamada de um popup não carrega o runtime: só os dados dele', () => {
+    const call = buildPopupCall(form('id-a', 'A') as any, 'https://app.test')
+    expect(call).not.toContain('function mountRoot')
+    expect(call).not.toContain('BASE_CSS')
+    expect(call).toContain('"id-a"')
+    expect(call).toContain('"obrigado A"')
+    // Uma linha só: a chamada da função global do runtime.
+    expect(call.trim().split('\n')).toHaveLength(1)
+  })
+
+  it('o script individual continua autossuficiente: runtime + chamada', () => {
+    const js = buildPopupScript(form('id-a', 'A') as any, 'https://app.test')
+    expect(js).toContain('function mountRoot')
+    expect(js).toContain(buildPopupCall(form('id-a', 'A') as any, 'https://app.test'))
+    // Emitir duas vezes na mesma página não redefine o runtime.
+    expect(js).toContain('if(!window[')
+  })
+
+  it('dois popups compartilham o mesmo runtime, e o bundle encolhe', () => {
+    const a = buildPopupCall(form('id-a', 'A') as any, 'https://app.test')
+    const b = buildPopupCall(form('id-b', 'B') as any, 'https://app.test')
+    const runtime = buildRuntimeScript()
+    const antes = buildPopupScript(form('id-a', 'A') as any, 'https://app.test').length
+      + buildPopupScript(form('id-b', 'B') as any, 'https://app.test').length
+    const depois = runtime.length + a.length + b.length
+    expect(depois).toBeLessThan(antes)
+    // O ganho é praticamente um runtime inteiro.
+    expect(antes - depois).toBeGreaterThan(runtime.length * 0.9)
+    // As duas chamadas usam a mesma função global.
+    const key = runtime.match(/window\["(wfRT[a-z0-9]+)"\]/)![1]
+    expect(a).toContain(key)
+    expect(b).toContain(key)
   })
 })

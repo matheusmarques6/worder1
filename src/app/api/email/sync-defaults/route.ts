@@ -124,14 +124,39 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // email_templates não guarda remetente (não há colunas from_*); o
-  // remetente de campanha é definido ao criar a campanha, a partir do
-  // padrão da loja.
+  // Campanhas ainda não enviadas guardam o remetente na própria linha
+  // (email_campaigns.from_email). Sem atualizá-las, trocar o remetente da
+  // loja não alcançava nada do que já estava escrito — e a campanha
+  // agendada saía pelo endereço antigo.
+  let campaignsUpdated = 0;
+  if (senderEmail) {
+    let cq = supabase
+      .from('email_campaigns')
+      .update({
+        from_email: senderEmail,
+        ...(senderName ? { sender_name: senderName } : {}),
+        ...(replyTo ? { reply_to: replyTo } : {}),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('organization_id', storeOrgId)
+      .eq('store_id', storeId)
+      .in('status', ['draft', 'scheduled']);
+    // "Só onde está vazio" e "só o endereço antigo" seguem a mesma régua
+    // dos nós de automação: nunca mexer numa escolha deliberada.
+    if (onlyEmpty) cq = cq.or('from_email.is.null,from_email.eq.');
+    else if (previousEmail) cq = cq.or(`from_email.is.null,from_email.eq.,from_email.eq.${previousEmail}`);
+    const { data: updatedCampaigns, error: campErr } = await cq.select('id');
+    if (campErr) console.error('[sync-defaults] campaign update error:', campErr);
+    else campaignsUpdated = (updatedCampaigns || []).length;
+  }
+
+  // email_templates não guarda remetente (não há colunas from_*).
   return NextResponse.json({
     success: true,
     storeId,
     automationsUpdated,
     nodesUpdated,
+    campaignsUpdated,
     templatesUpdated: 0,
   });
 }

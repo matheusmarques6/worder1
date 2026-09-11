@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseClient } from '@/lib/api-utils'
+import { sanitizeSearchTerm } from '@/lib/db/search-term'
 export const dynamic = 'force-dynamic';
 
 // GET - List all available integrations (catalog)
@@ -13,6 +14,9 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
   const categoryId = searchParams.get('categoryId')
   const search = searchParams.get('search')
+  // O termo vai para dentro de um filtro do PostgREST: vírgula e
+  // parêntese deixariam de ser texto e passariam a ser consulta.
+  const buscaSegura = sanitizeSearchTerm(search)
 
   try {
     let query = supabase
@@ -30,8 +34,8 @@ export async function GET(request: NextRequest) {
       query = query.eq('category_id', categoryId)
     }
 
-    if (search) {
-      query = query.or(`name.ilike.%${search}%,short_description.ilike.%${search}%`)
+    if (buscaSegura) {
+      query = query.or(`name.ilike.%${buscaSegura}%,short_description.ilike.%${buscaSegura}%`)
     }
 
     const { data: integrations, error } = await query

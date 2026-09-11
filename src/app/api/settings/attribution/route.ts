@@ -9,6 +9,8 @@ const DEFAULTS = {
   email_window_days: 5,
   whatsapp_window_days: 2,
   sms_window_days: 2,
+  // Popup: a inscrição conta como toque por 30 dias (Alia usa a mesma janela).
+  popup_window_days: 30,
   count_opens: true,
   exclude_mpp_opens: true,
   model: 'last_touch' as 'last_touch' | 'first_touch',
@@ -61,6 +63,7 @@ async function saveAttribution(orgId: string, body: any) {
     email_window_days: clampWindow(body.email_window_days, 5),
     whatsapp_window_days: clampWindow(body.whatsapp_window_days, 2),
     sms_window_days: clampWindow(body.sms_window_days, 2),
+    popup_window_days: clampWindow(body.popup_window_days, 30),
     count_opens: body.count_opens !== false,
     exclude_mpp_opens: body.exclude_mpp_opens !== false,
     model: validateModel(body.model),

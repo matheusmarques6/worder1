@@ -152,6 +152,13 @@ const triggerExecutors: Record<string, NodeExecutor> = {
       return { status: 'success', output: context.trigger?.data || {} };
     },
   },
+  trigger_whatsapp_optin: {
+    // Disparado pelo webhook quando a pessoa confirma o opt-in de WhatsApp
+    // pedido por um popup — o ponto certo para a régua no WhatsApp começar.
+    async execute({ context }) {
+      return { status: 'success', output: context.trigger?.data || {} };
+    },
+  },
   trigger_custom_event: {
     async execute({ context }) {
       return { status: 'success', output: context.trigger?.data || {} };
@@ -607,7 +614,10 @@ const actionExecutors: Record<string, NodeExecutor> = {
         try {
           const { data: consentRow } = await supabase
             .from('contacts')
-            .select('email_consent, status')
+            // `suppressed` é a coluna que existe; `status` não. Com o
+            // select recusado, consentRow vinha nulo e o guarda liberava
+            // TODO MUNDO — inclusive bounce e opt-in duplo pendente.
+            .select('email_consent, suppressed')
             .eq('organization_id', organizationId)
             .ilike('email', String(email))
             .maybeSingle();
@@ -626,7 +636,7 @@ const actionExecutors: Record<string, NodeExecutor> = {
           );
           const isInvalid = !!consentRow && isEmailBlockedForThreshold(
             consentRow.email_consent,
-            consentRow.status,
+            consentRow.suppressed,
             emailThreshold
           );
           if (isInvalid) {
@@ -1049,6 +1059,17 @@ const actionExecutors: Record<string, NodeExecutor> = {
             if (v == null || typeof v === 'object') continue;
             if (!mergeData[`event.${k}`]) mergeData[`event.${k}`] = String(v);
           }
+          // As respostas do popup (quiz, campos livres) ficavam presas
+          // dentro de um objeto e nenhuma mensagem conseguia usá-las.
+          const answers = (triggerData as any).answers;
+          if (answers && typeof answers === 'object' && !Array.isArray(answers)) {
+            for (const [k, v] of Object.entries(answers)) {
+              if (v == null || typeof v === 'object') continue;
+              if (k === '_wf_hp' || k === 'consent' || k.startsWith('consent__')) continue;
+              const key = `event.answers.${k}`;
+              if (!mergeData[key]) mergeData[key] = String(v);
+            }
+          }
         }
         // Checkout URL for cart recovery emails
         mergeData['checkout_url'] = triggerProps.CheckoutURL || triggerProps.checkout_url || '';
@@ -1095,8 +1116,16 @@ const actionExecutors: Record<string, NodeExecutor> = {
           }
         } catch {}
 
-        const { getAppBaseUrl } = await import('@/lib/app-url');
-        const baseUrl = getAppBaseUrl();
+        // Os links deste e-mail saem do domínio de rastreamento (o do
+        // lojista, ou o padrão da plataforma) — não do host do painel.
+        // Um fluxo de boas-vindas com links apontando para app.worder…
+        // enquanto o remetente é o domínio da loja é o padrão que os
+        // filtros leem como e-mail de intermediário.
+        const { getTrackingBaseUrl } = await import('@/lib/email/tracking-url');
+        const baseUrl = await getTrackingBaseUrl(
+          organizationId || '',
+          (context as any)?.store?.id || (context as any)?.storeId || null,
+        );
 
         // email_sends.campaign_id is UUID — only pass it through when
         // the flow id actually is a UUID. Flow attribution lives in the
@@ -1309,12 +1338,12 @@ const actionExecutors: Record<string, NodeExecutor> = {
             const smsThreshold = normalizeThreshold(rawThreshold);
             const { data: row } = await supabase
               .from('contacts')
-              .select('sms_consent, status')
+              .select('sms_consent, suppressed')
               .eq('id', contactId)
               .maybeSingle();
-            if (row && isSmsBlockedForThreshold(row.sms_consent, row.status, smsThreshold)) {
+            if (row && isSmsBlockedForThreshold(row.sms_consent, row.suppressed, smsThreshold)) {
               console.log('[action_sms] ⊘ skipped — SMS bloqueado pelo threshold', {
-                nodeId: node?.id, contactId, threshold: smsThreshold, status: row.status,
+                nodeId: node?.id, contactId, threshold: smsThreshold, suprimido: row.suppressed,
               });
               return {
                 status: 'success',
@@ -1971,12 +2000,28 @@ const actionExecutors: Record<string, NodeExecutor> = {
         return { status: 'error', output: null, error: 'Nenhuma lista selecionada no nó' };
       }
       try {
+        // A lista tem de ser desta organização. O id vem da configuração
+        // do nó, que o lojista edita: um uuid copiado de outro inquilino
+        // colocaria o contato na lista dele.
+        const { data: lista } = await supabase
+          .from('contact_lists')
+          .select('id')
+          .eq('id', config.listId)
+          .eq('organization_id', organizationId)
+          .maybeSingle();
+        if (!lista) {
+          return { status: 'error', output: null, error: 'A lista escolhida não é desta organização' };
+        }
         // Supabase não lança — sem checar o error, FK quebrada ou lista
         // apagada viravam "success" sem gravar nada.
-        const { error } = await supabase.from('list_contacts').upsert({
+        //
+        // A tabela não tem organization_id: o vínculo com a organização
+        // vem da lista (é assim que o RLS dela funciona). Mandar a coluna
+        // fazia o PostgREST recusar a linha inteira — ninguém entrava em
+        // lista nenhuma por automação.
+        const { error } = await supabase.from('contact_list_members').upsert({
           list_id: config.listId,
           contact_id: contactId,
-          organization_id: organizationId,
         }, { onConflict: 'list_id,contact_id' });
         if (error) {
           return { status: 'error', output: null, error: `Falha ao adicionar à lista: ${error.message}` };
@@ -2272,43 +2317,65 @@ const actionExecutors: Record<string, NodeExecutor> = {
 
   // Gerar cupom Shopify
   action_shopify_coupon: {
-    async execute({ config, context, credentials, isTest }) {
+    // Cupom de uso único via GraphQL (discountCodeBasicCreate /
+    // discountCodeFreeShippingCreate) — a REST price_rules que o serviço
+    // antigo usava está deprecada e não existe para apps novos. Cada
+    // código é o seu próprio desconto com usageLimit 1.
+    async execute({ config, context, credentials, isTest, organizationId }) {
+      const prefix = String(config.prefix || 'GIFT').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12) || 'GIFT';
       if (isTest) {
-        const code = (config.prefix || 'GIFT') + '-' + Math.random().toString(36).substr(2, 6).toUpperCase();
+        const code = prefix + '-' + Math.random().toString(36).substr(2, 6).toUpperCase();
         return { status: 'success', output: { code, test: true } };
       }
       try {
-        const { generateShopifyCoupon } = await import('@/lib/services/whatsapp/shopify-coupon-service');
+        const { createUniqueDiscount, generateCouponCode, isDuplicateCodeError } = await import('@/lib/coupons/shopify-discounts');
         // Sem credencial explícita, usa a loja da automação (o engine põe
-        // storeId no contexto) — antes o nó ia SEMPRE sem shopDomain/token.
-        let shopDomain: string | undefined = credentials?.shopDomain;
-        let accessToken: string | undefined = credentials?.accessToken;
-        if ((!shopDomain || !accessToken) && context.storeId) {
+        // storeId no contexto).
+        let store: { id: string; organization_id: string; shop_domain: string; access_token: string; currency?: string | null } | null = null;
+        if (credentials?.shopDomain && credentials?.accessToken) {
+          store = { id: context.storeId || '', organization_id: organizationId || context.organization_id || context.organizationId || '', shop_domain: credentials.shopDomain, access_token: credentials.accessToken, currency: null };
+        } else if (context.storeId) {
           const { supabaseAdmin } = await import('@/lib/supabase-admin');
-          const { data: store } = await supabaseAdmin
+          let q = supabaseAdmin
             .from('shopify_stores')
-            .select('shop_domain, access_token')
+            .select('id, organization_id, shop_domain, access_token, currency')
             .eq('id', context.storeId)
-            .eq('is_active', true)
-            .maybeSingle();
-          shopDomain = shopDomain || store?.shop_domain;
-          accessToken = accessToken || store?.access_token;
+            .eq('is_active', true);
+          const orgScope = organizationId || context.organization_id || context.organizationId;
+          if (orgScope) q = q.eq('organization_id', orgScope);
+          const { data: row } = await q.maybeSingle();
+          if (row?.shop_domain && row?.access_token) store = row as any;
         }
-        if (!shopDomain || !accessToken) {
+        if (!store) {
           return { status: 'error', output: null, error: 'Sem loja Shopify conectada para gerar o cupom (automação sem loja e nó sem credencial)' };
         }
-        const result = await generateShopifyCoupon({
-          shopDomain,
-          accessToken,
-          discountType: config.discountType || 'percentage',
-          value: config.value || 10,
-          // O catálogo grava expiryDays; fluxos antigos, validityDays.
-          validityDays: config.validityDays || config.expiryDays || 7,
-          prefix: config.prefix || 'GIFT',
-          contactEmail: context.contact?.email,
-        });
-        if (result.error) return { status: 'error', output: null, error: result.error };
-        return { status: 'success', output: { code: result.data?.code } };
+        const kind = config.discountType === 'free_shipping' ? 'free_shipping'
+          : (config.discountType === 'fixed_amount' || config.discountType === 'fixed') ? 'fixed'
+          : 'percent';
+        const value = Math.max(0, Number(config.value) || (kind === 'percent' ? 10 : 0));
+        // O catálogo grava expiryDays; fluxos antigos, validityDays.
+        const days = Math.max(1, Math.min(365, Number(config.validityDays || config.expiryDays) || 7));
+        const endsAt = new Date(Date.now() + days * 86400000);
+        const who = context.contact?.email || context.contact?.phone || context.contact?.id || 'contato';
+        let lastErr: any = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const code = generateCouponCode(prefix);
+          try {
+            const res = await createUniqueDiscount(store, {
+              code,
+              title: `Automação · ${prefix} · ${who}`.slice(0, 255),
+              kind,
+              value,
+              currency: store.currency || 'BRL',
+              endsAt,
+            });
+            return { status: 'success', output: { code: res.code, discount_id: res.discountId, kind, value, ends_at: endsAt.toISOString(), validity_days: days } };
+          } catch (err: any) {
+            lastErr = err;
+            if (!isDuplicateCodeError(err)) break;
+          }
+        }
+        return { status: 'error', output: null, error: lastErr?.message || 'Não foi possível criar o cupom na Shopify' };
       } catch (error: any) {
         return { status: 'error', output: null, error: error.message };
       }
@@ -2353,12 +2420,24 @@ const actionExecutors: Record<string, NodeExecutor> = {
         return { status: 'error', output: null, error: 'Nenhuma lista selecionada no nó' };
       }
       try {
+        // `contact_list_members` não tem organization_id — o filtro
+        // derrubava o delete inteiro e ninguém saía de lista nenhuma.
+        // A cerca do inquilino é a lista: confirmamos que ela é desta
+        // organização antes de mexer.
+        const { data: lista } = await supabase
+          .from('contact_lists')
+          .select('id')
+          .eq('id', config.listId)
+          .eq('organization_id', organizationId)
+          .maybeSingle();
+        if (!lista) {
+          return { status: 'error', output: null, error: 'Lista não encontrada nesta organização' };
+        }
         const { error } = await supabase
-          .from('list_contacts')
+          .from('contact_list_members')
           .delete()
           .eq('list_id', config.listId)
-          .eq('contact_id', contactId)
-          .eq('organization_id', organizationId);
+          .eq('contact_id', contactId);
         if (error) {
           return { status: 'error', output: null, error: `Falha ao remover da lista: ${error.message}` };
         }

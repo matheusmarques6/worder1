@@ -212,8 +212,7 @@ export async function GET(request: NextRequest) {
         total_orders,
         total_revenue,
         total_customers,
-        last_sync_at,
-        metrics
+        last_sync_at
       `);
 
     query = query.in('organization_id', orgIds);

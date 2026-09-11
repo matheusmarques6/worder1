@@ -258,6 +258,7 @@ class EventBusClass {
           'order.created', 'order.paid', 'order.fulfilled', 'order.cancelled',
           'checkout.abandoned', 'customer.created', 'shipment.tracking_created',
           'payment.pix.abandoned', 'payment.boleto.abandoned', 'browse.abandoned',
+          'popup.signup', 'popup.reward',
         ]);
         if (OUTBOUND_V1_CATALOG.has(eventType) && payload.data?._webhook_dispatch_meta) {
           const meta = payload.data._webhook_dispatch_meta;

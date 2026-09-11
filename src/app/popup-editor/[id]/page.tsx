@@ -1,10 +1,13 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent, DragOverlay, type DragStartEvent } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import { TRAFFIC_TYPES, PAGE_TEMPLATES } from '@/lib/popups/targeting'
+import { wheelSectorPath, wheelLabelPos, wheelPinPos, WHEEL_R, WHEEL_RIM_R, WHEEL_RIM_W } from '@/lib/popups/games'
+import { splitLines } from '@/lib/popups/lines'
 import {
   ArrowLeft, Save, Loader2, Monitor, Smartphone, Plus, Trash2, X, Undo2, Redo2, Copy,
   ChevronDown, ChevronRight, GripVertical, Users, CalendarDays, Target, Power,
@@ -12,7 +15,8 @@ import {
   CircleDot, CheckSquare, Type, MousePointerClick, ImageIcon, Minus,
   GripHorizontal, Tag, Clock, Eye, Settings, Palette, Upload, LayoutGrid,
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
-  Bold, Italic, Underline, Link2, ExternalLink, Sparkles,
+  Bold, Italic, Underline, Link2, ExternalLink, Sparkles, Disc3, Eraser, Gift, Hand,
+  BarChart3,
   SlidersHorizontal, Layers, Square, Sun, CornerDownRight,
   MoveHorizontal, MoveVertical, Check, MoreHorizontal, Pencil,
   AlertTriangle,
@@ -24,7 +28,14 @@ import {
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface Block { id: string; type: string; props: Record<string, any> }
-interface Step { id: string; name: string; blocks: Block[] }
+// kind: o papel da etapa no fluxo (boas-vindas, formulário, quiz, lição,
+// recompensa, consentimento). Informativo para o editor e o relatório; o
+// runtime segue a ramificação, não o tipo.
+interface Step { id: string; name: string; blocks: Block[]; kind?: 'welcome' | 'form' | 'quiz' | 'lesson' | 'reward' | 'consent' }
+
+const STEP_KIND_LABELS: Record<NonNullable<Step['kind']>, string> = {
+  welcome: 'Boas-vindas', form: 'Formulário', quiz: 'Quiz', lesson: 'Lição', reward: 'Recompensa', consent: 'Consentimento',
+}
 interface PopupDesign {
   formType: 'popup' | 'flyout' | 'fullpage' | 'embed' | 'banner'
   steps: Step[]
@@ -38,6 +49,8 @@ interface PopupDesign {
     closeButton: { show: boolean; color: string; size: number }
     sideImage: { enabled: boolean; src: string; position: 'left' | 'right'; width: number }
     animation: 'fade' | 'slide-up' | 'none'
+    // Barra de progresso entre etapas (só aparece com 2+ etapas).
+    progress?: { enabled: boolean; color?: string; trackColor?: string; height?: number }
   }
   behavior: {
     display: {
@@ -100,12 +113,45 @@ interface PopupDesign {
       minTotal?: number
       maxTotal?: number
       minItems?: number
+      // Pelo conteúdo: só quando o carrinho tem (any) ou não tem (none)
+      // algum dos produtos — por handle, tipo ou fornecedor.
+      contains?: { enabled: boolean; match: 'any' | 'none'; handles: string[]; types: string[]; vendors: string[] }
     }
+    // Quem vê, pelo que sabemos da pessoa: só quem está (ou exceto quem
+    // está) em segmentos e listas. Decidido no servidor, nunca no navegador.
+    audienceTargeting?: { mode: 'off' | 'include' | 'exclude'; segmentIds: string[]; listIds: string[] }
+    // Contexto da página: template da Shopify e o produto/coleção em vista.
+    page?: {
+      enabled: boolean
+      templates: string[]
+      productHandles: string[]
+      productTypes: string[]
+      productVendors: string[]
+      productTags: string[]
+      collectionHandles: string[]
+    }
+    // Origem do tráfego da sessão (direto, busca, anúncio, social...).
+    traffic?: { enabled: boolean; types: string[] }
+    // WhatsApp com confirmação: a caixa marcada só vira opt-in quando a
+    // pessoa responde ao template (UTILITY, aprovado pela Meta).
+    whatsapp?: { doubleOptIn: boolean; templateName: string; templateLanguage: string; bodyVariables: string[] }
     progressiveProfiling?: {
       enabled: boolean
       hideKnownFields: boolean
       prefillKnownFields: boolean
     }
+    // Grupo de controle: fatia dos elegíveis que nunca vê o popup, para
+    // medir receita incremental (não só atribuída). 0 = desligado; teto 50.
+    experiment?: {
+      holdoutPercent: number
+    }
+    // Quando dois popups são elegíveis na mesma página, o de maior número
+    // aparece; o outro espera a próxima visita. 0 = normal.
+    priority?: number
+    // Segunda chance na sessão para quem fechou e depois mostrou intenção
+    // (rolagem, permanência, páginas, produtos, carrinho). Uma vez por
+    // sessão, nunca antes do delay mínimo.
+    smartTrigger?: { enabled: boolean; threshold: number; minDelaySec: number }
   }
   postSubmit?: {
     action: 'close' | 'redirect' | 'show-success'
@@ -119,6 +165,31 @@ interface PopupDesign {
 }
 
 const uid = () => Math.random().toString(36).slice(2, 9)
+
+// Etapa apagada: nenhuma ramificação, botão ou nível de recompensa pode
+// continuar apontando para ela — o runtime ignoraria em silêncio.
+function stripStepRefs(d: PopupDesign, stepId: string | undefined): PopupDesign {
+  if (!stepId) return d
+  const clean = (b: Block): Block => {
+    const p: any = { ...b.props }
+    let changed = false
+    if (p.nextStepId === stepId) { delete p.nextStepId; changed = true }
+    if (p.branches && typeof p.branches === 'object') {
+      const next: Record<string, string> = {}
+      for (const [k, v] of Object.entries(p.branches)) if (v !== stepId) next[k] = v as string
+      if (Object.keys(next).length !== Object.keys(p.branches).length) { p.branches = next; changed = true }
+    }
+    if (Array.isArray(p.tiers) && p.tiers.some((t: any) => t?.afterStepId === stepId)) {
+      p.tiers = p.tiers.map((t: any) => (t?.afterStepId === stepId ? { ...t, afterStepId: '' } : t)); changed = true
+    }
+    return changed ? { ...b, props: p } : b
+  }
+  return {
+    ...d,
+    steps: d.steps.map(s => ({ ...s, blocks: s.blocks.map(clean) })),
+    successStep: d.successStep ? { ...d.successStep, blocks: d.successStep.blocks.map(clean) } : d.successStep,
+  }
+}
 
 // Stable IDs for the brand-new-popup defaults. Using uid() (Math.random)
 // here breaks SSR hydration: Next.js evaluates this module on the server
@@ -148,6 +219,13 @@ const BLOCK_CATEGORIES: Array<{ name: string; items: Array<{ type: string; label
       { type: 'image', label: 'Imagem', icon: ImageIcon },
       { type: 'coupon', label: 'Cupom', icon: Tag },
       { type: 'countdown', label: 'Contagem', icon: Clock },
+    ],
+  },
+  {
+    name: 'Jogos',
+    items: [
+      { type: 'wheel', label: 'Roleta', icon: Disc3 },
+      { type: 'scratch', label: 'Raspadinha', icon: Eraser },
     ],
   },
   {
@@ -185,14 +263,14 @@ const PROFILE_FIELDS = [
   { value: 'phone', label: 'Telefone' },
   { value: 'whatsapp', label: 'WhatsApp' },
   { value: 'birthday', label: 'Data de nascimento' },
-  { value: 'gender', label: 'Genero' },
+  { value: 'gender', label: 'Gênero' },
   { value: 'company', label: 'Empresa' },
   { value: 'position', label: 'Cargo' },
   { value: 'city', label: 'Cidade' },
   { value: 'state', label: 'Estado' },
-  { value: 'country', label: 'Pais' },
+  { value: 'country', label: 'País' },
   { value: 'zip', label: 'CEP' },
-  { value: 'address', label: 'Endereco' },
+  { value: 'address', label: 'Endereço' },
   { value: 'custom', label: 'Campo personalizado' },
 ]
 
@@ -200,7 +278,7 @@ const PROFILE_FIELDS = [
 const INPUT_BASE_DEFAULTS = {
   // Input config
   required: false,
-  requiredMsg: 'Este campo e obrigatorio',
+  requiredMsg: 'Este campo é obrigatório',
   showLabel: false,
   mapTo: '',
   mapToCustom: '',
@@ -234,9 +312,9 @@ const defaultProps: Record<string, Record<string, any>> = {
   'name-input': { ...INPUT_BASE_DEFAULTS, placeholder: 'Seu nome', label: 'Nome', mapTo: 'first_name' },
   'text-input': { ...INPUT_BASE_DEFAULTS, placeholder: 'Digite aqui...', label: 'Campo', showLabel: true, mapTo: 'custom' },
   'date-input': { ...INPUT_BASE_DEFAULTS, label: 'Data de nascimento', showLabel: true, mapTo: 'birthday' },
-  dropdown: { label: 'Selecione', options: ['Opcao 1', 'Opcao 2'], placeholder: 'Escolha...', showLabel: true, mapTo: 'custom', mapToCustom: '' },
-  radio: { label: 'Escolha', options: ['Opcao 1', 'Opcao 2'], layout: 'vertical', showLabel: true, mapTo: 'custom', mapToCustom: '' },
-  checkbox: { label: 'Escolha', options: ['Opcao 1', 'Opcao 2'], showLabel: true, mapTo: 'custom', mapToCustom: '' },
+  dropdown: { label: 'Selecione', options: ['Opção 1', 'Opção 2'], placeholder: 'Escolha...', showLabel: true, mapTo: 'custom', mapToCustom: '' },
+  radio: { label: 'Escolha', options: ['Opção 1', 'Opção 2'], layout: 'vertical', showLabel: true, mapTo: 'custom', mapToCustom: '' },
+  checkbox: { label: 'Escolha', options: ['Opção 1', 'Opção 2'], showLabel: true, mapTo: 'custom', mapToCustom: '' },
   'legal-consent': { text: 'Aceito receber comunicações e concordo com a política de privacidade.', required: true, fontSize: 12, color: '#6B7280' },
   text: { content: 'Ganhe 10% de desconto!', fontSize: 28, color: '#111827', fontWeight: 'bold', align: 'center', tag: 'h2', lineHeight: 1.3 },
   button: { text: 'QUERO MEU DESCONTO', bgColor: '#F97316', textColor: '#fff', fontSize: 15, borderRadius: 8, fullWidth: true, action: 'submit', paddingV: 14, paddingH: 28 },
@@ -245,6 +323,27 @@ const defaultProps: Record<string, Record<string, any>> = {
   line: { color: '#E5E7EB', thickness: 1, style: 'solid', width: 100 },
   coupon: { code: 'DESCONTO10', description: 'Seu cupom de desconto:', bgColor: '#FFF7ED', borderColor: '#F97316', borderStyle: 'dashed', fontSize: 20 },
   countdown: { endDate: '', style: 'dark', numberColor: '#FFFFFF', labelColor: '#9CA3AF', boxColor: '#1F2937', fontSize: 28, labels: { days: 'DIAS', hours: 'HORAS', minutes: 'MIN', seconds: 'SEG' } },
+  // Jogos: o prêmio de cada segmento aponta para a oferta do bloco de cupom
+  // (base, um nível progressivo ou nada). Rótulos iguais em segmentos
+  // diferentes são normais — a roleta fica mais cheia sem inventar prêmio.
+  wheel: {
+    segments: [
+      { id: 's1', label: '10% OFF', prize: 'base', weight: 35, color: '#F97316' },
+      { id: 's2', label: 'Quase!', prize: 'none', weight: 15, color: '#111827' },
+      { id: 's3', label: '10% OFF', prize: 'base', weight: 35, color: '#FDBA74' },
+      { id: 's4', label: 'Tente de novo', prize: 'none', weight: 15, color: '#374151' },
+    ],
+    buttonText: 'Girar a roleta', size: 320, labelSize: 13, labelColor: '#FFFFFF', strokeColor: '#FFFFFF', pointerColor: '#111827', rimColor: '#111827', sound: true,
+    bgColor: '#F97316', textColor: '#FFFFFF', fontSize: 15, borderRadius: 8, fullWidth: false,
+  },
+  scratch: {
+    segments: [
+      { id: 's1', label: '10% OFF', prize: 'base', weight: 80, color: '#F97316' },
+      { id: 's2', label: 'Não foi dessa vez', prize: 'none', weight: 20, color: '#111827' },
+    ],
+    buttonText: 'Raspar', width: 320, height: 190, coverColor: '#C0C6CF', coverText: 'Raspe aqui', coverTextColor: '#FFFFFF', prizeBg: '#FFF7ED', prizeColor: '#F97316', prizeSize: 26, cardRadius: 14,
+    bgColor: '#F97316', textColor: '#FFFFFF', fontSize: 15, borderRadius: 8, fullWidth: false,
+  },
 }
 
 const defaultDesign: PopupDesign = {
@@ -289,7 +388,14 @@ const defaultDesign: PopupDesign = {
     utm: { storeOnConsent: false, filterEnabled: false, filters: [] },
     clickOutsideClose: { desktop: true, mobile: true },
     customTrigger: false,
-    cart: { enabled: false, minTotal: 0, maxTotal: 0, minItems: 0 },
+    cart: { enabled: false, minTotal: 0, maxTotal: 0, minItems: 0, contains: { enabled: false, match: 'any', handles: [], types: [], vendors: [] } },
+    experiment: { holdoutPercent: 0 },
+    priority: 0,
+    smartTrigger: { enabled: false, threshold: 60, minDelaySec: 20 },
+    audienceTargeting: { mode: 'off', segmentIds: [], listIds: [] },
+    page: { enabled: false, templates: [], productHandles: [], productTypes: [], productVendors: [], productTags: [], collectionHandles: [] },
+    traffic: { enabled: false, types: [] },
+    whatsapp: { doubleOptIn: false, templateName: '', templateLanguage: 'pt_BR', bodyVariables: [] },
   },
   postSubmit: { action: 'show-success', redirectUrl: '', closeDelay: 4 },
   successMessage: '',
@@ -332,11 +438,245 @@ function ToggleRow({ label, checked, onChange, hint }: { label: string; checked:
         <p className="text-[13px] text-gray-800 leading-tight">{label}</p>
         {hint && <p className="text-[11px] text-gray-400 mt-0.5 leading-snug">{hint}</p>}
       </div>
-      <button type="button" onClick={() => onChange(!checked)}
+      <button type="button" role="switch" aria-checked={checked} aria-label={label} onClick={() => onChange(!checked)}
         className={`relative w-9 h-5 rounded-full flex-shrink-0 transition-colors ${checked ? 'bg-zinc-900' : 'bg-gray-200'}`}>
         <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
       </button>
     </div>
+  )
+}
+
+// ── Experimento A/B ──────────────────────────────────────────────────────────
+// O popup é a variante A. Cada variante extra é uma cópia editável; o
+// experimento sorteia por visitante e o cron declara a vencedora.
+type ExperimentBundle = {
+  parent: { id: string; name: string; status: string }
+  experiment: null | {
+    id: string; status: 'draft' | 'running' | 'ended'; mode: 'split' | 'bandit'; kpi: 'submit' | 'optin' | 'revenue'
+    split: Record<string, number>; min_sample: number; max_days: number; confidence: number; auto_apply_winner: boolean; bandit_min_views: number
+    started_at: string | null; ended_at: string | null; winner_variant_id: string | null; end_reason: string | null; stats: any
+  }
+  variants: Array<{ id: string; label: string; name: string; is_control: boolean; status: string }>
+  split: Record<string, number>
+  stats: Array<{ variantId: string; impressions: number; submissions: number; optins: number; orders: number; revenue: number }>
+  evaluation: null | {
+    kpi: string; leaderId: string | null; winnerId: string | null; ready: boolean; reason: string
+    comparisons: Array<{ variantId: string; n: number; k: number; rate: number; lift: number | null; p: number | null; significant: boolean; enoughSample: boolean }>
+  }
+}
+const KPI_LABEL: Record<string, string> = { submit: 'Inscrições', optin: 'Opt-in de e-mail', revenue: 'Pedidos' }
+const END_REASON: Record<string, string> = { manual: 'encerrado manualmente', manual_apply: 'vencedora aplicada manualmente', auto_winner: 'vencedora aplicada automaticamente', auto_control_wins: 'a versão principal venceu', max_days: 'prazo esgotado sem vencedora' }
+
+function ExperimentDrawer({ formId, formName, formStatus, dirty, onClose, onOpenVariant, onApplied }: { formId: string; formName: string; formStatus: string; dirty: boolean; onClose: () => void; onOpenVariant: (id: string) => void; onApplied: () => void }) {
+  const [data, setData] = useState<ExperimentBundle | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+  const [split, setSplit] = useState<Record<string, number>>({})
+  const load = useCallback(async () => {
+    try {
+      const r = await fetch(`/api/forms/${formId}/experiment`, { cache: 'no-store' })
+      const d = await r.json()
+      if (!r.ok) throw new Error(d.error || 'erro')
+      setData(d); setSplit(d.split || {}); setError(null)
+    } catch (e: any) { setError(e?.message || 'Não foi possível carregar o experimento') }
+  }, [formId])
+  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey); return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+  // Foco entra no botão de fechar e volta para onde estava ao sair.
+  const closeRef = useRef<HTMLButtonElement | null>(null)
+  useEffect(() => {
+    const prev = document.activeElement as HTMLElement | null
+    closeRef.current?.focus()
+    return () => { try { prev?.focus() } catch { /* elemento pode ter sumido */ } }
+  }, [])
+  const act = async (action: string, extra: Record<string, any> = {}) => {
+    setBusy(action)
+    try {
+      const r = await fetch(`/api/forms/${formId}/experiment`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...extra }) })
+      const d = await r.json()
+      if (!r.ok) throw new Error(d.error || 'erro')
+      setData(d); setSplit(d.split || {}); setError(null)
+      // Aplicar a vencedora troca o design do popup principal no servidor:
+      // o editor recarrega para não salvar por cima com a versão antiga.
+      if (action === 'apply_winner') onApplied()
+    } catch (e: any) { setError(e?.message || 'Não foi possível atualizar') }
+    finally { setBusy(null) }
+  }
+  const exp = data?.experiment || null
+  const running = exp?.status === 'running'
+  const ended = exp?.status === 'ended'
+  const variants = data?.variants || []
+  const splitTotal = Object.values(split).reduce((a, b) => a + (Number(b) || 0), 0)
+  const cmp = (id: string) => data?.evaluation?.comparisons.find(c => c.variantId === id)
+  const st = (id: string) => data?.stats.find(x => x.variantId === id)
+  const fmtP = (p: number | null) => p == null ? '—' : p < 0.001 ? '<0,001' : p.toFixed(3).replace('.', ',')
+  const pct1 = (v: number) => `${(v * 100).toFixed(1).replace('.', ',')}%`
+  const winnerName = exp?.winner_variant_id ? (variants.find(v => v.id === exp.winner_variant_id)?.label || '?') : null
+  return (
+    <div className="fixed inset-0 z-[70] flex justify-end" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/30" />
+      <div role="dialog" aria-modal="true" aria-label="Experimento A/B" onClick={e => e.stopPropagation()} className="relative h-full w-full max-w-[520px] bg-white shadow-2xl flex flex-col">
+        <div className="flex items-start justify-between px-5 py-4 border-b border-gray-200">
+          <div>
+            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-[0.08em]">Experimento A/B</p>
+            <h2 className="text-[15px] font-semibold text-gray-900 mt-0.5 truncate max-w-[380px]">{formName}</h2>
+            <p className="text-[11px] text-gray-500 mt-0.5">
+              {!exp ? 'Sem experimento. Crie uma variante para começar.' : running ? `Em andamento desde ${exp.started_at ? new Date(exp.started_at).toLocaleDateString('pt-BR') : 'hoje'} · KPI ${KPI_LABEL[exp.kpi]}` : ended ? `Encerrado · ${END_REASON[exp.end_reason || ''] || exp.end_reason}${winnerName ? ` · vencedora ${winnerName}` : ''}` : 'Rascunho — configure e inicie.'}
+            </p>
+          </div>
+          <button ref={closeRef} onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500" aria-label="Fechar"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+          {error && <p className="text-[12px] text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
+          {formStatus !== 'published' && <p className="text-[12px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">O popup não está ativo: o experimento só recebe visitantes quando o popup principal estiver no ar.</p>}
+          {dirty && <p className="text-[12px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">Há alterações não salvas neste popup. Salve antes de criar variantes — a cópia parte do que está salvo.</p>}
+
+          {/* Variantes */}
+          <section>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[11px] font-bold text-gray-500 uppercase tracking-[0.08em]">Variantes</p>
+              {!running && variants.length < 4 && (
+                <button onClick={() => act('create_variant')} disabled={!!busy} className="text-[12px] font-semibold text-zinc-900 underline underline-offset-2 disabled:opacity-50">{busy === 'create_variant' ? 'Criando…' : '+ Criar variante'}</button>
+              )}
+            </div>
+            <div className="rounded-lg border border-gray-200 divide-y divide-gray-100">
+              {variants.map(v => {
+                const c = cmp(v.id); const s = st(v.id)
+                const isWinner = exp?.winner_variant_id === v.id || (data?.evaluation?.winnerId === v.id)
+                const isLeader = !isWinner && data?.evaluation?.leaderId === v.id && (s?.impressions || 0) > 0
+                return (
+                  <div key={v.id} className="px-3 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className={`w-6 h-6 rounded-md flex items-center justify-center text-[11px] font-bold ${v.is_control ? 'bg-gray-900 text-white' : 'bg-violet-100 text-violet-800'}`}>{v.label}</span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[12px] font-medium text-gray-800 truncate">{v.is_control ? 'Este popup (controle)' : v.name}</p>
+                        {(exp && exp.status !== 'draft') && (
+                          <p className="text-[11px] text-gray-500 tabular-nums">
+                            {(s?.impressions || 0).toLocaleString('pt-BR')} vis. · {(c?.k ?? s?.submissions ?? 0).toLocaleString('pt-BR')} {KPI_LABEL[exp.kpi]?.toLowerCase()} · {pct1(c?.rate || 0)}
+                            {!v.is_control && c?.lift != null && <span className={c.lift >= 0 ? 'text-emerald-700' : 'text-red-700'}> · {c.lift >= 0 ? '+' : ''}{(c.lift * 100).toFixed(0)}%</span>}
+                            {!v.is_control && c && <span className="text-gray-400"> · p {fmtP(c.p)}{c.significant ? ' · significativo' : ''}</span>}
+                          </p>
+                        )}
+                      </div>
+                      {isWinner && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 uppercase tracking-wide">vencedora</span>}
+                      {isLeader && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 uppercase tracking-wide">líder</span>}
+                      {!running && (
+                        <div className="w-16">
+                          <div className="relative"><input type="number" min={0} max={100} value={split[v.id] ?? 0} onChange={e => setSplit({ ...split, [v.id]: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} onBlur={() => act('update', { patch: { split } })} className={inp + ' pr-6 text-right text-[12px] py-1'} aria-label={`Fatia da variante ${v.label}`} /><span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">%</span></div>
+                        </div>
+                      )}
+                      {running && <span className="text-[11px] text-gray-500 tabular-nums w-10 text-right">{split[v.id] ?? 0}%</span>}
+                      {!v.is_control && <button onClick={() => onOpenVariant(v.id)} className="p-1.5 rounded hover:bg-gray-100 text-gray-500" title="Editar variante"><Pencil className="w-3.5 h-3.5" /></button>}
+                      {!v.is_control && !running && <button onClick={() => act('remove_variant', { variant_id: v.id })} disabled={!!busy} className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-600" title="Remover variante"><Trash2 className="w-3.5 h-3.5" /></button>}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            {!running && variants.length > 1 && splitTotal !== 100 && <p className="text-[11px] text-amber-700 mt-1.5">As fatias somam {splitTotal}%; ao salvar são normalizadas para 100%.</p>}
+          </section>
+
+          {exp && variants.length > 1 && (
+            <section className="space-y-3">
+              <p className="text-[11px] font-bold text-gray-500 uppercase tracking-[0.08em]">Regras</p>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="O que decide">
+                  <select className={sel} value={exp.kpi} disabled={running} onChange={e => act('update', { patch: { kpi: e.target.value } })}>
+                    <option value="submit">Inscrições ÷ visualizações</option>
+                    <option value="optin">Opt-in de e-mail ÷ visualizações</option>
+                    <option value="revenue">Pedidos ÷ visualizações</option>
+                  </select>
+                </Field>
+                <Field label="Confiança">
+                  <select className={sel} value={String(exp.confidence)} disabled={running} onChange={e => act('update', { patch: { confidence: Number(e.target.value) } })}>
+                    <option value="0.9">90%</option>
+                    <option value="0.95">95%</option>
+                    <option value="0.99">99%</option>
+                  </select>
+                </Field>
+                <Field label="Amostra mínima" hint="Visualizações por variante antes de decidir.">
+                  <input type="number" min={20} className={inp} defaultValue={exp.min_sample} disabled={running} onBlur={e => act('update', { patch: { min_sample: Number(e.target.value) } })} />
+                </Field>
+                <Field label="Prazo máximo" hint="Dias. Sem vencedora até lá, encerra.">
+                  <input type="number" min={1} max={180} className={inp} defaultValue={exp.max_days} disabled={running} onBlur={e => act('update', { patch: { max_days: Number(e.target.value) } })} />
+                </Field>
+              </div>
+              <ToggleRow label="Aplicar a vencedora sozinho" hint="Quando o teste bater a confiança com a amostra mínima, o design vencedor vira o do popup e o experimento encerra."
+                checked={!!exp.auto_apply_winner} onChange={v => !running && act('update', { patch: { auto_apply_winner: v } })} />
+              <Field label="Modo" hint={exp.mode === 'bandit' ? `Bandit: depois de ${exp.bandit_min_views.toLocaleString('pt-BR')} visualizações por variante, a divisão passa a favorecer quem converte mais em cada contexto (página, origem, dispositivo). Sem vencedora automática.` : 'Divisão fixa com teste de significância e vencedora.'}>
+                <select className={sel} value={exp.mode} disabled={running} onChange={e => act('update', { patch: { mode: e.target.value } })}>
+                  <option value="split">Teste A/B (divisão fixa)</option>
+                  <option value="bandit">Otimização contínua (bandit)</option>
+                </select>
+              </Field>
+              {exp.mode === 'bandit' && (
+                <Field label="Visualizações mínimas por variante para o bandit assumir">
+                  <input type="number" min={100} className={inp} defaultValue={exp.bandit_min_views} disabled={running} onBlur={e => act('update', { patch: { bandit_min_views: Number(e.target.value) } })} />
+                </Field>
+              )}
+            </section>
+          )}
+
+          {data?.evaluation && exp && exp.status !== 'draft' && (
+            <section className="rounded-lg border border-gray-200 p-3 text-[12px] text-gray-700 space-y-1">
+              <p className="font-semibold text-gray-900">Leitura</p>
+              {data.evaluation.reason === 'no_data' && <p>Ainda sem visualizações.</p>}
+              {data.evaluation.reason === 'sample_too_small' && <p>Amostra ainda pequena: cada variante precisa de {exp.min_sample.toLocaleString('pt-BR')} visualizações. {data.evaluation.leaderId && <>Por enquanto a variante {variants.find(v => v.id === data.evaluation!.leaderId)?.label} lidera — sem valor estatístico ainda.</>}</p>}
+              {data.evaluation.reason === 'not_significant' && <p>Diferença dentro do ruído: nenhuma variante bate a outra com {Math.round(exp.confidence * 100)}% de confiança. O teste segue até o prazo.</p>}
+              {data.evaluation.reason === 'winner' && <p className="text-emerald-800">A variante {variants.find(v => v.id === data.evaluation!.winnerId)?.label} vence a versão principal com {Math.round(exp.confidence * 100)}% de confiança.</p>}
+              {data.evaluation.reason === 'control_wins' && <p className="text-emerald-800">A versão principal venceu: nenhuma variante a supera.</p>}
+              {running && exp.mode === 'bandit' && exp.stats?.bandit && <p className="text-gray-500">Bandit {exp.stats.bandit.eligible ? 'ativo: a divisão já segue as conversões por contexto.' : 'ainda observando — a divisão fixa vale até a amostra mínima.'}</p>}
+            </section>
+          )}
+        </div>
+        <div className="px-5 py-3 border-t border-gray-200 flex items-center justify-between gap-2">
+          <p className="text-[11px] text-gray-400">As variantes compartilham gatilhos, segmentação e cupom do popup principal.</p>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {running && data?.evaluation?.winnerId && !exp?.auto_apply_winner && (
+              <button onClick={() => act('apply_winner', { variant_id: data.evaluation!.winnerId })} disabled={!!busy || dirty} title={dirty ? 'Salve ou descarte as alterações deste popup antes de aplicar a vencedora.' : undefined} className="px-3 py-1.5 text-[12px] font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50">Aplicar vencedora</button>
+            )}
+            {running && <button onClick={() => act('stop')} disabled={!!busy} className="px-3 py-1.5 text-[12px] font-semibold rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50">Encerrar</button>}
+            {!running && variants.length > 1 && (
+              <button onClick={() => act('start', { patch: { split } })} disabled={!!busy} className="px-3 py-1.5 text-[12px] font-semibold rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50">{busy === 'start' ? 'Iniciando…' : ended ? 'Rodar de novo' : 'Iniciar experimento'}</button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Lista de caixas de seleção com rolagem, para segmentos e listas.
+function CheckList({ items, selected, onToggle }: { items: Array<{ id: string; name: string }>; selected: string[]; onToggle: (id: string) => void }) {
+  return (
+    <div className="max-h-44 overflow-y-auto rounded-lg border border-gray-200 divide-y divide-gray-100">
+      {items.map(it => (
+        <label key={it.id} className="flex items-center gap-2 px-2.5 py-1.5 text-[12px] text-gray-700 cursor-pointer hover:bg-gray-50">
+          <input type="checkbox" className="rounded border-gray-300" checked={selected.includes(it.id)} onChange={() => onToggle(it.id)} />
+          <span className="truncate">{it.name}</span>
+        </label>
+      ))}
+    </div>
+  )
+}
+
+function LinesTextarea({ value, onChange, rows = 2, className, placeholder, transform }: {
+  value: string[]; onChange: (lines: string[]) => void; rows?: number; className?: string; placeholder?: string; transform?: (s: string) => string
+}) {
+  const joined = (value || []).join('\n')
+  const [raw, setRaw] = useState(joined)
+  useEffect(() => {
+    // Mudança vinda de fora (undo, troca de bloco): ressincroniza sem
+    // apagar a linha em branco que a pessoa acabou de abrir.
+    if (splitLines(raw, transform).join('\n') !== joined) setRaw(joined)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [joined])
+  return (
+    <textarea rows={rows} className={className} placeholder={placeholder} value={raw}
+      onChange={e => { setRaw(e.target.value); onChange(splitLines(e.target.value, transform)) }} />
   )
 }
 
@@ -570,14 +910,92 @@ function InlineEditableStyles() {
 }
 
 // ── Block Renderer (canvas) ────────────────────────────────────────────────────
-function BlockPreview({ block, selected, onContentChange, onSelect }: { block: Block; selected?: boolean; onContentChange?: (key: string, value: string) => void; onSelect?: () => void }) {
+// Como a oferta base é escrita onde o lojista digita {{offer}}. Mesma regra
+// do runtime (offerText): rótulo manual > tipo/valor do desconto.
+function offerLabelOf(cp: any): string {
+  if (!cp) return ''
+  if (cp.offerLabel) return String(cp.offerLabel)
+  if (cp.discountType === 'free_shipping') return 'Frete grátis'
+  if (cp.discountType === 'fixed_amount' || cp.discountType === 'fixed') return `R$ ${Math.round(Number(cp.discountValue) * 100) / 100} OFF`
+  return `${Math.round(Number(cp.discountValue) || 0)}% OFF`
+}
+function designOfferLabel(steps: Step[]): string {
+  for (const st of steps) for (const b of st.blocks) if (b.type === 'coupon') return offerLabelOf(b.props)
+  return ''
+}
+function applyOfferPreview(text: string, label: string | undefined, prize?: string): string {
+  if (label === undefined) return text
+  return String(text || '').replace(/\{\{\s*offer\s*\}\}/g, label).replace(/\{\{\s*prize\s*\}\}/g, prize || '')
+}
+// O que impede publicar: erros que o visitante veria como popup quebrado.
+function publishProblems(design: PopupDesign): string[] {
+  const out: string[] = []
+  const all = [...design.steps, design.successStep].filter(Boolean).flatMap(st => st.blocks || [])
+  const hasCoupon = all.some(b => b.type === 'coupon')
+  for (const b of all) {
+    const segs = gameSegments(b.props)
+    if (b.type === 'wheel' && segs.length < 2) out.push('A roleta precisa de pelo menos dois segmentos para ir ao ar.')
+    if (b.type === 'scratch' && segs.length < 1) out.push('A raspadinha precisa de pelo menos um prêmio para ir ao ar.')
+    if ((b.type === 'wheel' || b.type === 'scratch') && !hasCoupon) out.push('O jogo promete um prêmio, mas não há bloco de cupom na etapa de sucesso.')
+    if (b.type === 'countdown' && !b.props?.endDate) out.push('A contagem regressiva está sem data final — ficaria zerada na loja.')
+  }
+  // Jogo sem botão próprio depende do botão da etapa. Se a etapa não tem
+  // nenhum botão de envio, o visitante não tem como jogar — o popup abre e
+  // fica de enfeite, sem nada quebrado à vista.
+  for (const st of design.steps) {
+    const blocks = st.blocks || []
+    if (!blocks.some(b => (b.type === 'wheel' || b.type === 'scratch') && b.props?.showButton === false)) continue
+    if (!blocks.some(b => b.type === 'button' && (b.props?.action || 'submit') === 'submit')) {
+      out.push('O jogo está sem botão próprio e a etapa não tem botão de envio — ninguém conseguiria jogar.')
+    }
+  }
+  return Array.from(new Set(out))
+}
+// O rótulo do primeiro segmento do primeiro jogo: é o que a visualização
+// mostra onde o lojista escreveu {{prize}}.
+function designPrizeLabel(steps: Step[]): string {
+  for (const st of steps) for (const b of st.blocks) if (b.type === 'wheel' || b.type === 'scratch') return String(b.props?.segments?.[0]?.label || '')
+  return ''
+}
+const GAME_PALETTE = ['#F97316', '#111827', '#FDBA74', '#374151', '#FB923C', '#1F2937', '#FED7AA', '#4B5563']
+function gameSegments(p: any): Array<{ id: string; label: string; prize: string; weight: number; color: string; textColor?: string }> {
+  const list: any[] = Array.isArray(p?.segments) ? p.segments.slice(0, 12) : []
+  return list.map((s, i) => ({
+    id: String(s?.id || `s${i + 1}`), label: String(s?.label || `Prêmio ${i + 1}`).slice(0, 40), prize: String(s?.prize || 'base'),
+    weight: Math.max(0, Number(s?.weight) || 0), color: /^#[0-9a-fA-F]{6}$/.test(String(s?.color || '')) ? s.color : GAME_PALETTE[i % GAME_PALETTE.length],
+    textColor: /^#[0-9a-fA-F]{6}$/.test(String(s?.textColor || '')) ? s.textColor : undefined,
+  }))
+}
+function GameButtonPreview({ p, fallback }: { p: any; fallback: string }) {
+  // showButton:false → o jogo vai sozinho e quem dispara é o botão da
+  // etapa. É como as referências mostram o cartão e a roleta.
+  if (p?.showButton === false) return null
+  return <button type="button" style={{ marginTop: 14, padding: `${p.paddingV || 14}px ${p.paddingH || 28}px`, background: p.bgColor || '#F97316', color: p.textColor || '#fff', fontSize: p.fontSize || 15, fontWeight: 700, border: 'none', borderRadius: p.borderRadius ?? 8, cursor: 'pointer', display: p.fullWidth ? 'block' : 'inline-block', width: p.fullWidth ? '100%' : 'auto' }}>{p.buttonText || fallback}</button>
+}
+
+/** Clareia (amt>0) ou escurece um #rrggbb. Espelha wfShade do runtime. */
+function shadeHex(hex: string, amt: number): string {
+  const m = /^#([0-9a-fA-F]{6})$/.exec(String(hex || ''))
+  if (!m) return String(hex || '#C0C6CF')
+  const n = parseInt(m[1], 16)
+  const cl = (v: number) => (v < 0 ? 0 : v > 255 ? 255 : v)
+  const r = cl((n >> 16) + amt), g = cl(((n >> 8) & 255) + amt), b = cl((n & 255) + amt)
+  return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)
+}
+
+const NO_LAYOUT_BORDER = new Set(['email', 'phone', 'name-input', 'text-input', 'date-input', 'dropdown', 'radio', 'checkbox', 'legal-consent', 'coupon', 'countdown', 'wheel', 'scratch'])
+const NO_LAYOUT_SHADOW = new Set(['wheel', 'scratch', 'image'])
+
+function BlockPreview({ block, selected, onContentChange, onSelect, offerLabel, prizeLabel }: { block: Block; selected?: boolean; onContentChange?: (key: string, value: string) => void; onSelect?: () => void; offerLabel?: string; prizeLabel?: string }) {
   const p = block.props
   const blockStyle: React.CSSProperties = {
     marginTop: p.marginTop || 0, marginBottom: p.marginBottom ?? 8,
     padding: p.blockPadding || 0, backgroundColor: p.blockBg || undefined,
     borderRadius: p.blockRadius || 0,
-    border: p.borderWidth && !['email','phone','name-input','text-input','date-input'].includes(block.type) ? `${p.borderWidth}px ${p.borderStyle || 'solid'} ${p.borderColor || '#E5E7EB'}` : undefined,
-    boxShadow: p.shadow || undefined,
+    // Mesmas exceções do runtime (blockStyleStr com noBorder/noShadow):
+    // blocos com moldura própria não recebem a borda do layout.
+    border: p.borderWidth && !NO_LAYOUT_BORDER.has(block.type) ? `${p.borderWidth}px ${p.borderStyle || 'solid'} ${p.borderColor || '#E5E7EB'}` : undefined,
+    boxShadow: p.shadow && !NO_LAYOUT_SHADOW.has(block.type) ? p.shadow : undefined,
     opacity: p.opacity != null ? p.opacity / 100 : undefined,
   }
   const inputStyle = "w-full border border-gray-200 rounded-lg px-4 py-3 text-sm bg-white placeholder-gray-400 outline-none"
@@ -622,7 +1040,7 @@ function BlockPreview({ block, selected, onContentChange, onSelect }: { block: B
           />
         )
       }
-      return <Tag style={textStyle}>{p.content}</Tag>
+      return <Tag style={textStyle}>{applyOfferPreview(p.content, offerLabel, prizeLabel)}</Tag>
     }
     case 'email':
       return <InputBlockPreview block={block}><><InputPreviewStyles /><input readOnly placeholder={p.placeholder || 'Seu email'} className="worder-input" style={{ ...buildInputStyle(p), ...phCssVar }} /></></InputBlockPreview>
@@ -667,7 +1085,7 @@ function BlockPreview({ block, selected, onContentChange, onSelect }: { block: B
           <button
             onMouseEnter={e => { if (p.hoverColor) (e.currentTarget as HTMLButtonElement).style.backgroundColor = p.hoverColor }}
             onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = p.bgColor || '#F97316' }}
-            style={btnStyle}>{p.text || 'Enviar'}</button>
+            style={btnStyle}>{applyOfferPreview(p.text, offerLabel, prizeLabel) || 'Enviar'}</button>
         )}
       </div>
     }
@@ -685,13 +1103,107 @@ function BlockPreview({ block, selected, onContentChange, onSelect }: { block: B
     // under-draw the gap. New inserts already carry height: 24.
     case 'spacer': return <div style={{ ...blockStyle, height: p.height ?? 24 }} />
     case 'line': return <div style={blockStyle}><hr style={{ border: 'none', borderTop: `${p.thickness || 1}px ${p.style || 'solid'} ${p.color || '#E5E7EB'}`, margin: '0 auto', width: `${p.width ?? 100}%` }} /></div>
-    case 'coupon':
+    case 'coupon': {
+      const unique = p.mode === 'unique' || p.mode === 'dynamic'
+      const preview = unique ? `${(p.codePrefix || 'POPUP').toUpperCase()}-XXXXXXXX` : (p.code || 'CODIGO')
+      const applied = unique && p.showCode === false
       return <div style={{ ...blockStyle, padding: '16px', border: `2px ${p.borderStyle || 'dashed'} ${p.borderColor || '#F97316'}`, borderRadius: p.borderRadius ?? 8, textAlign: 'center', background: p.bgColor || '#FFF7ED' }}>
-        <p style={{ fontSize: 12, color: '#6B7280', margin: '0 0 4px' }}>{p.description}</p>
-        <p onClick={() => { navigator.clipboard?.writeText(p.code || ''); }}
-          style={{ fontSize: p.fontSize || 20, fontWeight: 700, color: p.codeColor || '#F97316', letterSpacing: 2, margin: 0, cursor: 'pointer' }}
-          title="Clique para copiar">{p.code}</p>
+        {applied ? (
+          <p style={{ fontSize: Math.round((p.fontSize || 20) * 0.8), fontWeight: 700, color: p.codeColor || '#F97316', margin: 0 }}>{p.appliedText || 'Desconto aplicado no seu carrinho'}</p>
+        ) : (
+          <>
+            <p style={{ fontSize: 12, color: '#6B7280', margin: '0 0 4px' }}>{p.description}</p>
+            <p style={{ fontSize: p.fontSize || 20, fontWeight: 700, color: p.codeColor || '#F97316', letterSpacing: 2, margin: 0 }}
+              title={unique ? 'Cada inscrito recebe um código único' : 'Clique para copiar'}>{preview}</p>
+            {unique && <p style={{ fontSize: 10, color: '#9CA3AF', margin: '6px 0 0' }}>código único por inscrito</p>}
+            {Array.isArray(p.tiers) && p.tiers.length > 0 && <p style={{ fontSize: 10, color: '#9CA3AF', margin: '4px 0 0' }}>+{p.tiers.length} {p.tiers.length === 1 ? 'nível progressivo' : 'níveis progressivos'}</p>}
+          </>
+        )}
       </div>
+    }
+    case 'wheel': {
+      // A pré-visualização é a MESMA peça que vai ao ar: disco, aro com
+      // volume, pinos nas divisões, brilho fixo no alto, cubo no centro e
+      // o ponteiro em forma de alfinete. O que o lojista arruma aqui é o
+      // que o visitante vê girar.
+      const segs = gameSegments(p)
+      const size = Math.max(200, Math.min(460, Number(p.size) || 320))
+      if (segs.length < 2) return <div style={{ ...blockStyle, padding: 16, textAlign: 'center', border: '1px dashed #FCA5A5', borderRadius: 8, color: '#B91C1C', fontSize: 12 }}>A roleta precisa de pelo menos dois segmentos.</div>
+      const rim = p.rimColor || '#111827'
+      const ptr = p.pointerColor || '#111827'
+      const hub = p.strokeColor || '#FFFFFF'
+      const gid = `wprev-${String(block.id).replace(/[^a-zA-Z0-9_-]/g, "")}`
+      return <div style={{ ...blockStyle, textAlign: 'center' }}>
+        <div style={{ position: 'relative', display: 'inline-block', width: size, maxWidth: '100%', filter: 'drop-shadow(0 14px 28px rgba(0,0,0,.24))' }}>
+          <svg viewBox="0 0 300 300" role="img" aria-label="Roleta de prêmios" style={{ width: '100%', height: 'auto', display: 'block', overflow: 'visible' }}>
+            <defs>
+              <linearGradient id={`${gid}-rim`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stopColor={shadeHex(rim, 46)} />
+                <stop offset=".48" stopColor={rim} />
+                <stop offset="1" stopColor={shadeHex(rim, -30)} />
+              </linearGradient>
+              <radialGradient id={`${gid}-sheen`} cx=".33" cy=".24" r=".8">
+                <stop offset="0" stopColor="#FFFFFF" stopOpacity=".3" />
+                <stop offset=".52" stopColor="#FFFFFF" stopOpacity=".05" />
+                <stop offset="1" stopColor="#000000" stopOpacity=".16" />
+              </radialGradient>
+            </defs>
+            <circle cx={150} cy={150} r={WHEEL_RIM_R} fill="none" stroke={`url(#${gid}-rim)`} strokeWidth={WHEEL_RIM_W} />
+            <g>
+              {segs.map((sg, i) => {
+                const lp = wheelLabelPos(i, segs.length)
+                return <g key={sg.id + i}>
+                  <path d={wheelSectorPath(i, segs.length)} fill={sg.color} stroke={hub} strokeWidth={2} />
+                  <text x={lp.x} y={lp.y} transform={`rotate(${lp.angle} ${lp.x} ${lp.y})`} textAnchor="middle" dominantBaseline="middle" fontSize={p.labelSize || 13} fontWeight={800} fill={sg.textColor || p.labelColor || '#FFFFFF'}>{sg.label}</text>
+                </g>
+              })}
+              {segs.map((sg, i) => {
+                const pin = wheelPinPos(i, segs.length)
+                return <circle key={`pin${sg.id}${i}`} cx={pin.x} cy={pin.y} r={3.2} fill="#FFFFFF" fillOpacity={0.92} />
+              })}
+            </g>
+            <circle cx={150} cy={150} r={WHEEL_R} fill={`url(#${gid}-sheen)`} pointerEvents="none" />
+            <circle cx={150} cy={150} r={26} fill={hub} />
+            <circle cx={150} cy={150} r={26} fill="none" stroke="rgba(0,0,0,.12)" strokeWidth={1} />
+            <circle cx={150} cy={150} r={8.5} fill={ptr} />
+          </svg>
+          <div style={{ position: 'absolute', left: '50%', top: -3, width: 30, height: 46, marginLeft: -15, zIndex: 2, pointerEvents: 'none' }}>
+            <svg viewBox="0 0 30 46" width={30} height={46} aria-hidden="true" style={{ display: 'block', filter: 'drop-shadow(0 3px 4px rgba(0,0,0,.32))' }}>
+              <path d="M15 46 L4.4 17.5 A11 11 0 1 1 25.6 17.5 Z" fill={ptr} stroke="#FFFFFF" strokeWidth={2.6} strokeLinejoin="round" />
+              <circle cx={15} cy={14.5} r={3.4} fill="#FFFFFF" fillOpacity={0.92} />
+            </svg>
+          </div>
+        </div>
+        <GameButtonPreview p={p} fallback="Girar" />
+      </div>
+    }
+    case 'scratch': {
+      // A pré-visualização tem de ser a MESMA coisa que vai ao ar. Antes,
+      // aqui, a cobertura era um polígono cinza com zigue-zague — um
+      // borrão que não existe em lugar nenhum do runtime, e que fazia o
+      // lojista achar que a raspadinha era isso.
+      const segs = gameSegments(p)
+      const w = Math.max(160, Math.min(480, Number(p.width) || 320))
+      const h = Math.max(80, Math.min(360, Number(p.height) || 190))
+      const foil = p.coverColor || '#C0C6CF'
+      return <div style={{ ...blockStyle, textAlign: 'center' }}>
+        <div style={{ position: 'relative', display: 'inline-block', width: w, maxWidth: '100%', height: h, borderRadius: p.cardRadius ?? 14, overflow: 'hidden', background: p.prizeBg || '#FFF7ED', boxShadow: '0 6px 20px rgba(0,0,0,.14)' }}>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12, fontSize: p.prizeSize || 26, fontWeight: 800, color: p.prizeColor || '#F97316', lineHeight: 1.2 }}>{segs[0]?.label || '?'}</div>
+          {/* A lâmina: o mesmo gradiente + listras finas que o runtime pinta no canvas. */}
+          <div style={{
+            position: 'absolute', inset: 0,
+            backgroundColor: foil,
+            backgroundImage: `linear-gradient(135deg, ${shadeHex(foil, 20)} 0%, ${foil} 45%, ${shadeHex(foil, 12)} 55%, ${shadeHex(foil, -16)} 100%), repeating-linear-gradient(135deg, rgba(255,255,255,.10) 0 1px, transparent 1px 12px)`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
+            color: p.coverTextColor || '#FFFFFF', fontWeight: 800, fontSize: 13, letterSpacing: 1.6, textTransform: 'uppercase', textShadow: '0 1px 2px rgba(0,0,0,.28)',
+          }}>
+            <Hand className="w-[22px] h-[22px]" strokeWidth={1.8} />
+            <span>{p.coverText || 'Raspe aqui'}</span>
+          </div>
+        </div>
+        <GameButtonPreview p={p} fallback="Raspar" />
+      </div>
+    }
     case 'countdown': {
       // Real remaining time (what the storefront shows). No endDate → zeros +
       // warning icon so the merchant sees the timer would render dead on site.
@@ -713,21 +1225,21 @@ function BlockPreview({ block, selected, onContentChange, onSelect }: { block: B
         {p.showLabel !== false && p.label && <label className="block text-[13px] font-medium text-gray-700 mb-1">{p.label}</label>}
         <select className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm bg-white text-gray-600 outline-none">
           <option>{p.placeholder || 'Escolha...'}</option>
-          {(p.options || []).map((o: string) => <option key={o}>{o}</option>)}
+          {(p.options || []).map((o: string, i: number) => <option key={i}>{o}</option>)}
         </select>
       </div>
     case 'radio':
       return <div style={blockStyle}>
         {p.showLabel !== false && p.label && <label className="block text-[13px] font-medium text-gray-700 mb-1.5">{p.label}</label>}
         <div style={{ display: 'flex', flexDirection: p.layout === 'horizontal' ? 'row' : 'column', gap: p.layout === 'horizontal' ? 12 : 8 }}>
-          {(p.options || []).map((o: string) => <label key={o} className="flex items-center gap-2.5 text-[13px] text-gray-700 cursor-pointer"><input type="radio" name={block.id} className="accent-orange-500" />{o}</label>)}
+          {(p.options || []).map((o: string, i: number) => <label key={i} className="flex items-center gap-2.5 text-[13px] text-gray-700 cursor-pointer"><input type="radio" name={block.id} className="accent-orange-500" />{o}</label>)}
         </div>
       </div>
     case 'checkbox':
       return <div style={blockStyle}>
         {p.showLabel !== false && p.label && <label className="block text-[13px] font-medium text-gray-700 mb-1.5">{p.label}</label>}
         <div className="space-y-2">
-          {(p.options || []).map((o: string) => <label key={o} className="flex items-center gap-2.5 text-[13px] text-gray-700 cursor-pointer"><input type="checkbox" className="rounded accent-orange-500" />{o}</label>)}
+          {(p.options || []).map((o: string, i: number) => <label key={i} className="flex items-center gap-2.5 text-[13px] text-gray-700 cursor-pointer"><input type="checkbox" className="rounded accent-orange-500" />{o}</label>)}
         </div>
       </div>
     default: return <div className="text-xs text-gray-400 p-2">[{block.type}]</div>
@@ -767,7 +1279,7 @@ const Toggle = ({ label, checked, onChange: oc, hint }: { label: string; checked
       <p className="text-[13px] text-gray-800 leading-tight">{label}</p>
       {hint && <p className="text-[11px] text-gray-400 mt-0.5 leading-snug">{hint}</p>}
     </div>
-    <button type="button" onClick={() => oc(!checked)}
+    <button type="button" role="switch" aria-checked={checked} aria-label={label} onClick={() => oc(!checked)}
       className={`relative w-9 h-5 rounded-full flex-shrink-0 transition-colors ${checked ? 'bg-zinc-900' : 'bg-gray-200'}`}>
       <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
     </button>
@@ -803,7 +1315,6 @@ const ColorRow = ({ label, value, onChange: oc, hint }: { label: string; value: 
     <ColorPicker value={value || ''} onChange={oc} />
   </LabeledField>
 )
-const CleanColor = ColorRow
 const ColorField = ColorRow
 
 const UnitInput = ({ value, onChange: oc, unit = 'px', min = 0, max = 999, step = 1, className = '' }: { value: number; onChange: (v: number) => void; unit?: string; min?: number; max?: number; step?: number; className?: string }) => (
@@ -944,8 +1455,302 @@ const BorderStyleControl = ({ p, up, def = 'solid' }: { p: any; up: (k: string, 
   ]} />
 )
 
+// Recompensa progressiva: o desconto cresce conforme a pessoa avança
+// (10% ao entrar o e-mail, 15% depois do quiz). Cada tier é desbloqueado
+// por uma etapa; vale o último tier cuja etapa foi visitada. Em modo
+// único, cada tier tem o próprio estoque de códigos.
+// Smart Offers: a oferta segue a intenção medida na hora de mostrar. Cada
+// faixa (baixa / média / alta) recebe a base, um nível progressivo ou
+// nenhuma oferta; uma fatia de controle recebe sempre a base.
+// Fora do editor para não remontar (e perder o foco) a cada render.
+function OfferSelectField({ value, onChange, label, hint, baseLabel, tiers }: { value: string; onChange: (v: string) => void; label: string; hint: string; baseLabel: string; tiers: any[] }) {
+  return (
+    <LabeledField label={label} hint={hint}>
+      <select className={sel} value={value} onChange={e => onChange(e.target.value)}>
+        <option value="base">Oferta base · {baseLabel}</option>
+        {tiers.map((t: any) => <option key={t.id} value={t.id}>{t.label || 'Nível'} · {t.discountType === 'free_shipping' ? 'Frete grátis' : `${t.discountValue ?? 0}${t.discountType === 'fixed_amount' ? '' : '%'} OFF`}</option>)}
+        <option value="none">Sem desconto (só a inscrição)</option>
+      </select>
+    </LabeledField>
+  )
+}
+
+function SmartOfferEditor({ p, up }: { p: any; up: (k: string, v: any) => void }) {
+  const so = { enabled: false, lowMax: 35, highMin: 70, lowTier: 'base', midTier: 'base', highTier: 'base', controlPercent: 20, ...(p.smartOffer || {}) }
+  const set = (patch: Record<string, any>) => up('smartOffer', { ...so, ...patch })
+  const tiers: any[] = Array.isArray(p.tiers) ? p.tiers : []
+  const baseLabel = p.discountType === 'free_shipping' ? 'Frete grátis' : p.discountType === 'fixed_amount' ? `R$ ${p.discountValue ?? 0} OFF` : `${p.discountValue ?? 10}% OFF`
+  return (
+    <div className="pt-3 border-t border-gray-100 space-y-2">
+      <Toggle label="Oferta por intenção" hint="Quem está quase comprando não precisa do desconto inteiro; quem chegou frio precisa de mais. A intenção é medida na hora de mostrar (rolagem, permanência, páginas, carrinho)." checked={!!so.enabled} onChange={v => set({ enabled: v })} />
+      {so.enabled && (
+        <div className="space-y-2">
+          <p className="text-[11px] text-gray-500 leading-snug bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">Escreva <code className="px-1 bg-white border border-gray-200 rounded text-[10px]">{'{{offer}}'}</code> no texto ou no botão e a oferta escolhida aparece no lugar (ex.: "Ganhe {'{{offer}}'} agora"). Com "sem desconto", o bloco de cupom some.</p>
+          <OfferSelectField value={so.lowTier} onChange={v => set({ lowTier: v })} baseLabel={baseLabel} tiers={tiers} label={`Intenção baixa (score < ${so.lowMax})`} hint="Chegou frio: aqui cabe o empurrão maior." />
+          <OfferSelectField value={so.midTier} onChange={v => set({ midTier: v })} baseLabel={baseLabel} tiers={tiers} label={`Intenção média (${so.lowMax}–${so.highMin - 1})`} hint="O padrão." />
+          <OfferSelectField value={so.highTier} onChange={v => set({ highTier: v })} baseLabel={baseLabel} tiers={tiers} label={`Intenção alta (score ≥ ${so.highMin})`} hint="Já ia comprar: dá para segurar margem." />
+          <div className="grid grid-cols-2 gap-2">
+            <LabeledField label="Baixa até">
+              <div className="relative"><input type="number" min={5} max={90} className={inp + ' pr-6'} value={so.lowMax} onChange={e => set({ lowMax: Math.max(5, Math.min(90, +e.target.value || 35)) })} /><span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">pts</span></div>
+            </LabeledField>
+            <LabeledField label="Alta a partir de">
+              <div className="relative"><input type="number" min={10} max={95} className={inp + ' pr-6'} value={so.highMin} onChange={e => set({ highMin: Math.max(so.lowMax + 5, Math.min(95, +e.target.value || 70)) })} /><span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">pts</span></div>
+            </LabeledField>
+          </div>
+          <LabeledField label={`Grupo de controle · ${so.controlPercent}%`} hint="Recebe sempre a oferta base, para medir no analytics se a economia de margem custou conversão.">
+            <input type="range" min={0} max={50} step={5} value={so.controlPercent} onChange={e => set({ controlPercent: +e.target.value })} className="w-full accent-zinc-900" aria-label="Grupo de controle" />
+          </LabeledField>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Roleta e raspadinha: segmentos com rótulo, prêmio (oferta base, nível
+// progressivo ou nada) e peso. O sorteio é do servidor no envio; aqui só
+// se descreve o que pode sair e com que chance.
+function GameEditor({ type, p, up, hints }: { type: string; p: any; up: (k: string, v: any) => void; hints: { hasCoupon: boolean; couponTiers: any[]; baseOfferLabel: string; gameBlocks: number } }) {
+  const isWheel = type === 'wheel'
+  const segs: any[] = Array.isArray(p.segments) ? p.segments : []
+  const total = segs.reduce((a, s) => a + Math.max(0, Number(s?.weight) || 0), 0)
+  const minSegs = isWheel ? 2 : 1
+  const setSeg = (i: number, patch: Record<string, any>) => up('segments', segs.map((s, j) => (j === i ? { ...s, ...patch } : s)))
+  const addSeg = () => up('segments', [...segs, { id: 's' + Math.random().toString(36).slice(2, 8), label: hints.baseOfferLabel || 'Prêmio', prize: 'base', weight: 10, color: GAME_PALETTE[segs.length % GAME_PALETTE.length] }])
+  const tierText = (t: any) => t.discountType === 'free_shipping' ? 'Frete grátis' : `${t.discountValue ?? 0}${t.discountType === 'fixed_amount' ? '' : '%'} OFF`
+  const Warn = ({ children }: { children: React.ReactNode }) => (
+    <div className="flex items-start gap-2 p-2.5 rounded-lg bg-amber-50 border border-amber-100">
+      <AlertTriangle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
+      <p className="text-[11px] text-amber-800 leading-snug">{children}</p>
+    </div>
+  )
+  return <div className="space-y-5">
+    <div className="space-y-3">
+      <SectionHeader title={isWheel ? 'Roleta' : 'Raspadinha'} icon={<Gift className="w-3 h-3" />} />
+      <p className="text-[11px] text-gray-500 leading-snug bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
+        O visitante preenche, clica em "{p.buttonText || (isWheel ? 'Girar' : 'Raspar')}" e o servidor sorteia pelo peso — {isWheel ? 'a roleta para' : 'a raspadinha revela'} no prêmio decidido. O cupom sai pelo bloco de cupom, no nível escolhido aqui. Na etapa de sucesso, <code className="px-1 bg-white border border-gray-200 rounded text-[10px]">{'{{prize}}'}</code> vira o prêmio sorteado.
+      </p>
+      {!hints.hasCoupon && <Warn>Sem bloco de cupom neste popup: o jogo mostra o prêmio, mas nenhum código é emitido. Adicione um bloco de cupom na etapa de sucesso.</Warn>}
+      {hints.gameBlocks > 1 && <Warn>Há {hints.gameBlocks} jogos neste popup. Só o primeiro sorteia; os outros ficam decorativos.</Warn>}
+      {segs.length < minSegs && <Warn>{isWheel ? 'A roleta precisa de pelo menos dois segmentos.' : 'A raspadinha precisa de pelo menos um prêmio.'}</Warn>}
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] font-bold text-gray-500 uppercase tracking-[0.08em]">Segmentos</p>
+        <button type="button" onClick={addSeg} disabled={segs.length >= 12} className="text-[11px] font-semibold text-zinc-900 underline underline-offset-2 disabled:opacity-40">Adicionar</button>
+      </div>
+      <div className="space-y-2">
+        {segs.map((sg, i) => {
+          const w = Math.max(0, Number(sg?.weight) || 0)
+          const chance = total > 0 ? Math.round((w / total) * 100) : Math.round(100 / Math.max(1, segs.length))
+          return (
+            <div key={sg?.id || i} className="rounded-lg border border-gray-200 p-2.5 space-y-2">
+              <div className="flex items-center gap-2">
+                <input type="color" value={sg?.color || GAME_PALETTE[i % GAME_PALETTE.length]} onChange={e => setSeg(i, { color: e.target.value })} className="w-7 h-7 rounded border border-gray-200 p-0 cursor-pointer flex-shrink-0" aria-label={`Cor do segmento ${i + 1}`} />
+                <input className={inp + ' flex-1'} value={sg?.label || ''} onChange={e => setSeg(i, { label: e.target.value.slice(0, 40) })} placeholder="O que o visitante lê" aria-label={`Rótulo do segmento ${i + 1}`} />
+                <button type="button" onClick={() => up('segments', segs.filter((_, j) => j !== i))} disabled={segs.length <= minSegs} className="p-1.5 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-30 flex-shrink-0" title="Remover segmento"><Trash2 className="w-3.5 h-3.5" /></button>
+              </div>
+              <div className="grid grid-cols-[1fr_96px] gap-2">
+                <select className={sel} value={sg?.prize || 'base'} onChange={e => setSeg(i, { prize: e.target.value })} aria-label={`Prêmio do segmento ${i + 1}`}>
+                  <option value="base">Oferta base{hints.baseOfferLabel ? ` · ${hints.baseOfferLabel}` : ''}</option>
+                  {hints.couponTiers.map((t: any) => <option key={t.id} value={t.id}>{t.label || 'Nível'} · {tierText(t)}</option>)}
+                  {sg?.prize && sg.prize !== 'base' && sg.prize !== 'none' && !hints.couponTiers.some((t: any) => t.id === sg.prize) && <option value={sg.prize}>Nível removido (vira oferta base)</option>}
+                  <option value="none">Nada (só a inscrição)</option>
+                </select>
+                <div className="relative">
+                  <input type="number" min={0} max={1000} className={inp + ' pr-9 text-right tabular-nums'} value={sg?.weight ?? 0} onChange={e => setSeg(i, { weight: Math.max(0, Math.min(1000, Math.round(Number(e.target.value) || 0))) })} aria-label={`Peso do segmento ${i + 1}`} />
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 tabular-nums">{chance}%</span>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <p className="text-[11px] text-gray-400 leading-snug">O peso define a chance de cada segmento (a porcentagem ao lado). Mantenha o rótulo coerente com o prêmio: quem lê "15% OFF" e recebe 10% não volta.</p>
+    </div>
+    <div className="pt-4 border-t border-gray-100 space-y-3">
+      <SectionHeader title="Botão" icon={<MousePointerClick className="w-3 h-3" />} />
+      {/* Nas referências que convertem, o jogo não tem botão grudado
+          embaixo: quem dispara é o botão da etapa, no fim do formulário.
+          Desligado aqui, o bloco entrega só o jogo — e o sorteio acontece
+          no envio de qualquer maneira. */}
+      <Toggle label="Botão junto do jogo" checked={p.showButton !== false} onChange={v => up('showButton', v)} />
+      {p.showButton === false ? (
+        <p className="text-[11px] text-gray-400 leading-snug">Quem dispara é o botão da etapa. Confira se existe um bloco de botão com a ação "Enviar" abaixo do jogo.</p>
+      ) : (
+        <>
+          <LabeledField label="Texto">
+            <input className={inp} value={p.buttonText || ''} onChange={e => up('buttonText', e.target.value.slice(0, 40))} placeholder={isWheel ? 'Girar a roleta' : 'Raspar'} />
+          </LabeledField>
+          <ColorRow label="Fundo" value={p.bgColor || '#F97316'} onChange={v => up('bgColor', v)} />
+          <ColorRow label="Texto" value={p.textColor || '#FFFFFF'} onChange={v => up('textColor', v)} />
+          <Toggle label="Largura total" checked={!!p.fullWidth} onChange={v => up('fullWidth', v)} />
+        </>
+      )}
+    </div>
+    <div className="pt-4 border-t border-gray-100 space-y-3">
+      <SectionHeader title="Aparência" icon={<Palette className="w-3 h-3" />} />
+      {isWheel ? (
+        <>
+          <LabeledField label="Tamanho"><Slider value={p.size || 320} onChange={v => up('size', v)} min={200} max={460} unit="px" /></LabeledField>
+          <LabeledField label="Texto dos segmentos"><Slider value={p.labelSize || 13} onChange={v => up('labelSize', v)} min={8} max={20} unit="px" /></LabeledField>
+          <ColorRow label="Cor do texto" value={p.labelColor || '#FFFFFF'} onChange={v => up('labelColor', v)} />
+          <ColorRow label="Aro" value={p.rimColor || '#111827'} onChange={v => up('rimColor', v)} />
+          <ColorRow label="Ponteiro e cubo" value={p.pointerColor || '#111827'} onChange={v => up('pointerColor', v)} />
+          <ColorRow label="Divisórias" value={p.strokeColor || '#FFFFFF'} onChange={v => up('strokeColor', v)} />
+          {/* O tique de cada pino que passa é o que faz o giro parecer
+              mecânico. Quem não quiser som na loja desliga aqui. */}
+          <Toggle label="Tique ao girar" checked={p.sound !== false} onChange={v => up('sound', v)} />
+        </>
+      ) : (
+        <>
+          <LabeledField label="Altura"><Slider value={p.height || 150} onChange={v => up('height', v)} min={80} max={320} unit="px" /></LabeledField>
+          <LabeledField label="Texto da cobertura"><input className={inp} value={p.coverText || ''} onChange={e => up('coverText', e.target.value.slice(0, 40))} placeholder="Raspe aqui" /></LabeledField>
+          <ColorRow label="Cobertura" value={p.coverColor || '#9CA3AF'} onChange={v => up('coverColor', v)} />
+          <ColorRow label="Texto da cobertura" value={p.coverTextColor || '#FFFFFF'} onChange={v => up('coverTextColor', v)} />
+          <ColorRow label="Fundo do prêmio" value={p.prizeBg || '#FFF7ED'} onChange={v => up('prizeBg', v)} />
+          <ColorRow label="Texto do prêmio" value={p.prizeColor || '#F97316'} onChange={v => up('prizeColor', v)} />
+          <LabeledField label="Tamanho do prêmio"><Slider value={p.prizeSize || 24} onChange={v => up('prizeSize', v)} min={14} max={40} unit="px" /></LabeledField>
+        </>
+      )}
+    </div>
+  </div>
+}
+
+function RewardTiersEditor({ p, up, steps }: { p: any; up: (k: string, v: any) => void; steps: Array<{ id: string; name: string }> }) {
+  const tiers: any[] = Array.isArray(p.tiers) ? p.tiers : []
+  const setTier = (i: number, patch: Record<string, any>) => up('tiers', tiers.map((t, j) => (j === i ? { ...t, ...patch } : t)))
+  const unique = p.mode === 'unique' || p.mode === 'dynamic'
+  return (
+    <div className="pt-3 border-t border-gray-100 space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] font-bold text-gray-500 uppercase tracking-[0.08em]">Recompensa progressiva</p>
+        <button type="button"
+          onClick={() => up('tiers', [...tiers, { id: 't' + Math.random().toString(36).slice(2, 8), label: `Nível ${tiers.length + 2}`, afterStepId: steps.length >= 2 ? steps[1].id : '', discountType: p.discountType || 'percentage', discountValue: (Number(p.discountValue) || 10) + 5, code: '' }])}
+          className="text-[11px] font-semibold text-zinc-900 underline underline-offset-2">
+          Adicionar nível
+        </button>
+      </div>
+      {tiers.length === 0 ? (
+        <p className="text-[11px] text-gray-400 leading-snug">Sem níveis: todo inscrito recebe o desconto acima. Adicione um nível para dar mais a quem chega a uma etapa (quiz, lição).</p>
+      ) : (
+        <p className="text-[11px] text-gray-400 leading-snug">Vale o último nível cuja etapa a pessoa chegou a ver. A base é o desconto acima.</p>
+      )}
+      {steps.length < 2 && tiers.length > 0 && (
+        <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">Com uma etapa só, nenhum nível é desbloqueado. Adicione uma segunda etapa e ligue o nível a ela.</p>
+      )}
+      {tiers.map((t, i) => (
+        <div key={t.id || i} className="rounded-lg border border-gray-200 p-2.5 space-y-2">
+          <div className="flex items-center gap-2">
+            <input className={inp + ' flex-1'} value={t.label || ''} onChange={e => setTier(i, { label: e.target.value })} placeholder="Nome do nível" />
+            <button type="button" onClick={() => up('tiers', tiers.filter((_, j) => j !== i))} className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded" title="Remover">
+              <Trash2 className="w-3 h-3" />
+            </button>
+          </div>
+          <LabeledField label="Desbloqueia ao chegar em" hint={t.afterStepId && !steps.some(s => s.id === t.afterStepId) ? 'A etapa ligada a este nível foi apagada. Escolha outra.' : undefined}>
+            <select className={sel} value={steps.some(s => s.id === t.afterStepId) ? t.afterStepId : ''} onChange={e => setTier(i, { afterStepId: e.target.value })}>
+              <option value="">Escolha a etapa</option>
+              {steps.map((s, j) => <option key={s.id} value={s.id}>{j + 1}. {s.name}</option>)}
+            </select>
+          </LabeledField>
+          <div className="grid grid-cols-2 gap-2">
+            <LabeledField label="Tipo">
+              <select className={sel} value={t.discountType || 'percentage'} onChange={e => setTier(i, { discountType: e.target.value })}>
+                <option value="percentage">Percentual (%)</option>
+                <option value="fixed_amount">Valor fixo</option>
+                <option value="free_shipping">Frete grátis</option>
+              </select>
+            </LabeledField>
+            {t.discountType !== 'free_shipping' && (
+              <LabeledField label={t.discountType === 'fixed_amount' ? 'Valor' : 'Desconto (%)'}>
+                <input type="number" min={0} step="0.01" className={inp} value={t.discountValue ?? 0} onChange={e => setTier(i, { discountValue: +e.target.value })} />
+              </LabeledField>
+            )}
+          </div>
+          <LabeledField label={unique ? 'Código reserva deste nível' : 'Código deste nível'} hint={unique ? 'Se o estoque do nível acabar.' : 'Crie na Shopify com este código.'}>
+            <input className={inp + ' font-mono tracking-wider uppercase'} value={t.code || ''} onChange={e => setTier(i, { code: e.target.value.toUpperCase() })} placeholder="QUIZ15" />
+          </LabeledField>
+          {unique && (
+            <LabeledField label="Prefixo dos códigos" hint="Vazio = o mesmo da base.">
+              <input className={inp + ' font-mono uppercase'} value={t.codePrefix || ''} onChange={e => setTier(i, { codePrefix: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12) })} placeholder={(p.codePrefix || 'POPUP')} />
+            </LabeledField>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// Estoque de códigos únicos do popup — a base e um por nível de recompensa.
+// Lê /api/forms/:id/coupon-pool; o botão sincroniza os pools com o bloco e
+// cria um lote agora, sem esperar o cron. O popup precisa estar salvo com
+// o bloco em modo único.
+function CouponPoolPanel({ dirty = false }: { dirty?: boolean }) {
+  const params = useParams()
+  const formId = String(params?.id || '')
+  const [state, setState] = useState<{ loading: boolean; data: any; error: string | null; working: boolean }>({ loading: true, data: null, error: null, working: false })
+  const load = useCallback(async () => {
+    if (!formId) return
+    try {
+      const r = await fetch(`/api/forms/${formId}/coupon-pool`, { cache: 'no-store' })
+      const d = await r.json().catch(() => ({}))
+      setState(s => ({ ...s, loading: false, data: r.ok ? d : null, error: r.ok ? null : (d.error || 'Não foi possível ler o estoque') }))
+    } catch (e: any) {
+      setState(s => ({ ...s, loading: false, error: e?.message || 'erro' }))
+    }
+  }, [formId])
+  useEffect(() => { load() }, [load])
+  const generate = async () => {
+    setState(s => ({ ...s, working: true, error: null }))
+    try {
+      const r = await fetch(`/api/forms/${formId}/coupon-pool`, { method: 'POST' })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) setState(s => ({ ...s, working: false, error: d.error || 'Não foi possível gerar códigos' }))
+      else setState(s => ({ ...s, working: false, data: d, error: d.error || null }))
+    } catch (e: any) {
+      setState(s => ({ ...s, working: false, error: e?.message || 'erro' }))
+    }
+  }
+  const d = state.data
+  return (
+    <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] font-bold text-gray-500 uppercase tracking-[0.08em]">Estoque de códigos</p>
+        <button type="button" onClick={generate} disabled={state.working || dirty}
+          title={dirty ? 'Salve o popup primeiro: os códigos seguem o desconto salvo.' : undefined}
+          className="text-[11px] font-semibold text-zinc-900 underline underline-offset-2 disabled:opacity-50 disabled:no-underline">
+          {state.working ? 'Gerando…' : dirty ? 'Salve para gerar' : 'Gerar códigos agora'}
+        </button>
+      </div>
+      {state.loading ? (
+        <p className="text-[11px] text-gray-400">Carregando…</p>
+      ) : !d?.pools?.length ? (
+        <p className="text-[11px] text-gray-500 leading-snug">Nenhum pool ainda. Salve o popup com o cupom em modo único (e uma loja vinculada) — o pool é criado no save e os primeiros códigos ao publicar.</p>
+      ) : (
+        <div className="space-y-2">
+          {d.pools.map((pool: any) => (
+            <div key={pool.id} className={pool.status === 'paused' ? 'opacity-50' : ''}>
+              {d.pools.length > 1 && (
+                <p className="text-[10px] font-semibold text-gray-600 mb-1">{pool.tier_key === 'base' ? 'Base' : (pool.name.split(' · ').pop() || pool.tier_key)} · {pool.kind === 'free_shipping' ? 'frete grátis' : pool.kind === 'fixed' ? `R$ ${pool.value}` : `${pool.value}%`}</p>
+              )}
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div><p className="text-[15px] font-semibold text-gray-900 tabular-nums">{pool.stock.usable}</p><p className="text-[10px] text-gray-500">prontos</p></div>
+                <div><p className="text-[15px] font-semibold text-gray-900 tabular-nums">{pool.stock.reserved}</p><p className="text-[10px] text-gray-500">entregues</p></div>
+                <div><p className="text-[15px] font-semibold text-gray-900 tabular-nums">{pool.stock.consumed}</p><p className="text-[10px] text-gray-500">usados</p></div>
+              </div>
+              <p className="text-[11px] text-gray-500 leading-snug mt-1">
+                {pool.status === 'error' ? `Última reposição falhou: ${pool.last_error || 'erro'}` :
+                  pool.status === 'paused' ? 'Pausado — não está mais no bloco.' :
+                    pool.needs_replenish ? `Abaixo do mínimo (${pool.min_stock}). O cron repõe a cada 2 minutos.` : 'Estoque em dia. O cron repõe sozinho.'}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+      {state.error && <p className="text-[11px] text-red-600">{state.error}</p>}
+    </div>
+  )
+}
+
 // ── Block Props Editor (Klaviyo-style per-block panels) ──────────────────────
-function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInputs }: { block: Block; onChange: (b: Block) => void; onDelete: () => void; onOpenMedia?: (cb: (url: string) => void) => void; onApplyToAllInputs?: (b: Block) => void }) {
+function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInputs, steps = [], dirty = false, couponBlocks = 1, hints }: { block: Block; onChange: (b: Block) => void; onDelete: () => void; onOpenMedia?: (cb: (url: string) => void) => void; onApplyToAllInputs?: (b: Block) => void; steps?: Array<{ id: string; name: string }>; dirty?: boolean; couponBlocks?: number; hints?: { hasCoupon: boolean; couponTiers: any[]; baseOfferLabel: string; gameBlocks: number } }) {
   const up = (key: string, val: any) => onChange(mergeBlockProps(block, { [key]: val }))
   // Multi-key updates MUST go through a single onChange — two `up()` calls in
   // a row both spread the same stale block.props and the 2nd reverts the 1st.
@@ -958,7 +1763,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
     email: 'Email', phone: 'Telefone', 'name-input': 'Nome', 'text-input': 'Campo',
     'date-input': 'Data', dropdown: 'Dropdown', radio: 'Radio', checkbox: 'Checkbox',
     'legal-consent': 'Consentimento', text: 'Conteúdo', button: 'Botão', image: 'Imagem',
-    spacer: 'Espaçador', line: 'Linha', coupon: 'Cupom', countdown: 'Contagem',
+    spacer: 'Espaçador', line: 'Linha', coupon: 'Cupom', countdown: 'Contagem', wheel: 'Roleta', scratch: 'Raspadinha',
   }
 
   // Unified input "Input" tab renderer (Omnisend-style clean sections)
@@ -1277,10 +2082,19 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
             <Segmented value={p.action || 'submit'} onChange={v => up('action', v)} options={[
               { value: 'submit', label: 'Enviar' },
               { value: 'next-step', label: 'Próxima' },
+              { value: 'prev-step', label: 'Voltar' },
               { value: 'url', label: 'URL' },
               { value: 'close', label: 'Fechar' },
             ]} />
           </LabeledField>
+          {p.action === 'next-step' && steps.length > 1 && (
+            <LabeledField label="Ir para" hint="A opção escolhida num bloco de escolha com ramificação vence este destino.">
+              <select className={sel} value={p.nextStepId || ''} onChange={e => up('nextStepId', e.target.value || undefined)}>
+                <option value="">Próxima na sequência</option>
+                {steps.map((s, i) => <option key={s.id} value={s.id}>{i + 1}. {s.name}</option>)}
+              </select>
+            </LabeledField>
+          )}
           {p.action === 'url' && (
             <LabeledField label="URL de destino" hint="Abre em nova aba.">
               <div className="flex items-center border border-gray-200 rounded-lg focus-within:border-zinc-900 focus-within:ring-1 focus-within:ring-zinc-900/10">
@@ -1478,7 +2292,18 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
                 <div key={i} className="flex items-center gap-1.5 group">
                   <div className="w-6 h-6 flex items-center justify-center rounded bg-gray-50 border border-gray-200 text-[10px] font-semibold text-gray-400 flex-shrink-0">{i + 1}</div>
                   <input className={inp + ' flex-1'} value={opt} onChange={e => {
-                    const next = [...(p.options || [])]; next[i] = e.target.value; up('options', next)
+                    const next = [...(p.options || [])]; next[i] = e.target.value
+                    // Ramificação e tags são indexadas pelo rótulo: renomear
+                    // a opção leva o que estava ligado a ela junto.
+                    const patch: Record<string, any> = { options: next }
+                    for (const key of ['branches', 'tagsByOption'] as const) {
+                      const map = p[key]
+                      if (map && typeof map === 'object' && opt in map) {
+                        const { [opt]: moved, ...rest } = map
+                        patch[key] = { ...rest, [e.target.value]: moved }
+                      }
+                    }
+                    upMany(patch)
                   }} placeholder={`Opção ${i + 1}`} />
                   <button onClick={() => { const next = [...(p.options || [])]; if (i > 0) { [next[i-1], next[i]] = [next[i], next[i-1]]; up('options', next) } }}
                     className="p-1.5 text-gray-300 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors" title="Mover para cima" disabled={i === 0}>
@@ -1499,6 +2324,35 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
                 <Plus className="w-3.5 h-3.5" /> Adicionar opção
               </button>
             </div>
+            {/* Quiz: cada opção pode levar a uma etapa e marcar o contato com tags. */}
+            {(p.options || []).length > 0 && (
+              <div className="pt-3 space-y-2">
+                <p className="text-[11px] font-bold text-gray-500 uppercase tracking-[0.08em]">Por opção</p>
+                <p className="text-[11px] text-gray-400 leading-snug">Para onde a resposta leva e que tags ela grava no contato (viram segmento).</p>
+                {(p.options || []).map((opt: string, i: number) => {
+                  const branches: Record<string, string> = p.branches || {}
+                  const tagsBy: Record<string, string> = p.tagsByOption || {}
+                  return (
+                    <div key={i} className="rounded-lg border border-gray-200 p-2 space-y-1.5">
+                      <p className="text-[11px] font-medium text-gray-700 truncate">{opt || `Opção ${i + 1}`}</p>
+                      {steps.length > 1 && (
+                        <select className={sel} value={branches[opt] || ''}
+                          onChange={e => {
+                            const next = { ...branches }
+                            if (e.target.value) next[opt] = e.target.value; else delete next[opt]
+                            up('branches', next)
+                          }}>
+                          <option value="">Segue a sequência</option>
+                          {steps.map((s, j) => <option key={s.id} value={s.id}>→ {j + 1}. {s.name}</option>)}
+                        </select>
+                      )}
+                      <input className={inp} value={tagsBy[opt] || ''} placeholder="tags, separadas por vírgula"
+                        onChange={e => up('tagsByOption', { ...tagsBy, [opt]: e.target.value })} />
+                    </div>
+                  )
+                })}
+              </div>
+            )}
             {block.type === 'radio' && (
               <LabeledField label="Direção">
                 <Segmented value={p.layout || 'vertical'} onChange={v => up('layout', v)} options={[
@@ -1531,11 +2385,32 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
         return <div className="space-y-5">
           <div className="space-y-3">
             <SectionHeader title="Conteúdo" icon={<ShieldCheck className="w-3 h-3" />} />
-            <LabeledField label="Texto de consentimento" hint='Suporta HTML. Use <a href="url">link</a> para links.'>
+            <LabeledField label="Texto de consentimento" hint='Suporta HTML. Use <a href="url">link</a> para links. Diga o nome da loja e o que a pessoa vai receber — autorização genérica não vale.'>
               <textarea className={inp} rows={4} value={p.text || ''} onChange={e => up('text', e.target.value)}
-                placeholder='Aceito receber comunicações e concordo com a <a href="/politica">política de privacidade</a>.' />
+                placeholder='Aceito receber ofertas da Loja por e-mail e concordo com a <a href="/politica">política de privacidade</a>.' />
             </LabeledField>
-            <Toggle label="Obrigatório" checked={p.required !== false} onChange={v => up('required', v)} hint="Usuário precisa marcar para enviar." />
+            <LabeledField label="Canais cobertos" hint="Marcar a caixa autoriza estes canais. WhatsApp e SMS só recebem mensagem com autorização explícita aqui.">
+              <div className="grid grid-cols-3 gap-2">
+                {([['email', 'E-mail'], ['whatsapp', 'WhatsApp'], ['sms', 'SMS']] as const).map(([ch, label]) => {
+                  const channels: string[] = Array.isArray(p.channels) && p.channels.length ? p.channels : ['email']
+                  const on = channels.includes(ch)
+                  return (
+                    <button key={ch} type="button"
+                      onClick={() => {
+                        const next = on ? channels.filter(c => c !== ch) : [...channels, ch]
+                        up('channels', next.length ? next : ['email'])
+                      }}
+                      className={`px-2 py-2 text-[12px] rounded-lg border transition-colors ${on ? 'border-zinc-900 bg-gray-100 text-gray-900 font-semibold' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
+            </LabeledField>
+            <LabeledField label="Versão do texto" hint="Mude quando alterar o texto. Fica registrada em cada consentimento como prova do que foi aceito.">
+              <input className={inp} value={p.consentVersion || ''} onChange={e => up('consentVersion', e.target.value)} placeholder="v1" />
+            </LabeledField>
+            <Toggle label="Obrigatório" checked={p.required !== false} onChange={v => up('required', v)} hint="Usuário precisa marcar para enviar. Nunca vem pré-marcado." />
           </div>
           <div className="pt-4 border-t border-gray-100 space-y-3">
             <SectionHeader title="Estilo" icon={<Type className="w-3 h-3" />} />
@@ -1556,62 +2431,116 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
         return <div className="space-y-5">
           <div className="space-y-3">
             <SectionHeader title="Conteúdo" icon={<Tag className="w-3 h-3" />} />
-            <LabeledField label="Modo do cupom" hint="Estático: mesmo código para todos. Dinâmico: gera código único na Shopify para cada inscrição (anti-fraude).">
+            <LabeledField label="Modo do cupom" hint="Estático: o mesmo código para todo mundo. Único: cada inscrito recebe um código de uso único, criado antes na Shopify e reservado na hora.">
               <div className="grid grid-cols-2 gap-2">
-                <button type="button"
-                  onClick={() => up('mode', 'static')}
-                  className={`px-3 py-2 text-[12px] rounded-lg border transition-colors ${(p.mode || 'static') === 'static' ? 'border-zinc-900 bg-gray-100 text-gray-900 font-semibold' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
-                  Estático
-                </button>
-                <button type="button"
-                  onClick={() => up('mode', 'dynamic')}
-                  className={`px-3 py-2 text-[12px] rounded-lg border transition-colors ${p.mode === 'dynamic' ? 'border-zinc-900 bg-gray-100 text-gray-900 font-semibold' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
-                  Dinâmico (Shopify)
-                </button>
+                {([['static', 'Estático'], ['unique', 'Único por inscrito']] as const).map(([m, label]) => {
+                  const cur = p.mode === 'dynamic' ? 'unique' : (p.mode || 'static')
+                  return (
+                    <button key={m} type="button" onClick={() => up('mode', m)}
+                      className={`px-3 py-2 text-[12px] rounded-lg border transition-colors ${cur === m ? 'border-zinc-900 bg-gray-100 text-gray-900 font-semibold' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
+                      {label}
+                    </button>
+                  )
+                })}
               </div>
             </LabeledField>
-            {(p.mode || 'static') === 'static' ? (
-              <LabeledField label="Código do cupom" hint="Exibido em destaque para ser copiado.">
-                <input className={inp + ' font-mono tracking-wider uppercase'} value={p.code || ''} onChange={e => up('code', e.target.value.toUpperCase())} placeholder="DESCONTO10" />
-              </LabeledField>
-            ) : (
+            {(p.mode === 'unique' || p.mode === 'dynamic') ? (
               <>
                 <div className="grid grid-cols-2 gap-2">
                   <LabeledField label="Tipo">
-                    <select className={inp} value={p.discountType || 'percentage'} onChange={e => up('discountType', e.target.value)}>
+                    <select className={sel} value={p.discountType || 'percentage'} onChange={e => up('discountType', e.target.value)}>
                       <option value="percentage">Percentual (%)</option>
                       <option value="fixed_amount">Valor fixo</option>
+                      <option value="free_shipping">Frete grátis</option>
                     </select>
                   </LabeledField>
-                  <LabeledField label={p.discountType === 'fixed_amount' ? 'Valor' : 'Desconto (%)'}>
-                    <input type="number" min={1} step="0.01" className={inp}
-                      value={p.discountValue ?? 10}
-                      onChange={e => up('discountValue', +e.target.value)} />
-                  </LabeledField>
+                  {p.discountType !== 'free_shipping' && (
+                    <LabeledField label={p.discountType === 'fixed_amount' ? 'Valor' : 'Desconto (%)'}>
+                      <input type="number" min={1} step="0.01" className={inp}
+                        value={p.discountValue ?? 10}
+                        onChange={e => up('discountValue', +e.target.value)} />
+                    </LabeledField>
+                  )}
                 </div>
+                <LabeledField label="Rótulo da oferta" hint={`Aparece onde você escrever {{offer}} no texto ou no botão. Vazio: "${offerLabelOf({ ...p, offerLabel: '' })}".`}>
+                  <input className={inp} value={p.offerLabel || ''} onChange={e => up('offerLabel', e.target.value.slice(0, 40))} placeholder={offerLabelOf({ ...p, offerLabel: '' })} />
+                </LabeledField>
                 <div className="grid grid-cols-2 gap-2">
-                  <LabeledField label="Prefixo" hint="Código fica PREFIXO-XXXXXX">
+                  <LabeledField label="Prefixo" hint="O código sai como PREFIXO-XXXXXXXX.">
                     <input className={inp + ' font-mono uppercase'}
                       value={p.codePrefix || 'POPUP'}
-                      onChange={e => up('codePrefix', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} />
+                      onChange={e => up('codePrefix', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12))} />
                   </LabeledField>
-                  <LabeledField label="Validade (dias)">
+                  <LabeledField label="Validade (dias)" hint="Contada da inscrição.">
                     <input type="number" min={1} max={365} className={inp}
                       value={p.validityDays ?? 7}
                       onChange={e => up('validityDays', +e.target.value)} />
                   </LabeledField>
                 </div>
-                <LabeledField label="Valor mínimo da compra (opcional)" hint="0 = sem mínimo. Bloqueia uso em pedidos menores.">
+                <LabeledField label="Valor mínimo do pedido" hint="0 = sem mínimo.">
                   <input type="number" min={0} step="0.01" className={inp}
                     value={p.minimumAmount ?? 0}
                     onChange={e => up('minimumAmount', +e.target.value)} />
                 </LabeledField>
-                <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg p-2.5 leading-snug">
-                  Cada inscrição gera um código novo na Shopify com uso único por cliente. Se a API da Shopify falhar, o popup mostra o código estático abaixo como fallback.
-                </p>
-                <LabeledField label="Código de fallback" hint="Mostrado se a Shopify estiver indisponível.">
+                <LabeledField label="Só nestas coleções" hint="Opcional. ID da coleção na Shopify (gid://shopify/Collection/123 ou só o número), um por linha. Vazio = loja inteira.">
+                  <LinesTextarea rows={2} className={inp + ' font-mono text-[11px]'} value={Array.isArray(p.collectionIds) ? p.collectionIds : []}
+                    transform={c => (/^\d+$/.test(c) ? `gid://shopify/Collection/${c}` : c)}
+                    onChange={v => up('collectionIds', v)} />
+                </LabeledField>
+                <LabeledField label="Combina com" hint="Outros descontos que podem ser usados no mesmo pedido.">
+                  <div className="grid grid-cols-3 gap-2">
+                    {([['product', 'Produto'], ['order', 'Pedido'], ['shipping', 'Frete']] as const).map(([k, label]) => {
+                      const cw = p.combinesWith || { product: true, order: false, shipping: true }
+                      const on = k === 'order' ? cw.order === true : cw[k] !== false
+                      return (
+                        <button key={k} type="button" onClick={() => up('combinesWith', { ...cw, [k]: !on })}
+                          className={`px-2 py-2 text-[12px] rounded-lg border transition-colors ${on ? 'border-zinc-900 bg-gray-100 text-gray-900 font-semibold' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
+                          {label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </LabeledField>
+                <Toggle label="Aplicar no carrinho automaticamente" hint="O checkout já abre com o desconto. A pessoa não precisa digitar nada." checked={p.autoApply !== false} onChange={v => (v ? up('autoApply', true) : upMany({ autoApply: false, showCode: true }))} />
+                {p.autoApply !== false && (
+                  <Toggle label="Mostrar o código mesmo assim" hint="Desligado, o bloco diz só que o desconto foi aplicado." checked={p.showCode !== false} onChange={v => up('showCode', v)} />
+                )}
+                {p.autoApply !== false && p.showCode === false && (
+                  <LabeledField label="Texto quando aplicado">
+                    <input className={inp} value={p.appliedText || ''} onChange={e => up('appliedText', e.target.value)} placeholder="Desconto aplicado no seu carrinho" />
+                  </LabeledField>
+                )}
+                <LabeledField label="Código reserva" hint="Usado se o estoque de códigos únicos acabar. Fica registrado quando acontece.">
+                  <input className={inp + ' font-mono tracking-wider uppercase'} value={p.code || ''} onChange={e => up('code', e.target.value.toUpperCase())} placeholder="BEMVINDO10" />
+                </LabeledField>
+                {couponBlocks > 1 && (
+                  <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">Há {couponBlocks} blocos de cupom neste popup. O desconto e o estoque seguem o primeiro; os outros só repetem o mesmo código.</p>
+                )}
+                <RewardTiersEditor p={p} up={up} steps={steps} />
+                <SmartOfferEditor p={p} up={up} />
+                <CouponPoolPanel dirty={dirty} />
+              </>
+            ) : (
+              <>
+                <LabeledField label="Código do cupom" hint="Crie o desconto na Shopify com este código. Ele aparece em destaque e é aplicado no carrinho.">
                   <input className={inp + ' font-mono tracking-wider uppercase'} value={p.code || ''} onChange={e => up('code', e.target.value.toUpperCase())} placeholder="DESCONTO10" />
                 </LabeledField>
+                <div className="grid grid-cols-2 gap-2">
+                  <LabeledField label="Tipo" hint="Só para o relatório.">
+                    <select className={sel} value={p.discountType || 'percentage'} onChange={e => up('discountType', e.target.value)}>
+                      <option value="percentage">Percentual (%)</option>
+                      <option value="fixed_amount">Valor fixo</option>
+                      <option value="free_shipping">Frete grátis</option>
+                    </select>
+                  </LabeledField>
+                  {p.discountType !== 'free_shipping' && (
+                    <LabeledField label={p.discountType === 'fixed_amount' ? 'Valor' : 'Desconto (%)'}>
+                      <input type="number" min={0} step="0.01" className={inp} value={p.discountValue ?? 10} onChange={e => up('discountValue', +e.target.value)} />
+                    </LabeledField>
+                  )}
+                </div>
+                <Toggle label="Aplicar no carrinho automaticamente" hint="O checkout já abre com o desconto." checked={p.autoApply !== false} onChange={v => (v ? up('autoApply', true) : upMany({ autoApply: false, showCode: true }))} />
+                <RewardTiersEditor p={p} up={up} steps={steps} />
               </>
             )}
             <LabeledField label="Descrição">
@@ -1678,6 +2607,9 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
           </div>
         </div>
 
+      case 'wheel':
+      case 'scratch':
+        return <GameEditor type={block.type} p={p} up={up} hints={hints || { hasCoupon: true, couponTiers: [], baseOfferLabel: '', gameBlocks: 1 }} />
       case 'countdown':
         return <div className="space-y-5">
           <div className="space-y-3">
@@ -1864,6 +2796,78 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
 }
 
 // ── Behavior Panel ─────────────────────────────────────────────────────────────
+// Aplica o patch de regras (vindo da IA) por cima do behavior atual: cada
+// grupo funde com o que já existe, e cart.contains funde um nível a mais.
+function mergeBehaviorPatch(beh: PopupDesign['behavior'], patch: Record<string, any>): PopupDesign['behavior'] {
+  const out: any = { ...beh }
+  for (const [k, v] of Object.entries(patch || {})) {
+    if (!v || typeof v !== 'object') continue
+    const cur = (out[k] && typeof out[k] === 'object') ? out[k] : {}
+    if (k === 'cart' && v.contains && typeof v.contains === 'object') {
+      out[k] = { ...cur, ...v, contains: { ...(cur.contains || {}), ...v.contains } }
+    } else {
+      out[k] = { ...cur, ...v }
+    }
+  }
+  return out
+}
+
+// "Descreva quem deve ver" → o servidor pede ao modelo um patch de regras,
+// devolve o resumo do que entendeu e o que não dá para fazer. Nada é salvo
+// até o lojista aplicar — e mesmo aí é só o design em memória.
+function AiTargetingBox({ formId, onApply }: { formId: string; onApply: (patch: Record<string, any>) => void }) {
+  const [prompt, setPrompt] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [result, setResult] = useState<{ patch: Record<string, any>; summary: string[]; unsupported: string[] } | null>(null)
+  const [applied, setApplied] = useState(false)
+  const ask = async () => {
+    if (!prompt.trim() || busy) return
+    setBusy(true); setError(null); setResult(null); setApplied(false)
+    try {
+      const r = await fetch(`/api/forms/${formId}/ai-targeting`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: prompt.trim() }) })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(d.error || 'Não foi possível gerar as regras')
+      setResult({ patch: d.patch || {}, summary: Array.isArray(d.summary) ? d.summary : [], unsupported: Array.isArray(d.unsupported) ? d.unsupported : [] })
+    } catch (e: any) { setError(e?.message || 'Não foi possível gerar as regras') }
+    finally { setBusy(false) }
+  }
+  const hasPatch = !!result && Object.keys(result.patch).length > 0
+  return (
+    <div className="space-y-2">
+      <p className="text-[11px] text-gray-500 leading-snug">Escreva em português quem deve ver este popup. Ex.: "só no celular, para quem chegou de anúncio, na página de produto, depois de 10 segundos, e nunca para inscritos".</p>
+      <textarea className={inp + ' resize-none'} rows={3} value={prompt} onChange={e => setPrompt(e.target.value.slice(0, 600))} placeholder="Quem deve ver e quando…"
+        onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') ask() }} />
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[10px] text-gray-400">{prompt.length}/600</span>
+        <button type="button" onClick={ask} disabled={busy || !prompt.trim()} className="px-3 py-1.5 text-[12px] font-semibold rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-40 inline-flex items-center gap-1.5">
+          {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}{busy ? 'Pensando…' : 'Sugerir regras'}
+        </button>
+      </div>
+      {error && <p className="text-[12px] text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>}
+      {result && (
+        <div className="rounded-lg border border-gray-200 p-3 space-y-2">
+          {result.summary.length > 0 ? (
+            <ul className="space-y-1">
+              {result.summary.map((line, i) => <li key={i} className="text-[12px] text-gray-800 flex gap-2"><span className="text-emerald-600 flex-shrink-0">✓</span><span>{line}</span></li>)}
+            </ul>
+          ) : <p className="text-[12px] text-gray-500">Não entendi uma regra aplicável nesse pedido.</p>}
+          {result.unsupported.length > 0 && (
+            <ul className="space-y-1 pt-1 border-t border-gray-100">
+              {result.unsupported.map((line, i) => <li key={i} className="text-[12px] text-amber-800 flex gap-2"><span className="flex-shrink-0">–</span><span>{line} <span className="text-gray-400">(não existe no produto)</span></span></li>)}
+            </ul>
+          )}
+          <div className="flex items-center justify-end gap-2 pt-1">
+            <button type="button" onClick={() => { setResult(null); setApplied(false) }} className="px-3 py-1.5 text-[12px] font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">Descartar</button>
+            <button type="button" disabled={!hasPatch || applied} onClick={() => { onApply(result.patch); setApplied(true) }} className="px-3 py-1.5 text-[12px] font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40">{applied ? 'Aplicado' : 'Aplicar regras'}</button>
+          </div>
+          {applied && <p className="text-[11px] text-gray-500">As seções abaixo já refletem as regras. Confira e salve o popup.</p>}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, successMessage, onSuccessMessageChange, errorMessage, onErrorMessageChange, trackingIds, onTrackingIdsChange }: {
   beh: PopupDesign['behavior']
   onChange: (b: PopupDesign['behavior']) => void
@@ -1896,9 +2900,43 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
     return () => { cancelled = true }
   }, [])
 
+  // Segmentos da org, para o gate de audiência. Só nome e id.
+  const [orgSegments, setOrgSegments] = useState<Array<{ id: string; name: string; segment_type?: string }>>([])
+  const [segmentsLoaded, setSegmentsLoaded] = useState(false)
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/segments?active_only=true')
+      .then(r => r.ok ? r.json() : { segments: [] })
+      .then(d => { if (!cancelled) setOrgSegments((d?.segments || []).map((s: any) => ({ id: s.id, name: s.name, segment_type: s.segment_type }))) })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setSegmentsLoaded(true) })
+    return () => { cancelled = true }
+  }, [])
+
+  // Templates aprovados de WhatsApp, para o pedido de confirmação.
+  const [waTemplates, setWaTemplates] = useState<Array<{ name: string; language: string; category: string; body_text: string | null; body_variables: number; buttons: any }>>([])
+  const [waTemplatesLoaded, setWaTemplatesLoaded] = useState(false)
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/whatsapp/templates?status=APPROVED')
+      .then(r => r.ok ? r.json() : { templates: [] })
+      .then(d => { if (!cancelled) setWaTemplates((d?.templates || []).map((t: any) => ({ name: t.name, language: t.language || 'pt_BR', category: String(t.category || '').toUpperCase(), body_text: t.body_text || null, body_variables: Number(t.body_variables || 0), buttons: t.buttons }))) })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setWaTemplatesLoaded(true) })
+    return () => { cancelled = true }
+  }, [])
+
   const d: any = beh.display || {}
   const freq = beh.frequency
   const vis = beh.visibility
+  const wa = beh.whatsapp || { doubleOptIn: false, templateName: '', templateLanguage: 'pt_BR', bodyVariables: [] }
+  const waTemplate = waTemplates.find(t => t.name === wa.templateName && (!wa.templateLanguage || t.language === wa.templateLanguage)) || waTemplates.find(t => t.name === wa.templateName) || null
+  const aud = beh.audienceTargeting || { mode: 'off' as const, segmentIds: [], listIds: [] }
+  const page = beh.page || { enabled: false, templates: [], productHandles: [], productTypes: [], productVendors: [], productTags: [], collectionHandles: [] }
+  const traffic = beh.traffic || { enabled: false, types: [] }
+  const smart = beh.smartTrigger || { enabled: false, threshold: 60, minDelaySec: 20 }
+  const cartHas = beh.cart?.contains || { enabled: false, match: 'any' as const, handles: [], types: [], vendors: [] }
+  const toggleIn = (list: string[], key: string) => list.includes(key) ? list.filter(k => k !== key) : [...list, key]
   const urls = beh.urls || { includeEnabled: false, includeUrls: [], excludeEnabled: false, excludeUrls: [] }
   const loc = beh.location || { includeEnabled: false, includeCountries: [], excludeEnabled: false, excludeCountries: [] }
   const utm = beh.utm || { storeOnConsent: false, filterEnabled: false, filters: [] }
@@ -1918,24 +2956,24 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
       {/* Sub-tabs: Display | Targeting | Post-submit */}
       <div className="flex border-b border-gray-200">
         <button onClick={() => setTab('display')} className={`flex-1 py-3 text-[12px] font-semibold transition-colors ${tab === 'display' ? 'text-gray-900 border-b-2 border-gray-900' : 'text-gray-400 hover:text-gray-600'}`}>
-          Exibicao
+          Exibição
         </button>
         <button onClick={() => setTab('targeting')} className={`flex-1 py-3 text-[12px] font-semibold transition-colors ${tab === 'targeting' ? 'text-gray-900 border-b-2 border-gray-900' : 'text-gray-400 hover:text-gray-600'}`}>
-          Segmentacao
+          Segmentação
         </button>
         <button onClick={() => setTab('postsubmit')} className={`flex-1 py-3 text-[12px] font-semibold transition-colors ${tab === 'postsubmit' ? 'text-gray-900 border-b-2 border-gray-900' : 'text-gray-400 hover:text-gray-600'}`}>
-          Apos envio
+          Após envio
         </button>
       </div>
 
       {tab === 'postsubmit' ? (
         <div>
-          <Section title="Acao apos envio" defaultOpen>
+          <Section title="Ação após envio" defaultOpen>
             <div className="space-y-2">
               {[
                 { value: 'show-success', label: 'Mostrar mensagem de sucesso', hint: 'Exibe a etapa de sucesso configurada dentro do popup.' },
-                { value: 'close', label: 'Fechar formulario', hint: 'Fecha o popup imediatamente apos o envio.' },
-                { value: 'redirect', label: 'Redirecionar para URL', hint: 'Envia o visitante para uma pagina especifica.' },
+                { value: 'close', label: 'Fechar formulário', hint: 'Fecha o popup imediatamente após o envio.' },
+                { value: 'redirect', label: 'Redirecionar para URL', hint: 'Envia o visitante para uma página especifica.' },
               ].map(opt => (
                 <label key={opt.value} className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${postSubmit.action === opt.value ? 'border-zinc-900 bg-gray-100' : 'border-gray-200 hover:border-gray-300'}`}>
                   <input type="radio" name="postAction" value={opt.value} checked={postSubmit.action === opt.value}
@@ -1961,7 +2999,7 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
 
             {postSubmit.action === 'show-success' && (
               <div className="pt-3 border-t border-gray-100 mt-3 space-y-3">
-                <Field label="Fechar automaticamente apos" hint="Segundos ate fechar o popup. Zero mantem aberto ate o visitante fechar.">
+                <Field label="Fechar automaticamente após" hint="Segundos ate fechar o popup. Zero mantem aberto ate o visitante fechar.">
                   <div className="flex items-center gap-2">
                     <input type="number" min={0} max={60} className={inp + ' w-24'}
                       value={postSubmit.closeDelay ?? 4}
@@ -1984,11 +3022,97 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
             </Field>
           </Section>
 
+          <Section title="Audiência">
+            <p className="text-[11px] text-gray-400 leading-snug -mt-1">Tags e listas aplicadas ao contato quando o formulário for enviado.</p>
+            <Field label="Tags (separadas por virgula)" hint="Ex: newsletter, promo. Adicionadas ao contato criado.">
+              <input className={inp} placeholder="newsletter, promo"
+                value={(beh.audience?.tags || []).join(', ')}
+                onChange={e => setG('audience', { tags: e.target.value.split(',').map(t => t.trim()).filter(Boolean) })} />
+            </Field>
+            <Field label="Lista de contatos (opcional)" hint="O contato sera adicionado a esta lista quando o formulário for enviado.">
+              {listsLoaded && orgLists.length > 0 ? (
+                <select className={sel}
+                  value={beh.audience?.listId || ''}
+                  onChange={e => setG('audience', { listId: e.target.value })}>
+                  <option value="">Sem lista</option>
+                  {orgLists.map(l => (
+                    <option key={l.id} value={l.id}>{l.name}</option>
+                  ))}
+                </select>
+              ) : listsLoaded && orgLists.length === 0 ? (
+                <div className="text-[11px] text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
+                  Nenhuma lista criada ainda. <a href="/contacts/lists" target="_blank" className="text-zinc-900 underline underline-offset-2 font-medium">Criar agora</a>.
+                </div>
+              ) : (
+                <input className={inp + ' opacity-60'} placeholder="Carregando..." disabled />
+              )}
+            </Field>
+            <ToggleRow label="Double opt-in" hint="Envia email de confirmacao antes de marcar como inscrito."
+              checked={!!beh.audience?.doubleOptIn}
+              onChange={v => setG('audience', { doubleOptIn: v })} />
+
+            <div className="pt-3 border-t border-gray-100">
+              <ToggleRow label="WhatsApp: confirmar por mensagem" hint="Quem marcar o consentimento de WhatsApp recebe um template pedindo para responder SIM. O opt-in só vale depois da resposta — e a régua no WhatsApp começa daí."
+                checked={!!wa.doubleOptIn}
+                onChange={v => setG('whatsapp', { ...wa, doubleOptIn: v })} />
+              {wa.doubleOptIn && (
+                <div className="mt-2 space-y-2">
+                  <Field label="Template de confirmação" hint="Precisa estar aprovado pela Meta na categoria Utilidade (UTILITY). Um botão de resposta rápida 'Confirmar' torna a resposta mais fácil.">
+                    {!waTemplatesLoaded ? (
+                      <input className={inp + ' opacity-60'} placeholder="Carregando..." disabled />
+                    ) : waTemplates.length === 0 ? (
+                      <div className="text-[11px] text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
+                        Nenhum template aprovado. <a href="/whatsapp/templates" target="_blank" className="text-zinc-900 underline underline-offset-2 font-medium">Criar template</a>.
+                      </div>
+                    ) : (
+                      <select className={sel} value={wa.templateName ? `${wa.templateName}|${wa.templateLanguage || ''}` : ''}
+                        onChange={e => {
+                          const [name, language] = e.target.value.split('|')
+                          const t = waTemplates.find(x => x.name === name && x.language === language) || waTemplates.find(x => x.name === name)
+                          setG('whatsapp', { ...wa, templateName: name || '', templateLanguage: t?.language || language || 'pt_BR', bodyVariables: Array.from({ length: t?.body_variables || 0 }, (_, i) => wa.bodyVariables?.[i] || (i === 0 ? '{{first_name}}' : '')) })
+                        }}>
+                        <option value="">Escolha um template</option>
+                        {waTemplates.map(t => (
+                          <option key={t.name + t.language} value={`${t.name}|${t.language}`}>{t.name} · {t.language} · {t.category === 'UTILITY' ? 'Utilidade' : t.category === 'MARKETING' ? 'Marketing' : t.category}</option>
+                        ))}
+                      </select>
+                    )}
+                  </Field>
+                  {wa.doubleOptIn && !wa.templateName && (
+                    <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">Sem template escolhido a confirmação fica desligada: o consentimento marcado no popup vale na hora, sem pedido no WhatsApp.</p>
+                  )}
+                  {waTemplatesLoaded && wa.templateName && !waTemplate && (
+                    <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">O template salvo ("{wa.templateName}") não está mais aprovado ou foi removido. Escolha outro — até lá o pedido não sai.</p>
+                  )}
+                  {waTemplate && waTemplate.category !== 'UTILITY' && (
+                    <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">Este template é de {waTemplate.category === 'MARKETING' ? 'Marketing' : waTemplate.category}. A Meta não permite marketing antes do opt-in, então o pedido não será enviado. Use um template de Utilidade.</p>
+                  )}
+                  {waTemplate?.body_text && (
+                    <p className="text-[11px] text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 whitespace-pre-wrap leading-snug">{waTemplate.body_text}</p>
+                  )}
+                  {waTemplate && waTemplate.body_variables > 0 && (
+                    <div className="space-y-1.5">
+                      <p className="text-[11px] font-bold text-gray-500 uppercase tracking-[0.08em]">Variáveis do corpo <span className="normal-case font-normal tracking-normal text-gray-400">({'{{first_name}}'}, {'{{form_name}}'}, {'{{store_name}}'})</span></p>
+                      {Array.from({ length: waTemplate.body_variables }, (_, i) => (
+                        <div key={i} className="flex items-center gap-2">
+                          <span className="text-[11px] font-mono text-gray-400 w-8">{'{{' + (i + 1) + '}}'}</span>
+                          <input className={inp} value={wa.bodyVariables?.[i] || ''} placeholder={i === 0 ? '{{first_name}}' : ''}
+                            onChange={e => { const next = [...(wa.bodyVariables || [])]; next[i] = e.target.value; setG('whatsapp', { ...wa, bodyVariables: next }) }} />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-[11px] text-gray-400 leading-snug">Valem como confirmação: SIM, CONFIRMAR, QUERO, ACEITO, OK, 1 ou o botão do template. Quem já tinha opt-in não recebe o pedido. Enquanto não responde, nenhuma campanha ou automação de marketing fala com a pessoa.</p>
+                </div>
+              )}
+            </div>
+          </Section>
+
           <Section title="Rastreamento (Pixels)">
             <p className="text-[11px] text-gray-400 leading-snug -mt-1">
-              Dispara eventos de conversao para Facebook Ads e Google Ads/Analytics quando o formulario e enviado. Deixe em branco para nao rastrear.
+              Dispara eventos de conversão para Facebook Ads e Google Ads/Analytics quando o formulário é enviado. Deixe em branco para não rastrear.
             </p>
-            <Field label="Facebook Pixel ID" hint="Numero do pixel (ex: 1234567890123456). Dispara o evento Lead.">
+            <Field label="Facebook Pixel ID" hint="Número do pixel (ex: 1234567890123456). Dispara o evento Lead.">
               <input className={inp} placeholder="1234567890123456"
                 value={trackingIds.facebook_pixel_id}
                 onChange={e => onTrackingIdsChange(s => ({ ...s, facebook_pixel_id: e.target.value }))} />
@@ -2008,11 +3132,11 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
       ) : tab === 'display' ? (
         <div>
           <Section title="Quando exibir" defaultOpen>
-            <ToggleRow label="Quando o visitante estiver saindo da pagina" hint="Detecta movimento do mouse em direcao a barra de enderecos."
+            <ToggleRow label="Quando o visitante estiver saindo da página" hint="Detecta movimento do mouse em direcao a barra de enderecos."
               checked={exitOn} onChange={v => setG('display', { exitEnabled: v })} />
 
             <div className="pt-3 border-t border-gray-100">
-              <ToggleRow label="Apos tempo decorrido" hint="Tempo que o visitante precisa permanecer na pagina."
+              <ToggleRow label="Após tempo decorrido" hint="Tempo que o visitante precisa permanecer na página."
                 checked={timeOn} onChange={v => setG('display', { timeEnabled: v })} />
               {timeOn && (
                 <div className="flex items-center gap-2 mt-2 ml-0">
@@ -2024,41 +3148,57 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
             </div>
 
             <div className="pt-3 border-t border-gray-100">
-              <ToggleRow label="Apos rolar uma certa quantidade" hint="Percentual de rolagem da pagina."
+              <ToggleRow label="Após rolar uma certa quantidade" hint="Percentual de rolagem da página."
                 checked={scrollOn} onChange={v => setG('display', { scrollEnabled: v })} />
               {scrollOn && (
                 <div className="flex items-center gap-2 mt-2">
                   <input type="number" min={0} max={100} className="w-20 border border-gray-200 rounded-lg px-2.5 py-1.5 text-[13px] focus:border-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
                     value={d.scrollPercent ?? 30} onChange={e => setG('display', { scrollPercent: +e.target.value })} />
-                  <span className="text-[12px] text-gray-500">% da pagina</span>
+                  <span className="text-[12px] text-gray-500">% da página</span>
                 </div>
               )}
             </div>
 
             <div className="pt-3 border-t border-gray-100">
-              <ToggleRow label="Apos visitar X paginas" hint="Numero minimo de paginas visitadas antes de exibir."
+              <ToggleRow label="Após visitar X páginas" hint="Número mínimo de páginas visitadas antes de exibir."
                 checked={pvOn} onChange={v => setG('display', { pageViewEnabled: v })} />
               {pvOn && (
                 <div className="flex items-center gap-2 mt-2">
                   <input type="number" min={1} max={50} className="w-20 border border-gray-200 rounded-lg px-2.5 py-1.5 text-[13px] focus:border-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
                     value={d.pageViewCount ?? 3} onChange={e => setG('display', { pageViewCount: +e.target.value })} />
-                  <span className="text-[12px] text-gray-500">paginas</span>
+                  <span className="text-[12px] text-gray-500">páginas</span>
                 </div>
               )}
             </div>
 
             <div className="pt-3 border-t border-gray-100">
-              <ToggleRow label="Exibir somente se TODAS as condicoes forem atendidas"
-                hint={d.matchAll ? 'Modo AND: todas as condicoes ativas precisam ser satisfeitas.' : 'Modo OR: qualquer condicao ativa dispara o popup.'}
+              <ToggleRow label="Exibir somente se TODAS as condições forem atendidas"
+                hint={d.matchAll ? 'Modo AND: todas as condições ativas precisam ser satisfeitas.' : 'Modo OR: qualquer condição ativa dispara o popup.'}
                 checked={!!d.matchAll} onChange={v => setG('display', { matchAll: v })} />
+            </div>
+
+            <div className="pt-3 border-t border-gray-100">
+              <ToggleRow label="Segunda chance por intenção" hint="Quem fechou o popup e depois mostra intenção de compra (rola bastante, fica na página, vê produtos, põe no carrinho) vê de novo — uma vez por sessão."
+                checked={!!smart.enabled} onChange={v => setG('smartTrigger', { ...smart, enabled: v })} />
+              {smart.enabled && (
+                <div className="mt-2 space-y-2">
+                  <Field label={`Intenção mínima · ${smart.threshold ?? 60}`} hint="Score de 0 a 100 somando rolagem, permanência, páginas vistas, produtos vistos, carrinho, visitante retornante e origem paga. 40 = cedo, 60 = equilibrado, 80 = só quem está quase comprando.">
+                    <input type="range" min={20} max={95} step={5} value={smart.threshold ?? 60} onChange={e => setG('smartTrigger', { ...smart, threshold: +e.target.value })} className="w-full accent-zinc-900" aria-label="Intenção mínima" />
+                    <div className="flex justify-between text-[10px] text-gray-400 -mt-1"><span>cedo</span><span>equilibrado</span><span>só quase comprando</span></div>
+                  </Field>
+                  <Field label="Nunca antes de" hint="Segundos desde o carregamento da página e desde o fechamento. Evita o popup voltando na cara de quem acabou de fechar.">
+                    <div className="relative w-28"><input type="number" min={5} max={300} className={inp + ' pr-8'} value={smart.minDelaySec ?? 20} onChange={e => setG('smartTrigger', { ...smart, minDelaySec: Math.max(5, Math.min(300, +e.target.value || 20)) })} /><span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-400">s</span></div>
+                  </Field>
+                </div>
+              )}
             </div>
           </Section>
 
-          <Section title="Frequencia">
-            <ToggleRow label="Nao mostrar novamente se o formulario foi enviado"
+          <Section title="Frequência">
+            <ToggleRow label="Não mostrar novamente se o formulário foi enviado"
               checked={freq.stopAfterSubmission} onChange={v => setG('frequency', { stopAfterSubmission: v })} />
             <div className="pt-2">
-              <Field label="Se o visitante fechar, mostrar novamente apos" hint="Numero de dias ate reaparecer.">
+              <Field label="Se o visitante fechar, mostrar novamente após" hint="Número de dias até reaparecer.">
                 <div className="flex items-center gap-2">
                   <input type="number" min={0} max={365} className={inp + ' w-24'}
                     value={freq.showAfterDays} onChange={e => setG('frequency', { showAfterDays: +e.target.value })} />
@@ -2068,12 +3208,12 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
             </div>
             <div className="pt-3 border-t border-gray-100">
               <ToggleRow label="Limite por visitante (anti-spam)"
-                hint="Limite por pessoa, independente de qual formulario. Usa o cookie __worder_id para identificar o mesmo visitante entre sessoes."
+                hint="Limite por pessoa, independente de qual formulário. Usa o cookie __worder_id para identificar o mesmo visitante entre sessões."
                 checked={!!freq.perVisitor?.enabled}
                 onChange={v => setG('frequency', { perVisitor: { ...(freq.perVisitor || {}), enabled: v } })} />
               {freq.perVisitor?.enabled && (
                 <div className="mt-2 grid grid-cols-2 gap-2">
-                  <Field label="Maximo de exibicoes">
+                  <Field label="Máximo de exibicoes">
                     <input type="number" min={1} max={20} className={inp}
                       value={freq.perVisitor?.maxShows ?? 1}
                       onChange={e => setG('frequency', { perVisitor: { ...(freq.perVisitor || {}), maxShows: +e.target.value } })} />
@@ -2125,6 +3265,31 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
             )}
           </Section>
 
+          <Section title="Prioridade">
+            <Field label="Quando outro popup também for elegível" hint="O de maior número aparece; o outro fica para a próxima visita. Só um popup por página.">
+              <div className="flex items-center gap-2">
+                <input type="number" min={0} max={100} step={1} className={inp + ' max-w-[100px]'}
+                  value={beh.priority ?? 0}
+                  onChange={e => onChange({ ...beh, priority: Math.max(0, Math.min(100, Math.round(Number(e.target.value) || 0))) })} />
+                <span className="text-[12px] text-gray-500">0 = normal · 100 = sempre primeiro</span>
+              </div>
+            </Field>
+          </Section>
+
+          <Section title="Grupo de controle">
+            <p className="text-[11px] text-gray-400 leading-snug">
+              Uma parte dos visitantes elegíveis não vê o popup. Comparar as compras dos dois grupos mostra quanto o popup gera de verdade — e não só quanto é creditado a ele. O sorteio é fixo por visitante.
+            </p>
+            <Field label="Visitantes no grupo de controle" hint="0 desliga. Entre 5% e 20% costuma bastar; o máximo é 50%.">
+              <div className="flex items-center gap-2">
+                <input type="number" min={0} max={50} step={1} className={inp + ' max-w-[100px]'}
+                  value={beh.experiment?.holdoutPercent ?? 0}
+                  onChange={e => setG('experiment', { holdoutPercent: Math.max(0, Math.min(50, Math.round(Number(e.target.value) || 0))) })} />
+                <span className="text-[12px] text-gray-500">%</span>
+              </div>
+            </Field>
+          </Section>
+
           <Section title="Perfil progressivo">
             <p className="text-[11px] text-gray-400 leading-snug -mt-1 mb-3">
               Esconde campos que o visitante ja preencheu em visitas anteriores.
@@ -2135,7 +3300,7 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
               onChange={v => onChange({ ...beh, progressiveProfiling: { ...(beh as any).progressiveProfiling, enabled: v } })} />
             {(beh as any).progressiveProfiling?.enabled && (
               <div className="space-y-2 mt-2">
-                <ToggleRow label="Esconder campos ja conhecidos" hint="Ex: se ja temos o email, nao mostra o campo email."
+                <ToggleRow label="Esconder campos ja conhecidos" hint="Ex: se ja temos o email, não mostra o campo email."
                   checked={(beh as any).progressiveProfiling?.hideKnownFields !== false}
                   onChange={v => onChange({ ...beh, progressiveProfiling: { ...(beh as any).progressiveProfiling, hideKnownFields: v } })} />
                 <ToggleRow label="Pre-preencher campos conhecidos" hint="Mostra o campo com o valor existente preenchido."
@@ -2163,21 +3328,67 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
         </div>
       ) : (
         <div>
+          <Section title="Descrever com IA" defaultOpen>
+            <AiTargetingBox formId={formId} onApply={patch => onChange(mergeBehaviorPatch(beh, patch))} />
+          </Section>
           <Section title="Visitantes" defaultOpen>
-            <Field label="Quem deve ver o formulario">
+            <Field label="Quem deve ver o formulário">
               <select className={sel} value={vis.visitorType} onChange={e => setG('visibility', { visitorType: e.target.value as any })}>
                 <option value="all">Todos os visitantes</option>
                 <option value="new">Somente visitantes novos</option>
                 <option value="returning">Somente visitantes retornantes</option>
               </select>
             </Field>
-            <ToggleRow label="Nao mostrar a inscritos existentes" hint="Oculta para visitantes ja cadastrados."
+            <ToggleRow label="Não mostrar a inscritos existentes" hint="Oculta para visitantes ja cadastrados."
               checked={vis.hideFromSubscribers} onChange={v => setG('visibility', { hideFromSubscribers: v })} />
+          </Section>
+
+          <Section title="Segmentos e listas">
+            <p className="text-[11px] text-gray-400 leading-snug -mt-1">
+              Vale para visitantes que já reconhecemos (cookie, link de e-mail ou WhatsApp, login na loja). Quem é desconhecido não está em segmento nenhum.
+            </p>
+            <Field label="Regra">
+              <select className={sel} value={aud.mode} onChange={e => setG('audienceTargeting', { ...aud, mode: e.target.value })}>
+                <option value="off">Não filtrar por segmento</option>
+                <option value="include">Mostrar somente a quem está em…</option>
+                <option value="exclude">Mostrar a todos, exceto quem está em…</option>
+              </select>
+            </Field>
+            {aud.mode !== 'off' && (
+              <div className="space-y-3">
+                <div>
+                  <p className="text-[11px] font-bold text-gray-500 uppercase tracking-[0.08em] mb-1.5">Segmentos</p>
+                  {!segmentsLoaded ? (
+                    <p className="text-[11px] text-gray-400">Carregando…</p>
+                  ) : orgSegments.length === 0 ? (
+                    <div className="text-[11px] text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
+                      Nenhum segmento ainda. <a href="/contacts/segments" target="_blank" className="text-zinc-900 underline underline-offset-2 font-medium">Criar segmento</a>.
+                    </div>
+                  ) : (
+                    <CheckList items={orgSegments} selected={aud.segmentIds} onToggle={id => setG('audienceTargeting', { ...aud, segmentIds: toggleIn(aud.segmentIds, id) })} />
+                  )}
+                </div>
+                <div>
+                  <p className="text-[11px] font-bold text-gray-500 uppercase tracking-[0.08em] mb-1.5">Listas</p>
+                  {!listsLoaded ? (
+                    <p className="text-[11px] text-gray-400">Carregando…</p>
+                  ) : orgLists.length === 0 ? (
+                    <div className="text-[11px] text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">Nenhuma lista criada ainda.</div>
+                  ) : (
+                    <CheckList items={orgLists} selected={aud.listIds} onToggle={id => setG('audienceTargeting', { ...aud, listIds: toggleIn(aud.listIds, id) })} />
+                  )}
+                </div>
+                {aud.segmentIds.length + aud.listIds.length === 0 && (
+                  <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">Escolha ao menos um segmento ou lista — sem isso a regra não faz nada.</p>
+                )}
+                <p className="text-[11px] text-gray-400 leading-snug">Segmentos dinâmicos são reavaliados a cada 15 minutos; listas valem na hora.</p>
+              </div>
+            )}
           </Section>
 
           <Section title="Carrinho">
             <p className="text-[11px] text-gray-400 leading-snug -mt-1">
-              Mostra o formulario somente quando o carrinho do visitante atende os criterios. Le <code className="px-1 bg-gray-100 rounded text-[10px]">/cart.js</code> da Shopify.
+              Mostra o formulário somente quando o carrinho do visitante atende os critérios. Le <code className="px-1 bg-gray-100 rounded text-[10px]">/cart.js</code> da Shopify.
             </p>
             <ToggleRow label="Filtrar por valor do carrinho"
               checked={!!(beh.cart && beh.cart.enabled)}
@@ -2185,20 +3396,20 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
             {beh.cart?.enabled && (
               <div className="mt-2 space-y-2">
                 <div className="grid grid-cols-2 gap-2">
-                  <Field label="Valor minimo" hint="Em moeda da loja. 0 = sem minimo.">
+                  <Field label="Valor mínimo" hint="Em moeda da loja. 0 = sem mínimo.">
                     <input type="number" min={0} step={0.01} className={inp}
                       placeholder="0"
                       value={beh.cart?.minTotal ?? ''}
                       onChange={e => setG('cart', { minTotal: e.target.value === '' ? 0 : +e.target.value })} />
                   </Field>
-                  <Field label="Valor maximo" hint="0 = sem maximo.">
+                  <Field label="Valor máximo" hint="0 = sem máximo.">
                     <input type="number" min={0} step={0.01} className={inp}
                       placeholder="0"
                       value={beh.cart?.maxTotal ?? ''}
                       onChange={e => setG('cart', { maxTotal: e.target.value === '' ? 0 : +e.target.value })} />
                   </Field>
                 </div>
-                <Field label="Minimo de itens" hint="Numero minimo de produtos no carrinho. 0 = sem minimo.">
+                <Field label="Mínimo de itens" hint="Número mínimo de produtos no carrinho. 0 = sem mínimo.">
                   <input type="number" min={0} className={inp + ' w-24'}
                     placeholder="0"
                     value={beh.cart?.minItems ?? ''}
@@ -2206,6 +3417,32 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
                 </Field>
               </div>
             )}
+            <div className="pt-3 border-t border-gray-100">
+              <ToggleRow label="Filtrar pelo que está no carrinho" hint="Por handle do produto, tipo ou fornecedor. Aceita * como coringa."
+                checked={!!cartHas.enabled}
+                onChange={v => setG('cart', { contains: { ...cartHas, enabled: v } })} />
+              {cartHas.enabled && (
+                <div className="mt-2 space-y-2">
+                  <Field label="Mostrar quando o carrinho">
+                    <select className={sel} value={cartHas.match} onChange={e => setG('cart', { contains: { ...cartHas, match: e.target.value } })}>
+                      <option value="any">tem algum destes produtos</option>
+                      <option value="none">não tem nenhum destes produtos</option>
+                    </select>
+                  </Field>
+                  <Field label="Handles de produto" hint="Um por linha. Ex.: kit-skincare, camiseta-*">
+                    <LinesTextarea rows={2} className={inp + ' font-mono text-[11px]'} value={cartHas.handles} onChange={v => setG('cart', { contains: { ...cartHas, handles: v } })} />
+                  </Field>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Field label="Tipos de produto">
+                      <LinesTextarea rows={2} className={inp + ' font-mono text-[11px]'} value={cartHas.types} onChange={v => setG('cart', { contains: { ...cartHas, types: v } })} />
+                    </Field>
+                    <Field label="Fornecedores">
+                      <LinesTextarea rows={2} className={inp + ' font-mono text-[11px]'} value={cartHas.vendors} onChange={v => setG('cart', { contains: { ...cartHas, vendors: v } })} />
+                    </Field>
+                  </div>
+                </div>
+              )}
+            </div>
           </Section>
 
           <Section title="URLs">
@@ -2213,78 +3450,93 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
 
             <ToggleRow label="Exibir somente em certas URLs" checked={urls.includeEnabled} onChange={v => setG('urls', { includeEnabled: v })} />
             {urls.includeEnabled && (
-              <textarea rows={3} className={inp + ' font-mono text-[11px] mt-2'}
-                placeholder="/produtos/*&#10;/promocao"
-                value={urls.includeUrls.join('\n')}
-                onChange={e => setG('urls', { includeUrls: e.target.value.split('\n').map(u => u.trim()).filter(Boolean) })} />
+              <LinesTextarea rows={3} className={inp + ' font-mono text-[11px] mt-2'} placeholder="/produtos/*&#10;/promocao" value={urls.includeUrls} onChange={v => setG('urls', { includeUrls: v })} />
             )}
 
             <div className="pt-3 border-t border-gray-100">
-              <ToggleRow label="Nao exibir em certas URLs" checked={urls.excludeEnabled} onChange={v => setG('urls', { excludeEnabled: v })} />
+              <ToggleRow label="Não exibir em certas URLs" checked={urls.excludeEnabled} onChange={v => setG('urls', { excludeEnabled: v })} />
               {urls.excludeEnabled && (
-                <textarea rows={3} className={inp + ' font-mono text-[11px] mt-2'}
-                  placeholder="/checkout&#10;/admin/*"
-                  value={urls.excludeUrls.join('\n')}
-                  onChange={e => setG('urls', { excludeUrls: e.target.value.split('\n').map(u => u.trim()).filter(Boolean) })} />
+                <LinesTextarea rows={3} className={inp + ' font-mono text-[11px] mt-2'} placeholder="/checkout&#10;/admin/*" value={urls.excludeUrls} onChange={v => setG('urls', { excludeUrls: v })} />
               )}
             </div>
           </Section>
 
-          <Section title="Localizacao">
-            <p className="text-[11px] text-gray-400 leading-snug -mt-1">Codigo do pais ISO (BR, US, PT). Um por linha.</p>
+          <Section title="Página">
+            <p className="text-[11px] text-gray-400 leading-snug -mt-1">
+              Pelo tipo de página da Shopify e, em páginas de produto ou coleção, pelo que está sendo visto. Precisa do bloco de tema da Worder ativo; sem ele, deduz pela URL.
+            </p>
+            <ToggleRow label="Filtrar pelo contexto da página" checked={page.enabled} onChange={v => setG('page', { ...page, enabled: v })} />
+            {page.enabled && (
+              <div className="mt-2 space-y-3">
+                <div>
+                  <p className="text-[11px] font-bold text-gray-500 uppercase tracking-[0.08em] mb-1.5">Tipos de página <span className="normal-case font-normal tracking-normal text-gray-400">(nenhum = todos)</span></p>
+                  <div className="grid grid-cols-2 gap-x-2 gap-y-1">
+                    {PAGE_TEMPLATES.map(t => (
+                      <label key={t.key} className="flex items-center gap-2 text-[12px] text-gray-700 cursor-pointer py-0.5">
+                        <input type="checkbox" className="rounded border-gray-300" checked={page.templates.includes(t.key)}
+                          onChange={() => setG('page', { ...page, templates: toggleIn(page.templates, t.key) })} />
+                        {t.label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div className="pt-3 border-t border-gray-100 space-y-2">
+                  <p className="text-[11px] font-bold text-gray-500 uppercase tracking-[0.08em]">Produto em vista <span className="normal-case font-normal tracking-normal text-gray-400">(basta bater um)</span></p>
+                  <Field label="Handles" hint="Um por linha. Aceita * como coringa."><LinesTextarea rows={2} className={inp + ' font-mono text-[11px]'} value={page.productHandles} onChange={v => setG('page', { ...page, productHandles: v })} /></Field>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Field label="Tipos"><LinesTextarea rows={2} className={inp + ' font-mono text-[11px]'} value={page.productTypes} onChange={v => setG('page', { ...page, productTypes: v })} /></Field>
+                    <Field label="Fornecedores"><LinesTextarea rows={2} className={inp + ' font-mono text-[11px]'} value={page.productVendors} onChange={v => setG('page', { ...page, productVendors: v })} /></Field>
+                  </div>
+                  <Field label="Tags do produto"><LinesTextarea rows={2} className={inp + ' font-mono text-[11px]'} value={page.productTags} onChange={v => setG('page', { ...page, productTags: v })} /></Field>
+                </div>
+                <div className="pt-3 border-t border-gray-100">
+                  <Field label="Coleção em vista" hint="Handles, um por linha."><LinesTextarea rows={2} className={inp + ' font-mono text-[11px]'} value={page.collectionHandles} onChange={v => setG('page', { ...page, collectionHandles: v })} /></Field>
+                </div>
+              </div>
+            )}
+          </Section>
 
-            <ToggleRow label="Exibir em certos paises" checked={loc.includeEnabled} onChange={v => setG('location', { includeEnabled: v })} />
+          <Section title="Origem do tráfego">
+            <p className="text-[11px] text-gray-400 leading-snug -mt-1">
+              Classificada uma vez por sessão pelos parâmetros da URL de entrada e pelo site de origem. Vale nas páginas seguintes da mesma visita.
+            </p>
+            <ToggleRow label="Mostrar só para certas origens" checked={traffic.enabled} onChange={v => setG('traffic', { ...traffic, enabled: v })} />
+            {traffic.enabled && (
+              <div className="mt-2 space-y-1">
+                {TRAFFIC_TYPES.map(t => (
+                  <label key={t.key} className="flex items-start gap-2 text-[12px] text-gray-700 cursor-pointer py-1">
+                    <input type="checkbox" className="rounded border-gray-300 mt-0.5" checked={traffic.types.includes(t.key)}
+                      onChange={() => setG('traffic', { ...traffic, types: toggleIn(traffic.types, t.key) })} />
+                    <span><span className="font-medium">{t.label}</span><span className="block text-[11px] text-gray-400 leading-snug">{t.hint}</span></span>
+                  </label>
+                ))}
+                {traffic.types.length === 0 && (
+                  <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mt-1">Marque ao menos uma origem — sem isso o filtro não faz nada.</p>
+                )}
+              </div>
+            )}
+          </Section>
+
+          <Section title="Localização">
+            <p className="text-[11px] text-gray-400 leading-snug -mt-1">Código do país ISO (BR, US, PT). Um por linha.</p>
+
+            <ToggleRow label="Exibir em certos países" checked={loc.includeEnabled} onChange={v => setG('location', { includeEnabled: v })} />
             {loc.includeEnabled && (
-              <textarea rows={2} className={inp + ' font-mono text-[11px] mt-2 uppercase'}
-                placeholder="BR&#10;PT"
-                value={loc.includeCountries.join('\n')}
-                onChange={e => setG('location', { includeCountries: e.target.value.split('\n').map(c => c.trim().toUpperCase()).filter(Boolean) })} />
+              <LinesTextarea rows={2} className={inp + ' font-mono text-[11px] mt-2'} placeholder="BR&#10;PT" value={loc.includeCountries} transform={c => c.toUpperCase()} onChange={v => setG('location', { includeCountries: v })} />
             )}
 
             <div className="pt-3 border-t border-gray-100">
-              <ToggleRow label="Nao exibir em certos paises" checked={loc.excludeEnabled} onChange={v => setG('location', { excludeEnabled: v })} />
+              <ToggleRow label="Não exibir em certos países" checked={loc.excludeEnabled} onChange={v => setG('location', { excludeEnabled: v })} />
               {loc.excludeEnabled && (
-                <textarea rows={2} className={inp + ' font-mono text-[11px] mt-2 uppercase'}
-                  placeholder="US"
-                  value={loc.excludeCountries.join('\n')}
-                  onChange={e => setG('location', { excludeCountries: e.target.value.split('\n').map(c => c.trim().toUpperCase()).filter(Boolean) })} />
+                <LinesTextarea rows={2} className={inp + ' font-mono text-[11px] mt-2'} placeholder="US" value={loc.excludeCountries} transform={c => c.toUpperCase()} onChange={v => setG('location', { excludeCountries: v })} />
               )}
             </div>
           </Section>
 
-          <Section title="Audiencia">
-            <p className="text-[11px] text-gray-400 leading-snug -mt-1">Tags e listas aplicadas ao contato quando o formulario for enviado.</p>
-            <Field label="Tags (separadas por virgula)" hint="Ex: newsletter, promo. Adicionadas ao contato criado.">
-              <input className={inp} placeholder="newsletter, promo"
-                value={(beh.audience?.tags || []).join(', ')}
-                onChange={e => setG('audience', { tags: e.target.value.split(',').map(t => t.trim()).filter(Boolean) })} />
-            </Field>
-            <Field label="Lista de contatos (opcional)" hint="O contato sera adicionado a esta lista quando o formulario for enviado.">
-              {listsLoaded && orgLists.length > 0 ? (
-                <select className={sel}
-                  value={beh.audience?.listId || ''}
-                  onChange={e => setG('audience', { listId: e.target.value })}>
-                  <option value="">Sem lista</option>
-                  {orgLists.map(l => (
-                    <option key={l.id} value={l.id}>{l.name}</option>
-                  ))}
-                </select>
-              ) : listsLoaded && orgLists.length === 0 ? (
-                <div className="text-[11px] text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
-                  Nenhuma lista criada ainda. <a href="/contacts/lists" target="_blank" className="text-zinc-900 underline underline-offset-2 font-medium">Criar agora</a>.
-                </div>
-              ) : (
-                <input className={inp + ' opacity-60'} placeholder="Carregando..." disabled />
-              )}
-            </Field>
-            <ToggleRow label="Double opt-in" hint="Envia email de confirmacao antes de marcar como inscrito."
-              checked={!!beh.audience?.doubleOptIn}
-              onChange={v => setG('audience', { doubleOptIn: v })} />
-          </Section>
 
-          <Section title="Parametros UTM">
+          <Section title="Parâmetros UTM">
             <ToggleRow label="Salvar UTMs no perfil do contato ao confirmar"
-              hint="Quando o visitante enviar o formulario, os parametros UTM serao salvos em contacts.utm_data."
+              hint="Quando o visitante enviar o formulário, os parametros UTM serao salvos em contacts.utm_data."
               checked={utm.storeOnConsent} onChange={v => setG('utm', { storeOnConsent: v })} />
 
             <div className="pt-3 border-t border-gray-100">
@@ -2319,6 +3571,7 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
               )}
             </div>
           </Section>
+
         </div>
       )}
     </div>
@@ -2342,11 +3595,11 @@ function ThemePanel({ design, onChange, onOpenMedia }: { design: PopupDesign; on
   return (
     <div>
       <Section title="Layout" defaultOpen>
-        <Field label="Tipo de formulario">
+        <Field label="Tipo de formulário">
           <select className={sel} value={design.formType} onChange={e => onChange({ ...design, formType: e.target.value as any })}>
             <option value="popup">Popup</option>
             <option value="flyout">Flyout</option>
-            <option value="fullpage">Pagina inteira</option>
+            <option value="fullpage">Página inteira</option>
             <option value="embed">Embed</option>
             <option value="banner">Banner</option>
           </select>
@@ -2368,13 +3621,28 @@ function ThemePanel({ design, onChange, onOpenMedia }: { design: PopupDesign; on
             <option value="'Open Sans', sans-serif">Open Sans</option>
           </select>
         </Field>
-        <Field label="Animacao">
+        <Field label="Animação">
           <select className={sel} value={s.animation} onChange={e => setS({ animation: e.target.value as any })}>
             <option value="fade">Fade</option>
             <option value="slide-up">Slide up</option>
             <option value="none">Nenhuma</option>
           </select>
         </Field>
+
+        {design.steps.length > 1 && (
+          <div className="rounded-lg border border-gray-200 p-2.5 space-y-2">
+            <ToggleRow label="Barra de progresso" hint="Mostra em que etapa a pessoa está. Só aparece com duas ou mais etapas."
+              checked={!!s.progress?.enabled}
+              onChange={v => setS({ progress: { ...(s.progress || {}), enabled: v } })} />
+            {s.progress?.enabled && (
+              <div className="grid grid-cols-2 gap-2">
+                <PanelColorField label="Cor" value={s.progress?.color || '#F97316'} onChange={v => setS({ progress: { ...(s.progress || { enabled: true }), color: v } })} />
+                <PanelColorField label="Trilho" value={s.progress?.trackColor || '#E5E7EB'} onChange={v => setS({ progress: { ...(s.progress || { enabled: true }), trackColor: v } })} />
+                <Field label="Altura"><div className="relative"><input type="number" min={2} max={16} className={inp + ' pr-8'} value={s.progress?.height ?? 4} onChange={e => setS({ progress: { ...(s.progress || { enabled: true }), height: Math.min(16, Math.max(2, +e.target.value || 4)) } })} /><span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-400">px</span></div></Field>
+              </div>
+            )}
+          </div>
+        )}
 
         <div>
           <p className="text-[12px] font-medium text-gray-700 mb-2">Padding interno</p>
@@ -2436,7 +3704,7 @@ function ThemePanel({ design, onChange, onOpenMedia }: { design: PopupDesign; on
                 <span className="text-[12px] text-gray-500">Escolher imagem da biblioteca</span>
               </button>
             )}
-            <Field label="Posicao">
+            <Field label="Posição">
               <div className="flex border border-gray-200 rounded-lg overflow-hidden">
                 <button onClick={() => setSi({ position: 'left' })} className={`flex-1 py-2 text-[12px] font-medium transition-colors ${s.sideImage.position === 'left' ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>Esquerda</button>
                 <button onClick={() => setSi({ position: 'right' })} className={`flex-1 py-2 text-[12px] font-medium transition-colors ${s.sideImage.position === 'right' ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>Direita</button>
@@ -2447,8 +3715,8 @@ function ThemePanel({ design, onChange, onOpenMedia }: { design: PopupDesign; on
         )}
       </Section>
 
-      <Section title="Botao fechar">
-        <ToggleRow label="Mostrar botao fechar" checked={s.closeButton.show} onChange={v => setCb({ show: v })} />
+      <Section title="Botão fechar">
+        <ToggleRow label="Mostrar botão fechar" checked={s.closeButton.show} onChange={v => setCb({ show: v })} />
         {s.closeButton.show && (
           <div className="mt-3 space-y-3">
             <Field label="Cor do botão">
@@ -2468,7 +3736,6 @@ function ThemePanel({ design, onChange, onOpenMedia }: { design: PopupDesign; on
 function SortablePopupBlock({ block, isSelected, onSelect, onDelete, onDuplicate, onContentChange }: {
   block: Block; isSelected: boolean; onSelect: () => void; onDelete: () => void; onDuplicate: () => void
   onContentChange: (key: string, value: string) => void
-  onPropChange?: (key: string, value: any) => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: block.id })
   return (
@@ -2512,7 +3779,7 @@ import { ColorPicker } from '@/components/email-builder/ui/ColorPicker'
 import { useStoreStore } from '@/stores'
 
 // ── Step Bar (Omnisend-style, centered, editable step names) ──────────────────
-function StepBar({ steps, activeIdx, showSuccess, onSelectStep, onSelectSuccess, onRenameStep, onCloneStep, onDeleteStep, onAddStep }: {
+function StepBar({ steps, activeIdx, showSuccess, onSelectStep, onSelectSuccess, onRenameStep, onCloneStep, onDeleteStep, onAddStep, onSetStepKind }: {
   steps: Step[]
   activeIdx: number
   showSuccess: boolean
@@ -2522,6 +3789,7 @@ function StepBar({ steps, activeIdx, showSuccess, onSelectStep, onSelectSuccess,
   onCloneStep: (i: number) => void
   onDeleteStep: (i: number) => void
   onAddStep: () => void
+  onSetStepKind?: (i: number, kind: Step['kind']) => void
 }) {
   const [editingIdx, setEditingIdx] = useState<number | null>(null)
   const [draft, setDraft] = useState('')
@@ -2569,9 +3837,12 @@ function StepBar({ steps, activeIdx, showSuccess, onSelectStep, onSelectSuccess,
                   <button
                     onClick={() => onSelectStep(i)}
                     onDoubleClick={() => startEdit(i, step.name)}
-                    title="Duplo clique para renomear"
+                    title={`${step.kind ? STEP_KIND_LABELS[step.kind] + ' · ' : ''}Duplo clique para renomear`}
                     className={`px-2 py-1.5 text-[12px] font-medium whitespace-nowrap transition-colors ${isActive ? 'text-white' : 'text-gray-600'}`}>
                     {step.name}
+                    {step.kind && step.kind !== 'form' && (
+                      <span className={`ml-1.5 text-[9px] font-semibold uppercase tracking-wide ${isActive ? 'text-white/60' : 'text-gray-400'}`}>{STEP_KIND_LABELS[step.kind]}</span>
+                    )}
                   </button>
                 )}
                 {isActive && !isEditing && (
@@ -2591,6 +3862,18 @@ function StepBar({ steps, activeIdx, showSuccess, onSelectStep, onSelectSuccess,
                           className="flex items-center gap-2 w-full px-3 py-2 text-[12px] text-gray-700 hover:bg-gray-50 transition-colors">
                           <Copy className="w-3.5 h-3.5 text-gray-400" /> Duplicar etapa
                         </button>
+                        {onSetStepKind && (
+                          <div className="px-3 py-2 border-t border-gray-100">
+                            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Tipo da etapa</p>
+                            <select className="w-full text-[12px] border border-gray-200 rounded-md px-2 py-1 bg-white text-gray-700"
+                              value={step.kind || 'form'}
+                              onChange={e => onSetStepKind(i, e.target.value as Step['kind'])}>
+                              {(Object.keys(STEP_KIND_LABELS) as Array<NonNullable<Step['kind']>>).map(k => (
+                                <option key={k} value={k}>{STEP_KIND_LABELS[k]}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
                         {steps.length > 1 && (
                           <>
                             <div className="h-px bg-gray-100 my-1" />
@@ -2655,7 +3938,12 @@ export default function PopupEditorPage() {
   const [dirty, setDirty] = useState(false)
   const [toast, setToast] = useState<{ msg: string; type: 'error' | 'success' } | null>(null)
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [formStatus, setFormStatus] = useState<'draft' | 'published'>('draft')
+  const [formStatus, setFormStatus] = useState<'draft' | 'published' | 'paused'>('draft')
+  // Variante de experimento: edita o design, mas quem vai ao ar é o pai.
+  const [abParent, setAbParent] = useState<{ id: string; name: string; label: string } | null>(null)
+  // Loja do popup como veio do servidor: salvar só liga uma loja quando não há nenhuma.
+  const [formStoreId, setFormStoreId] = useState<string | null>(null)
+  const [showExperiment, setShowExperiment] = useState(false)
   const [formName, setFormName] = useState('Popup sem título')
   // Tracking pixel IDs live on the crm_forms row (not in design_json) so
   // the public popup script can pull them server-side and fire fbq/gtag
@@ -2689,6 +3977,22 @@ export default function PopupEditorPage() {
   // crash the canvas. Steps are also repaired on load — this is the belt.
   const activeStep: Step = (showSuccess ? design.successStep : (design.steps[activeStepIdx] ?? design.steps[0])) ?? EMPTY_FALLBACK_STEP
   const selectedBlock = activeStep?.blocks.find(b => b.id === selectedBlockId) ?? null
+  // No modo de visualização, {{offer}} vira a oferta base (o runtime troca pela oferta escolhida).
+  const previewOfferLabel = useMemo(() => designOfferLabel([...design.steps, design.successStep].filter(Boolean) as Step[]), [design.steps, design.successStep])
+  const previewPrizeLabel = useMemo(() => designPrizeLabel(design.steps), [design.steps])
+  // O que o editor de blocos precisa saber do popup inteiro: o bloco de
+  // cupom (níveis e oferta base, para os prêmios do jogo) e quantos jogos há.
+  const designHints = useMemo(() => {
+    const all = [...design.steps, design.successStep].filter(Boolean).flatMap(st => st.blocks || [])
+    const cp = all.find(b => b.type === 'coupon')
+    return {
+      hasCoupon: !!cp,
+      // A mesma leitura do servidor: nível sem id não existe para o jogo.
+      couponTiers: (Array.isArray(cp?.props?.tiers) ? cp!.props.tiers.filter((t: any) => t && String(t.id || '').replace(/[^a-zA-Z0-9_-]/g, '')) : []) as any[],
+      baseOfferLabel: cp ? offerLabelOf(cp.props) : '',
+      gameBlocks: all.filter(b => b.type === 'wheel' || b.type === 'scratch').length,
+    }
+  }, [design.steps, design.successStep])
 
   // Drop-zone state for HTML5-drag from the block palette. dropIndicatorIdx
   // is the insertion index inside the active step (0 = before first block,
@@ -2759,10 +4063,15 @@ export default function PopupEditorPage() {
       const data = await r.json()
       const form = data.form || data
       if (form.name) setFormName(form.name)
+      setFormStoreId(form.store_id || null)
       let nextDesign: PopupDesign = defaultDesign
       if (form.design_json && Object.keys(form.design_json).length > 0) {
         // Deep-merge to preserve new default fields (styles/behavior sub-objects)
-        const saved = form.design_json
+        // O runtime lê a coluna behavior antes do design_json.behavior; o
+        // editor precisa partir do mesmo lugar, senão "aplicar a vencedora"
+        // (que só copia design_json) faria o próximo salvar reverter regras.
+        const colBehavior = form.behavior && typeof form.behavior === 'object' && Object.keys(form.behavior).length ? form.behavior : null
+        const saved = colBehavior ? { ...form.design_json, behavior: colBehavior } : form.design_json
         const merged: PopupDesign = {
           ...defaultDesign,
           ...saved,
@@ -2793,7 +4102,16 @@ export default function PopupEditorPage() {
             location: { ...defaultDesign.behavior.location!, ...((saved.behavior || {}).location || {}) },
             utm: { ...defaultDesign.behavior.utm!, ...((saved.behavior || {}).utm || {}) },
             clickOutsideClose: { ...defaultDesign.behavior.clickOutsideClose!, ...((saved.behavior || {}).clickOutsideClose || {}) },
-            cart: { ...defaultDesign.behavior.cart!, ...((saved.behavior || {}).cart || {}) },
+            cart: {
+              ...defaultDesign.behavior.cart!,
+              ...((saved.behavior || {}).cart || {}),
+              contains: { ...defaultDesign.behavior.cart!.contains!, ...(((saved.behavior || {}).cart || {}).contains || {}) },
+            },
+            audienceTargeting: { ...defaultDesign.behavior.audienceTargeting!, ...((saved.behavior || {}).audienceTargeting || {}) },
+            smartTrigger: { ...defaultDesign.behavior.smartTrigger!, ...((saved.behavior || {}).smartTrigger || {}) },
+            page: { ...defaultDesign.behavior.page!, ...((saved.behavior || {}).page || {}) },
+            traffic: { ...defaultDesign.behavior.traffic!, ...((saved.behavior || {}).traffic || {}) },
+            whatsapp: { ...defaultDesign.behavior.whatsapp!, ...((saved.behavior || {}).whatsapp || {}) },
           },
           postSubmit: { ...defaultDesign.postSubmit!, ...(saved.postSubmit || {}) },
           successMessage: saved.successMessage || form.success_message || '',
@@ -2839,7 +4157,12 @@ export default function PopupEditorPage() {
       // not to a broken empty stack.
       setHist(historySeed(JSON.stringify(nextDesign)))
       setDirty(false)
-      if (form.status) setFormStatus(form.status === 'published' ? 'published' : 'draft')
+      if (form.status) setFormStatus(form.status === 'published' ? 'published' : form.status === 'paused' ? 'paused' : 'draft')
+      if (form.ab_parent_id) {
+        let parentName = ''
+        try { const pr = await fetch(`/api/forms/${form.ab_parent_id}`); const pd = await pr.json(); parentName = pd?.form?.name || pd?.name || '' } catch {}
+        setAbParent({ id: form.ab_parent_id, name: parentName, label: form.ab_variant || 'B' })
+      } else setAbParent(null)
       // Hydrate pixel IDs from top-level columns. Empty string is the
       // controlled-input-friendly default; null/undefined from the API
       // would put React in uncontrolled mode and warn.
@@ -2888,7 +4211,7 @@ export default function PopupEditorPage() {
           // the form was created with store_id=NULL because currentStore was still
           // hydrating when the merchant clicked Create — without this, the popup
           // is invisible in the per-store list and stuck as orphan forever.
-          ...(currentStore?.id ? { store_id: currentStore.id } : {}),
+          ...(!formStoreId && currentStore?.id ? { store_id: currentStore.id } : {}),
         }),
       })
       if (!res.ok) {
@@ -2901,13 +4224,14 @@ export default function PopupEditorPage() {
         return false
       }
       setDirty(false)
+      if (!formStoreId && currentStore?.id) setFormStoreId(currentStore.id)
       showToast('Alterações salvas', 'success')
       return true
     } catch {
       showToast('Não foi possível salvar — tente novamente', 'error')
       return false
     } finally { setSaving(false) }
-  }, [formId, design, formStatus, formName, currentStore?.id, trackingIds, designLoaded, showToast])
+  }, [formId, design, formStatus, formName, currentStore?.id, formStoreId, trackingIds, designLoaded, showToast])
 
   // Publish/unpublish — optimistic toggle WITH rollback: awaits the response
   // and reverts + toasts on failure (e.g. the server pack's 400 when a visual
@@ -2915,7 +4239,16 @@ export default function PopupEditorPage() {
   const handlePublish = useCallback(async () => {
     if (!designLoaded || publishing) return
     const prevStatus = formStatus
-    const newStatus = prevStatus === 'published' ? 'draft' : 'published'
+    // Desativar um popup que já esteve no ar é pausar, não voltar a rascunho.
+    const newStatus: 'draft' | 'published' | 'paused' = prevStatus === 'published' ? 'paused' : 'published'
+    if (newStatus === 'published') {
+      // O que quebraria na loja não vai ao ar: roleta sem setores, contagem
+      // sem data, jogo sem cupom.
+      const problems = publishProblems(design)
+      if (problems.length) { showToast(problems[0], 'error'); return }
+      // Ativar publica o que está salvo — nome, pixels e design incluídos.
+      if (dirty) { const ok = await handleSave(); if (!ok) return }
+    }
     setFormStatus(newStatus)
     setPublishing(true)
     try {
@@ -2924,10 +4257,7 @@ export default function PopupEditorPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           status: newStatus,
-          design_json: design,
-          form_type: design.formType,
-          behavior: design.behavior,
-          ...(currentStore?.id ? { store_id: currentStore.id } : {}),
+          ...(!formStoreId && currentStore?.id ? { store_id: currentStore.id } : {}),
         }),
       })
       if (!res.ok) {
@@ -2942,12 +4272,13 @@ export default function PopupEditorPage() {
         showToast(msg, 'error')
         return
       }
-      showToast(newStatus === 'published' ? 'Popup ativado' : 'Popup desativado', 'success')
+      if (!formStoreId && currentStore?.id) setFormStoreId(currentStore.id)
+      showToast(newStatus === 'published' ? 'Popup ativado' : 'Popup pausado', 'success')
     } catch {
       setFormStatus(prevStatus)
       showToast('Não foi possível atualizar o status — tente novamente', 'error')
     } finally { setPublishing(false) }
-  }, [formId, design, formStatus, currentStore?.id, designLoaded, publishing, showToast])
+  }, [formId, design, formStatus, currentStore?.id, formStoreId, designLoaded, publishing, dirty, handleSave, showToast])
 
   const updateBlocks = (blocks: Block[]) => {
     commitDesign(d => {
@@ -3031,8 +4362,12 @@ export default function PopupEditorPage() {
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo() }
-      if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); handleSave() }
+      const key = e.key.toLowerCase()
+      const t = e.target as HTMLElement | null
+      const typing = !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)
+      // Dentro de um campo, Ctrl+Z é o desfazer do próprio campo.
+      if ((e.metaKey || e.ctrlKey) && key === 'z' && !typing) { e.preventDefault(); e.shiftKey ? redo() : undo() }
+      if ((e.metaKey || e.ctrlKey) && key === 's') { e.preventDefault(); handleSave() }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
@@ -3196,14 +4531,41 @@ export default function PopupEditorPage() {
           <button onClick={() => setShowPreview(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-zinc-300 hover:text-white hover:bg-zinc-700 rounded-lg transition-colors">
             <Eye className="w-4 h-4" /> Preview
           </button>
+          {!abParent && (
+            <button onClick={() => { if (!dirty || window.confirm('Você tem alterações não salvas. Sair mesmo assim?')) router.push(`/forms/${formId}/analytics`) }} className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-zinc-300 hover:text-white hover:bg-zinc-700 rounded-lg transition-colors" title="Resultados do popup">
+              <BarChart3 className="w-4 h-4" /> Resultados
+            </button>
+          )}
+          {!abParent && (
+            <button onClick={() => setShowExperiment(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-zinc-300 hover:text-white hover:bg-zinc-700 rounded-lg transition-colors" title="Teste A/B">
+              <span className="font-mono text-[11px] font-bold tracking-wider">A/B</span> Experimento
+            </button>
+          )}
           <button onClick={handleSave} disabled={saving || !designLoaded} className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-white bg-zinc-700 hover:bg-zinc-600 rounded-lg transition-colors disabled:opacity-50">
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Salvar{dirty ? ' •' : ''}
           </button>
-          <button onClick={handlePublish} disabled={publishing || !designLoaded} className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[13px] font-semibold transition-colors disabled:opacity-50 ${formStatus === 'published' ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border border-zinc-700' : 'bg-emerald-500 text-white hover:bg-emerald-600'}`}>
-            {publishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Power className="w-4 h-4" />} {formStatus === 'published' ? 'Desativar' : 'Ativar'}
-          </button>
+          {!abParent && (
+            <button onClick={handlePublish} disabled={publishing || !designLoaded} className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[13px] font-semibold transition-colors disabled:opacity-50 ${formStatus === 'published' ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border border-zinc-700' : 'bg-emerald-500 text-white hover:bg-emerald-600'}`}>
+              {publishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Power className="w-4 h-4" />} {formStatus === 'published' ? 'Pausar' : 'Ativar'}
+            </button>
+          )}
         </div>
       </header>
+      {formStoreId && currentStore?.id && currentStore.id !== formStoreId && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 border-b border-amber-200 text-[12px] text-amber-900">
+          <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+          <span>Este popup é de outra loja, não da loja selecionada agora ({currentStore.name || currentStore.domain}). As alterações valem para a loja dele.</span>
+        </div>
+      )}
+      {abParent && (
+        <div className="flex items-center justify-between gap-3 px-4 py-2 bg-violet-50 border-b border-violet-200 text-[12px] text-violet-900">
+          <span>Você está editando a <strong>variante {abParent.label}</strong> de <strong>{abParent.name || 'um popup'}</strong>. Ela só aparece na loja pela fatia do experimento — as regras de exibição e o cupom são os do popup principal.</span>
+          <button onClick={() => { if (!dirty || window.confirm('Você tem alterações não salvas. Sair mesmo assim?')) router.push(`/popup-editor/${abParent.id}`) }} className="flex-shrink-0 font-semibold underline underline-offset-2 hover:text-violet-700">Voltar ao popup principal</button>
+        </div>
+      )}
+      {showExperiment && !abParent && (
+        <ExperimentDrawer formId={formId} formName={formName} formStatus={formStatus} dirty={dirty} onClose={() => setShowExperiment(false)} onOpenVariant={id => { if (!dirty || window.confirm('Você tem alterações não salvas. Sair mesmo assim?')) router.push(`/popup-editor/${id}`) }} onApplied={() => { setShowExperiment(false); loadForm() }} />
+      )}
 
       <div className="flex flex-1 overflow-hidden">
         {/* Left sidebar — all controls (Klaviyo-style hub + drill-down panels) */}
@@ -3225,7 +4587,7 @@ export default function PopupEditorPage() {
                         'text-input': 'Campo de texto', 'date-input': 'Data',
                         dropdown: 'Dropdown', radio: 'Radio', checkbox: 'Checkbox',
                         'legal-consent': 'Consentimento', text: 'Texto', button: 'Botão', image: 'Imagem',
-                        spacer: 'Espaçador', line: 'Linha', coupon: 'Cupom', countdown: 'Contagem',
+                        spacer: 'Espaçador', line: 'Linha', coupon: 'Cupom', countdown: 'Contagem', wheel: 'Roleta', scratch: 'Raspadinha',
                       }
                       return labels[selectedBlock.type] || selectedBlock.type
                     })()}
@@ -3238,7 +4600,7 @@ export default function PopupEditorPage() {
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto">
-                <BlockEditor block={selectedBlock} onChange={updateBlock} onDelete={() => deleteBlock(selectedBlock.id)} onOpenMedia={openMediaLibrary} onApplyToAllInputs={applyStylesToAllInputs} />
+                <BlockEditor block={selectedBlock} onChange={updateBlock} onDelete={() => deleteBlock(selectedBlock.id)} onOpenMedia={openMediaLibrary} onApplyToAllInputs={applyStylesToAllInputs} steps={design.steps.map(s => ({ id: s.id, name: s.name }))} dirty={dirty} couponBlocks={[...design.steps, design.successStep].reduce((n, st) => n + (st?.blocks || []).filter(b => b.type === 'coupon').length, 0)} hints={designHints} />
               </div>
             </>
           ) : (
@@ -3381,6 +4743,11 @@ export default function PopupEditorPage() {
                 flexDirection: 'column',
                 justifyContent: 'center',
               }} className="relative">
+                {!showSuccess && design.steps.length > 1 && design.styles.progress?.enabled && (
+                  <div title="Barra de progresso (Tema → Layout)" style={{ height: design.styles.progress.height ?? 4, background: design.styles.progress.trackColor || '#E5E7EB', borderRadius: 999, margin: '0 0 16px', overflow: 'hidden' }}>
+                    <div style={{ width: `${Math.round(((activeStepIdx + 1) / design.steps.length) * 100)}%`, height: '100%', background: design.styles.progress.color || '#F97316' }} />
+                  </div>
+                )}
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                   <SortableContext items={activeStep.blocks.map(b => b.id)} strategy={verticalListSortingStrategy}>
                     {/* Outer drop zone — accepts native HTML5 drags from the
@@ -3439,7 +4806,7 @@ export default function PopupEditorPage() {
                               onDelete={() => deleteBlock(block.id)}
                               onDuplicate={() => duplicateBlock(block.id)}
                               onContentChange={(k, v) => updateBlock({ ...block, props: { ...block.props, [k]: v } })}
-                              onPropChange={(k, v) => updateBlock({ ...block, props: { ...block.props, [k]: v } })} />
+ />
                           </div>
                         </div>
                       ))}
@@ -3491,16 +4858,18 @@ export default function PopupEditorPage() {
             onCloneStep={i => {
               const step = design.steps[i]
               if (!step) return
-              const clone: Step = { id: uid(), name: `${step.name} (cópia)`, blocks: JSON.parse(JSON.stringify(step.blocks)) }
+              const clone: Step = { ...step, id: uid(), name: `${step.name} (cópia)`, blocks: (JSON.parse(JSON.stringify(step.blocks)) as Block[]).map(b => ({ ...b, id: uid() })) }
               commitDesign(d => { const next = [...d.steps]; next.splice(i + 1, 0, clone); return { ...d, steps: next } })
               setActiveStepIdx(i + 1)
             }}
             onDeleteStep={i => {
               if (design.steps.length <= 1) return
-              commitDesign(d => ({ ...d, steps: d.steps.filter((_, j) => j !== i) }))
+              const gone = design.steps[i]?.id
+              commitDesign(d => stripStepRefs({ ...d, steps: d.steps.filter((_, j) => j !== i) }, gone))
               setActiveStepIdx(Math.max(0, i - 1))
             }}
             onAddStep={addStep}
+            onSetStepKind={(i, kind) => commitDesign(d => ({ ...d, steps: d.steps.map((s, j) => j === i ? { ...s, kind } : s) }))}
           />
         </main>
 
@@ -3508,7 +4877,7 @@ export default function PopupEditorPage() {
 
       {/* Preview Mode Overlay */}
       {showPreview && (
-        <div className="fixed inset-0 z-50 flex flex-col">
+        <div className="fixed inset-0 z-50 flex flex-col" role="dialog" aria-modal="true" aria-label="Visualização do popup" onKeyDown={e => { if (e.key === 'Escape') setShowPreview(false) }}>
           {/* Preview toolbar */}
           <div className="flex items-center justify-between px-6 py-3 bg-gray-900 shrink-0">
             <span className="text-sm font-medium text-white">Preview Mode</span>
@@ -3522,7 +4891,7 @@ export default function PopupEditorPage() {
                 </button>
               </div>
             </div>
-            <button onClick={() => setShowPreview(false)} className="flex items-center gap-2 px-4 py-1.5 bg-white text-gray-900 rounded-lg text-sm font-medium hover:bg-gray-100">
+            <button autoFocus onClick={() => setShowPreview(false)} className="flex items-center gap-2 px-4 py-1.5 bg-white text-gray-900 rounded-lg text-sm font-medium hover:bg-gray-100">
               <X className="w-4 h-4" /> Fechar Preview
             </button>
           </div>
@@ -3558,7 +4927,7 @@ export default function PopupEditorPage() {
                   </div>
                 )}
                 <div style={{ backgroundColor: s.backgroundColor, paddingTop: s.paddingTop ?? s.padding ?? 32, paddingRight: s.paddingRight ?? s.padding ?? 32, paddingBottom: s.paddingBottom ?? s.padding ?? 32, paddingLeft: s.paddingLeft ?? s.padding ?? 32, fontFamily: s.fontFamily, flex: 1, flexBasis: 0, minWidth: 0, minHeight: (isBannerFt || isFlyoutFt) ? undefined : (s.minHeight ?? 500), display: 'flex', flexDirection: 'column', justifyContent: contentVCenter ? 'center' : 'flex-start' }}>
-                  {activeStep.blocks.map(block => <BlockPreview key={block.id} block={block} />)}
+                  {activeStep.blocks.filter(b => previewDevice === 'mobile' ? !b.props?.hideOnMobile : !b.props?.hideOnDesktop).map(block => <BlockPreview key={block.id} block={block} offerLabel={previewOfferLabel} prizeLabel={previewPrizeLabel} />)}
                 </div>
                 {s.sideImage.enabled && s.sideImage.position === 'right' && s.sideImage.src && sideAllowed && (
                   <div style={{ flex: 1, flexBasis: 0, minWidth: 0 }} className="overflow-hidden">

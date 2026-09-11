@@ -5,6 +5,7 @@
 import { NextRequest } from 'next/server'
 import { getSupabaseClient } from '@/lib/api-utils'
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit'
+import { checkPopupOrigin } from '@/lib/forms/origin-gate'
 import { META_BASE_URL } from '@/lib/whatsapp/api-version'
 import { corsJson, corsError, corsPreflight } from '@/lib/forms/public-cors'
 import {
@@ -14,7 +15,18 @@ import {
   buildCapiUserData,
   isVisualPopupForm,
 } from '@/lib/forms/submit-utils'
+import {
+  collectConsentBlocks,
+  resolveConsentDecisions,
+  recordConsent,
+  writePhoneChannelConsent,
+  deviceClassFromUserAgent,
+  countryFromHeaders,
+  type ConsentRecordInput,
+} from '@/lib/forms/consent'
 import { isValidEmail } from '@/lib/email/validation'
+import { trafficTypeOrNull, pageKindOrNull } from '@/lib/popups/targeting'
+import { readWhatsAppOptInConfig, startWhatsAppDoubleOptIn } from '@/lib/whatsapp/popup-opt-in'
 
 export const dynamic = 'force-dynamic'
 
@@ -394,16 +406,10 @@ export async function POST(
       if (!rlImp.allowed) {
         return corsError('Muitas tentativas. Aguarde e tente novamente.', 429, 'rate_limited')
       }
-      try {
-        const sb = getSupabaseClient()
-        if (sb) {
-          // Bump BOTH impressions_count and views_count. The dashboard
-          // card reads views_count; impressions_count is the legacy
-          // name kept around for old analytics queries.
-          await bumpFormCounters(sb, formId, ['impressions_count', 'views_count'])
-        }
-      } catch {}
-      return corsJson({ ok: true })
+      // Caminho antigo: a impressão hoje vai por /events, que confere se o
+      // popup está publicado e grava a série. Aqui só se reconhece o beacon
+      // — contar aqui de novo dobrava a visualização de qualquer id.
+      return corsJson({ ok: true, deprecated: 'use /events' })
     }
 
     // ---- Rate limit anti-spam ----
@@ -466,6 +472,16 @@ export async function POST(
       return corsError('Formulário não encontrado ou não publicado', 404, 'not_found')
     }
 
+    // De onde veio? O id do popup sai no bundle de toda loja; sem esta
+    // régua, quem o lesse podia inscrever gente na organização alheia e,
+    // pior, drenar o pool de cupons dela (cada e-mail novo reserva um
+    // código de verdade na Shopify do lojista).
+    const originVerdict = await checkPopupOrigin(supabase, request.headers, form as any, (body as any)?.domain)
+    if (!originVerdict.ok) {
+      console.warn('[Form Submit] origem recusada', { formId, reason: originVerdict.reason })
+      return corsError('Formulário não encontrado ou não publicado', 404, 'not_found')
+    }
+
     // Honeypot: the storefront renders an off-screen _wf_hp field that only
     // bots fill. A non-empty value → drop the submission silently: create
     // no contact, no deal, fire no automation, apply no audience. Return a
@@ -487,7 +503,28 @@ export async function POST(
       })
     }
 
-    const designJson = form.design_json || {}
+    const parentDesignJson = form.design_json || {}
+    // Experimento A/B: a inscrição pode vir de uma variante. Os blocos,
+    // etapas, consentimentos e tags são os da variante; o cupom e os níveis
+    // são sempre do popup principal (o estoque de códigos é dele).
+    let variantId: string | null = null
+    let designJson: any = parentDesignJson
+    {
+      const raw = String((body as any)?.variant_id || '')
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw) && raw !== formId) {
+        const { data: variant } = await supabase
+          .from('crm_forms')
+          .select('id, design_json')
+          .eq('id', raw)
+          .eq('organization_id', form.organization_id)
+          .eq('ab_parent_id', formId)
+          .maybeSingle()
+        if (variant?.id) {
+          variantId = variant.id
+          if (variant.design_json && Array.isArray(variant.design_json.steps)) designJson = variant.design_json
+        }
+      }
+    }
     const isVisualForm = isVisualPopupForm(form.form_type, designJson)
 
     // 2. Validar campos obrigatórios (APENAS formulários clássicos).
@@ -514,20 +551,28 @@ export async function POST(
     }
     const contactData = extractContactData(answers, isVisualForm ? [] : (form.fields || []), designBlocks)
 
-    // Legal consent (LGPD): the script renders the legal-consent block
-    // as <input type="checkbox" name="consent"> — checked posts
-    // answers.consent='on', unchecked omits the key entirely. When the
-    // design HAS a legal-consent block and the visitor did NOT check it,
-    // we still save the contact + submission but never grant marketing
-    // e-mail consent (and skip the DOI e-mail).
-    const hasLegalConsentBlock = designBlocks.some((b: any) => b?.type === 'legal-consent')
-    const consentRaw = (answers as any)?.consent
-    const consentChecked =
-      consentRaw !== undefined && consentRaw !== null &&
-      String(consentRaw) !== '' &&
-      String(consentRaw).toLowerCase() !== 'false' &&
-      String(consentRaw) !== '0'
-    const marketingConsentDenied = hasLegalConsentBlock && !consentChecked
+    // Consentimento (LGPD): cada bloco legal-consent declara os canais que
+    // cobre e rende um checkbox próprio. A decisão por canal sai daqui; a
+    // prova (texto exibido, IP, página) é gravada depois da submissão
+    // existir, em consent_records. Um canal sem bloco não tem decisão —
+    // e-mail cai no opt-in único de sempre; WhatsApp e SMS exigem bloco.
+    const consentBlocks = collectConsentBlocks(designBlocks)
+    const consentDecisions = resolveConsentDecisions(consentBlocks, answers)
+    const emailDecision = consentDecisions.find((d) => d.channel === 'email')
+    const whatsappDecision = consentDecisions.find((d) => d.channel === 'whatsapp')
+    const smsDecision = consentDecisions.find((d) => d.channel === 'sms')
+    const marketingConsentDenied = !!emailDecision && !emailDecision.checked
+
+    // Contexto da captura — de onde a pessoa veio quando disse sim.
+    const requestUserAgent = request.headers.get('user-agent') || null
+    const requestIp = (request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || '')
+      .split(',')[0].trim() || null
+    const pageUrl = typeof (body as any)?.page_url === 'string' && (body as any).page_url.length <= 2048
+      ? (body as any).page_url
+      : request.headers.get('referer') || null
+    const visitorCountry = countryFromHeaders(request.headers)
+    const visitorDevice = deviceClassFromUserAgent(requestUserAgent)
+    const visitorLocale = (request.headers.get('accept-language') || '').split(',')[0].trim() || null
 
     // UTM data for contact profile (if behavior.utm.storeOnConsent is true)
     const popupBehavior = (form.behavior as any) || (designJson.behavior as any) || {}
@@ -559,7 +604,8 @@ export async function POST(
     let contactId: string | null = null
     const hasContactData = contactData.email || contactData.phone || contactData.first_name
 
-    console.log('[Form Submit] Contact data extracted:', contactData)
+    // Só os campos preenchidos — o valor é PII e o log não é lugar de PII.
+    console.log('[Form Submit] Contact data extracted:', Object.keys(contactData))
     console.log('[Form Submit] Pipeline ID:', form.pipeline_id)
 
     // Update an existing contact merging custom_fields (new keys win)
@@ -627,6 +673,24 @@ export async function POST(
 
         if (existingContact) {
           contactId = await applyContactUpdate(existingContact)
+        }
+      }
+
+      // Sem e-mail (ou e-mail que não bateu): o telefone identifica a
+      // pessoa. Sem isto cada reenvio só com telefone criava um contato
+      // novo — e, com ele, um cupom único novo.
+      if (!contactId) {
+        const ph = String(contactData.phone || contactData.whatsapp || '').trim()
+        if (ph && /^\+?[0-9]{8,20}$/.test(ph)) {
+          const { data: byPhone } = await supabase
+            .from('contacts')
+            .select(CONTACT_SELECT)
+            .eq('organization_id', form.organization_id)
+            .or(`phone.eq.${ph},whatsapp.eq.${ph}`)
+            .order('created_at', { ascending: true })
+            .limit(1)
+            .maybeSingle()
+          if (byPhone) contactId = await applyContactUpdate(byPhone)
         }
       }
 
@@ -712,6 +776,36 @@ export async function POST(
     // welcome automation emails someone who opted out.
     if (contactId && contactData.email && marketingConsentDenied) {
       await writeEmailConsent(supabase, contactId, 'denied', `popup_form:${form.id}`)
+    }
+
+    // 4.6. WhatsApp e SMS. Antes disto o submit capturava o telefone e não
+    // gravava consentimento nenhum: a régua de boas-vindas no WhatsApp
+    // partia de um contato sem opt-in — o que a Meta proíbe e a LGPD
+    // pune. Só existe decisão quando há bloco cobrindo o canal E um
+    // telefone para receber a mensagem.
+    const contactPhone = contactData.phone || contactData.whatsapp || null
+    // WhatsApp com confirmação: a caixa marcada NÃO vale consentimento — só
+    // a resposta ao template. O pedido sai depois da submissão (8.4c), com
+    // o id dela na evidência.
+    const whatsappOptIn = readWhatsAppOptInConfig(popupBehavior)
+    const whatsappDoubleOptIn = !!(whatsappDecision?.checked && contactPhone && whatsappOptIn.doubleOptIn)
+    let whatsappOptInSent = false
+    // Pedido de confirmação que falhou: o canal fica negado, não pendente.
+    let whatsappOptInFailed = false
+    let whatsappAlreadyOptedIn = false
+    if (contactId && contactPhone) {
+      if (whatsappDecision && !whatsappDoubleOptIn) {
+        await writePhoneChannelConsent(
+          supabase, contactId, 'whatsapp',
+          whatsappDecision.checked ? 'granted' : 'denied', `popup_form:${form.id}`,
+        )
+      }
+      if (smsDecision) {
+        await writePhoneChannelConsent(
+          supabase, contactId, 'sms',
+          smsDecision.checked ? 'granted' : 'denied', `popup_form:${form.id}`,
+        )
+      }
     }
 
     // 5. Criar deal no pipeline (se configurado)
@@ -834,38 +928,116 @@ export async function POST(
     }
 
     // 6. Criar submission
-    const { data: submission, error: subError } = await supabase
+    const submissionBase = {
+      form_id: formId,
+      organization_id: form.organization_id,
+      contact_id: contactId,
+      deal_id: dealId,
+      answers,
+      ip_address: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || null,
+      user_agent: requestUserAgent,
+      referrer: request.headers.get('referer') || null,
+      utm_source: utm_source || null,
+      utm_medium: utm_medium || null,
+      utm_campaign: utm_campaign || null,
+      utm_term: utm_term || null,
+      utm_content: utm_content || null,
+      status: 'new',
+    }
+    // Contexto (migration popup_foundation). Se o banco ainda não tiver as
+    // colunas, a submissão entra sem elas — perder o contexto é aceitável,
+    // perder a inscrição não.
+    const submissionContext = {
+      visitor_id: typeof visitorId === 'string' && visitorId.length <= 128 ? visitorId : null,
+      session_id: typeof sessionId === 'string' && sessionId.length <= 128 ? sessionId : null,
+      page_url: pageUrl,
+      country: visitorCountry,
+      device: visitorDevice,
+      // Origem da sessão e tipo de página, como o runtime classificou.
+      // Vocabulário fechado: fora dele vira nulo, não texto livre.
+      traffic_type: trafficTypeOrNull((body as any)?.traffic_type),
+      page_kind: pageKindOrNull((body as any)?.page_kind),
+      variant_id: variantId,
+      propensity_score: Number.isFinite(Number((body as any)?.propensity_score)) ? Math.max(0, Math.min(100, Math.round(Number((body as any).propensity_score)))) : null,
+    }
+    let { data: submission, error: subError } = await supabase
       .from('crm_form_submissions')
-      .insert({
-        form_id: formId,
-        organization_id: form.organization_id,
-        contact_id: contactId,
-        deal_id: dealId,
-        answers,
-        ip_address: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || null,
-        user_agent: request.headers.get('user-agent') || null,
-        referrer: request.headers.get('referer') || null,
-        utm_source: utm_source || null,
-        utm_medium: utm_medium || null,
-        utm_campaign: utm_campaign || null,
-        utm_term: utm_term || null,
-        utm_content: utm_content || null,
-        status: 'new',
-      })
+      .insert({ ...submissionBase, ...submissionContext })
       .select()
       .single()
 
-    if (subError) {
-      console.error('[Form Submit] Error creating submission:', subError)
-      return corsError(subError.message, 500, 'server_error')
+    if (subError && (subError.code === '42703' || subError.code === 'PGRST204' || /column .* does not exist|Could not find the '.*' column/i.test(subError.message || ''))) {
+      console.warn('[Form Submit] submission context columns missing — apply migration 20260910100000_popup_foundation')
+      const retry = await supabase.from('crm_form_submissions').insert(submissionBase).select().single()
+      submission = retry.data
+      subError = retry.error
     }
 
-    // Bump the form's submissions_count + views_count so the /forms
-    // dashboard card reflects reality. Atomic via RPC (fire-and-forget —
-    // a failure here mustn't break the submit response). views_count is
-    // also bumped because the impression beacon can drop on slow
-    // connections; this guarantees views >= submits.
-    bumpFormCounters(supabase, formId, ['submissions_count', 'views_count']).catch(() => {})
+    if (subError) {
+      console.error('[Form Submit] Error creating submission:', subError)
+      return corsError('Não foi possível registrar a inscrição. Tente novamente.', 500, 'server_error')
+    }
+
+    // 6.1. O evento 'submitted' na série diária. As impressões e os
+    // fechamentos chegam pelo beacon do runtime; o envio é gravado aqui,
+    // do lado do servidor, porque é o único ponto que sabe que ele
+    // aconteceu de verdade.
+    await supabase.from('form_events').insert({
+      organization_id: form.organization_id,
+      form_id: formId,
+      event_type: 'submitted',
+      properties: {
+        submission_id: submission.id,
+        contact_id: contactId,
+        visitor_id: submissionContext.visitor_id,
+        url: pageUrl,
+        country: visitorCountry,
+        device: visitorDevice,
+      },
+      occurred_at: new Date().toISOString(),
+    }).then(({ error }) => {
+      if (error && error.code !== '42P01') console.warn('[Form Submit] form_events submitted insert failed:', error.message)
+    })
+
+    // 6.2. A prova do consentimento — uma linha por canal decidido, com o
+    // texto exato que a pessoa viu. E-mail em DOI entra como 'pending' e
+    // vira 'confirmed' em /api/public/confirm-opt-in.
+    {
+      const proofs: ConsentRecordInput[] = []
+      for (const d of consentDecisions) {
+        if (d.channel === 'email' && !contactData.email) continue
+        if ((d.channel === 'whatsapp' || d.channel === 'sms') && !contactPhone) continue
+        const action = !d.checked
+          ? 'denied'
+          : d.channel === 'email' && doubleOptInEnabled ? 'pending'
+          : d.channel === 'whatsapp' && whatsappDoubleOptIn ? 'pending' : 'granted'
+        proofs.push({ channel: d.channel, action, text: d.block.text || null, version: d.block.version })
+      }
+      // Opt-in único de e-mail sem bloco: a prova registra que não houve
+      // texto — o que é, em si, a informação que o jurídico precisa.
+      if (!emailDecision && contactData.email && !doubleOptInEnabled) {
+        proofs.push({ channel: 'email', action: 'granted', text: null, version: null })
+      }
+      if (!emailDecision && contactData.email && doubleOptInEnabled) {
+        proofs.push({ channel: 'email', action: 'pending', text: null, version: null })
+      }
+      await recordConsent(supabase, {
+        organizationId: form.organization_id,
+        contactId,
+        submissionId: submission.id,
+        source: 'popup_form',
+        sourceRef: form.id,
+        pageUrl,
+        ipAddress: requestIp,
+        userAgent: requestUserAgent,
+        locale: visitorLocale,
+      }, proofs)
+    }
+
+    // Contador legado do card em /forms. Só submissions_count: views_count
+    // já sobe no beacon de impressão — somar aqui de novo contava cada
+    // inscrito duas vezes como visualização e derrubava a taxa.
+    await bumpFormCounters(supabase, formId, ['submissions_count']).catch(() => {})
 
     // 7. Processar eventos de ads
     const eventsFired: any[] = []
@@ -953,10 +1125,11 @@ export async function POST(
 
     // 8. Atualizar submission com eventos disparados
     if (eventsFired.length > 0) {
-      await supabase
+      const { error: eventsError } = await supabase
         .from('crm_form_submissions')
         .update({ events_fired: eventsFired })
         .eq('id', submission.id)
+      if (eventsError) console.error('[Form Submit] eventos disparados não gravados na inscrição', submission.id, eventsError.message)
     }
 
     // 8.4. Aplicar audiencia (tags + listId) do formulario no contato.
@@ -965,7 +1138,11 @@ export async function POST(
     // an explicit opt-out must not land them in the audience.
     if (contactId && !marketingConsentDenied) {
       try {
-        const audienceTags: string[] = Array.isArray(audienceCfg.tags) ? audienceCfg.tags.filter(Boolean) : (Array.isArray(form.tags) ? form.tags : [])
+        // Tags do popup + tags das opções escolhidas no quiz (derivadas das
+        // respostas contra o design — o cliente não manda tag nenhuma).
+        const baseTags: string[] = Array.isArray(audienceCfg.tags) ? audienceCfg.tags.filter(Boolean) : (Array.isArray(form.tags) ? form.tags : [])
+        const { tagsFromAnswers } = await import('@/lib/popups/branching')
+        const audienceTags: string[] = Array.from(new Set([...baseTags, ...tagsFromAnswers(designBlocks, answers)]))
         const audienceListId: string | null = audienceCfg.listId || form.list_id || null
 
         if (audienceTags.length > 0) {
@@ -976,7 +1153,10 @@ export async function POST(
             .maybeSingle()
           const current: string[] = Array.isArray(existing?.tags) ? existing.tags : []
           const merged = Array.from(new Set([...current, ...audienceTags]))
-          await supabase.from('contacts').update({ tags: merged }).eq('id', contactId)
+          const { error: tagsError } = await supabase.from('contacts').update({ tags: merged }).eq('id', contactId)
+          // Sem as tags, a automação que dispara por tag nunca roda para
+          // este inscrito — e a falha não aparece em lugar nenhum.
+          if (tagsError) console.error('[Form Submit] tags do popup não aplicadas ao contato:', tagsError.message)
         }
 
         if (audienceListId) {
@@ -998,11 +1178,15 @@ export async function POST(
             // never showed up under /contacts/lists/[id]. The
             // contact_list_members trigger maintains total_contacts
             // on the parent row automatically.
-            await supabase.from('contact_list_members').upsert({
+            const { error: memberError } = await supabase.from('contact_list_members').upsert({
               list_id: audienceListId,
               contact_id: contactId,
               source: 'form',
             }, { onConflict: 'list_id,contact_id', ignoreDuplicates: true })
+            // O contato existe, mas fora da lista: invisível para sempre em
+            // /contacts/lists. Um erro do PostgREST não vira exceção, então
+            // sem esta checagem a falha passaria calada pelo catch abaixo.
+            if (memberError) console.error(`[Form Submit] contato não entrou na lista ${audienceListId}:`, memberError.message)
           } else {
             console.warn('[Form Submit] audience.listId does not belong to this org, skipping:', audienceListId)
           }
@@ -1034,8 +1218,12 @@ export async function POST(
           orgId: form.organization_id,
           formId: form.id,
         })
-        const { getAppBaseUrl } = await import('@/lib/app-url')
-        const baseUrl = getAppBaseUrl()
+        // O link de confirmação sai do mesmo host dos outros links do
+        // e-mail. Misturar hosts dentro da mesma mensagem é o que faz o
+        // filtro desconfiar — e este é o único link que a pessoa precisa
+        // clicar para virar inscrita.
+        const { getTrackingBaseUrl } = await import('@/lib/email/tracking-url')
+        const baseUrl = await getTrackingBaseUrl(form.organization_id, form.store_id || null)
         const confirmUrl = `${baseUrl}/api/public/confirm-opt-in?token=${encodeURIComponent(token)}`
 
         // Remetente DA LOJA do formulário — o e-mail de confirmação de um
@@ -1073,6 +1261,59 @@ export async function POST(
         }
       } catch (e: any) {
         console.warn('[Form Submit] doubleOptIn block failed:', e?.message)
+      }
+    }
+
+    // 8.4c. Confirmação de WhatsApp. Linha 'pending' em whatsapp_opt_status
+    // (que já bloqueia marketing na guarda de envio) e um template UTILITY
+    // aprovado pedindo o "sim". Quem já tinha opt-in não recebe pedido: o
+    // consentimento do bloco vale na hora. Falha de envio não derruba a
+    // inscrição — fica no whatsapp_sends com o erro.
+    if (contactId && contactPhone && whatsappDoubleOptIn) {
+      try {
+        let storeName: string | null = null
+        if ((form as any).store_id) {
+          // A coluna é shop_name — 'name' não existe e a consulta falhava em silêncio.
+          const { data: st } = await supabase.from('shopify_stores').select('shop_name').eq('id', (form as any).store_id).maybeSingle()
+          storeName = (st as any)?.shop_name || null
+        }
+        const r = await startWhatsAppDoubleOptIn(supabase, {
+          organizationId: form.organization_id,
+          storeId: (form as any).store_id || null,
+          contactId,
+          phone: contactPhone,
+          formId: form.id,
+          formName: form.name || null,
+          submissionId: submission.id,
+          firstName: contactData.first_name || null,
+          storeName,
+          config: whatsappOptIn,
+        })
+        if (r.sent) whatsappOptInSent = true
+        else if (r.reason === 'already_opted_in') {
+          whatsappAlreadyOptedIn = true
+          await writePhoneChannelConsent(supabase, contactId, 'whatsapp', 'granted', `popup_form:${form.id}`)
+          // A prova acompanha o desfecho: o 'pending' de cima vira 'granted'.
+          const waBlock = consentDecisions.find((d) => d.channel === 'whatsapp')?.block
+          await recordConsent(supabase, {
+            organizationId: form.organization_id, contactId, submissionId: submission.id,
+            source: 'popup_form', sourceRef: form.id, pageUrl, ipAddress: requestIp, userAgent: requestUserAgent, locale: visitorLocale,
+          }, [{ channel: 'whatsapp', action: 'granted', text: waBlock?.text || null, version: waBlock?.version || null }])
+        } else {
+          // Pedido de confirmação não saiu (sem conta, template reprovado,
+          // falha de envio). A prova não pode continuar dizendo 'pending':
+          // não existe linha em whatsapp_opt_status, então a guarda de
+          // envio deixaria marketing passar para quem nunca confirmou.
+          console.warn('[Form Submit] whatsapp double opt-in not sent:', r.reason, r.error || '')
+          whatsappOptInFailed = true
+          const waBlockFail = consentDecisions.find((d) => d.channel === 'whatsapp')?.block
+          await recordConsent(supabase, {
+            organizationId: form.organization_id, contactId, submissionId: submission.id,
+            source: 'popup_form', sourceRef: form.id, pageUrl, ipAddress: requestIp, userAgent: requestUserAgent, locale: visitorLocale,
+          }, [{ channel: 'whatsapp', action: 'denied', text: waBlockFail?.text || null, version: waBlockFail?.version || null }])
+        }
+      } catch (e: any) {
+        console.warn('[Form Submit] whatsapp double opt-in failed:', e?.message)
       }
     }
 
@@ -1133,7 +1374,170 @@ export async function POST(
     // the automation governs from there).
     const dispatchContactKey = contactId || contactData.email || submission.id
 
-    // 8.6. Disparar automações com trigger_form_submitted
+    // 8.5. Cupom — sempre pelo ledger de incentivos. Nada é criado na
+    // Shopify aqui: o pool já tem códigos únicos prontos (cron), e
+    // issue_popup_incentive reserva um deles atomicamente. UM grant por
+    // pessoa por popup — reenvio devolve o mesmo código. Pool vazio cai no
+    // código estático do bloco, e a queda fica registrada no ledger.
+    // Código estático também passa pelo ledger: é o que liga o pedido de
+    // volta ao popup ("receita por código") mesmo sem código único.
+    let issuedCoupon: {
+      code: string; kind: string; value: number; ends_at: string | null
+      auto_apply: boolean; show_code: boolean; source: string; tier: string
+    } | null = null
+    // O caminho percorrido (etapas ramificadas) — só ids que existem no
+    // design. Decide o tier da recompensa progressiva e fica na submissão.
+    const { sanitizeStepPath, effectiveRewardTier, stepsWithAnswers } = await import('@/lib/popups/branching')
+    const designSteps = Array.isArray(designJson.steps) ? designJson.steps : []
+    const stepPath = sanitizeStepPath((body as any)?.step_path, designSteps)
+    // Para o nível de recompensa só vale a etapa cujos campos obrigatórios
+    // foram respondidos — mandar o id da etapa do quiz sem responder não
+    // desbloqueia nada.
+    const earnedPath = stepsWithAnswers(stepPath, designSteps, answers || {})
+    let rewardTierKey: string | null = null
+    // Tudo que a submissão ganha depois de criada vai num update só, e
+    // esperado: na Vercel o que fica pendente depois da resposta pode
+    // nunca rodar.
+    const submissionPatch: Record<string, any> = {}
+
+    // 8.4d. Jogo (roleta/raspadinha): o prêmio é sorteado AQUI, pelo peso
+    // dos segmentos, nunca no navegador. Quem já jogou neste popup recebe
+    // o mesmo resultado de novo — reenviar não é uma segunda chance.
+    let gameResult: import('@/lib/popups/games').GameResult | null = null
+    let gameReplay = false
+    try {
+      const { readGameBlock, playGame } = await import('@/lib/popups/games')
+      const game = readGameBlock(designJson) || readGameBlock(parentDesignJson)
+      if (game) {
+        if (contactId) {
+          const { data: prevRow } = await supabase
+            .from('crm_form_submissions')
+            .select('game_prize')
+            .eq('organization_id', form.organization_id)
+            .eq('form_id', formId)
+            .eq('contact_id', contactId)
+            .neq('id', submission.id)
+            .not('game_prize', 'is', null)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+          const prev: any = prevRow?.game_prize
+          const seg = prev && Number.isInteger(prev.segment) ? game.segments[prev.segment] : null
+          // O resultado antigo só vale se o segmento ainda é o mesmo; se o
+          // lojista mexeu nos prêmios, sorteia de novo.
+          if (seg && seg.id === prev.segment_id) {
+            gameResult = { type: game.type, segment: prev.segment, segmentId: seg.id, label: seg.label, prize: seg.prize }
+            gameReplay = true
+          }
+        }
+        if (!gameResult) gameResult = playGame(game)
+        submissionPatch.game_prize = { type: gameResult.type, segment: gameResult.segment, segment_id: gameResult.segmentId, label: gameResult.label, prize: gameResult.prize, replay: gameReplay }
+      }
+    } catch (e: any) {
+      console.warn('[Form Submit] game play errored:', e?.message)
+    }
+
+    try {
+      const { readCouponBlock, effectiveDiscount } = await import('@/lib/coupons/pool-service')
+      const cp = readCouponBlock(parentDesignJson)
+      if (cp) {
+        // Recompensa progressiva: o último tier cuja etapa foi visitada.
+        let tier = effectiveRewardTier(cp.tiers, earnedPath)
+        // Smart Offers: a intenção medida na exibição decide a oferta; o
+        // servidor só aceita o que a regra produz. "Nenhuma" pula o cupom.
+        let offerNone = false
+        if (cp.smartOffer.enabled) {
+          const { resolveOffer } = await import('@/lib/popups/offers')
+          const off = resolveOffer(cp.smartOffer, { intent: (body as any)?.intent, bucket: (body as any)?.offer_bucket, tier: (body as any)?.offer_tier }, cp.tiers.map((t) => t.id))
+          submissionPatch.intent = off.intent
+          submissionPatch.offer_bucket = off.bucket
+          submissionPatch.offer_tier = off.tier
+          if (off.tier === 'none') offerNone = true
+          else if (off.tier === 'base') tier = null
+          else tier = cp.tiers.find((t) => t.id === off.tier) || null
+        }
+        // Jogo: o segmento sorteado decide o nível — por cima da recompensa
+        // progressiva e da oferta por intenção. "Nada" pula o cupom.
+        if (gameResult) {
+          if (gameResult.prize === 'none') offerNone = true
+          else if (gameResult.prize === 'base') { offerNone = false; tier = null }
+          else {
+            const found = cp.tiers.find((t) => t.id === gameResult!.prize)
+            // O jogo pode estar numa variante e o cupom é sempre do pai:
+            // um nível que só existe na variante não tem pool nem valor.
+            // Cair na oferta base entregaria menos do que a roleta
+            // prometeu — melhor não prometer desconto nenhum.
+            if (!found) {
+              console.warn('[Form Submit] prêmio do jogo aponta para um nível inexistente no cupom', { formId, prize: gameResult.prize })
+              offerNone = true
+            } else { offerNone = false; tier = found }
+          }
+        }
+        const eff = effectiveDiscount(cp, tier)
+        rewardTierKey = eff.tierKey
+
+        let poolId: string | null = null
+        if (cp.mode === 'unique' && form.store_id) {
+          const { data: pool } = await supabase
+            .from('coupon_pools')
+            .select('id')
+            .eq('organization_id', form.organization_id)
+            .eq('form_id', formId)
+            .eq('store_id', form.store_id)
+            .eq('tier_key', eff.tierKey)
+            // 'error' é pool que falhou a última reposição: os códigos já
+            // criados continuam válidos e devem sair antes do estático.
+            .in('status', ['active', 'error'])
+            .maybeSingle()
+          poolId = pool?.id || null
+          if (!poolId) console.warn('[Form Submit] popup em modo único sem pool ativo — caindo no código estático', { formId, tier: eff.tierKey })
+        }
+        const base = { kind: eff.kind, value: eff.value, auto_apply: cp.autoApply, show_code: cp.showCode, tier: eff.tierKey }
+
+        if (offerNone) {
+          // Intenção alta sem desconto: a inscrição vale, o cupom não sai.
+        } else if (contactId) {
+          const { data, error } = await supabase.rpc('issue_popup_incentive', {
+            p_organization_id: form.organization_id,
+            p_store_id: form.store_id || null,
+            p_contact_id: contactId,
+            p_form_id: formId,
+            p_submission_id: submission.id,
+            p_kind: eff.kind,
+            p_value: eff.value,
+            p_validity_days: cp.validityDays,
+            p_pool_id: poolId,
+            p_static_code: eff.staticCode,
+            p_tier_key: eff.tierKey,
+          })
+          if (error) {
+            console.error('[Form Submit] issue_popup_incentive failed:', error.message)
+            // Sem ledger não há código único; o estático ainda vale.
+            if (eff.staticCode) issuedCoupon = { ...base, code: eff.staticCode, ends_at: null, source: 'static_ledger_error' }
+          } else {
+            const row: any = Array.isArray(data) ? data[0] : data
+            if (row?.coupon_code) {
+              issuedCoupon = { ...base, code: row.coupon_code, ends_at: row.validity_until || null, source: row.outcome || 'issued' }
+              submissionPatch.coupon_code = row.coupon_code
+              submissionPatch.coupon_kind = eff.kind
+              submissionPatch.grant_id = row.grant_id || null
+            } else if (row?.outcome === 'already_used') {
+              console.log('[Form Submit] cupom deste popup já usado por este contato — sem novo código')
+            }
+          }
+        } else if (eff.staticCode) {
+          // Sem e-mail nem telefone não há contato, logo não há grant. O
+          // código estático aparece mesmo assim — o popup prometeu.
+          issuedCoupon = { ...base, code: eff.staticCode, ends_at: null, source: 'static_no_contact' }
+        }
+      }
+    } catch (e: any) {
+      console.warn('[Form Submit] coupon issuance errored:', e?.message)
+    }
+
+    // 8.7. Automações. Vêm DEPOIS do cupom de propósito: um fluxo de
+    // boas-vindas que manda "seu código é {{coupon_code}}" precisa do
+    // código já emitido — antes o e-mail saía com o campo vazio.
     try {
       const { dispatchTrigger } = await import('@/lib/automation/trigger-dispatcher')
       await dispatchTrigger({
@@ -1205,6 +1609,13 @@ export async function POST(
             first_name: contactData.first_name || null,
             last_name: contactData.last_name || null,
             answers,
+            // O que o popup entregou: o fluxo usa no texto da mensagem.
+            coupon_code: issuedCoupon?.code || null,
+            coupon_kind: issuedCoupon?.kind || null,
+            coupon_value: issuedCoupon?.value ?? null,
+            coupon_ends_at: issuedCoupon?.ends_at || null,
+            reward_tier: rewardTierKey,
+            game_prize: gameResult?.label || null,
             utm_source,
             utm_medium,
             utm_campaign,
@@ -1227,55 +1638,93 @@ export async function POST(
       }
     }
 
-    // 8.5. Dynamic Shopify coupon. If the design has a coupon block in
-    // `dynamic` mode, generate a unique price_rule + discount_code on
-    // the merchant's Shopify so each subscriber gets a single-use code
-    // (anti-abuse). Falls back silently to whatever is in block.code on
-    // any error so the success step still shows *something*.
-    let dynamicCoupon: { code: string; endsAt: string } | null = null
-    const allBlocks: any[] = []
-    if (Array.isArray(designJson.steps)) {
-      for (const step of designJson.steps) {
-        if (Array.isArray(step?.blocks)) allBlocks.push(...step.blocks)
-      }
-    }
-    if (Array.isArray(designJson.successStep?.blocks)) {
-      allBlocks.push(...designJson.successStep.blocks)
-    }
-    const dynamicCouponBlock = allBlocks.find(
-      (b: any) => b?.type === 'coupon' && b?.props?.mode === 'dynamic'
-    )
-    if (dynamicCouponBlock && form.store_id) {
+
+    // 8.8. Webhooks de saída (popup.signup / popup.reward) para quem assinou
+    // na loja do popup. Sem loja não há assinatura possível. Só enfileira:
+    // a entrega tem retry próprio. Falha aqui não derruba a inscrição.
+    if (form.store_id) {
       try {
-        const { data: store } = await supabase
-          .from('shopify_stores')
-          .select('shop_domain, access_token')
-          .eq('id', form.store_id)
-          .maybeSingle()
-        if (store?.shop_domain && store?.access_token) {
-          const cp = dynamicCouponBlock.props || {}
-          const { generateShopifyCoupon } = await import('@/lib/services/whatsapp/shopify-coupon-service')
-          const result = await generateShopifyCoupon({
-            shopDomain: store.shop_domain,
-            accessToken: store.access_token,
-            discountType: cp.discountType === 'fixed_amount' ? 'fixed_amount' : 'percentage',
-            value: Number(cp.discountValue) || 10,
-            validityDays: Number(cp.validityDays) || 7,
-            prefix: String(cp.codePrefix || 'POPUP').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12) || 'POPUP',
-            usageLimit: 1,
-            minimumAmount: cp.minimumAmount > 0 ? Number(cp.minimumAmount) : undefined,
-            contactEmail: contactData.email,
-            title: `Popup ${form.name || form.id}`,
+        const { data: storeRow } = await supabase.from('shopify_stores').select('id, shop_domain, shop_name').eq('id', form.store_id).eq('organization_id', form.organization_id).maybeSingle()
+        if (storeRow?.shop_domain) {
+          const { dispatchToOutbound } = await import('@/lib/webhooks/outbound-dispatcher')
+          const storeInfo = { id: String(storeRow.id), shop_domain: String(storeRow.shop_domain), name: String((storeRow as any).shop_name || storeRow.shop_domain) }
+          const cleanAnswers: Record<string, any> = {}
+          for (const [k, v] of Object.entries(answers || {})) {
+            if (k === '_wf_hp' || k === 'consent' || k.startsWith('consent__')) continue
+            cleanAnswers[k] = v
+          }
+          // Mesma leitura por canal que vai na resposta ao runtime.
+          const consentOut = {
+            email: !contactData.email ? null : marketingConsentDenied ? 'denied' : doubleOptInEnabled ? 'pending' : 'granted',
+            whatsapp: !contactPhone || !whatsappDecision ? null : !whatsappDecision.checked ? 'denied' : whatsappOptInFailed ? 'denied' : whatsappDoubleOptIn && !whatsappAlreadyOptedIn ? 'pending' : 'granted',
+            sms: !contactPhone || !smsDecision ? null : (smsDecision.checked ? 'granted' : 'denied'),
+          }
+          await dispatchToOutbound({
+            eventType: 'popup.signup',
+            organizationId: form.organization_id,
+            storeId: form.store_id,
+            sourceEventId: submission.id,
+            source: 'popup',
+            store: storeInfo,
+            data: {
+              submission_id: submission.id,
+              form_id: formId,
+              form_name: form.name || null,
+              contact_id: contactId,
+              email: contactData.email || null,
+              phone: contactPhone || null,
+              first_name: contactData.first_name || null,
+              last_name: contactData.last_name || null,
+              answers: cleanAnswers,
+              consent: consentOut,
+              device: submissionContext.device || null,
+              country: submissionContext.country || null,
+              page_url: submissionContext.page_url || null,
+              traffic_type: submissionContext.traffic_type || null,
+              page_kind: submissionContext.page_kind || null,
+              variant_id: submissionContext.variant_id || null,
+              utm: { source: utm_source || null, medium: utm_medium || null, campaign: utm_campaign || null, term: utm_term || null, content: utm_content || null },
+              created_at: new Date().toISOString(),
+            },
           })
-          if (result.data) {
-            dynamicCoupon = { code: result.data.code, endsAt: result.data.endsAt }
-          } else {
-            console.warn('[Form Submit] dynamic coupon failed (using fallback):', result.error)
+          if (issuedCoupon) {
+            await dispatchToOutbound({
+              eventType: 'popup.reward',
+              organizationId: form.organization_id,
+              storeId: form.store_id,
+              sourceEventId: `${submission.id}:reward`,
+              source: 'popup',
+              store: storeInfo,
+              data: {
+                submission_id: submission.id,
+                form_id: formId,
+                form_name: form.name || null,
+                contact_id: contactId,
+                email: contactData.email || null,
+                coupon: { code: issuedCoupon.code, kind: issuedCoupon.kind, value: issuedCoupon.value, ends_at: issuedCoupon.ends_at, tier: issuedCoupon.tier, source: issuedCoupon.source },
+                game: gameResult ? { type: gameResult.type, segment: gameResult.segment, label: gameResult.label, prize: gameResult.prize } : null,
+                created_at: new Date().toISOString(),
+              },
+            })
           }
         }
       } catch (e: any) {
-        console.warn('[Form Submit] dynamic coupon errored (using fallback):', e?.message)
+        console.warn('[Form Submit] outbound webhook dispatch failed:', e?.message)
       }
+    }
+
+    // Código estático (pool vazio, erro do ledger ou visitante sem contato)
+    // também é um código entregue: sem isto o analytics contava menos
+    // cupons do que o popup realmente mostrou.
+    if (issuedCoupon && !submissionPatch.coupon_code) {
+      submissionPatch.coupon_code = issuedCoupon.code
+      submissionPatch.coupon_kind = issuedCoupon.kind
+    }
+    if (stepPath.length) submissionPatch.step_path = stepPath
+    if (rewardTierKey) submissionPatch.reward_tier = rewardTierKey
+    if (Object.keys(submissionPatch).length) {
+      const { error: upErr } = await supabase.from('crm_form_submissions').update(submissionPatch).eq('id', submission.id)
+      if (upErr && upErr.code !== '42703' && upErr.code !== 'PGRST204') console.warn('[Form Submit] submission patch failed:', upErr.message)
     }
 
     // 9. Return success with tracking data for client-side pixels
@@ -1287,12 +1736,31 @@ export async function POST(
       events_fired: eventsFired,
       redirect_url: form.redirect_url || null,
       success_message: form.success_message,
-      // Dynamic coupon (null when the form is static-only or generation failed).
-      // The popup script splices this into any coupon block on the success step.
-      coupon: dynamicCoupon,
+      // O cupom emitido (null quando não há bloco, ou a pessoa já usou o
+      // dela). O runtime encaixa no bloco de cupom da etapa de sucesso e,
+      // com auto_apply, grava na sessão do carrinho da Shopify.
+      coupon: issuedCoupon,
+      // Resultado do jogo (null sem roleta/raspadinha). O runtime só anima
+      // até o segmento — o prêmio já está decidido e gravado.
+      game: gameResult ? { type: gameResult.type, segment: gameResult.segment, segment_id: gameResult.segmentId, label: gameResult.label, prize: gameResult.prize, replay: gameReplay } : null,
       // True when a double-opt-in confirmation email was just dispatched.
       // The popup script can swap the success copy to "check your inbox".
       double_optin_sent: doubleOptInSent,
+      // Pedido de confirmação no WhatsApp saiu? O runtime mostra "responda
+      // SIM no WhatsApp" quando o lojista quiser.
+      whatsapp_optin_sent: whatsappOptInSent,
+      // O que ficou decidido por canal — o runtime expõe no evento
+      // worder:signup para o script da loja.
+      consent: {
+        email: !contactData.email ? null
+          : marketingConsentDenied ? 'denied'
+          : doubleOptInEnabled ? 'pending' : 'granted',
+        whatsapp: !contactPhone || !whatsappDecision ? null
+          : !whatsappDecision.checked ? 'denied'
+          : whatsappOptInFailed ? 'denied'
+          : whatsappDoubleOptIn && !whatsappAlreadyOptedIn ? 'pending' : 'granted',
+        sms: !contactPhone || !smsDecision ? null : (smsDecision.checked ? 'granted' : 'denied'),
+      },
       // Client-side tracking data
       tracking: {
         facebook_pixel_id: form.facebook_pixel_id,

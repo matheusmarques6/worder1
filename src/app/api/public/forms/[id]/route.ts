@@ -2,6 +2,7 @@
 // PUBLIC FORM API - Get form for embedding (no auth required)
 // =============================================
 import { NextRequest, NextResponse } from 'next/server'
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit'
 import { getSupabaseClient } from '@/lib/api-utils'
 
 export const dynamic = 'force-dynamic'
@@ -19,14 +20,25 @@ export async function GET(
 
     const formId = params.id
 
-    // Buscar por ID ou slug
+    // Rota pública e sem autenticação: o limite evita varredura de slugs
+    // (que devolveria o design e os ids de pixel de outra organização).
+    const ip = getClientIp(request)
+    const rl = await checkRateLimit(`public-form:${formId}:${ip}`, { limit: 60, windowSec: 60 })
+    if (!rl.allowed) {
+      return NextResponse.json({ error: 'Muitas tentativas. Aguarde e tente novamente.' }, { status: 429 })
+    }
+
+    // Buscar por ID ou slug. behavior, audience, tags e list_id ficam de
+    // fora do retorno: são regras internas (segmentos, listas, gates) e
+    // esta rota é pública, sem gate de domínio. A página de embed não usa
+    // nenhuma delas.
     let query = supabase
       .from('crm_forms')
       .select(`
         id, name, slug, description, status,
         theme, logo_url, success_message, redirect_url,
         facebook_pixel_id, google_ads_id, google_analytics_id,
-        form_type, design_json, behavior, audience, tags, list_id,
+        form_type, design_json,
         fields:crm_form_fields(
           id, field_type, label, placeholder, description,
           required, position, options, validation, conditional
@@ -53,8 +65,6 @@ export async function GET(
       form.fields.sort((a: any, b: any) => a.position - b.position)
     }
 
-    // Increment views
-    await supabase.rpc('increment_form_views', { p_form_id: form.id })
 
     // CORS headers for embedding
     const response = NextResponse.json({ form })

@@ -138,3 +138,45 @@ describe('os níveis são progressivamente mais amplos', () => {
     }
   });
 });
+
+// =============================================
+// A coluna que existe é `contacts.suppressed`, booleana.
+//
+// `contacts.status` nunca existiu neste banco: todo select que a pedia
+// era recusado pelo PostgREST, o guarda recebia `undefined` e liberava
+// todo mundo — bounce, denúncia e opt-in duplo pendente incluídos. Agora
+// o guarda entende o booleano, e o texto antigo continua valendo.
+// =============================================
+describe('supressão como booleano', () => {
+  it('suppressed = true é bloqueio técnico: nenhum threshold libera', () => {
+    for (const nivel of ['subscribed', 'nonSubscribed', 'all'] as const) {
+      expect(isEmailBlockedForThreshold('subscribed', true, nivel)).toBe(true)
+    }
+  })
+
+  it('suppressed = false não bloqueia nada por si só', () => {
+    expect(isEmailBlockedForThreshold('subscribed', false, 'subscribed')).toBe(false)
+    expect(isEmailBlockedForThreshold(true, false, 'subscribed')).toBe(false)
+  })
+
+  it('sem informação de supressão, quem decide é o consentimento', () => {
+    expect(isEmailBlockedForThreshold('pending', null, 'subscribed')).toBe(true)
+    expect(isEmailBlockedForThreshold('subscribed', null, 'subscribed')).toBe(false)
+    expect(isEmailBlockedForThreshold('subscribed', undefined, 'subscribed')).toBe(false)
+  })
+
+  it('o texto antigo continua funcionando', () => {
+    expect(isEmailBlockedForThreshold('subscribed', 'bounced', 'all')).toBe(true)
+    expect(isEmailBlockedForThreshold('subscribed', 'complained', 'all')).toBe(true)
+  })
+
+  it('o mesmo vale para SMS', () => {
+    expect(isSmsBlockedForThreshold(true, true, 'all')).toBe(true)
+    expect(isSmsBlockedForThreshold(true, false, 'all')).toBe(false)
+  })
+
+  it('isEmailBlocked (sem threshold) também entende o booleano', () => {
+    expect(isEmailBlocked('subscribed', true)).toBe(true)
+    expect(isEmailBlocked('subscribed', false)).toBe(false)
+  })
+})

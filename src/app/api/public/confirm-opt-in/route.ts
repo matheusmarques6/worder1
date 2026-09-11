@@ -71,7 +71,7 @@ export async function GET(req: NextRequest) {
     // the original consent timestamp for audit.
     const { data: contact } = await supabaseAdmin
       .from('contacts')
-      .select('id, email, first_name, last_name, phone, email_consent, email_consent_at')
+      .select('id, email, first_name, last_name, phone, email_consent, email_consent_at, lifecycle_stage')
       .eq('id', payload.contactId)
       .eq('organization_id', payload.orgId)
       .maybeSingle()
@@ -105,7 +105,16 @@ export async function GET(req: NextRequest) {
         email_consent: true as boolean | string,
         email_consent_at: new Date().toISOString(),
         email_consent_source: `popup_form:${payload.formId}:double_optin`,
-        status: 'qualified',
+        // Só promove quem ainda não é nada; cliente continua cliente.
+        //
+        // A coluna é `lifecycle_stage`; o código escrevia `status`, que não
+        // existe em contacts — e o PostgREST recusa a linha inteira. Ou
+        // seja: a confirmação do opt-in duplo NÃO GRAVAVA NADA, nem o
+        // consentimento. Quem clicava no link do e-mail continuava
+        // pendente para sempre.
+        ...(!contact.lifecycle_stage || ['lead', 'new'].includes(String(contact.lifecycle_stage))
+          ? { lifecycle_stage: 'subscriber' }
+          : {}),
       }
       const { error: consentErr } = await supabaseAdmin
         .from('contacts')
@@ -121,6 +130,22 @@ export async function GET(req: NextRequest) {
           throw retryErr
         }
       }
+
+      // A prova da confirmação: o clique no e-mail é a manifestação
+      // inequívoca que a LGPD pede — fica registrada com IP e user-agent
+      // do clique, ligada ao popup de origem.
+      const { recordConsent } = await import('@/lib/forms/consent')
+      await recordConsent(supabaseAdmin, {
+        organizationId: payload.orgId,
+        contactId: contact.id,
+        submissionId: null,
+        source: 'double_opt_in',
+        sourceRef: payload.formId,
+        pageUrl: req.nextUrl.pathname,
+        ipAddress: (req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || '').split(',')[0].trim() || null,
+        userAgent: req.headers.get('user-agent'),
+        locale: (req.headers.get('accept-language') || '').split(',')[0].trim() || null,
+      }, [{ channel: 'email', action: 'confirmed', text: null, version: null }])
 
       // Welcome flow fires HERE for double opt-in popups — not at submit.
       // The subscriber has just confirmed, so consent is now granted and

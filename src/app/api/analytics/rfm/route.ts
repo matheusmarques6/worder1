@@ -185,7 +185,9 @@ async function calculateRFMManual(organization_id: string, period_days: number) 
   // Buscar métricas de compra por contato
   const { data: purchases } = await supabase
     .from('contact_events')
-    .select('contact_id, order_total, occurred_at')
+    // O valor do pedido é `monetary_value`; `order_total` não existe em
+    // contact_events e derrubava a consulta — o RFM ficava sem compras.
+    .select('contact_id, monetary_value, occurred_at')
     .eq('organization_id', organization_id)
     .in('event_type', ['purchase', 'placed_order', 'checkout_completed'])
     .gte('occurred_at', cutoffDate.toISOString())
@@ -212,7 +214,7 @@ async function calculateRFMManual(organization_id: string, period_days: number) 
     const pDate = new Date(p.occurred_at)
     if (pDate > m.lastPurchase) m.lastPurchase = pDate
     m.orders++
-    m.total += p.order_total || 0
+    m.total += Number(p.monetary_value) || 0
   })
 
   // Calcular percentis

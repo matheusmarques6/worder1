@@ -233,12 +233,16 @@ export async function POST(request: NextRequest) {
         // permanent bounce as a hard suppression so the contact stops
         // receiving emails — automations + campaigns will skip it via
         // the consent guard, while WhatsApp/SMS branches keep working.
+        // A coluna de supressão é `suppressed` (booleana). Enquanto isto
+        // escrevia `status`, TODA esta atualização era recusada: nenhum
+        // bounce, nenhuma falha e nenhuma denúncia do provedor marcava o
+        // contato. O motivo e a data continuam em email_sends.
         if (contactId) {
           const bounceType = String(data.bounce?.type || '').toLowerCase();
           const isPermanent = bounceType === 'hard' || bounceType === 'permanent';
           if (isPermanent) {
             await supabaseAdmin.from('contacts')
-              .update({ email_consent: false, status: 'bounced' })
+              .update({ email_consent: false, suppressed: true })
               .eq('id', contactId);
           }
         }
@@ -261,7 +265,7 @@ export async function POST(request: NextRequest) {
         });
         if (contactId) {
           await supabaseAdmin.from('contacts')
-            .update({ email_consent: false, status: 'bounced' })
+            .update({ email_consent: false, suppressed: true })
             .eq('id', contactId);
         }
         break;
@@ -274,7 +278,7 @@ export async function POST(request: NextRequest) {
         // Revogar consent de quem reclamou (spam report)
         if (contactId) {
           await supabaseAdmin.from('contacts')
-            .update({ email_consent: false, status: 'complained' })
+            .update({ email_consent: false, suppressed: true })
             .eq('id', contactId);
         }
         break;

@@ -144,6 +144,15 @@ export function evaluateBlockCondition(
  * Escapa caracteres HTML para evitar XSS ao interpolar merge tags.
  * Converter < > & " ' / impede que user-provided content vire tag HTML no email.
  */
+/** decodeURIComponent que não explode com `%` solto vindo do template. */
+function decodeUriSeguro(value: string): string {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
 function escapeHtml(value: unknown): string {
   if (value === null || value === undefined) return ''
   // Standard HTML attribute escape set. We intentionally do NOT escape
@@ -520,7 +529,11 @@ export async function resolveProductBlocks(
    */
   storeId?: string | null
 ): Promise<string> {
-  const regex = /<!-- WORDER_PRODUCT_BLOCK:(\w+):(\d+):(\d+):(true|false):(true|false):(true|false):([^-]*?) -->/g
+  // O texto do botão viaja codificado (encodeURIComponent), então não tem
+  // espaço — mas TEM hífen quando o lojista escreve "Compre-agora", e o
+  // `[^-]` antigo fazia o marcador inteiro não casar: o bloco de produtos
+  // sumia do e-mail e sobrava um comentário HTML no lugar.
+  const regex = /<!-- WORDER_PRODUCT_BLOCK:(\w+):(\d+):(\d+):(true|false):(true|false):(true|false):(\S*) -->/g
   let result = html
   const matches: RegExpExecArray[] = []
   let m: RegExpExecArray | null
@@ -530,7 +543,10 @@ export async function resolveProductBlocks(
   }
 
   for (const match of matches) {
-    const [fullMatch, feedType, maxStr, colsStr, showPrice, showComparePrice, showButton, buttonText] = match
+    const [fullMatch, feedType, maxStr, colsStr, showPrice, showComparePrice, showButton, buttonTextRaw] = match
+    // Sem o decode, "Comprar agora" chegava no e-mail como "Comprar%20agora"
+    // — era o que o destinatário lia no botão.
+    const buttonText = escapeHtml(decodeUriSeguro(buttonTextRaw).trim() || 'Comprar')
     const maxProducts = parseInt(maxStr) || 4
     const cols = parseInt(colsStr) || 2
 
@@ -568,13 +584,15 @@ export async function resolveProductBlocks(
         const p = products[r * cols + c]
         if (!p) { productHtml += `<td width="${100 / cols}%"></td>`; continue }
 
-        const title = p.title || p.name || 'Produto'
-        const price = p.price || '0'
-        const comparePrice = p.compare_at_price || p.compare_price || ''
-        const imgUrl = p.image_url || p.images?.[0]?.src || ''
+        // Título e preço vêm da loja e entram em atributo HTML: uma aspa
+        // no nome do produto quebrava a tag inteira.
+        const title = escapeHtml(p.title || p.name || 'Produto')
+        const price = escapeHtml(p.price || '0')
+        const comparePrice = escapeHtml(p.compare_at_price || p.compare_price || '')
+        const imgUrl = escapeHtml(p.image_url || p.images?.[0]?.src || '')
         // O feed já monta a URL com o domínio da loja do e-mail. Sem URL,
         // melhor um link morto do que um domínio inventado.
-        const url = p.url || '#'
+        const url = escapeHtml(p.url || '#')
 
         productHtml += `<td width="${100 / cols}%" style="padding:8px;vertical-align:top;text-align:center;">
           <a href="${url}" style="text-decoration:none;color:inherit;display:block;">
@@ -583,7 +601,7 @@ export async function resolveProductBlocks(
               <div style="padding:12px;">
                 <p style="margin:0;font-size:14px;font-weight:600;color:#111827;">${title}</p>
                 ${showPrice === 'true' ? `${showComparePrice === 'true' && comparePrice ? `<p style="margin:4px 0 0;font-size:12px;color:#9CA3AF;text-decoration:line-through;">R$ ${comparePrice}</p>` : ''}<p style="margin:2px 0 0;font-size:16px;font-weight:700;color:#F97316;">R$ ${price}</p>` : ''}
-                ${showButton === 'true' ? `<a href="${url}" style="display:inline-block;margin-top:10px;padding:10px 24px;background:#F97316;color:white;border-radius:6px;font-size:13px;font-weight:600;text-decoration:none;">${buttonText.trim() || 'Comprar'}</a>` : ''}
+                ${showButton === 'true' ? `<a href="${url}" style="display:inline-block;margin-top:10px;padding:10px 24px;background:#F97316;color:white;border-radius:6px;font-size:13px;font-weight:600;text-decoration:none;">${buttonText}</a>` : ''}
               </div>
             </div>
           </a>

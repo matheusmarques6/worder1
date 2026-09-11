@@ -32,6 +32,9 @@ export async function POST(
       .from('whatsapp_campaigns')
       .insert({
         organization_id: organizationId,
+        // A cópia nasce na mesma loja da original. Sem isto, duplicar uma
+        // campanha de uma vitrine a jogava para a organização inteira.
+        store_id: original.store_id ?? null,
         instance_id: original.instance_id,
         name: `${original.name} (Cópia)`,
         description: original.description,
@@ -59,11 +62,15 @@ export async function POST(
 
     if (error) throw error
 
-    await supabase.from('whatsapp_campaign_logs').insert({
+    // O log é registro, não o trabalho: se ele falhar, a duplicata já
+    // existe e a resposta continua verdadeira — mas o erro aparece.
+    const { error: logError } = await supabase.from('whatsapp_campaign_logs').insert({
       campaign_id: duplicate.id,
+      organization_id: organizationId,
       log_type: 'info',
       message: `Campanha duplicada de "${original.name}"`
     })
+    if (logError) console.error('[WhatsAppDuplicate] log não registrado:', logError.message)
 
     return NextResponse.json({ campaign: duplicate })
   } catch (error) {

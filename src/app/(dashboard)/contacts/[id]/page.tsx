@@ -60,6 +60,7 @@ const shopifyEventLabels: Record<string, string> = {
   fulfilled_order: 'Pedido Entregue',
   cancelled_order: 'Pedido Cancelado',
   refunded_order: 'Pedido Reembolsado',
+  form_submitted: 'Inscreveu-se por um popup',
   checkout_started: 'Checkout Iniciado',
   checkout_completed: 'Checkout Concluído',
   checkout_abandoned: 'Carrinho Abandonado',
@@ -355,7 +356,9 @@ export default function ContactDetailPage() {
         ? `Pedido #${evt.properties.OrderNumber || evt.properties.order_number}`
         : evt.properties?.ProductName || evt.properties?.product_title || null,
       created_at: evt.occurredAt,
-      source: 'shopify',
+      // Nem todo evento do contato veio da Shopify: a inscrição por popup
+      // saía com o selo da loja, o que confundia a origem do contato.
+      source: evt.eventType === 'form_submitted' ? 'popup' : 'shopify',
       properties: evt.properties,
       monetaryValue: evt.monetaryValue,
       currency: evt.currency,

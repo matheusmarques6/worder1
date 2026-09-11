@@ -62,6 +62,7 @@ const TRIGGER_LABELS: Record<string, string> = {
   trigger_signup: 'Contato criado',
   trigger_form_submitted: 'Formulário enviado',
   trigger_popup_subscribed: 'Inscrito via popup',
+  trigger_whatsapp_optin: 'Confirmou WhatsApp via popup',
 }
 
 function triggerLabel(t?: string): string {

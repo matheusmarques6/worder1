@@ -91,6 +91,8 @@ export async function GET(request: NextRequest) {
       total: accountsWithWarnings.length,
       store: {
         id: store.id,
+        // A coluna é shop_name; o nome de fora segue `name` para não
+        // mexer no contrato de quem consome esta rota.
         name: store.shop_name,
       }
     });

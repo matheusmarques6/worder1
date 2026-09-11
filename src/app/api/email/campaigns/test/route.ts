@@ -45,7 +45,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Campaign template not found' }, { status: 404 });
     }
 
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
+    // O teste tem de mostrar o link que o cliente vai receber: mesmo host
+    // de rastreamento do disparo de verdade.
+    const { getTrackingBaseUrl } = await import('@/lib/email/tracking-url');
+    const baseUrl = await getTrackingBaseUrl(user.organization_id, campaign.store_id || null);
     const sampleData = getSampleMergeData();
 
     // Use a fake emailSendId for test emails
@@ -94,10 +97,27 @@ export async function POST(request: NextRequest) {
     // escape:false — subject is text/plain (no &amp; in the inbox).
     const finalSubject = `[TESTE] ${renderMergeTags(campaign.subject, sampleData, { escape: false })}`;
 
+    // O teste tem de sair pelo mesmo endereço do envio de verdade: era
+    // aqui que o lojista via "worder.email" e concluía que a troca de
+    // domínio não tinha funcionado.
+    let testFrom = campaign.from_email as string | null
+    let testSenderName = campaign.sender_name as string | null
+    try {
+      const { getEmailProviderForOrg } = await import('@/lib/email/providers')
+      const { chooseSender } = await import('@/lib/email/sender-preference')
+      const { config } = await getEmailProviderForOrg(user.organization_id, campaign.store_id || undefined)
+      const chosen = chooseSender(
+        { email: campaign.from_email, name: campaign.sender_name },
+        { email: config.defaultFrom, name: config.defaultSenderName },
+      )
+      testFrom = chosen.email
+      testSenderName = chosen.name
+    } catch { /* mantém o que está na campanha */ }
+
     await sendEmail({
       to: testEmail,
-      from: campaign.from_email,
-      senderName: campaign.sender_name,
+      from: testFrom as string,
+      senderName: testSenderName || undefined,
       subject: finalSubject,
       html: finalHtml,
       replyTo: campaign.reply_to,

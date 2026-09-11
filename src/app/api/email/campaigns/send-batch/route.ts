@@ -229,6 +229,8 @@ export async function POST(req: NextRequest) {
     // ISP-aware: group by ISP, apply per-ISP throttle
     // ──────────────────────────────────────────
     let sent = 0;
+    // Envios que saíram e não conseguiram ser registrados no banco.
+    let naoRegistrados = 0;
     let failed = 0;
 
     // Group contacts by ISP for throttling
@@ -262,10 +264,13 @@ export async function POST(req: NextRequest) {
     // the campaign + organization (both constant per request), so computing
     // it per-contact meant getOrgSender() hit the organizations table N times
     // for a single batch. Hoisted out to a single lookup.
-    let batchFromAddress = campaign.from_email
-      ? (campaign.sender_name ? `${campaign.sender_name} <${campaign.from_email}>` : campaign.from_email)
-      : null;
-    if (!batchFromAddress && campaign.store_id) {
+    // O endereço guardado na campanha vence — a não ser que ele seja o do
+    // domínio compartilhado e a loja já tenha domínio próprio verificado.
+    // Esse endereço é um marcador de lugar que toda loja recebe ao nascer,
+    // não uma escolha; sem esta regra o lojista verifica o domínio dele e
+    // as campanhas continuam saindo como worder.email para sempre.
+    let batchFromAddress: string | null = null;
+    if (campaign.store_id) {
       // Store-aware sender: a multi-store org must send each store's
       // campaigns under THAT store's identity, not the org default.
       // getEmailProviderForOrg layers store email_settings (and the
@@ -274,13 +279,17 @@ export async function POST(req: NextRequest) {
       // getOrgSender() and arrived as the org name ("Based").
       try {
         const { getEmailProviderForOrg } = await import('@/lib/email/providers');
+        const { chooseSender, formatSender } = await import('@/lib/email/sender-preference');
         const { config } = await getEmailProviderForOrg(organizationId, campaign.store_id);
-        if (config.defaultFrom) {
-          batchFromAddress = config.defaultSenderName
-            ? `${config.defaultSenderName} <${config.defaultFrom}>`
-            : config.defaultFrom;
-        }
+        const chosen = chooseSender(
+          { email: campaign.from_email, name: campaign.sender_name },
+          { email: config.defaultFrom, name: config.defaultSenderName },
+        );
+        batchFromAddress = formatSender(chosen);
       } catch { /* fall through to org-level */ }
+    }
+    if (!batchFromAddress && campaign.from_email) {
+      batchFromAddress = campaign.sender_name ? `${campaign.sender_name} <${campaign.from_email}>` : campaign.from_email;
     }
     if (!batchFromAddress) {
       try {
@@ -424,7 +433,10 @@ export async function POST(req: NextRequest) {
             contact_id: contact.id,
             email: contact.email,
             to_email: contact.email,
-            from_email: campaign.sender_email || null,
+            // A coluna gravada na campanha é from_email; sender_email nunca
+            // é escrita, então o registro do envio saía sem remetente — e
+            // era por isso que este problema não aparecia nos dados.
+            from_email: campaign.from_email || null,
             sender_email: campaign.sender_email || null,
             subject: campaign.subject || null,
             provider: 'resend',
@@ -484,10 +496,14 @@ export async function POST(req: NextRequest) {
         }
 
         // Persistir variant no email_sends (pro relatório A/B)
-        await supabaseAdmin
+        const { error: variantError } = await supabaseAdmin
           .from('email_sends')
           .update({ ab_variant: variant })
           .eq('id', emailSend.id)
+          .eq('organization_id', organizationId)
+        // Sem a variante gravada, este envio some do relatório A/B e o
+        // teste decide com meia amostra.
+        if (variantError) console.error('[SendBatch] variante do A/B não gravada:', variantError.message)
 
         // Resolve dynamic product/cart blocks per contact — com a loja da
         // campanha, para que o catálogo e os links sejam DESTA loja e não
@@ -633,7 +649,7 @@ export async function POST(req: NextRequest) {
         for (let i = 0; i < prepped.length; i++) {
           const p = prepped[i];
           const resendId = resendIds[i] || null;
-          await supabaseAdmin
+          const { error: markError } = await supabaseAdmin
             .from('email_sends')
             .update({
               status: 'sent',
@@ -641,7 +657,16 @@ export async function POST(req: NextRequest) {
               resend_id: resendId,
               provider_message_id: resendId,
             })
-            .eq('id', p.emailSendId);
+            .eq('id', p.emailSendId)
+            .eq('organization_id', organizationId);
+          // A mensagem SAIU — isso é fato, e o contador reflete o fato.
+          // O que pode ter falhado é o registro dela. Sem essa linha
+          // atualizada, o relatório da campanha, a franquia e a régua de
+          // frequência passam a contar menos do que aconteceu de verdade.
+          if (markError) {
+            naoRegistrados++;
+            console.error(`[SendBatch] envio ${p.emailSendId} saiu mas não foi registrado:`, markError.message);
+          }
           sent++;
         }
       } catch (batchErr: any) {
@@ -649,10 +674,15 @@ export async function POST(req: NextRequest) {
         // Mark everything in this chunk as failed
         const err = batchErr?.message || 'Batch send error';
         for (const p of prepped) {
-          await supabaseAdmin
+          const { error: failError } = await supabaseAdmin
             .from('email_sends')
             .update({ status: 'failed', error_message: err })
-            .eq('id', p.emailSendId);
+            .eq('id', p.emailSendId)
+            .eq('organization_id', organizationId);
+          if (failError) {
+            naoRegistrados++;
+            console.error(`[SendBatch] envio ${p.emailSendId} falhou e a falha não foi registrada:`, failError.message);
+          }
           failed++;
         }
       }
@@ -697,11 +727,18 @@ export async function POST(req: NextRequest) {
 
     // If last batch, mark campaign as 'sent'
     if (batch_number === total_batches) {
-      await supabaseAdmin
+      const { error: finalError } = await supabaseAdmin
         .from('email_campaigns')
         .update({ status: 'sent' })
-        .eq('id', campaign_id);
-      console.log(`[SendBatch] Campaign ${campaign_id} marked as sent (final batch ${batch_number})`);
+        .eq('id', campaign_id)
+        .eq('organization_id', organizationId);
+      if (finalError) {
+        // A campanha fica presa em "sending" para sempre, com todos os
+        // e-mails já entregues. Quem olhar a tela vai achar que travou.
+        console.error(`[SendBatch] campanha ${campaign_id} presa em "sending": último lote saiu mas o status não foi gravado:`, finalError.message);
+      } else {
+        console.log(`[SendBatch] Campaign ${campaign_id} marked as sent (final batch ${batch_number})`);
+      }
     }
 
     return NextResponse.json({
@@ -709,6 +746,9 @@ export async function POST(req: NextRequest) {
       total_batches,
       sent,
       failed,
+      // Saíram, mas o registro no banco falhou. Zero é o esperado; qualquer
+      // outro número quer dizer que o relatório desta campanha está por baixo.
+      unrecorded: naoRegistrados,
     });
   } catch (error: any) {
     console.error('[SendBatch] Error:', error);

@@ -413,6 +413,26 @@ async function processMessage(
     }
   }
 
+  // Confirmação de opt-in pedida por popup ("SIM" ou o botão do template).
+  // Só age quando há pedido pendente para este telefone; nunca derruba o
+  // ingest.
+  try {
+    const { confirmWhatsAppOptInFromInbound } = await import('./popup-opt-in');
+    const optIn = await confirmWhatsAppOptInFromInbound(supabase, {
+      organizationId: account.organization_id,
+      storeId: account.store_id || null,
+      phone: phoneNumber,
+      message,
+      textBody,
+      crmContactId: crmContactId || null,
+    });
+    if (optIn.outcome !== 'ignored') {
+      wlog.info('whatsapp.popup_optin.' + optIn.outcome, { organization_id: account.organization_id, conversation_id: conversation.id });
+    }
+  } catch (err: any) {
+    wlog.error('whatsapp.popup_optin.error', { error: err?.message, conversation_id: conversation?.id });
+  }
+
   const eventData: EventData = {
     contact_id: crmContactId,
     contact_name: contactName,

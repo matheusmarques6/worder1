@@ -111,10 +111,8 @@ export async function POST(request: NextRequest) {
     // do navegador do DONO da loja, sem sessão Worder) — todo o contexto
     // viaja por aqui, nunca pela sessão.
     //
-    // O schema VIVO de oauth_states é (state, provider, organization_id,
-    // metadata, expires_at); o schema que o fluxo OAuth oficial assume é
-    // (state_token, data, expires_at). Gravamos no vivo primeiro e caímos
-    // pro formato antigo se as colunas não existirem (CI/dev).
+    // oauth_states é (state, provider, organization_id, metadata,
+    // expires_at).
     const state = crypto.randomBytes(32).toString('hex');
     const pendingPayload = {
       provider: 'shopify_manual_oauth',
@@ -130,21 +128,13 @@ export async function POST(request: NextRequest) {
     };
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
 
-    let { error: stateErr } = await supabase.from('oauth_states').insert({
+    const { error: stateErr } = await supabase.from('oauth_states').insert({
       state,
       provider: 'shopify_manual_oauth',
       organization_id: organizationId,
       metadata: pendingPayload,
       expires_at: expiresAt,
     });
-    if (stateErr) {
-      const retry = await supabase.from('oauth_states').insert({
-        state_token: state,
-        data: pendingPayload,
-        expires_at: expiresAt,
-      });
-      stateErr = retry.error;
-    }
     if (stateErr) {
       console.error('[ShopifyOAuthManual] state insert failed:', stateErr);
       return NextResponse.json({ error: 'Falha ao iniciar o fluxo OAuth' }, { status: 500 });

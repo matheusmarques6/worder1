@@ -81,6 +81,9 @@ const effects = vi.hoisted(() => {
     checkAllIntegrations,
     checkIntegration,
     integrationHealthService: vi.fn(() => ({ checkAllIntegrations, checkIntegration })),
+    listPoolsNeedingStock: vi.fn(async () => []),
+    replenishPool: vi.fn(async () => ({ created: 0, usable: 0 })),
+    resolveRunningExperiments: vi.fn(async () => []),
     reserve: vi.fn(async () => []),
     complete: vi.fn(async () => undefined),
     fail: vi.fn(async () => ({ retrying: false, nextAttemptAt: null })),
@@ -177,6 +180,13 @@ vi.mock('@/lib/api-utils', () => ({
 }))
 vi.mock('@/lib/services/integration-health', () => ({
   IntegrationHealthService: effects.integrationHealthService,
+}))
+vi.mock('@/lib/coupons/pool-service', () => ({
+  listPoolsNeedingStock: effects.listPoolsNeedingStock,
+  replenishPool: effects.replenishPool,
+}))
+vi.mock('@/lib/popups/experiment-service', () => ({
+  resolveRunningExperiments: effects.resolveRunningExperiments,
 }))
 vi.mock('@/lib/queue/durable-queue', () => ({
   reserve: effects.reserve,
@@ -303,6 +313,11 @@ refusesWithoutSecret(
   [...unauthorizedHeaders, { authorization: 'Bearer undefined' }],
   null,
 )
+
+refusesWithoutSecret('cron-remote-new-routes', [
+  'replenish-coupon-pools',
+  'resolve-popup-experiments',
+])
 
 describe('configured Bearer reaches the existing business seam', () => {
   it('reaches Supabase for a database-backed handler', async () => {
@@ -487,5 +502,27 @@ describe('configured Bearer reaches the existing business seam', () => {
 
     expect(response.status).not.toBe(401)
     expect(effects.from).toHaveBeenCalled()
+  })
+
+  it('reaches coupon pool scanning with a configured Bearer', async () => {
+    vi.stubEnv('CRON_SECRET', 's3cret')
+    const load = routes['../app/api/cron/replenish-coupon-pools/route.ts']
+    const handlers = await load() as Record<string, (req: NextRequest) => Promise<Response>>
+
+    const response = await handlers.GET(request('GET', { authorization: 'Bearer s3cret' }))
+
+    expect(response.status).not.toBe(401)
+    expect(effects.listPoolsNeedingStock).toHaveBeenCalled()
+  })
+
+  it('reaches popup experiment resolution with a configured Bearer', async () => {
+    vi.stubEnv('CRON_SECRET', 's3cret')
+    const load = routes['../app/api/cron/resolve-popup-experiments/route.ts']
+    const handlers = await load() as Record<string, (req: NextRequest) => Promise<Response>>
+
+    const response = await handlers.GET(request('GET', { authorization: 'Bearer s3cret' }))
+
+    expect(response.status).not.toBe(401)
+    expect(effects.resolveRunningExperiments).toHaveBeenCalled()
   })
 })

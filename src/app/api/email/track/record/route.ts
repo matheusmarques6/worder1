@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { isInternalAuthorized } from '@/lib/internal-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -7,8 +8,21 @@ export const dynamic = 'force-dynamic'
  * Endpoint interno chamado pelos redirects de open/click (em edge runtime).
  * Valida que (contactId, campaignId) pertencem ao orgId informado antes de gravar.
  * Retorna 200 mesmo em erro (não quebra pixel/click).
+ *
+ * Autorização: segredo interno, obrigatório. Só o cabeçalho X-Internal não
+ * é credencial nenhuma, e o trio de uuids que esta rota recebe (campanha,
+ * contato, organização) viaja em toda URL de rastreamento — está nas mãos
+ * de qualquer destinatário. Sem o segredo, dava para inflar as aberturas e
+ * os cliques de uma loja com um curl, e a decisão de "quem não abre há
+ * meses" passa por esses números.
+ *
+ * A conferência de que campanha e contato são daquela organização continua
+ * logo abaixo: uma coisa é a porta, outra é o conteúdo.
  */
 export async function POST(req: NextRequest) {
+  if (!isInternalAuthorized(req)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
   try {
     const body = await req.json()
     const { type, campaignId, contactId, orgId, url, sendId } = body
@@ -89,11 +103,18 @@ export async function POST(req: NextRequest) {
         type === 'click' ? { clicked_at: new Date().toISOString() } :
         null
       if (updateField) {
-        await supabaseAdmin
+        // A campanha e o contato acima são conferidos contra o orgId; o
+        // sendId vinha do corpo e ia direto para um update por id só —
+        // um id de outra organização marcaria a abertura dela. Agora o
+        // registro tem de ser desta organização E desta campanha.
+        const { error: sendError } = await supabaseAdmin
           .from('email_sends')
           .update(updateField)
           .eq('id', sendId)
+          .eq('organization_id', orgId)
+          .eq('campaign_id', campaignId)
           .is(type === 'open' ? 'opened_at' : 'clicked_at', null)
+        if (sendError) console.warn('[TrackRecord] abertura/clique não gravado no envio:', sendError.message)
       }
     }
 

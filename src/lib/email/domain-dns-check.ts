@@ -171,7 +171,10 @@ export async function verifyEmailDomain(dbDomain: any, opts: { trigger?: boolean
   const updates: Record<string, any> = { status, dns_records: dnsRecords }
   if (status === 'verified' && !dbDomain.verified_at) updates.verified_at = new Date().toISOString()
   if (resend && (resend.open_tracking !== undefined || resend.click_tracking !== undefined)) {
-    updates.tracking_config = { ...(dbDomain.tracking_config || {}), open_tracking: resend.open_tracking ?? false, click_tracking: resend.click_tracking ?? false, tls: resend.tls || 'opportunistic', region: resend.region || 'us-east-1', last_checked_at: new Date().toISOString(), dmarc_found: dmarc.found }
+    // `tracking_subdomain` é o host que o destinatário vê; guardar o que
+    // o Resend diz (e não o que pedimos) é o que deixa o painel falar do
+    // estado real.
+    updates.tracking_config = { ...(dbDomain.tracking_config || {}), open_tracking: resend.open_tracking ?? false, click_tracking: resend.click_tracking ?? false, tracking_subdomain: resend.tracking_subdomain ?? (dbDomain.tracking_config || {}).tracking_subdomain ?? null, tls: resend.tls || 'opportunistic', region: resend.region || 'us-east-1', last_checked_at: new Date().toISOString(), dmarc_found: dmarc.found }
   } else {
     updates.tracking_config = { ...(dbDomain.tracking_config || {}), last_checked_at: new Date().toISOString(), dmarc_found: dmarc.found }
   }

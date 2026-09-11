@@ -30,7 +30,7 @@ interface OverviewData {
   storeRevenue: number
   storeOrders: number
   series: Array<{ label: string; campanhas: number; automacoes: number; fora: number }>
-  channels: { email: number; whatsapp: number; sms: number }
+  channels: { email: number; whatsapp: number; sms: number; popup?: number }
   recentCampaigns: Array<{
     id: string
     name: string
@@ -301,15 +301,17 @@ export default function AnalyticsPage() {
   // ── Channel revenue breakdown from overview ──
 
   const channels = overview?.channels
-  const hasChannelData = channels && (channels.email > 0 || channels.whatsapp > 0 || channels.sms > 0)
-  const channelTotal = hasChannelData ? channels.email + channels.whatsapp + channels.sms : 0
+  const popupRevenue = channels?.popup || 0
+  const hasChannelData = channels && (channels.email > 0 || channels.whatsapp > 0 || channels.sms > 0 || popupRevenue > 0)
+  const channelTotal = hasChannelData ? channels.email + channels.whatsapp + channels.sms + popupRevenue : 0
 
   const channelBreakdown = hasChannelData
     ? [
         { name: 'E-mail', value: channels.email, pct: channelTotal > 0 ? (channels.email / channelTotal) * 100 : 0, color: '#F26B2A' },
         { name: 'WhatsApp', value: channels.whatsapp, pct: channelTotal > 0 ? (channels.whatsapp / channelTotal) * 100 : 0, color: '#25D366' },
         { name: 'SMS', value: channels.sms, pct: channelTotal > 0 ? (channels.sms / channelTotal) * 100 : 0, color: '#8B5CF6' },
-      ]
+        { name: 'Popup', value: popupRevenue, pct: channelTotal > 0 ? (popupRevenue / channelTotal) * 100 : 0, color: '#0EA5E9' },
+      ].filter((c) => c.value > 0)
     : []
 
   // ── Recent campaigns from overview ──

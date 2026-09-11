@@ -18,6 +18,7 @@ export async function dispatchToOutbound(input: DispatchInput): Promise<void> {
   const { data: subs, error: subsError } = await supabaseAdmin
     .from('webhook_subscriptions')
     .select('id, organization_id, store_id, url, events, status')
+    .eq('organization_id', input.organizationId)
     .eq('store_id', input.storeId)
     .eq('status', 'active')
     .contains('events', [input.eventType]);

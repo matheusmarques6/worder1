@@ -46,6 +46,7 @@ const TRIGGER_TO_EVENT_TYPES: Record<string, string[]> = {
   trigger_browse_abandoned: ['viewed_product', 'page_viewed'],
   trigger_back_in_stock: ['back_in_stock'],
   trigger_form_submitted: ['form_submitted'],
+  trigger_popup_subscribed: ['form_submitted'],
 };
 
 function inferType(value: any): string {

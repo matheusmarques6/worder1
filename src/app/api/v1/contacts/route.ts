@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { authenticateApiKey, BULK_IMPORT_LIMIT } from '@/lib/auth/api-key'
 import { checkEmail } from '@/lib/email/email-hygiene'
+import { sanitizeSearchTerm } from '@/lib/db/search-term'
 export const dynamic = 'force-dynamic'
 
 const FIELDS = 'id, email, phone, first_name, last_name, full_name, tags, custom_fields, source, is_subscribed_email, is_subscribed_sms, total_orders, total_spent, created_at, updated_at'
@@ -18,9 +19,12 @@ export async function GET(req: NextRequest) {
   const limit = Math.min(200, Math.max(1, Number(sp.get('limit') || 50)))
   const cursor = sp.get('cursor')
   const search = (sp.get('search') || '').trim()
+  // O termo vai para dentro de um filtro do PostgREST: vírgula e
+  // parêntese deixariam de ser texto e passariam a ser consulta.
+  const buscaSegura = sanitizeSearchTerm(search)
   let q = supabaseAdmin.from('contacts').select(FIELDS).eq('organization_id', a.ctx.organizationId).order('created_at', { ascending: false }).limit(limit + 1)
   if (cursor) q = q.lt('created_at', cursor)
-  if (search) q = q.or(`email.ilike.%${search.replace(/[%,]/g, '')}%,phone.ilike.%${search.replace(/[%,]/g, '')}%`)
+  if (buscaSegura) q = q.or(`email.ilike.%${buscaSegura}%,phone.ilike.%${buscaSegura}%`)
   const { data, error } = await q
   if (error) return NextResponse.json({ error: 'query_failed', message: error.message }, { status: 500 })
   const rows = data || []

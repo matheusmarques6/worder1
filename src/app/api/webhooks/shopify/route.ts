@@ -299,6 +299,17 @@ async function getStoreConfig(shopDomain: string): Promise<ShopifyStoreConfig | 
 // Shopify sends in the header (canonical, alias, custom domain, even
 // a typo'd one), the URL itself unambiguously identifies the store.
 // Adapted from the AdTracked pattern.
+/** O store_id da URL só vale se a loja for mesmo a do domínio assinado. */
+function storeMatchesDomain(store: any, domain: string): boolean {
+  const d = String(domain || '').toLowerCase();
+  if (!d) return false;
+  const aliases: string[] = Array.isArray(store?.shop_domain_aliases) ? store.shop_domain_aliases : [];
+  return [store?.shop_domain, store?.primary_domain, ...aliases]
+    .filter(Boolean)
+    .map((x: string) => String(x).toLowerCase())
+    .includes(d);
+}
+
 async function getStoreConfigById(storeId: string): Promise<ShopifyStoreConfig | null> {
   try {
     const supabase = getSupabase();
@@ -473,14 +484,19 @@ async function processCustomerCreated(store: ShopifyStoreConfig, customer: any) 
 
   // Criar notificação
   const supabase = getSupabase();
-  await supabase.from('notifications').insert({
+  // `data` e `is_read` não existem: as colunas são `metadata` e `read`.
+  // Com os nomes errados, o aviso nunca chegava ao sino do painel.
+  const { error: notifErr } = await supabase.from('notifications').insert({
     organization_id: store.organization_id,
     type: 'contact',
     title: 'Novo cliente do Shopify',
     message: `${customer.first_name || ''} ${customer.last_name || ''} (${customer.email}) foi adicionado.`,
-    data: { contact_id: contact?.id, source: 'shopify' },
-    is_read: false,
+    metadata: { contact_id: contact?.id, source: 'shopify' },
+    reference_type: 'contact',
+    reference_id: contact?.id || null,
+    read: false,
   });
+  if (notifErr) console.error('[Shopify Webhook] aviso de novo cliente não criado:', notifErr.message);
 }
 
 async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
@@ -1125,13 +1141,16 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
     type: 'order',
     title: 'Novo pedido do Shopify',
     message: `Pedido #${order.order_number} de ${order.email} - R$ ${orderValue.toFixed(2)}`,
-    data: {
+    // `data` e `is_read` não existem: as colunas são `metadata` e `read`.
+    metadata: {
       order_id: order.id,
       order_number: order.order_number,
       contact_id: contact.id,
       value: orderValue,
     },
-    is_read: false,
+    reference_type: 'order',
+    reference_id: order.id ? String(order.id) : null,
+    read: false,
   });
 }
 
@@ -1140,26 +1159,16 @@ async function processOrderPaid(store: ShopifyStoreConfig, order: any) {
 
   const supabase = getSupabase();
 
-  // Ciclo de vida do grant (9.2): cupom emitido pelo offer_engine que volta
-  // no pedido pago é consumido (uses++ → consumed + ledger). Best-effort e
-  // idempotente no banco — reentrega do webhook recebe 'already'.
-  try {
-    const { consumeGrantsForOrder } = await import('@/lib/ai/grant-consumption');
-    await consumeGrantsForOrder(store.organization_id, order);
-  } catch (grantErr: any) {
-    console.warn('[Shopify] grant consumption failed (best-effort):', grantErr?.message);
-  }
-  
   // Atualizar pedido
   await supabase
     .from('shopify_orders')
-    .update({ 
+    .update({
       financial_status: 'paid',
       updated_at: new Date().toISOString(),
     })
     .eq('store_id', store.id)
     .eq('shopify_order_id', String(order.id));
-  
+
   // Buscar contato
   const { data: contact } = await supabase
     .from('contacts')
@@ -1167,7 +1176,34 @@ async function processOrderPaid(store: ShopifyStoreConfig, order: any) {
     .eq('organization_id', store.organization_id)
     .ilike('email', escapeLike(order.email) as string)
     .maybeSingle();
-  
+
+  // Ciclo de vida do grant (9.2): cupom emitido pelo offer_engine — ou por
+  // um popup — que volta no pedido pago é consumido (uses++ → consumed +
+  // ledger). O contato vai junto: com código estático, é ele que diz qual
+  // grant foi usado. Best-effort e idempotente no banco — reentrega do
+  // webhook recebe 'already'. Um grant de popup consumido vira receita
+  // "por código" do popup que o emitiu.
+  try {
+    const { consumeGrantsForOrder } = await import('@/lib/ai/grant-consumption');
+    const consumed = await consumeGrantsForOrder(store.organization_id, order, contact?.id ?? null, store.id ?? null);
+    const orderRef = String(order.id ?? order.order_number ?? '').trim();
+    const orderValue = parseFloat(order.total_price || '0') || 0;
+    for (const c of consumed) {
+      if (!c.grant_id || (c.status !== 'consumed' && c.status !== 'already') || !orderRef || order.test) continue;
+      const { error } = await supabase.rpc('record_popup_driven_order', {
+        p_organization_id: store.organization_id,
+        p_grant_id: c.grant_id,
+        p_order_ref: orderRef,
+        p_revenue: orderValue,
+        p_currency: order.currency || 'BRL',
+        p_order_at: order.created_at || order.processed_at || new Date().toISOString(),
+      });
+      if (error && error.code !== '42883') console.warn('[Shopify] record_popup_driven_order failed (best-effort):', error.message);
+    }
+  } catch (grantErr: any) {
+    console.warn('[Shopify] grant consumption failed (best-effort):', grantErr?.message);
+  }
+
   if (contact) {
     // Tracking: Registrar atividade
     await trackActivity({
@@ -2152,10 +2188,11 @@ async function processRefundCreated(store: ShopifyStoreConfig, refund: any) {
         .eq('store_id', store.id)
         .eq('shopify_order_id', String(refund.order_id))
         .maybeSingle();
-      const totalRefunded = Math.max(
-        refundAmount,
-        parseFloat((acumulado as any)?.total_refunded || '0') || 0
-      );
+      // SOMA, não máximo: dois reembolsos parciais de 30 e 40 num pedido
+      // de 100 dão 70. Com Math.max ficava 40, e a receita atribuída (e a
+      // "com cupom" do popup) seguia inflada para sempre.
+      const jaReembolsado = parseFloat((acumulado as any)?.total_refunded || '0') || 0;
+      const totalRefunded = Math.round((jaReembolsado + refundAmount) * 100) / 100;
       // Mantém a coluna em dia: até aqui só o full sync a escrevia, e o
       // cálculo líquido do painel depende dela.
       await supabase
@@ -2166,6 +2203,13 @@ async function processRefundCreated(store: ShopifyStoreConfig, refund: any) {
 
       const { refundOrderAttribution } = await import('@/lib/attribution');
       await refundOrderAttribution(store.organization_id, String(refund.order_id), totalRefunded);
+      // Receita "com o cupom" do popup também desconta o reembolso.
+      const { error: drivenErr } = await supabase.rpc('refund_popup_driven_order', {
+        p_organization_id: store.organization_id,
+        p_order_ref: String(refund.order_id),
+        p_refunded_total: totalRefunded,
+      });
+      if (drivenErr && drivenErr.code !== '42883') console.warn('[Shopify Webhook] refund_popup_driven_order failed (best-effort):', drivenErr.message);
     } catch (refundErr) {
       console.error('[Shopify Webhook] Refund attribution adjust failed:', refundErr);
     }
@@ -2654,6 +2698,14 @@ export async function POST(request: NextRequest) {
     // registered before this URL pattern shipped.
     const queryStoreId = request.nextUrl.searchParams.get('store_id');
     let store = queryStoreId ? await getStoreConfigById(queryStoreId) : null;
+    // O ?store_id= é conveniência, não credencial: com o segredo do app
+    // compartilhado entre lojas, uma entrega legítima da loja B reenviada
+    // com o id da loja A seria processada na organização errada. O domínio
+    // do cabeçalho (que a assinatura cobre) tem de bater.
+    if (store && shopDomain && !storeMatchesDomain(store, shopDomain)) {
+      console.warn('[Shopify Webhook] store_id da URL não corresponde ao domínio assinado — usando o domínio', { shopDomain });
+      store = null;
+    }
     if (!store) store = await getStoreConfig(shopDomain);
     if (!store) {
       // Orphan webhook subscription — typically from a store that was
@@ -2851,11 +2903,10 @@ export async function POST(request: NextRequest) {
           await supabase
             .from('contacts')
             .update({
-              is_active: false,
+              suppressed: true,
               email_consent: false,
               sms_consent: false,
               whatsapp_consent: false,
-              status: 'deleted_in_shopify',
               shopify_customer_id: null,
               updated_at: nowIso,
             })
@@ -2883,7 +2934,7 @@ export async function POST(request: NextRequest) {
           await supabase
             .from('shopify_stores')
             .update({
-              is_active: false,
+              suppressed: true,
               connection_status: 'disconnected',
               uninstalled_at: new Date().toISOString(),
               status: 'uninstalled',

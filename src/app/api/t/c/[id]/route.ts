@@ -27,6 +27,11 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   const emailSendId = params.id;
+  // Por qual host o clique entrou. É o que responde, meses depois, "os
+  // links deste e-mail saíram pelo domínio certo?" — a pergunta que a
+  // gente não conseguiu responder quando t.worder.email/click.worder.email
+  // se confundiram e todo clique virou página de erro.
+  const hostDoClique = request.headers.get('host') || request.nextUrl.host || null;
   const url = request.nextUrl.searchParams.get('url');
   if (!url) return NextResponse.json({ error: 'Missing url' }, { status: 400 });
 
@@ -54,12 +59,12 @@ export async function GET(
     console.warn(
       `[ClickTracker] destino invalido send=${emailSendId} url="${decodedUrl.slice(0, 80)}" -> fallback=${fallback}`
     );
-    recordClick(emailSendId, decodedUrl, attribution).catch(() => {});
+    recordClick(emailSendId, decodedUrl, attribution, hostDoClique).catch(() => {});
     return NextResponse.redirect(fallback, 302);
   }
 
   // Fire-and-forget the rest (event row, counters, touchpoint).
-  recordClick(emailSendId, decodedUrl, attribution).catch(() => {});
+  recordClick(emailSendId, decodedUrl, attribution, hostDoClique).catch(() => {});
 
   const stamped = stampDestination(decodedUrl, emailSendId, attribution);
   return NextResponse.redirect(stamped, 302);
@@ -276,7 +281,8 @@ function stampDestination(
 async function recordClick(
   emailSendId: string,
   url: string,
-  attribution: ClickAttribution
+  attribution: ClickAttribution,
+  trackingHost: string | null = null
 ) {
   try {
     const { supabaseAdmin } = await import('@/lib/supabase-admin');
@@ -307,6 +313,7 @@ async function recordClick(
           SendId: emailSendId,
           ClickedURL: url,
           ab_variant: attribution.abVariant,
+          TrackingHost: trackingHost,
         },
         occurred_at: now,
         idempotency_key: `email_clicked:${attribution.campaignId}:${attribution.contactId}:${day}:${url.slice(0, 100)}`,
