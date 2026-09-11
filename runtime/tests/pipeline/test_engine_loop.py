@@ -8,12 +8,18 @@ in limbo, never silently swallowed.
 """
 
 import asyncio
+import uuid
+
+import psycopg
+import pytest
 
 from agents_runtime.clock import SystemClock
 from agents_runtime.config import QueueingConfig
-from agents_runtime.queueing import INBOUND
+from agents_runtime.queueing import DOMAIN_EVENTS, INBOUND
 from agents_runtime.queueing.engine_loop import Ack, EngineLoop
+from agents_runtime.repository import alerts as alerts_repo
 from agents_runtime.repository.queue import PgmqQueue, QueueMessage
+from tests.db.factories import create_tenant
 from tests.support.randomness import FixedRandomness
 
 JOB = {"conversation_id": "0b7f1a5e-1f2e-4a5b-8c7d-9e0f1a2b3c4d", "generation": 1, "target_seq": 7}
@@ -137,6 +143,121 @@ async def test_a_permanent_failure_goes_to_the_dead_letter_queue(
     assert payload["error_class"] == "ValueError"
     assert payload["failure_kind"] == "permanent"
     assert payload["replay_count"] == 0
+
+
+async def test_inbound_dead_letters_open_one_deduplicated_tenant_alert(
+    queue: PgmqQueue,
+    queue_length,
+    tiny_config: QueueingConfig,
+    sync_admin: psycopg.Connection,
+    admin: psycopg.AsyncConnection,
+) -> None:
+    organization_id = create_tenant(sync_admin)
+    job = {**JOB, "organization_id": str(organization_id)}
+    stop = asyncio.Event()
+    failures = 0
+
+    async def handle(queue_name: str, message: QueueMessage) -> Ack:
+        nonlocal failures
+        failures += 1
+        if failures == 2:
+            stop.set()
+        raise ValueError("payload inválido")
+
+    await queue.send(job)
+    await queue.send(job)
+    await asyncio.wait_for(loop_for(queue, handle, stop, tiny_config).run(), DEADLINE)
+
+    assert await queue_length(DLQ) == 2
+    alerts = await (
+        await admin.execute(
+            "select type, severity, dedup_key from public.alerts"
+            " where organization_id = %s",
+            (organization_id,),
+        )
+    ).fetchall()
+    assert alerts == [
+        (
+            "send_failed",
+            "warning",
+            f"dlq:inbound:{JOB['conversation_id']}:{JOB['generation']}",
+        )
+    ]
+
+
+async def test_mission_touch_dead_letter_uses_touch_identity_in_alert(
+    queue: PgmqQueue,
+    tiny_config: QueueingConfig,
+    sync_admin: psycopg.Connection,
+    admin: psycopg.AsyncConnection,
+) -> None:
+    organization_id = create_tenant(sync_admin)
+    touch_id = uuid.uuid4()
+    domain_queue = PgmqQueue(queue.connection, DOMAIN_EVENTS)
+    stop = asyncio.Event()
+
+    async def handle(queue_name: str, message: QueueMessage) -> Ack:
+        stop.set()
+        raise ValueError("toque inválido")
+
+    await domain_queue.send(
+        {
+            "kind": "mission_touch",
+            "organization_id": str(organization_id),
+            "touch_id": str(touch_id),
+        }
+    )
+    loop = EngineLoop(
+        queues={DOMAIN_EVENTS: domain_queue},
+        handlers={DOMAIN_EVENTS: handle},
+        config=tiny_config,
+        clock=SystemClock(),
+        randomness=FixedRandomness(),
+        stop=stop,
+    )
+    await asyncio.wait_for(loop.run(), DEADLINE)
+
+    alert = await (
+        await admin.execute(
+            "select type, severity, dedup_key from public.alerts"
+            " where organization_id = %s",
+            (organization_id,),
+        )
+    ).fetchone()
+    assert alert == (
+        "mission_touch_failed",
+        "warning",
+        f"dlq:mission_touch:{touch_id}",
+    )
+
+
+async def test_alert_failure_never_erases_the_dead_letter(
+    queue: PgmqQueue,
+    queue_length,
+    tiny_config: QueueingConfig,
+    sync_admin: psycopg.Connection,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    organization_id = create_tenant(sync_admin)
+    attempted = asyncio.Event()
+    stop = asyncio.Event()
+
+    async def broken_alert(*args, **kwargs):
+        attempted.set()
+        raise RuntimeError("alerts unavailable")
+
+    async def handle(queue_name: str, message: QueueMessage) -> Ack:
+        stop.set()
+        raise ValueError("payload inválido")
+
+    monkeypatch.setattr(alerts_repo, "open_alert", broken_alert)
+    await queue.send({**JOB, "organization_id": str(organization_id)})
+
+    await asyncio.wait_for(loop_for(queue, handle, stop, tiny_config).run(), DEADLINE)
+
+    assert attempted.is_set()
+    assert await queue_length() == 0
+    assert await queue_length(DLQ) == 1
 
 
 async def test_a_busy_conversation_comes_back_shortly(
