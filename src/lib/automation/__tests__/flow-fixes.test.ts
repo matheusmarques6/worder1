@@ -14,12 +14,44 @@
 //     obrigatórias por nó, nós sem executor.
 // =============================================================
 
-import { describe, it, expect } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { ExecutionEngine, type Workflow } from '../execution-engine';
 import { nodeExecutors } from '../node-executors';
 import { filterLogicOf } from '../trigger-dispatcher';
 import { validateFlow } from '../flow-validation';
 import { buildEventIdempotencyKey, EventType } from '../../events';
+
+const legacyAiDb = vi.hoisted(() => ({
+  agent: { data: { id: 'agent-1' }, error: null } as any,
+  conversation: { data: { id: 'legacy-conversation-1' }, error: null } as any,
+  calls: [] as Array<{ table: string; method: string; args: any[] }>,
+}));
+
+vi.mock('@/lib/supabase-admin', () => ({
+  supabaseAdmin: {
+    from(table: string) {
+      const chain: any = new Proxy(
+        {},
+        {
+          get(_target, method: string) {
+            if (method === 'then') {
+              const result = table === 'ai_agents'
+                ? legacyAiDb.agent
+                : legacyAiDb.conversation;
+              return (resolve: any, reject: any) =>
+                Promise.resolve(result).then(resolve, reject);
+            }
+            return (...args: any[]) => {
+              legacyAiDb.calls.push({ table, method, args });
+              return chain;
+            };
+          },
+        },
+      );
+      return chain;
+    },
+  },
+}));
 
 const stubSupabase: any = {
   from() { throw new Error('supabase should not be called in these tests'); },
@@ -37,6 +69,52 @@ function node(id: string, type: string, category: string, config: any = {}) {
     data: { label: id, category, nodeType: type, config },
   } as any;
 }
+
+beforeEach(() => {
+  legacyAiDb.agent = { data: { id: 'agent-1' }, error: null };
+  legacyAiDb.conversation = { data: { id: 'legacy-conversation-1' }, error: null };
+  legacyAiDb.calls = [];
+});
+
+describe('action_whatsapp_ai legado', () => {
+  const run = () => nodeExecutors.action_whatsapp_ai.execute({
+    node: node('legacy-ai', 'action_whatsapp_ai', 'action'),
+    config: { aiAgentId: 'agent-1' },
+    context: { conversationId: 'cloud-conversation-1' } as any,
+    organizationId: 'org-1',
+    supabase: stubSupabase,
+    isTest: false,
+  });
+
+  it('não informa sucesso quando nenhuma conversa legada foi atualizada', async () => {
+    legacyAiDb.conversation = { data: null, error: null };
+
+    const result = await run();
+
+    expect(result.status).toBe('error');
+    expect(result.output?.ai_activated).not.toBe(true);
+  });
+
+  it('recusa agente que não pertence à organização da execução', async () => {
+    legacyAiDb.agent = { data: null, error: null };
+
+    const result = await run();
+
+    expect(result.status).toBe('error');
+    expect(legacyAiDb.calls.some(call => call.table === 'whatsapp_conversations')).toBe(false);
+  });
+
+  it('mantém sucesso para conversa e agente legados da organização', async () => {
+    const result = await run();
+
+    expect(result).toEqual({ status: 'success', output: { ai_activated: true } });
+    expect(legacyAiDb.calls).toContainEqual({
+      table: 'whatsapp_conversations',
+      method: 'eq',
+      args: ['organization_id', 'org-1'],
+    });
+  });
+});
 
 // -------------------------------------------------------------
 // 1 + 2. Roteamento de ramos
