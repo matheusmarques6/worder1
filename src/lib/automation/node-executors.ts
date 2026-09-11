@@ -2229,20 +2229,48 @@ const actionExecutors: Record<string, NodeExecutor> = {
   // action_ai_mission acima. Este executor fica vivo para fluxos antigos até
   // o pós-cutover; sai da palette na Etapa 7.
   action_whatsapp_ai: {
-    async execute({ config, context, isTest }) {
+    async execute({ config, context, organizationId, isTest }) {
       if (isTest) {
         return { status: 'success', output: { ai_activated: true, agent_id: config.aiAgentId } };
       }
       try {
         const { supabaseAdmin } = await import('@/lib/supabase-admin');
         const conversationId = context.conversation_id || context.conversationId;
-        if (!conversationId || !config.aiAgentId) {
-          return { status: 'error', output: null, error: 'conversationId or aiAgentId missing' };
+        const orgId = organizationId || context.organization_id || context.organizationId;
+        if (!conversationId || !config.aiAgentId || !orgId) {
+          return {
+            status: 'error',
+            output: null,
+            error: 'conversationId, aiAgentId or organizationId missing',
+          };
         }
-        await supabaseAdmin
+
+        const { data: agent, error: agentError } = await supabaseAdmin
+          .from('ai_agents')
+          .select('id')
+          .eq('id', config.aiAgentId)
+          .eq('organization_id', orgId)
+          .maybeSingle();
+        if (agentError) throw agentError;
+        if (!agent) {
+          return { status: 'error', output: null, error: 'Agente de IA não pertence à organização' };
+        }
+
+        const { data: conversation, error: updateError } = await supabaseAdmin
           .from('whatsapp_conversations')
           .update({ bot_active: true, ai_agent_id: config.aiAgentId })
-          .eq('id', conversationId);
+          .eq('id', conversationId)
+          .eq('organization_id', orgId)
+          .select('id')
+          .maybeSingle();
+        if (updateError) throw updateError;
+        if (!conversation) {
+          return {
+            status: 'error',
+            output: null,
+            error: 'Conversa não encontrada no canal legado da organização',
+          };
+        }
         return { status: 'success', output: { ai_activated: true } };
       } catch (error: any) {
         return { status: 'error', output: null, error: error.message };
