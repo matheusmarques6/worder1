@@ -41,6 +41,9 @@ const effects = vi.hoisted(() => {
     resolveSegment: vi.fn(async () => ({ contactIds: [] })),
     loadSegmentAsV2: vi.fn(async () => null),
     drainSegmentReevalQueue: vi.fn(async () => ({ processed: 0 })),
+    qstashVerify: vi.fn(async (_args: unknown) => false),
+    processWebhookPayload: vi.fn(async () => ({ ok: true })),
+    processInboundMedia: vi.fn(async () => ({ ok: true })),
     extractDependencies: vi.fn(() => ({ fields: [], events: [], lists: [], segments: [] })),
     detectSegmentChanges: vi.fn(async () => ({ processed: 0 })),
     processDueScheduledMessages: vi.fn(async () => ({
@@ -93,6 +96,13 @@ const effects = vi.hoisted(() => {
   }
 })
 
+vi.mock('@upstash/qstash', () => ({
+  Receiver: class {
+    verify(args: unknown) {
+      return effects.qstashVerify(args)
+    }
+  },
+}))
 vi.mock('@supabase/supabase-js', () => ({
   createClient: effects.createClient,
 }))
@@ -109,6 +119,12 @@ vi.mock('@/lib/segments', () => ({
 }))
 vi.mock('@/lib/segments/realtime', () => ({
   drainSegmentReevalQueue: effects.drainSegmentReevalQueue,
+}))
+vi.mock('@/lib/whatsapp/webhook-processor', () => ({
+  processWebhookPayload: effects.processWebhookPayload,
+}))
+vi.mock('@/lib/whatsapp/inbound-media', () => ({
+  processInboundMedia: effects.processInboundMedia,
 }))
 vi.mock('@/lib/segments/dsl', () => ({
   extractDependencies: effects.extractDependencies,
@@ -212,6 +228,13 @@ function request(method: string, headers: Record<string, string>) {
 function expectNoSideEffects() {
   for (const effect of sideEffects) {
     expect(effect).not.toHaveBeenCalled()
+  }
+  expect(fetch).not.toHaveBeenCalled()
+}
+
+function expectNoBusinessSideEffects() {
+  for (const effect of sideEffects) {
+    if (effect !== effects.qstashVerify) expect(effect).not.toHaveBeenCalled()
   }
   expect(fetch).not.toHaveBeenCalled()
 }
@@ -369,6 +392,83 @@ describe('worker-cron-auth', () => {
     expect(response.status).toBe(410)
     expect(body).toMatchObject({ error: 'Endpoint aposentado' })
     expectNoSideEffects()
+  })
+})
+
+describe('qstash-worker-auth', () => {
+  const names = [
+    'whatsapp-ai-respond',
+    'whatsapp-webhook',
+    'whatsapp-inbound-media',
+    'webhook-delivery',
+  ]
+
+  it.each(names)('%s rejects the internal header without signing keys', async name => {
+    vi.stubEnv('QSTASH_CURRENT_SIGNING_KEY', '')
+    vi.stubEnv('QSTASH_NEXT_SIGNING_KEY', '')
+    const load = workerRoutes[`../app/api/workers/${name}/route.ts`]
+    expect(load).toBeTypeOf('function')
+    const handlers = await load() as Record<string, (req: NextRequest) => Promise<Response>>
+    vi.clearAllMocks()
+
+    const response = await handlers.POST(request('POST', {
+      'content-type': 'application/json',
+      'x-internal-request': 'true',
+    }))
+
+    expect(response.status).toBe(401)
+    expect(effects.qstashVerify).not.toHaveBeenCalled()
+    expectNoBusinessSideEffects()
+  })
+
+  it.each(names)('%s rejects a forged QStash signature before business I/O', async name => {
+    vi.stubEnv('QSTASH_CURRENT_SIGNING_KEY', 'current')
+    vi.stubEnv('QSTASH_NEXT_SIGNING_KEY', 'next')
+    effects.qstashVerify.mockResolvedValue(false)
+    const load = workerRoutes[`../app/api/workers/${name}/route.ts`]
+    const handlers = await load() as Record<string, (req: NextRequest) => Promise<Response>>
+    vi.clearAllMocks()
+
+    const response = await handlers.POST(request('POST', {
+      'content-type': 'application/json',
+      'upstash-signature': 'forged',
+    }))
+
+    expect(response.status).toBe(401)
+    expect(effects.qstashVerify).toHaveBeenCalledTimes(1)
+    expectNoBusinessSideEffects()
+  })
+
+  it('verified inbound-media reaches its existing business seam', async () => {
+    vi.stubEnv('QSTASH_CURRENT_SIGNING_KEY', 'current')
+    vi.stubEnv('QSTASH_NEXT_SIGNING_KEY', 'next')
+    effects.qstashVerify.mockResolvedValue(true)
+    effects.processInboundMedia.mockResolvedValue({ ok: true })
+    const load = workerRoutes['../app/api/workers/whatsapp-inbound-media/route.ts']
+    const handlers = await load() as Record<string, (req: NextRequest) => Promise<Response>>
+    vi.clearAllMocks()
+    effects.qstashVerify.mockResolvedValue(true)
+
+    const body = JSON.stringify({
+      cloudMessageId: 'message-1',
+      accountId: 'account-1',
+      organizationId: 'org-1',
+    })
+    const response = await handlers.POST(new NextRequest(
+      'http://localhost/api/workers/whatsapp-inbound-media',
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'upstash-signature': 'valid',
+        },
+        body,
+      },
+    ))
+
+    expect(response.status).toBe(200)
+    expect(effects.qstashVerify).toHaveBeenCalledWith({ signature: 'valid', body })
+    expect(effects.processInboundMedia).toHaveBeenCalledTimes(1)
   })
 })
 

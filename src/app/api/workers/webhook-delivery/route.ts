@@ -51,21 +51,11 @@ export async function POST(req: NextRequest) {
   const signature = req.headers.get('upstash-signature');
   const receiver = getQstashReceiver();
 
-  // Em produção: QStash signature obrigatória.
-  // Em dev: se receiver configurado, também valida; senão aceita o header
-  // interno X-Internal-Request: true pra smoke manual.
-  if (process.env.NODE_ENV === 'production') {
-    if (!signature || !receiver) {
-      return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-    }
-    const valid = await receiver.verify({ signature, body: rawBody });
-    if (!valid) return NextResponse.json({ error: 'invalid signature' }, { status: 401 });
-  } else if (receiver && signature) {
-    const valid = await receiver.verify({ signature, body: rawBody });
-    if (!valid) return NextResponse.json({ error: 'invalid signature' }, { status: 401 });
-  } else if (req.headers.get('x-internal-request') !== 'true') {
+  if (!signature || !receiver) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
+  const valid = await receiver.verify({ signature, body: rawBody });
+  if (!valid) return NextResponse.json({ error: 'invalid signature' }, { status: 401 });
 
   let deliveryId: string | undefined;
   try {

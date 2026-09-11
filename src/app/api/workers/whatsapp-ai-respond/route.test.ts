@@ -17,6 +17,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // ---------------------------------------------------------------------------
 
 // ---- Mocks (hoisted) ----
+const mockQstashVerify = vi.hoisted(() => vi.fn(async (_args: unknown) => true))
+vi.mock('@upstash/qstash', () => ({
+  Receiver: class {
+    verify(args: unknown) {
+      return mockQstashVerify(args)
+    }
+  },
+}))
 vi.mock('@/lib/observability/whatsapp-logger', () => ({
   wlog: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
@@ -57,6 +65,10 @@ function resetMocks() {
   mockClaim.mockResolvedValue(true)
   mockEnqueue.mockReset()
   mockEnqueue.mockResolvedValue('retry-job-1')
+  mockQstashVerify.mockReset()
+  mockQstashVerify.mockResolvedValue(true)
+  process.env.QSTASH_CURRENT_SIGNING_KEY = 'current'
+  process.env.QSTASH_NEXT_SIGNING_KEY = 'next'
 }
 function track(name: string, args: any[]) {
   calls[name] = calls[name] || []
@@ -91,7 +103,7 @@ import { POST } from './route'
 function fakeReq(body: any): any {
   return {
     text: async () => JSON.stringify(body),
-    headers: new Headers({ 'x-internal-request': 'true' }),
+    headers: new Headers({ 'upstash-signature': 'valid' }),
   }
 }
 
