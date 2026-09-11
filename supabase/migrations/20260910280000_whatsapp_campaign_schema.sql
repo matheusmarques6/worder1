@@ -37,7 +37,6 @@
 -- ── 1. Renomear o vocabulário legado ──────────────────────────────
 do $$
 declare
-  r record;
   renomear text[][] := array[
     array['title', 'name'],
     array['total_contacts', 'audience_count'],
@@ -183,19 +182,14 @@ $$;
 
 -- Estas funções somam contador de uma campanha por id; quem chama é o
 -- servidor. Fora do service_role ninguém precisa delas.
-do $$
-begin
-  execute 'revoke all on function public.increment_campaign_sent(uuid) from public, anon';
-  execute 'revoke all on function public.increment_campaign_delivered(uuid) from public, anon';
-  execute 'revoke all on function public.increment_campaign_read(uuid) from public, anon';
-  execute 'revoke all on function public.increment_campaign_failed(uuid) from public, anon';
-  execute 'grant execute on function public.increment_campaign_sent(uuid) to service_role';
-  execute 'grant execute on function public.increment_campaign_delivered(uuid) to service_role';
-  execute 'grant execute on function public.increment_campaign_read(uuid) to service_role';
-  execute 'grant execute on function public.increment_campaign_failed(uuid) to service_role';
-exception when others then
-  raise notice 'grants dos contadores: %', sqlerrm;
-end $$;
+revoke all on function public.increment_campaign_sent(uuid) from public, anon, authenticated;
+revoke all on function public.increment_campaign_delivered(uuid) from public, anon, authenticated;
+revoke all on function public.increment_campaign_read(uuid) from public, anon, authenticated;
+revoke all on function public.increment_campaign_failed(uuid) from public, anon, authenticated;
+grant execute on function public.increment_campaign_sent(uuid) to service_role;
+grant execute on function public.increment_campaign_delivered(uuid) to service_role;
+grant execute on function public.increment_campaign_read(uuid) to service_role;
+grant execute on function public.increment_campaign_failed(uuid) to service_role;
 
 -- ── 5. Índices das consultas que a tela faz ───────────────────────
 create index if not exists idx_wa_campaigns_org_created

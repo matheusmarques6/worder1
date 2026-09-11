@@ -1074,12 +1074,19 @@ class Executor:
                 "migration limit precedes applied history",
             )
         baseline = self.upgrade_baseline()
-        require(baseline is None or through is None, "sealed Upgrade refuses migration limit")
+        if baseline is not None and through is not None:
+            require(
+                through in {row["version"] for row in baseline},
+                "unknown sealed migration limit",
+            )
+            target = [row for row in baseline if row["version"] <= through]
+        else:
+            target = baseline if baseline is not None else inventory(
+                self.repo / "supabase/migrations", through
+            )
         new = prospective(
             old,
-            baseline if baseline is not None else inventory(
-                self.repo / "supabase/migrations", through
-            ),
+            target,
         )
         write_json(self.run / "manifest.prospective.json", new)
         if new != old:

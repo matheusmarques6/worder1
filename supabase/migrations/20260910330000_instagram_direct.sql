@@ -11,6 +11,52 @@
 -- window_expires_at) não tinha onde ser guardada.
 -- =============================================
 
+-- Produção já possuía estas tabelas; o histórico ativo não. Mantemos o
+-- contrato observado em produção para que um banco Fresh também seja válido.
+create table if not exists public.instagram_accounts (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null,
+  store_id uuid,
+  ig_user_id text,
+  instagram_business_id text,
+  page_id text,
+  access_token text,
+  refresh_token text,
+  token_expires_at timestamptz,
+  username text,
+  name text,
+  profile_picture_url text,
+  followers_count integer default 0,
+  status text not null default 'active',
+  webhook_verify_token text,
+  webhook_configured boolean default false,
+  connected_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.instagram_conversations (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null,
+  account_id uuid not null references public.instagram_accounts(id) on delete cascade,
+  contact_id uuid,
+  ig_user_id text not null,
+  participant_id text,
+  contact_name text,
+  username text,
+  status text not null default 'open',
+  assigned_to uuid,
+  ai_enabled boolean default false,
+  last_message_at timestamptz,
+  last_message_preview text,
+  unread_count integer not null default 0,
+  tags jsonb,
+  notes text,
+  store_id uuid,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 -- ── Contatos do Instagram ──
 create table if not exists public.instagram_contacts (
   id uuid primary key default gen_random_uuid(),
@@ -85,15 +131,55 @@ alter table public.instagram_conversations
 -- ── Chaves estrangeiras que os embeds da listagem precisam ──
 -- contact_id aponta para instagram_contacts (o contato do Instagram),
 -- não para o contato do CRM — esse fica em instagram_contacts.crm_contact_id.
-update public.instagram_conversations c
-   set contact_id = null
- where contact_id is not null
-   and not exists (select 1 from public.instagram_contacts ic where ic.id = c.contact_id);
+do $$
+begin
+  lock table public.instagram_conversations in share row exclusive mode;
+  if exists (
+    select 1 from public.instagram_conversations c
+     where not exists (
+       select 1 from public.instagram_accounts a
+        where a.id = c.account_id and a.organization_id = c.organization_id
+     )
+  ) then
+    raise exception 'instagram preflight: account_id incompatible';
+  end if;
+  if exists (
+    select 1 from public.instagram_conversations c
+     where c.contact_id is not null
+       and not exists (
+         select 1 from public.instagram_contacts ic
+          where ic.id = c.contact_id and ic.organization_id = c.organization_id
+       )
+  ) then
+    raise exception 'instagram preflight: contact_id incompatible';
+  end if;
+  if exists (
+    select 1 from public.instagram_conversations c
+     where c.assigned_to is not null
+       and not exists (
+         select 1 from public.profiles p
+          where p.id = c.assigned_to and p.organization_id = c.organization_id
+       )
+  ) then
+    raise exception 'instagram preflight: assigned_to incompatible';
+  end if;
+end $$;
 
 do $$
 begin
+  if exists (
+    select 1 from pg_constraint
+     where conrelid = 'public.instagram_conversations'::regclass
+       and conname = 'instagram_conversations_contact_id_fkey'
+       and pg_get_constraintdef(oid) <>
+           'FOREIGN KEY (contact_id) REFERENCES instagram_contacts(id) ON DELETE SET NULL'
+  ) then
+    raise exception 'instagram preflight: contact_id foreign key incompatible';
+  end if;
   if not exists (
-    select 1 from pg_constraint where conname = 'instagram_conversations_contact_id_fkey'
+    select 1 from pg_constraint
+     where conrelid = 'public.instagram_conversations'::regclass
+       and conname = 'instagram_conversations_contact_id_fkey'
   ) then
     alter table public.instagram_conversations
       add constraint instagram_conversations_contact_id_fkey
@@ -101,15 +187,21 @@ begin
   end if;
 end $$;
 
-update public.instagram_conversations c
-   set assigned_to = null
- where assigned_to is not null
-   and not exists (select 1 from public.profiles p where p.id = c.assigned_to);
-
 do $$
 begin
+  if exists (
+    select 1 from pg_constraint
+     where conrelid = 'public.instagram_conversations'::regclass
+       and conname = 'instagram_conversations_assigned_to_fkey'
+       and pg_get_constraintdef(oid) <>
+           'FOREIGN KEY (assigned_to) REFERENCES profiles(id) ON DELETE SET NULL'
+  ) then
+    raise exception 'instagram preflight: assigned_to foreign key incompatible';
+  end if;
   if not exists (
-    select 1 from pg_constraint where conname = 'instagram_conversations_assigned_to_fkey'
+    select 1 from pg_constraint
+     where conrelid = 'public.instagram_conversations'::regclass
+       and conname = 'instagram_conversations_assigned_to_fkey'
   ) then
     alter table public.instagram_conversations
       add constraint instagram_conversations_assigned_to_fkey
@@ -117,9 +209,23 @@ begin
   end if;
 end $$;
 
--- ── RLS: as duas tabelas novas são por organização ──
+-- ── RLS: as quatro tabelas são por organização ──
+alter table public.instagram_accounts enable row level security;
+alter table public.instagram_conversations enable row level security;
 alter table public.instagram_contacts enable row level security;
 alter table public.instagram_messages enable row level security;
+
+drop policy if exists org_isolation_rls on public.instagram_accounts;
+create policy org_isolation_rls on public.instagram_accounts
+  for all to authenticated
+  using (organization_id = get_user_organization_id())
+  with check (organization_id = get_user_organization_id());
+
+drop policy if exists org_isolation_rls on public.instagram_conversations;
+create policy org_isolation_rls on public.instagram_conversations
+  for all to authenticated
+  using (organization_id = get_user_organization_id())
+  with check (organization_id = get_user_organization_id());
 
 drop policy if exists org_isolation_rls on public.instagram_contacts;
 create policy org_isolation_rls on public.instagram_contacts

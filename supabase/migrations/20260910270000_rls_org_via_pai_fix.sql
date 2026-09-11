@@ -40,11 +40,11 @@ begin
       for all to authenticated
       using (exists (
         select 1 from public.whatsapp_campaigns p
-        where p.id = public.whatsapp_campaign_recipients.campaign_id
+        where p.id::text = public.whatsapp_campaign_recipients.campaign_id::text
       ))
       with check (exists (
         select 1 from public.whatsapp_campaigns p
-        where p.id = public.whatsapp_campaign_recipients.campaign_id
+        where p.id::text = public.whatsapp_campaign_recipients.campaign_id::text
       ));
   end if;
 end $$;
@@ -59,11 +59,11 @@ begin
       for all to authenticated
       using (exists (
         select 1 from public.google_ads_campaigns p
-        where p.id = public.google_ads_search_terms.campaign_id
+        where p.id::text = public.google_ads_search_terms.campaign_id::text
       ))
       with check (exists (
         select 1 from public.google_ads_campaigns p
-        where p.id = public.google_ads_search_terms.campaign_id
+        where p.id::text = public.google_ads_search_terms.campaign_id::text
       ));
   end if;
 end $$;

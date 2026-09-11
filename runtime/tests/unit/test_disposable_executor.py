@@ -3275,6 +3275,24 @@ def test_sealed_cycle_never_checks_or_executes_db_reset(tmp_path, monkeypatch):
     ] == []
 
 
+def test_sealed_upgrade_can_stop_at_a_verified_checkpoint_then_finish(
+    tmp_path, monkeypatch,
+):
+    executor, cli = upgrade_environment(tmp_path, monkeypatch)
+    migrations = executor.repo / "supabase/migrations"
+    (migrations / "20260910000000_after_checkpoint.sql").write_bytes(b"select 7;\n")
+    assert executor.execute("PrepareUpgrade") == 0
+
+    executor = ex.Executor(executor.repo, executor.run, runner=cli)
+    assert executor.execute("Upgrade", [], "20260909230000") == 0
+    assert ex.read_json(executor.run / "manifest.json")[-1]["version"] == "20260909230000"
+    assert executor.gate["state"] == "ready"
+
+    executor = ex.Executor(executor.repo, executor.run, runner=cli)
+    assert executor.execute("Upgrade") == 0
+    assert ex.read_json(executor.run / "manifest.json")[-1]["version"] == "20260910000000"
+
+
 def test_replay_with_arbitrary_upgrade_marker_still_checks_reset_capability(
     tmp_path, monkeypatch,
 ):

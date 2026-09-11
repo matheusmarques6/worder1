@@ -15,31 +15,24 @@
 -- globais, sem dono.
 -- =============================================
 
--- Execuções de automação: leitura e ESCRITA liberadas para qualquer um.
-drop policy if exists "Allow all" on public.automation_executions;
-
--- Passos agendados (o que a automação vai fazer, e para quem).
-drop policy if exists "dash" on public.automation_pending_steps;
-
--- Cliques de e-mail: quem clicou, em qual link. Sobra org_via_pai.
-drop policy if exists "email_clicks org access" on public.email_clicks;
-
--- INSERT de organização liberado para PUBLIC. A organização de verdade
--- nasce no gatilho handle_new_user() (SECURITY DEFINER) e nas rotas com
--- service_role — nenhum caminho do app insere organização com o token do
--- usuário, então ninguém perde nada e o caminho de criar organização
--- arbitrária fecha.
-drop policy if exists "Service role can insert organizations" on public.organizations;
-
--- Quem está em qual segmento: lista de contatos de outra organização, e
--- a possibilidade de plantar contato em segmento alheio. A tela de
--- segmentos usa o cliente autenticado; org_via_pai (via customer_segments)
--- cobre select, insert e delete dela.
-drop policy if exists segment_members_select on public.segment_members;
-drop policy if exists segment_members_insert on public.segment_members;
-drop policy if exists segment_members_delete on public.segment_members;
-
--- Consultas de rastreio: INSERT público numa tabela com e-mail do
--- cliente e IP. Nenhum código do app escreve nela — sobra só
--- service_role, que ignora RLS.
-drop policy if exists public_lookups on public.tracking_lookups;
+do $$
+declare
+  p record;
+begin
+  for p in
+    select * from (values
+      ('automation_executions', 'Allow all'),
+      ('automation_pending_steps', 'dash'),
+      ('email_clicks', 'email_clicks org access'),
+      ('organizations', 'Service role can insert organizations'),
+      ('segment_members', 'segment_members_select'),
+      ('segment_members', 'segment_members_insert'),
+      ('segment_members', 'segment_members_delete'),
+      ('tracking_lookups', 'public_lookups')
+    ) as policies(table_name, policy_name)
+  loop
+    if to_regclass(format('public.%I', p.table_name)) is not null then
+      execute format('drop policy if exists %I on public.%I', p.policy_name, p.table_name);
+    end if;
+  end loop;
+end $$;

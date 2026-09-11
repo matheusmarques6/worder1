@@ -20,11 +20,25 @@
 -- migração de dado.
 -- =============================================
 
+create table if not exists public.whatsapp_campaign_logs (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid references public.organizations(id) on delete cascade,
+  campaign_id uuid references public.whatsapp_campaigns(id) on delete cascade,
+  contact_name varchar(255),
+  contact_mobile varchar(50),
+  meta_message_id varchar(255),
+  status varchar(50) default 'PENDING',
+  delivery_status varchar(50),
+  delivery_time timestamptz,
+  error_message text,
+  created_at timestamptz default now(),
+  log_type varchar(16),
+  message text,
+  details jsonb
+);
+
 do $$
 begin
-  if to_regclass('public.whatsapp_campaign_logs') is null then
-    return;
-  end if;
 
   alter table public.whatsapp_campaign_logs add column if not exists log_type varchar(16);
   alter table public.whatsapp_campaign_logs add column if not exists message text;
@@ -44,3 +58,10 @@ create index if not exists idx_wa_campaign_logs_campaign_created
 
 comment on table public.whatsapp_campaign_logs is
   'Histórico de eventos da campanha (log_type/message/details). O estado por destinatário fica em whatsapp_campaign_recipients.';
+
+alter table public.whatsapp_campaign_logs enable row level security;
+drop policy if exists org_isolation_rls on public.whatsapp_campaign_logs;
+create policy org_isolation_rls on public.whatsapp_campaign_logs
+  for all to authenticated
+  using (organization_id = get_user_organization_id())
+  with check (organization_id = get_user_organization_id());

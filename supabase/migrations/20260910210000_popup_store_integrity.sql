@@ -86,6 +86,36 @@ grant execute on function public.consume_incentive_grant(uuid, text, text, uuid,
 -- ----------------------------------------------------------------------------
 create schema if not exists internal;
 
+do $$
+declare
+    t text;
+    incompatible boolean;
+begin
+    if to_regclass('public.shopify_stores') is null then
+        return;
+    end if;
+    foreach t in array array['crm_forms', 'coupon_pools'] loop
+        if to_regclass('public.' || t) is null then
+            continue;
+        end if;
+        execute format('lock table public.%I in share row exclusive mode', t);
+        execute format(
+            'select exists (
+                select 1 from public.%I x
+                 where x.store_id is not null
+                   and not exists (
+                       select 1 from public.shopify_stores s
+                        where s.id = x.store_id
+                          and s.organization_id = x.organization_id
+                   )
+            )', t
+        ) into incompatible;
+        if incompatible then
+            raise exception 'popup preflight: %.store_id incompatible', t;
+        end if;
+    end loop;
+end $$;
+
 create or replace function internal.popup_store_same_org()
     returns trigger
     language plpgsql
@@ -113,14 +143,6 @@ begin
     end if;
 
     if to_regclass('public.crm_forms') is not null then
-        -- Popup apontando para loja de outra org volta a ser global em vez
-        -- de sumir: o histórico de inscrições dele continua valendo.
-        update public.crm_forms f set store_id = null
-         where f.store_id is not null
-           and not exists (
-             select 1 from public.shopify_stores s
-              where s.id = f.store_id and s.organization_id = f.organization_id
-           );
         drop trigger if exists crm_forms_store_same_org on public.crm_forms;
         create trigger crm_forms_store_same_org
             before insert or update of store_id, organization_id on public.crm_forms
@@ -128,12 +150,6 @@ begin
     end if;
 
     if to_regclass('public.coupon_pools') is not null then
-        update public.coupon_pools p set status = 'error', last_error = 'loja de outra organização'
-         where p.store_id is not null
-           and not exists (
-             select 1 from public.shopify_stores s
-              where s.id = p.store_id and s.organization_id = p.organization_id
-           );
         drop trigger if exists coupon_pools_store_same_org on public.coupon_pools;
         create trigger coupon_pools_store_same_org
             before insert or update of store_id, organization_id on public.coupon_pools

@@ -93,12 +93,21 @@ The executor is the only caller of SQL, migration paths, exclusions, and test-en
 
 ## Upgrade manifest
 
-`PrepareUpgrade` creates the approved old history through `20260909140000_definer_search_path.sql`, excluding exactly `20260812000005_app_baseline_prereqs.sql`. It applies the fixed legacy fixture, then `Upgrade` may append only these two reviewed files, in order:
+`PrepareUpgrade` creates the approved old history through
+`20260909140000_definer_search_path.sql`, excluding exactly
+`20260812000005_app_baseline_prereqs.sql`. It applies the fixed legacy
+fixture and seals the hashes of the remaining checkout. The original reviewed
+forward suffix begins with:
 
 1. `20260909230000_app_baseline_forward_compat.sql` (`D722A91E126940D4A6CCF6468CF3EBA2EDD348F7966B3C5F1BBE93BA66347E0E`)
 2. `20260910000000_auth_user_created_trigger.sql` (`016BFFC5FB60021404B4D4B81A2A13CE291AD230608D948D2A3759B36D56A097`)
 
-The sealed `Upgrade` action owns this projection and history check. Do not pass a migration limit, SQL path, exclusion, or caller-selected mapping. The upgraded history must be the old prefix plus exactly this suffix.
+The sealed `Upgrade` action owns this projection and history check. A
+`MigrationThrough` checkpoint is accepted only when its exact version already
+exists in the sealed baseline; this lets historical catalog tests run before
+later migrations, and a subsequent `Upgrade` without a checkpoint finishes the
+same immutable projection. SQL paths, exclusions, unknown limits and
+caller-selected mappings remain forbidden.
 
 ## CLI, markers, manifests, and evidence files
 
@@ -137,7 +146,10 @@ An empty `TestTargets` value selects the executor's full serial proof: RLS colle
 
 ## Exact local upgrade proof
 
-The upgrade lane is sealed: `PrepareUpgrade` builds the legacy prefix and marker, and `Upgrade` selects the two-file suffix above. Do not add `MigrationThrough`.
+The upgrade lane is sealed: `PrepareUpgrade` builds the legacy prefix and
+marker, and `Upgrade` selects the exact hashed suffix from that marker. The
+standard proof below applies the full suffix. Use `MigrationThrough` only for a
+separate historical-catalog checkpoint, never to redefine the suffix.
 
 ```powershell
 $upgradeNonce = [guid]::NewGuid().ToString('N')
@@ -166,7 +178,9 @@ The following are prohibited in this local proof and are not workarounds: `--inc
 
 - Every executed suite is non-empty with zero skips, failures, errors, and warning-masked failures.
 - `manifest.json` hashes match this inventory, and database migration history matches the exact manifest in order; the upgrade history excludes the bootstrap and ends with only the two approved suffix versions.
-- Fresh and upgraded `scoped_catalog(admin)` equal the shared `expected_scoped_catalog()`, including columns, constraints, indexes, RLS/policies, functions/triggers, enum order, and ACLs.
+- At its verified historical checkpoint, `scoped_catalog(admin)` equals the
+  corresponding `expected_scoped_catalog()`; the final Upgrade then applies the
+  rest of the sealed checkout without changing or omitting its manifest.
 - Upgrade preservation rows retain primary keys and values across all 11 scoped relations and all 13 replay prerequisites; this includes legacy template JSON, the non-null email campaign/template link (`...0009` to `...0018`), plaintext test-key compatibility, and the text campaign key. The legacy `email_sends` pending row remains pending while the new default is queued. Template deletion preserves campaign history through `ON DELETE SET NULL`; orphans abort compensation without coercion.
 - Auth tests prove normal signup owner provisioning, invitation selection under a membership row lock using the persisted role and a same-organization owner/admin inviter, rejection of forged metadata and invalid invitations, and transactional failure for owner invitations. Authenticated profile updates are limited to `must_change_password` and `updated_at`; membership and authority writes remain service-only. Existing RLS and duplicate/noncanonical trigger rejection remain in force.
 - Direct table ACLs are exact: `postgres` retains eight privileges, Data API roles receive only DML, and `anon`/`authenticated` have only SELECT on `organization_members`. Real PostgreSQL role tests reject structural privileges and SQL TRUNCATE across the 11-table scope; this makes no claim about an HTTP TRUNCATE endpoint.

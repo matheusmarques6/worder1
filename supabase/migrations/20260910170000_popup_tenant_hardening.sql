@@ -20,11 +20,32 @@ begin
     if to_regclass('public.crm_forms') is null then
         return;
     end if;
-    -- Variante sem pai é lixo: apagar o popup principal apaga as variantes.
-    if not exists (select 1 from pg_constraint where conname = 'crm_forms_ab_parent_fk') then
-        delete from public.crm_forms v
+    lock table public.crm_forms in share row exclusive mode;
+    if exists (
+        select 1
+          from public.crm_forms v
+          left join public.crm_forms p on p.id = v.ab_parent_id
          where v.ab_parent_id is not null
-           and not exists (select 1 from public.crm_forms p where p.id = v.ab_parent_id);
+           and (p.id is null
+                or p.organization_id is distinct from v.organization_id
+                or v.ab_parent_id = v.id)
+    ) then
+        raise exception 'popup preflight: invalid variant parent';
+    end if;
+    if exists (
+        select 1 from pg_constraint
+         where conrelid = 'public.crm_forms'::regclass
+           and conname = 'crm_forms_ab_parent_fk'
+           and pg_get_constraintdef(oid) <>
+               'FOREIGN KEY (ab_parent_id) REFERENCES crm_forms(id) ON DELETE CASCADE'
+    ) then
+        raise exception 'popup preflight: crm_forms_ab_parent_fk incompatible';
+    end if;
+    if not exists (
+        select 1 from pg_constraint
+         where conrelid = 'public.crm_forms'::regclass
+           and conname = 'crm_forms_ab_parent_fk'
+    ) then
         alter table public.crm_forms
             add constraint crm_forms_ab_parent_fk
             foreign key (ab_parent_id) references public.crm_forms(id) on delete cascade;
