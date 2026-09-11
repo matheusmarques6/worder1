@@ -2129,6 +2129,20 @@ const actionExecutors: Record<string, NodeExecutor> = {
         if (!config.eventFamily) {
           return { status: 'error', output: null, error: 'eventFamily (mission_ref) não configurado no nó' };
         }
+        const workflow = (context as any).workflow || {};
+        const runId =
+          (context as any).automation_run_id ||
+          (context as any).runId ||
+          workflow.executionId ||
+          workflow.execution_id;
+        const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (typeof runId !== 'string' || !uuidRe.test(runId)) {
+          return {
+            status: 'error',
+            output: null,
+            error: 'Persisted automation run identity is required',
+          };
+        }
 
         // Delta do toque: só o que o nó pode refinar (§3.3.3 — restrição
         // acumula, permissão estreita; o teto de concessão é da MISSÃO).
@@ -2180,6 +2194,7 @@ const actionExecutors: Record<string, NodeExecutor> = {
           p_concession_request: concession,
           p_preferred_channel: config.preferredChannel || 'whatsapp',
           p_otel: null,
+          p_run_id: runId,
         });
         if (error) {
           return { status: 'error', output: null, error: error.message };

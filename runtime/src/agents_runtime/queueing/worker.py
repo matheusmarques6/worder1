@@ -226,7 +226,7 @@ async def _touch(
     message_id: int | None = None,
 ) -> TurnResult:
     token = uuid.uuid4()
-    idempotency_key = f"touch-{job.conversation_id}-{message_id}"
+    idempotency_key = f"touch-{job.conversation_id}-{job.touch_id}"
 
     # FASE 1 — claim + alvos do CAS, uma transação curta.
     async with conn.transaction():

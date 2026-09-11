@@ -82,11 +82,22 @@ def toucher(dsn: str, llm: ScriptedLlm | None = None, **kwargs):
     return build_toucher(dsn, llm=llm or ScriptedLlm(), set_role="worker_role", **kwargs)
 
 
-def a_touch(organization_id: uuid.UUID, thread) -> MissionTouchJob:
+def a_touch(
+    organization_id: uuid.UUID,
+    thread,
+    *,
+    touch_id: uuid.UUID | None = None,
+) -> MissionTouchJob:
     return MissionTouchJob(
         organization_id=organization_id,
         contact_id=thread.contact_id,
         conversation_id=thread.conversation_id,
+        touch_id=touch_id
+        if touch_id is not None
+        else uuid.uuid5(
+            thread.conversation_id,
+            "test-responder-guards:flow-1:node-2",
+        ),
         event_family=FAMILY,
         node_ref="flow-1:node-2",
         delta=None,

@@ -43,12 +43,17 @@ def org(admin: psycopg.Connection) -> uuid.UUID:
 
 
 def _job(org: uuid.UUID, thread, **kwargs) -> MissionTouchJob:
+    node_ref = kwargs.get("node_ref", "flow-1:node-2")
     return MissionTouchJob(
         organization_id=org,
         contact_id=thread.contact_id,
         conversation_id=thread.conversation_id,
+        touch_id=kwargs.get(
+            "touch_id",
+            uuid.uuid5(thread.conversation_id, f"test-toucher:{node_ref}"),
+        ),
         event_family=FAMILY,
-        node_ref=kwargs.get("node_ref", "flow-1:node-2"),
+        node_ref=node_ref,
         delta=kwargs.get("delta"),
         concession_request=kwargs.get("concession_request"),
     )
@@ -268,7 +273,7 @@ class TestRunTouch:
         ).fetchall()
         assert row[0] == "funnel_touch"
         assert row[1] == [moment]
-        assert row[2] == f"touch-{thread.conversation_id}-101"
+        assert row[2] == f"touch-{thread.conversation_id}-{job.touch_id}"
 
         (owner,) = admin.execute(
             "select owner_mission_version_id from public.conversations where id = %s",
@@ -293,7 +298,7 @@ class TestRunTouch:
             calls_after_first = len(llm.asked)
             second = await run_touch(
                 conn, job, toucher, config=QueueingConfig(), clock=SystemClock(),
-                message_id=7,
+                message_id=8,
             )
 
         assert (first, second) == (TurnResult.DONE, TurnResult.STALE)
@@ -303,6 +308,42 @@ class TestRunTouch:
             (thread.conversation_id,),
         ).fetchone()
         assert count == 1
+
+    async def test_distinct_touch_ids_remain_distinct_business_actions(
+        self, dsn: str, admin: psycopg.Connection, org: uuid.UUID
+    ) -> None:
+        thread = create_thread(admin, org)
+        create_mission(admin, org, event_type=FAMILY, status="active")
+        first_job = _job(org, thread)
+        second_job = _job(org, thread, touch_id=uuid.uuid4())
+        llm = ScriptedLlm()
+        toucher = _toucher(dsn, llm)
+
+        async with as_runtime_worker(dsn) as conn:
+            first = await run_touch(
+                conn,
+                first_job,
+                toucher,
+                config=QueueingConfig(),
+                clock=SystemClock(),
+                message_id=7,
+            )
+            second = await run_touch(
+                conn,
+                second_job,
+                toucher,
+                config=QueueingConfig(),
+                clock=SystemClock(),
+                message_id=8,
+            )
+
+        assert (first, second) == (TurnResult.DONE, TurnResult.DONE)
+        assert len(llm.asked) == 2
+        (count,) = admin.execute(
+            "select count(*) from internal.message_outbox where conversation_id = %s",
+            (thread.conversation_id,),
+        ).fetchone()
+        assert count == 2
 
     async def test_an_inbound_mid_generation_kills_the_draft(
         self, dsn: str, admin: psycopg.Connection, org: uuid.UUID

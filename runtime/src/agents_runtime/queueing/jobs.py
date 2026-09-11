@@ -49,6 +49,7 @@ class MissionTouchJob:
     organization_id: UUID
     contact_id: UUID
     conversation_id: UUID
+    touch_id: UUID
     event_family: str
     node_ref: str | None = None
     delta: dict[str, Any] | None = None
@@ -65,6 +66,7 @@ class MissionTouchJob:
                 organization_id=UUID(payload["organization_id"]),
                 contact_id=UUID(payload["contact_id"]),
                 conversation_id=UUID(payload["conversation_id"]),
+                touch_id=UUID(payload["touch_id"]),
                 event_family=str(payload["event_family"]),
                 node_ref=payload.get("node_ref"),
                 delta=payload.get("delta") or None,

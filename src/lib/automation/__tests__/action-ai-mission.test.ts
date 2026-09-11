@@ -19,11 +19,12 @@ vi.mock('@/lib/supabase-admin', () => ({ supabaseAdmin: { rpc } }));
 import { nodeExecutors } from '../node-executors';
 
 const NODE = { id: 'node-9' } as any;
+const RUN_ID = '55555555-5555-4555-8555-555555555555';
 
 function baseContext(): any {
   return {
     contact: { id: 'c0ffee00-0000-0000-0000-000000000001' },
-    workflow: { id: 'flow-42', name: 'Recuperar carrinho', executionId: 'run-1' },
+    workflow: { id: 'flow-42', name: 'Recuperar carrinho', executionId: RUN_ID },
   };
 }
 
@@ -77,6 +78,7 @@ describe('action_ai_mission executor', () => {
     expect(fn).toBe('emit_ai_mission_job');
     expect(args.p_event_family).toBe('cart.abandoned');
     expect(args.p_node_ref).toBe('flow-42:node-9');
+    expect(args.p_run_id).toBe(RUN_ID);
     expect(args.p_delta).toEqual({ objective: 'lembrar do frete grátis' });
     expect(args.p_concession_request).toEqual({
       kind: 'percent', value: 10, object_kind: 'cart', object_ref: 'cart-5',
@@ -107,6 +109,17 @@ describe('action_ai_mission executor', () => {
     delete context.contact;
     const res = await execute({ eventFamily: 'cart.abandoned' }, { context });
     expect(res.status).toBe('error');
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('a transient flow without a persisted run id is refused before the rpc', async () => {
+    const context = baseContext();
+    context.workflow.executionId = 'run-temporario';
+
+    const res = await execute({ eventFamily: 'cart.abandoned' }, { context });
+
+    expect(res.status).toBe('error');
+    expect(res.error).toContain('Persisted automation run identity');
     expect(rpc).not.toHaveBeenCalled();
   });
 });
