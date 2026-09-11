@@ -199,6 +199,24 @@ async def run(
         tasks.append(asyncio.create_task(coalescer(), name="coalescer"))
         tasks.append(asyncio.create_task(heartbeat(), name="heartbeat"))
 
+        # Replays only queues this process can consume. Scheduled/evals stay
+        # manual until they have handlers, otherwise replay would just move a
+        # dead letter into a queue nobody drains.
+        replay_conn = await _connect(dsn, worker_set_role, WORKER_ROLE)
+        connections.append(replay_conn)
+
+        async def replay_dead_letters() -> None:
+            while not stop.is_set():
+                for queue_name in (INBOUND, DOMAIN_EVENTS):
+                    await engine.reprocess_dead_letters(
+                        replay_conn, f"{queue_name}_dlq", queue_name
+                    )
+                await _sleep_or_stop(
+                    clock, stop, config.process_heartbeat_every.total_seconds()
+                )
+
+        tasks.append(asyncio.create_task(replay_dead_letters(), name="dlq-replayer"))
+
         # -- workers: one connection and one loop each, so a slow turn on one
         # never blocks a claim on another (and cenários B get real concurrency).
         for index in range(workers):
@@ -245,5 +263,7 @@ async def run(
         for task in tasks:
             if not task.done():
                 task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
         for conn in connections:
             await conn.close()
