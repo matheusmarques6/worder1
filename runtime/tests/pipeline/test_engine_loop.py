@@ -171,7 +171,7 @@ async def test_inbound_dead_letters_open_one_deduplicated_tenant_alert(
     assert await queue_length(DLQ) == 2
     alerts = await (
         await admin.execute(
-            "select type, severity, dedup_key from public.alerts"
+            "select type, severity, title, dedup_key, metadata from public.alerts"
             " where organization_id = %s",
             (organization_id,),
         )
@@ -180,7 +180,14 @@ async def test_inbound_dead_letters_open_one_deduplicated_tenant_alert(
         (
             "send_failed",
             "warning",
-            f"dlq:inbound:{JOB['conversation_id']}:{JOB['generation']}",
+            "Falha no processamento de IA",
+            f"dlq:q_inbound:{JOB['conversation_id']}:{JOB['generation']}",
+            {
+                "queue": INBOUND,
+                "error_class": "ValueError",
+                "conversation_id": JOB["conversation_id"],
+                "generation": JOB["generation"],
+            },
         )
     ]
 
@@ -219,7 +226,7 @@ async def test_mission_touch_dead_letter_uses_touch_identity_in_alert(
 
     alert = await (
         await admin.execute(
-            "select type, severity, dedup_key from public.alerts"
+            "select type, severity, title, dedup_key, metadata from public.alerts"
             " where organization_id = %s",
             (organization_id,),
         )
@@ -227,7 +234,13 @@ async def test_mission_touch_dead_letter_uses_touch_identity_in_alert(
     assert alert == (
         "mission_touch_failed",
         "warning",
-        f"dlq:mission_touch:{touch_id}",
+        "Falha no processamento de IA",
+        f"dlq:q_domain_events:{touch_id}",
+        {
+            "queue": DOMAIN_EVENTS,
+            "error_class": "ValueError",
+            "touch_id": str(touch_id),
+        },
     )
 
 
