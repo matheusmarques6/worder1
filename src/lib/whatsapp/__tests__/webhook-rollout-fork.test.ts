@@ -240,6 +240,20 @@ function inboundImagePayload(overrides: { caption?: string } = {}) {
   });
 }
 
+function inboundReplyPayload(type: 'button' | 'interactive', text: string) {
+  return inboundMediaPayload(
+    type === 'button'
+      ? { type, button: { payload: 'buy', text } }
+      : {
+          type,
+          interactive: {
+            type: 'button_reply',
+            button_reply: { id: 'buy', title: text },
+          },
+        },
+  );
+}
+
 const UNSUPPORTED_MESSAGES: Record<string, any> = {
   sticker: { type: 'sticker', sticker: { id: 'media-sticker-1', mime_type: 'image/webp', sha256: 'x' } },
   document: {
@@ -302,6 +316,22 @@ describe('org NÃO migrada (legacy) — o cinto de segurança', () => {
     expect(enqueueWhatsAppAiRespond).not.toHaveBeenCalled();
   });
 
+  it.each(['button', 'interactive'] as const)(
+    '%s com texto agenda o worker legado',
+    async (type) => {
+      await processWebhookPayload(inboundReplyPayload(type, 'Quero comprar'));
+      expect(enqueueWhatsAppAiRespond).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each(['button', 'interactive'] as const)(
+    '%s sem texto útil não agenda o worker legado',
+    async (type) => {
+      await processWebhookPayload(inboundReplyPayload(type, '   '));
+      expect(enqueueWhatsAppAiRespond).not.toHaveBeenCalled();
+    },
+  );
+
   it('sticker não agenda no legado — paridade com o filtro do runtime (item 07)', async () => {
     await processWebhookPayload(inboundUnsupportedPayload('sticker'));
     expect(enqueueWhatsAppAiRespond).not.toHaveBeenCalled();
@@ -329,6 +359,24 @@ describe('org migrada (runtime) — o caminho canônico', () => {
 
     expect(ingestCalls()[0].args.p_content).toEqual({ type: 'text', text: 'boa tarde' });
   });
+
+  it.each(['button', 'interactive'] as const)(
+    '%s com texto é ingerido e mantém o turno agendado',
+    async (type) => {
+      await processWebhookPayload(inboundReplyPayload(type, 'Quero comprar'));
+      expect(ingestCalls()[0].args.p_content.text).toBe('Quero comprar');
+      expect(cancelCalls()).toHaveLength(0);
+    },
+  );
+
+  it.each(['button', 'interactive'] as const)(
+    '%s sem texto útil é ingerido mas cancela o turno',
+    async (type) => {
+      await processWebhookPayload(inboundReplyPayload(type, '   '));
+      expect(ingestCalls()).toHaveLength(1);
+      expect(cancelCalls()).toHaveLength(1);
+    },
+  );
 
   it('áudio leva media_id e mime_type conhecidos no ingest (item 06)', async () => {
     await processWebhookPayload(inboundAudioPayload());

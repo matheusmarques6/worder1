@@ -41,7 +41,9 @@ export function routeInboundForAi(
 ): AiMediaRoute {
   const body = (textBody || '').trim()
   const type = messageType || 'text'
-  if (type === 'text') return body ? 'text' : 'unsupported'
+  if (type === 'text' || type === 'button' || type === 'interactive') {
+    return body ? 'text' : 'unsupported'
+  }
   // Áudio já transcrito (text_body preenchido pelo runner em run anterior)
   // é tratado como texto — evita re-transcrever em retries.
   if (type === 'audio') return body ? 'text' : 'audio'

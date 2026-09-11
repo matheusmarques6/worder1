@@ -208,6 +208,20 @@ export async function safeFetch(
     if (hop >= maxRedirects) {
       throw blocked('excesso de redirecionamentos ao seguir a URL')
     }
+    const method = (currentInit.method || 'GET').toUpperCase()
+    if (res.status === 303 && method !== 'GET' && method !== 'HEAD') {
+      const headers = new Headers(currentInit.headers)
+      for (const name of [
+        'content-encoding',
+        'content-language',
+        'content-location',
+        'content-type',
+        'content-length',
+      ]) {
+        headers.delete(name)
+      }
+      currentInit = { ...currentInit, method: 'GET', body: undefined, headers }
+    }
     previousOrigin = url.origin
     previousProtocol = url.protocol
     currentUrl = new URL(location, url).toString()

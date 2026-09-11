@@ -20,6 +20,10 @@ describe('routeInboundForAi', () => {
     expect(routeInboundForAi('text', '   ')).toBe('unsupported')
     expect(routeInboundForAi(null, undefined)).toBe('unsupported')
   })
+  it.each(['button', 'interactive'])('%s com fala do cliente vira text', (type) => {
+    expect(routeInboundForAi(type, 'Quero comprar')).toBe('text')
+    expect(routeInboundForAi(type, '   ')).toBe('unsupported')
+  })
   it('audio sem transcript vira audio', () => {
     expect(routeInboundForAi('audio', '')).toBe('audio')
   })
