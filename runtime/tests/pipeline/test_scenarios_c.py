@@ -229,28 +229,23 @@ async def test_scenario_4b_a_crash_between_conclusion_and_archive_converges(
     assert status[0] == "sent"
 
 
-# --- cenário 7 · envenenada, ida e volta ---------------------------------------
+# --- cenário 7 · envenenada, quarentena ----------------------------------------
 
 
-async def test_scenario_7_a_poisoned_job_goes_to_the_dlq_and_comes_back(
+async def test_scenario_7_a_permanent_failure_stays_in_the_dlq_for_review(
     dsn: str,
     admin: psycopg.AsyncConnection,
     sync_admin: psycopg.Connection,
     tiny_config: QueueingConfig,
 ) -> None:
-    """Permanent failure → the right DLQ, payload intact → manual reprocess →
-    the same job concludes. A waiting room, not a cemetery."""
+    """Permanent failure → the right DLQ, payload intact, no blind replay."""
     organization_id = create_tenant(sync_admin)
     set_runtime_mode(sync_admin, organization_id, "runtime")
     thread = create_thread(sync_admin, organization_id)
     make_due(sync_admin, thread.conversation_id, last_inbound_seq=1)
 
-    poisoned = True
-
-    async def curable_responder(job: InboundJob):
-        if poisoned:
-            raise ValueError("payload inválido: veneno de teste")
-        return {"text": "curado"}
+    async def poisoned_responder(job: InboundJob):
+        raise ValueError("payload inválido: veneno de teste")
 
     stop = asyncio.Event()
     running = asyncio.create_task(
@@ -258,7 +253,7 @@ async def test_scenario_7_a_poisoned_job_goes_to_the_dlq_and_comes_back(
             dsn,
             stop=stop,
             config=tiny_config,
-            respond=curable_responder,
+            respond=poisoned_responder,
             worker_set_role="worker_role",
         )
     )
@@ -275,26 +270,18 @@ async def test_scenario_7_a_poisoned_job_goes_to_the_dlq_and_comes_back(
             await admin.execute("select message from pgmq.q_q_inbound_dlq")
         ).fetchone()
         assert dead[0]["error_class"] == "ValueError"
+        assert dead[0]["failure_kind"] == "permanent"
+        assert dead[0]["replay_count"] == 0
         assert dead[0]["conversation_id"] == str(thread.conversation_id)
 
-        # The cure, then the way back: reprocess strips the forensics and the
-        # job returns to its origin as if fresh.
-        poisoned = False
+        # The bounded reprocessor never turns a permanent poison into another
+        # live job. An operator can inspect and correct the source safely.
         moved = await (
             await admin.execute(
                 "select internal.reprocess_dead_letters('q_inbound_dlq', 'q_inbound')"
             )
         ).fetchone()
-        assert moved[0] == 1
-
-        async def concluded():
-            cursor = await admin.execute(
-                "select last_processed_seq from public.conversations where id = %s",
-                (thread.conversation_id,),
-            )
-            return (await cursor.fetchone())[0] == 1
-
-        await eventually(concluded, note="the reprocessed job concluding")
+        assert moved[0] == 0
     finally:
         stop.set()
         await asyncio.wait_for(running, DEADLINE)
@@ -302,12 +289,15 @@ async def test_scenario_7_a_poisoned_job_goes_to_the_dlq_and_comes_back(
     assert (
         await (await admin.execute("select queue_length from pgmq.metrics('q_inbound_dlq')"))
         .fetchone()
-    )[0] == 0
+    )[0] == 1
 
-    replayed = await (
-        await admin.execute("select message from pgmq.a_q_inbound order by msg_id desc limit 1")
+    conversation = await (
+        await admin.execute(
+            "select last_processed_seq from public.conversations where id = %s",
+            (thread.conversation_id,),
+        )
     ).fetchone()
-    assert "error_class" not in replayed[0], "the returning job must look fresh"
+    assert conversation == (0,)
 
 
 async def test_scenario_7_exhaustion_also_ends_in_the_dlq(
