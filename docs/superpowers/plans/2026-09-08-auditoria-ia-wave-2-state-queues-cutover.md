@@ -373,6 +373,11 @@ git commit -m "fix: maintain runtime state independently from message delivery"
 
 ### Task 4: W2-T3 — idempotência de negócio antes de drenar DLQ
 
+**Status 2026-09-11: concluída.** Identidade: `610db7d9`/`482a9254`, gate DB
+58/58. DLQ: `52416592` (RED), `18af07bb`, `50bae3eb` (RED), `c1effe0e`,
+`cfce3c11` (RED), `1aa21ed0` e `a487df1f`; gate integrado descartável 40/40,
+Ruff e quatro contratos do Import Linter verdes, sem recursos Docker residuais.
+
 **Papéis:** implementador Astra; revisor Astra independente; guardião DB Astra independente.
 
 **Files:**
@@ -389,7 +394,7 @@ git commit -m "fix: maintain runtime state independently from message delivery"
 
 **Contrato confirmado por inspeção:** `node-executors.ts:1199` já resolve run persistido por `context.automation_run_id || context.runId || context.workflow.executionId || context.workflow.execution_id`, e os emissores de e-mail validam UUID antes de gravar automation_run_id. `execution-engine.ts` guarda resultados por node.id e percorre nós com visited; uma execução/nó é a unidade de passagem neste motor. Reusar essa origem em action_ai_mission, sem fallback `exec_<timestamp>`: execução transitória sem UUID retorna erro e não gera job. Duas execuções persistidas distintas do mesmo nó continuam dois toques. Não criar identidade a partir do msg_id pgmq.
 
-- [ ] **Step 1: RED do parser e replay com msg_id novo**
+- [x] **Step 1: RED do parser e replay com msg_id novo**
 
 ```python
 def test_touch_identity_survives_transport_replay():
@@ -407,7 +412,7 @@ def test_touch_identity_survives_transport_replay():
 ```
 Teste DB entrega mesmo payload com msg_ids diferentes e assert um toque/LLM/outbox; duas touch_ids legítimas produzem dois toques.
 
-- [ ] **Step 1a: RED dos contratos existentes de emissão e chave de outbox**
+- [x] **Step 1a: RED dos contratos existentes de emissão e chave de outbox**
 
 Inventário somente leitura antes de editar código:
 ```powershell
@@ -491,11 +496,11 @@ Em `test_a_redelivery_finds_the_outbox_and_archives`, manter `message_id=7` na p
 
 Em `action-ai-mission.test.ts`, declarar `const RUN_ID = '55555555-5555-4555-8555-555555555555'`, trocar `executionId: 'run-1'` por `executionId: RUN_ID` em baseContext e acrescentar `expect(args.p_run_id).toBe(RUN_ID)` no teste queued. Assim os testes existentes continuam cobrindo RPC, recusas e delta após a validação de UUID.
 
-- [ ] **Step 2: Executar RED**
+- [x] **Step 2: Executar RED**
 
 Run: `pnpm exec vitest run src/lib/automation/__tests__/action-ai-mission.test.ts`; parser focal e ciclo DB via W0 com `-TestTargets @('tests/db/test_emit_mission_job.py','tests/db/test_toucher.py','tests/db/test_touch_business_identity.py')`. Expected: p_run_id ausente no mock TS; assinatura SQL de nove argumentos ainda inexistente; atributo touch_id ausente e replay com novo msg_id expõe duas chaves/outboxes. Registrar cada falha de contrato antes do patch; não aceitar falha de seed/baseline como RED do emissor.
 
-- [ ] **Step 3: Implementar identidade no produtor/consumidor**
+- [x] **Step 3: Implementar identidade no produtor/consumidor**
 
 ```python
 # MissionTouchJob: campo obrigatório antes dos defaults
@@ -506,7 +511,7 @@ touch_id=UUID(payload["touch_id"]),
 idempotency_key = f"touch-{job.conversation_id}-{job.touch_id}"
 ```
 
-- [ ] **Step 3a: Atualizar todos os construtores diretos existentes**
+- [x] **Step 3a: Atualizar todos os construtores diretos existentes**
 
 Busca estática `rg -n 'MissionTouchJob\(' runtime src` encontrou exatamente três locais: `runtime/tests/db/test_toucher.py:46`, `runtime/tests/db/test_responder_guards.py:86` e `runtime/tests/db/test_startup_rls_guard.py:111`. Todos entram no mesmo commit do campo obrigatório; não tornar touch_id opcional para poupar fixtures.
 
@@ -543,7 +548,7 @@ def a_touch(organization_id: uuid.UUID,thread,*,touch_id: uuid.UUID | None = Non
 ```
 No construtor inline de test_startup_rls_guard.py, acrescentar `touch_id=uuid.UUID('00000000-0000-4000-8000-000000000095')`. O teste não emite mensagem: o UUID constante deixa o job válido para alcançar a guarda e continuar falhando com RlsNotEnforced, nunca TypeError por argumento ausente. Os três arquivos já importam uuid. UUIDs determinísticos desses helpers representam recibos sintéticos já atribuídos; produção continua usando UUID persistido de mission_touch_emissions, nunca uuid5 de conversation/node. Nenhum helper deriva touch_id do msg_id da fila.
 
-- [ ] **Step 3b: Persistir o recibo no emissor SQL e atualizar o produtor TS**
+- [x] **Step 3b: Persistir o recibo no emissor SQL e atualizar o produtor TS**
 
 Adicionar tabela interna sem grants de browser:
 ```sql
@@ -600,7 +605,7 @@ if (typeof runId !== 'string' ||
 ```
 Enviar `p_run_id:runId` ao RPC existente; p_node_ref continua workflow.id:node.id. Jobs legados sem touch_id ficam em revisão/quarentena identificada; não inventar id em consumo. Aplicar o contrato preparado no Step 1a em `test_emit_mission_job.py` junto com a assinatura SQL: todas as emissões normais e recusas legadas enviam run persistido; somente o teste missing_run_identity omite a identidade. A igualdade de outbox e o replay de `test_toucher.py` também migram para touch_id no mesmo patch. O SQL valida run/org e contato/org antes de reservar recibo, impedindo replay cross-tenant.
 
-- [ ] **Step 4: GREEN da idempotência e primeiro commit**
+- [x] **Step 4: GREEN da idempotência e primeiro commit**
 
 Run: teste focal TS, parser, DB de emissor/worker e pipeline retry. Rodar também ciclo focal W0 com `-TestTargets @('tests/db/test_emit_mission_job.py','tests/db/test_toucher.py','tests/db/test_responder_guards.py','tests/db/test_startup_rls_guard.py')`; Test encerra esse projeto. Expected: mesmo touch_id idempotente após archive/re-enqueue, concorrência e crash após outbox; emissor preserva queued/not_rolled_out/contact_not_found/no_active_mission e InsufficientPrivilege, além de provar missing_run_identity e retry do mesmo run; a chave da outbox usa job.touch_id mesmo com msg_ids 7/8. Os três construtores continuam exercitando seus comportamentos originais, sem TypeError e sem perda da prova RlsNotEnforced. Repetir a busca por MissionTouchJob( e exigir touch_id explícito em todo construtor existente/novo antes do commit. Repetir também os dois rg do Step 1a: ambos os chamadores do emissor passam run_id e nenhuma chave/assertion executável permanece baseada em msg_id/message_id ou no literal -101.
 ```powershell
@@ -608,7 +613,7 @@ git add src/lib/automation/node-executors.ts src/lib/automation/__tests__/action
 git commit -m "fix: identify mission touches independently from queue messages"
 ```
 
-- [ ] **Step 5: RED de DLQ seletiva e limitada**
+- [x] **Step 5: RED de DLQ seletiva e limitada**
 
 Casos: transient/replay_count=0 pode reemitir; permanent/unknown sem decisão explícita fica; failure_kind ausente ou JSON null fica; transient/replay_count=1 fica; replay_count ausente/null/string `"zero"`/string `"0"`/boolean/negativo/decimal/inteiro maior que 1 fica sem lançar erro; mission_touch sem touch_id fica; queue par inválido recusa. Adicionar a matriz antes do SQL:
 ```python
@@ -641,7 +646,7 @@ select internal.reprocess_dead_letters('q_domain_events_dlq','q_inbound',50);
 ```
 Expected RED: função atual aceita par errado e drena sem filtro. Teste deve verificar original arquivado apenas se reemissão comitou, payload mantém touch_id, mensagem reenfileirada tem replay_count=1.
 
-- [ ] **Step 6: Implementar classificação e limite persistente**
+- [x] **Step 6: Implementar classificação e limite persistente**
 
 No _dispatch:
 ```python
@@ -691,7 +696,7 @@ grant execute on function internal.reprocess_dead_letters(text,text,integer) to 
 ```
 Tipo e faixa são validados em IFs separados antes do cast; não depender da ordem de avaliação de OR no PostgreSQL. `IS DISTINCT FROM` cobre NULL SQL e JSON null. O filtro textual aceita apenas inteiro canônico 0/1; números fracionários e enormes são recusados sem cast. Archive e send compartilham transação; mensagens inválidas permanecem para operador e podem ficar temporariamente invisíveis pelos 60s do read, mas não são removidas nem reenviadas.
 
-- [ ] **Step 7: RED do chamador automático na composição**
+- [x] **Step 7: RED do chamador automático na composição**
 
 Criar `runtime/tests/pipeline/test_automatic_dead_letter_replay.py` com a fixture clean_slate já protegida pelo executor W0:
 ```python
@@ -734,7 +739,7 @@ Run em ciclo focal novo W0 com TestTargets=`tests/pipeline/test_automatic_dead_l
 
 Nomes PGMQ: `q_inbound` é o nome lógico passado a send/read/archive/metrics; a tabela física é `pgmq.q_q_inbound` e o arquivo é `pgmq.a_q_inbound`. A DLQ lógica `q_inbound_dlq` corresponde a `pgmq.q_q_inbound_dlq` e `pgmq.a_q_inbound_dlq`. Preservar nomes lógicos nos argumentos das funções; acrescentar o prefixo físico somente em consultas diretas a tabelas, conforme `20260812000002_runtime_roles_and_internal.sql`.
 
-- [ ] **Step 7a: Criar task de dreno com conexão e cadência próprias**
+- [x] **Step 7a: Criar task de dreno com conexão e cadência próprias**
 
 Em app.run, depois de coalescer/heartbeat e antes do laço de workers, fora de `if channel is not None`:
 ```python
@@ -760,7 +765,7 @@ for conn in connections:
 ```
 Inserir gather no finally existente, substituindo seu fechamento prematuro; teste stop deve finalizar antes do deadline e não registrar conexão usada após close.
 
-- [ ] **Step 7b: Alerta persistente do job que chegou à DLQ**
+- [x] **Step 7b: Alerta persistente do job que chegou à DLQ**
 
 Usar `repository.alerts.open_alert(conn,organization_id,type,severity,title,payload,dedup_key)` existente, em transação curta escopada por organization_id UUID validado do payload. Tipo já aceito pelo CHECK: `mission_touch_failed` para toque, `send_failed` para inbound; severity=`warning` (valor aceito pelo CHECK existente), title=`Falha no processamento de IA`. Dedup_key=`dlq:<origin>:<touch_id>` ou `dlq:<origin>:<conversation_id>:<generation>`. Payload contém somente fila, error_class e identidade; não texto de cliente. Importar `open_alert` e `scope_to_organization` dos repositories; não escrever SQL em queueing.
 ```python
@@ -776,7 +781,7 @@ async with queue.connection.transaction():
 ```
 Validar UUID de organization_id antes desta transação; payload malformado sem org confiável permanece na DLQ e só gera log operacional sem tenant inventado. Abrir alerta não substitui send+archive: erro de alerta não apaga a evidência da DLQ, e retry do envelope continua protegido por idempotência. Teste pipeline com falha permanente de toque verifica um alerta aberto após duas entregas do mesmo touch_id e nenhuma chamada de serviço externo de mensagens.
 
-- [ ] **Step 8: GREEN, segundo commit e gate**
+- [x] **Step 8: GREEN, segundo commit e gate**
 
 Run: DB focal + `tests/pipeline/test_automatic_dead_letter_replay.py` + pipeline cenários C + Ruff + Import Linter. Expected: app reemite automaticamente só as duas filas com handlers, funciona sem canal, encerra task/conexão sem fuga, preserva contagem e a mesma ação não custa segundo LLM nem duplica outbox. Acrescentar ao teste pipeline JSON malformados da matriz Step 5 e verificar que o processo continua vivo enquanto esses registros permanecem na DLQ.
 ```powershell
