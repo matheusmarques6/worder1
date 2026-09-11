@@ -376,7 +376,9 @@ git commit -m "fix: maintain runtime state independently from message delivery"
 **Status 2026-09-11: concluída.** Identidade: `610db7d9`/`482a9254`, gate DB
 58/58. DLQ: `52416592` (RED), `18af07bb`, `50bae3eb` (RED), `c1effe0e`,
 `cfce3c11` (RED), `1aa21ed0` e `a487df1f`; gate integrado descartável 40/40,
-Ruff e quatro contratos do Import Linter verdes, sem recursos Docker residuais.
+seguido pela revisão de privacidade `119b257e` (RED)/`cb2ecc7b` e novo gate
+integrado 40/40. Ruff e quatro contratos do Import Linter verdes, sem recursos
+Docker residuais.
 
 **Papéis:** implementador Astra; revisor Astra independente; guardião DB Astra independente.
 
