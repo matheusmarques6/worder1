@@ -309,6 +309,20 @@ FUNCTIONS = (
      "1ba60e53bdfa48f9238ddcc30e0671541b0279a0d7c4b2e340df51b1343ba267"),
 )
 
+RECENT_CATALOG_IDENTITIES = (
+    *(("column", ("email_campaigns", column)) for column in (
+        "paused_at", "ab_test_enabled", "ab_test_percent", "ab_variant_b",
+        "ab_duration_hours", "ab_winner_metric", "ab_winner", "ab_resolved_at",
+    )),
+    *(("index", (table, keys)) for table, keys, *_ in INDEXES[-3:]),
+    *(("function", ("public", name, signature)) for name, signature, _ in FUNCTIONS),
+)
+
+
+def recent_catalog_id(value):
+    kind, identity = value
+    return f"{kind}:{identity[1] if kind != 'index' else ','.join(identity[1])}"
+
 
 def function_definition_digest(definition):
     definition = definition.replace("\r\n", "\n").replace("\r", "\n").strip()
@@ -506,6 +520,20 @@ def expected_scoped_catalog():
 def test_app_baseline_scoped_catalog(admin, kind):
     actual = tuple(row for row in scoped_catalog(admin) if row[0] == kind)
     expected = tuple(row for row in expected_scoped_catalog() if row[0] == kind)
+    assert actual == expected
+
+
+@pytest.mark.parametrize(
+    ("kind", "identity"),
+    RECENT_CATALOG_IDENTITIES,
+    ids=map(recent_catalog_id, RECENT_CATALOG_IDENTITIES),
+)
+def test_recent_app_baseline_catalog_object(admin, kind, identity):
+    prefix = (kind, *identity)
+    actual = tuple(row for row in scoped_catalog(admin) if row[:len(prefix)] == prefix)
+    expected = tuple(
+        row for row in expected_scoped_catalog() if row[:len(prefix)] == prefix
+    )
     assert actual == expected
 
 
