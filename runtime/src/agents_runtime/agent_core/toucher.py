@@ -111,7 +111,7 @@ def _node_delta(raw: dict | None) -> NodeDelta:
     raw = raw or {}
     return NodeDelta(
         objective=raw.get("objective"),
-        success_criteria=tuple(raw.get("success_criteria") or ()),
+        success_criteria=raw.get("success_criteria"),
         tone=raw.get("tone"),
         context=dict(raw.get("context") or {}),
         enabled_tools=(

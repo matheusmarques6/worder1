@@ -162,14 +162,6 @@ class TestErrors:
 
         assert classify(failure.value) is expected_class
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "item 95: `classify` casa os builtins TimeoutError/ConnectionError, e os "
-            "erros de transporte do httpx descem de httpx.TransportError, de nenhum "
-            "dos dois — caem em Failure.UNKNOWN"
-        ),
-    )
     @pytest.mark.parametrize(
         "transport_error",
         [
@@ -181,28 +173,7 @@ class TestErrors:
         ids=["connect", "connect_timeout", "read_timeout", "pool_timeout"],
     )
     def test_a_transport_error_is_transient(self, transport_error: Exception) -> None:
-        """The contract that SHOULD hold, not today's behaviour — on purpose.
-
-        Provider timeouts are the textbook transient failure, and today all
-        four land in `Failure.UNKNOWN`: `failures.py:30` matches the builtins
-        `TimeoutError`/`ConnectionError`, and `failures.py:33` looks for the
-        text `"timeout"` while httpx writes `"timed out"`. `openrouter.py` has
-        no `except httpx.*`, so the exception reaches `classify` raw.
-
-        Not a catastrophe — `failures.py:18-21` says `UNKNOWN` retries as
-        transient and the attempt limit still holds, so no message is dropped.
-        But the same comment says `UNKNOWN` exists apart "para permitir alertar
-        quando a tabela abaixo envelhecer", and `Failure.UNKNOWN` has zero
-        readers outside `failures.py`: nobody is alerted. A provider timeout
-        falls silently into the unmapped bucket, which IS the aged table.
-
-        The message goes empty deliberately: what must decide is the TYPE. The
-        only reason anything here ever classifies right today is an accident of
-        text — `httpx.PoolTimeout("pool timeout")` comes out `TRANSIENT`
-        because the word landed in the string, while
-        `httpx.ConnectTimeout("timed out")` does not. A test leaning on the
-        text would go green without the defect being fixed.
-        """
+        """The transport exception type decides even when its message is empty."""
         assert classify(transport_error) is Failure.TRANSIENT
 
     def test_missing_credentials_die_at_startup(self, monkeypatch: pytest.MonkeyPatch) -> None:

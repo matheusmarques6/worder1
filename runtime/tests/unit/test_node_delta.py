@@ -10,13 +10,8 @@ falou de ferramentas" (`None`, não mexe) de "o nó zerou as ferramentas"
 (`()`, apaga todas): um `()` onde devia haver `None` tira `create_coupon` de um
 toque de recuperação, que é caminho do dinheiro.
 
-O quarto caso é o contrato de `success_criteria`, e ele nasce sob
-`xfail(strict=True)` de propósito — ver o item 95 e o comentário no próprio
-caso. Primeiro `xfail` desta casa; a alternativa honesta era uma suíte vermelha
-na branch principal.
+O quarto caso preserva o contrato textual de `success_criteria` do item 95.
 """
-
-import pytest
 
 from agents_runtime.agent_core.toucher import _node_delta
 
@@ -47,28 +42,8 @@ def test_forbidden_keeps_the_order_the_node_wrote() -> None:
     assert _node_delta({"forbidden": ["b", "a"]}).forbidden == ("b", "a")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "item 95: toucher.py:114 faz tuple() sobre o str | None que "
-        "mission_resolver.py:63 declara, e fatia a frase em caracteres"
-    ),
-)
 def test_success_criteria_stays_the_string_the_node_wrote() -> None:
-    """O contrato CERTO, não o comportamento atual — de propósito.
-
-    Hoje `_node_delta({"success_criteria": "pessoa volta ao checkout"})` devolve
-    uma tupla de 24 caracteres. Ela é *truthy*, então
-    `mission_resolver.py:118` a deixa vencer a da missão e
-    `prompt_compiler.py:219-220` a interpola: o bloco MISSÃO passa a dizer
-    `Sucesso observável: ('p', 'e', 's', ...)`.
-
-    Escrever aqui o comportamento atual gravaria o bug como contrato — o
-    anti-padrão do item 40 com o sinal trocado. Com `strict=True`, no instante
-    em que o item 95 consertar `toucher.py:114` este caso vira XPASS e a suíte
-    fica VERMELHA até o marcador ser removido: o teste é o critério de aceite e
-    não tem como ser esquecido.
-    """
+    """O delta mantém a frase que o nó escreveu, sem fatiá-la em caracteres."""
     assert _node_delta({"success_criteria": "pessoa volta ao checkout"}).success_criteria == (
         "pessoa volta ao checkout"
     )
