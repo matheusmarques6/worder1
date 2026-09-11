@@ -498,6 +498,41 @@ describe('qstash-worker-auth', () => {
     expect(effects.qstashVerify).toHaveBeenCalledWith({ signature: 'valid', body })
     expect(effects.processInboundMedia).toHaveBeenCalledTimes(1)
   })
+
+  it.each([
+    [1, false],
+    [2, true],
+  ])('whatsapp-webhook attempt %i sets resumeExistingMessages=%s', async (attempts, resumeExistingMessages) => {
+    vi.stubEnv('QSTASH_CURRENT_SIGNING_KEY', 'current')
+    vi.stubEnv('QSTASH_NEXT_SIGNING_KEY', 'next')
+    const load = workerRoutes['../app/api/workers/whatsapp-webhook/route.ts']
+    const handlers = await load() as Record<string, (req: NextRequest) => Promise<Response>>
+    vi.clearAllMocks()
+    effects.qstashVerify.mockResolvedValue(true)
+    effects.rpc.mockResolvedValueOnce({
+      data: [{ raw_payload: { object: 'whatsapp_business_account' }, attempts, max_attempts: 5 }],
+      error: null,
+    } as any)
+
+    const body = JSON.stringify({ eventId: 'event-1' })
+    const response = await handlers.POST(new NextRequest(
+      'http://localhost/api/workers/whatsapp-webhook',
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'upstash-signature': 'valid',
+        },
+        body,
+      },
+    ))
+
+    expect(response.status).toBe(200)
+    expect(effects.processWebhookPayload).toHaveBeenCalledWith(
+      { object: 'whatsapp_business_account' },
+      { resumeExistingMessages },
+    )
+  })
 })
 
 describe('remaining-worker-auth', () => {

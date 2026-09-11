@@ -62,7 +62,11 @@ vi.mock('@/lib/observability/whatsapp-logger', () => ({
   wlog: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
 
-import { maybeRunAgentForCloudConversation } from '../cloud-runner'
+import {
+  claimAiPendingResponse,
+  maybeRunAgentForCloudConversation,
+  releaseAiPendingClaim,
+} from '../cloud-runner'
 
 const account = {
   id: 'waba-1',
@@ -116,6 +120,24 @@ beforeEach(() => {
   mockCreateAgentEngine.mockReset()
   mockSendHumanizedReply.mockReset()
   mockRpc.mockResolvedValue({ data: [{ agent_id: 'agent-1' }], error: null })
+})
+
+describe('cloud-runner — claim legado', () => {
+  it('usa as RPCs de claim e release e propaga falhas do banco', async () => {
+    mockRpc.mockResolvedValueOnce({ data: true, error: null })
+    await expect(claimAiPendingResponse('conv-1')).resolves.toBe(true)
+    expect(mockRpc).toHaveBeenLastCalledWith('claim_legacy_ai_pending', {
+      p_conversation_id: 'conv-1',
+    })
+
+    mockRpc.mockResolvedValueOnce({ data: null, error: { message: 'release failed' } })
+    await expect(releaseAiPendingClaim('conv-1')).rejects.toMatchObject({
+      message: 'release failed',
+    })
+    expect(mockRpc).toHaveBeenLastCalledWith('release_legacy_ai_pending', {
+      p_conversation_id: 'conv-1',
+    })
+  })
 })
 
 describe('cloud-runner guards — resolução do agente', () => {
@@ -414,6 +436,56 @@ describe('cloud-runner — bloqueio do send guard e terminal (sem retry)', () =>
 
     expect(r.replied).toBe(true)
     expect(r.failure).toBeUndefined()
+  })
+
+  it('flip para runtime durante o LLM impede o envio legado', async () => {
+    let engineStarted!: () => void
+    let finishEngine!: (value: { response: string }) => void
+    const started = new Promise<void>((resolve) => { engineStarted = resolve })
+    const response = new Promise<{ response: string }>((resolve) => { finishEngine = resolve })
+    mockCreateAgentEngine.mockResolvedValue({
+      processMessage: vi.fn(async () => {
+        engineStarted()
+        return response
+      }),
+    })
+    mockSendHumanizedReply.mockResolvedValue({ sent: true, messageId: 'wamid.stale' })
+    queueResult('ai_runtime_rollout', { data: { mode: 'runtime' }, error: null })
+
+    const run = maybeRunAgentForCloudConversation({
+      account,
+      conversation: conv(),
+      text: 'qual o preco do produto?',
+    })
+    await started
+    finishEngine({ response: 'rascunho legado' })
+
+    await expect(run).resolves.toMatchObject({
+      replied: false,
+      transferred: false,
+      skipped: 'runtime_cutover',
+    })
+    expect(mockSendHumanizedReply).not.toHaveBeenCalled()
+  })
+
+  it('falha ao revalidar rollout vira transient sem chamar o sender', async () => {
+    queueResult('ai_runtime_rollout', {
+      data: null,
+      error: { message: 'rollout read failed' },
+    })
+
+    const result = await maybeRunAgentForCloudConversation({
+      account,
+      conversation: conv(),
+      text: 'qual o preco do produto?',
+    })
+
+    expect(result).toMatchObject({
+      replied: false,
+      failure: 'transient',
+      error: 'rollout read failed',
+    })
+    expect(mockSendHumanizedReply).not.toHaveBeenCalled()
   })
 
   it('falha de token pre-envio vira transient e preserva o erro do sender', async () => {

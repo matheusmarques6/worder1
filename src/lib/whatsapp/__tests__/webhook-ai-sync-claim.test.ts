@@ -136,7 +136,6 @@ vi.mock('@/lib/ai/run-steps', () => ({
 const getRuntimeMode = vi.fn(async (_c?: any, _o?: string) => 'legacy' as const);
 vi.mock('@/lib/ai/runtime-rollout', () => ({
   getRuntimeMode: (client: any, org: string) => getRuntimeMode(client, org),
-  clearRuntimeModeCache: vi.fn(),
 }));
 
 // O guard em si é caixa-preta aqui — o que se prova é que webhook-processor

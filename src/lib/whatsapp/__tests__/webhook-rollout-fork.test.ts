@@ -33,10 +33,11 @@ const PHONE_NUMBER_ID = '555000111';
 
 interface Recorded {
   rpcs: Array<{ name: string; args: any }>;
+  inserts: Array<{ table: string; row: any }>;
   updates: Array<{ table: string; patch: any }>;
 }
 
-const rec: Recorded = { rpcs: [], updates: [] };
+const rec: Recorded = { rpcs: [], inserts: [], updates: [] };
 
 const state = {
   conversationAiEnabled: true as boolean | null,
@@ -101,6 +102,7 @@ function from(table: string) {
         }
         return (...a: any[]) => {
           calls.push({ m: prop, a });
+          if (prop === 'insert') rec.inserts.push({ table, row: a[0] });
           if (prop === 'update') rec.updates.push({ table, patch: a[0] });
           return chain;
         };
@@ -158,7 +160,6 @@ const getRuntimeMode = vi.fn(
 );
 vi.mock('@/lib/ai/runtime-rollout', () => ({
   getRuntimeMode: (client: any, org: string) => getRuntimeMode(client, org),
-  clearRuntimeModeCache: vi.fn(),
 }));
 
 vi.mock('@/lib/ai/cloud-runner', () => ({
@@ -275,6 +276,7 @@ const legacyDebounceUpdates = () =>
 
 beforeEach(() => {
   rec.rpcs = [];
+  rec.inserts = [];
   rec.updates = [];
   state.conversationAiEnabled = true;
   state.messageAlreadySeen = false;
@@ -462,7 +464,7 @@ describe('org migrada (runtime) — o caminho canônico', () => {
   });
 });
 
-describe('fail-closed — o rollout na dúvida é legacy', () => {
+describe('rollout sem estado stale', () => {
   it('org sem linha em ai_runtime_rollout usa o legado', async () => {
     // getRuntimeMode já devolve 'legacy' por ausência (contrato provado em
     // runtime-rollout.test.ts); aqui o que se prova é que o processor OBEDECE.
@@ -478,6 +480,21 @@ describe('fail-closed — o rollout na dúvida é legacy', () => {
 
     expect(getRuntimeMode).toHaveBeenCalledTimes(1);
     expect(getRuntimeMode.mock.calls[0][1]).toBe(ORG);
+  });
+
+  it('erro após persistir pede retry e a reentrega deduplicada ainda agenda', async () => {
+    const error = new Error('rollout indisponível');
+    getRuntimeMode.mockRejectedValueOnce(error).mockResolvedValueOnce('legacy');
+    const payload = inboundTextPayload();
+
+    await expect(processWebhookPayload(payload)).rejects.toThrow('rollout indisponível');
+
+    state.messageAlreadySeen = true;
+    await processWebhookPayload(payload, { resumeExistingMessages: true });
+
+    expect(rec.inserts.filter((entry) => entry.table === 'whatsapp_cloud_messages')).toHaveLength(1);
+    expect(getRuntimeMode).toHaveBeenCalledTimes(2);
+    expect(enqueueWhatsAppAiRespond).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -8,8 +8,7 @@
  *
  * Mocka supabaseAdmin (rpc por nome + from('ai_runtime_rollout') por org) e
  * getRuntimeMode roda de verdade, para provar a integração real: erro de
- * leitura do rollout precisa mesmo cair para legacy, não só o mock dizer que
- * cai.
+ * leitura do rollout precisa subir, não escolher um motor por estado stale.
  */
 
 import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest'
@@ -58,7 +57,6 @@ vi.mock('@/lib/supabase-admin', () => ({
 }))
 
 import { GET } from './route'
-import { clearRuntimeModeCache } from '@/lib/ai/runtime-rollout'
 
 function fakeReq(): any {
   return { headers: new Headers({ authorization: 'Bearer test-cron-secret' }) }
@@ -84,7 +82,6 @@ describe('GET /api/cron/reprocess-whatsapp-pending — fase 2 respeita o rollout
     mockEnqueueWebhook.mockClear()
     mockEnqueueAi.mockClear()
     mockQuarantine.mockClear()
-    clearRuntimeModeCache()
     rpcResults[EVENTS_RPC] = { data: [], error: null }
   })
 
@@ -111,15 +108,13 @@ describe('GET /api/cron/reprocess-whatsapp-pending — fase 2 respeita o rollout
     expect(body.ai_enqueued).toBe(0)
   })
 
-  it('erro na leitura do rollout cai para legacy: reenfileira (fail-closed)', async () => {
+  it('erro na leitura do rollout sobe sem reenfileirar no motor errado', async () => {
     rpcResults[AI_RPC] = { data: [aiRow('org-erro')], error: null }
-    orgRolloutResults['org-erro'] = { data: null, error: { message: 'timeout' } }
+    const error = { message: 'timeout' }
+    orgRolloutResults['org-erro'] = { data: null, error }
 
-    const res = await GET(fakeReq())
-    const body = await res.json()
-
-    expect(mockEnqueueAi).toHaveBeenCalledTimes(1)
-    expect(body.ai_enqueued).toBe(1)
+    await expect(GET(fakeReq())).rejects.toBe(error)
+    expect(mockEnqueueAi).not.toHaveBeenCalled()
   })
 
   it('fase 1 (eventos) segue chamando enqueueWhatsAppWebhook, intocada pelo filtro de rollout', async () => {

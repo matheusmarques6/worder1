@@ -98,7 +98,6 @@ vi.mock('@/lib/supabase-admin', () => ({
 }));
 
 import { resolveConversationAiStatus, AI_BLOCKER_LABELS } from '../conversation-ai-status';
-import { clearRuntimeModeCache } from '../runtime-rollout';
 
 // ---------------------------------------------------------------------------
 
@@ -143,7 +142,6 @@ function ask(over: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   rpc.mockClear();
-  clearRuntimeModeCache();
   db.activeAgentRows = [{ agent_id: AGENT }];
   db.agent = { id: AGENT, name: 'Matheus', settings: { behavior: {} } };
   db.agentError = null;
@@ -372,15 +370,9 @@ describe('item 37 — o badge para de mentir em runtime', () => {
     expect(await ask()).toMatchObject({ willRespond: true, reason: null });
   });
 
-  it('erro ao ler ai_runtime_rollout: cai pra legacy — horário não é avaliado', async () => {
+  it('erro ao ler ai_runtime_rollout sobe em vez de inventar um modo', async () => {
     db.runtimeMode = null; // resultFor devolve error para a leitura de ai_runtime_rollout
-    db.agent!.settings = { behavior: { max_messages_per_conversation: 1 }, schedule: { days: [] } };
-    db.botMessages = 5;
-    // getRuntimeMode falha aberto para 'legacy': o guard de max_messages
-    // continua valendo (era assim antes desta tarefa), e horário — que só
-    // roda em runtime — não é avaliado, então não é ele quem explicaria o
-    // silêncio mesmo que fosse consultado.
-    expect(await ask()).toMatchObject({ willRespond: false, reason: 'max_messages' });
+    await expect(ask()).rejects.toEqual({ message: 'leitura falhou' });
   });
 });
 

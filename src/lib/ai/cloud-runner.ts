@@ -45,8 +45,26 @@ import type { AIMessageImage } from '@/lib/whatsapp/ai-providers';
 import { matchHandoffKeyword, isTransferCooldownActive } from './guards';
 import { AI_RUN_STEPS, describeToolCall, recordAiStep, type AiRunStep } from './run-steps';
 import { countBotMessages, hasHumanReply } from './conversation-ai-status';
+import { getRuntimeMode } from './runtime-rollout';
 
 const COOLDOWN_MS = 5000;
+
+async function sendLegacyReply(
+  organizationId: string,
+  input: Parameters<typeof sendHumanizedReply>[0],
+) {
+  try {
+    if ((await getRuntimeMode(supabaseAdmin, organizationId)) === 'runtime') {
+      return { sent: false, reason: 'runtime_cutover' } as const;
+    }
+  } catch (error: any) {
+    return {
+      sent: false,
+      error: error?.message || 'runtime rollout unavailable',
+    } as const;
+  }
+  return sendHumanizedReply(input);
+}
 
 /** Alerta + notificação quando a IA é DESLIGADA por falha permanent.
  *  Padrão campaign_worker_stalled (whatsapp-dead-alert/route.ts:67-90):
@@ -154,7 +172,7 @@ async function tryHandoffKeyword(params: HandoffKeywordParams): Promise<CloudRun
   const confirmation = String(confirmationMessage || '').trim();
   if (confirmation && !skipSend) {
     // Best-effort: falha no envio da confirmação não desfaz a transferência.
-    await sendHumanizedReply({
+    await sendLegacyReply(organizationId, {
       account,
       conversation,
       text: confirmation,
@@ -251,7 +269,7 @@ async function runMediaFallback(params: MediaFallbackParams): Promise<CloudRunne
     };
   }
 
-  const sendResult = await sendHumanizedReply({
+  const sendResult = await sendLegacyReply(organizationId, {
     account,
     conversation,
     text: fallback.message,
@@ -270,6 +288,16 @@ async function runMediaFallback(params: MediaFallbackParams): Promise<CloudRunne
       response: fallback.message,
       agentId,
       skipped: 'opted_out',
+    };
+  }
+
+  if (!sendResult.sent && sendResult.reason === 'runtime_cutover') {
+    return {
+      replied: false,
+      transferred: false,
+      response: fallback.message,
+      agentId,
+      skipped: 'runtime_cutover',
     };
   }
 
@@ -330,14 +358,11 @@ export interface CloudRunnerResult {
  * nasceu.
  */
 export async function claimAiPendingResponse(conversationId: string): Promise<boolean> {
-  const { data: claimed } = await supabaseAdmin
-    .from('whatsapp_cloud_conversations')
-    .update({ ai_pending: false })
-    .eq('id', conversationId)
-    .eq('ai_pending', true)
-    .select('id')
-    .maybeSingle();
-  return Boolean(claimed);
+  const { data, error } = await supabaseAdmin.rpc('claim_legacy_ai_pending', {
+    p_conversation_id: conversationId,
+  });
+  if (error) throw error;
+  return data === true;
 }
 
 /**
@@ -348,10 +373,10 @@ export async function claimAiPendingResponse(conversationId: string): Promise<bo
  * uma linha com ai_pending=false, e esse sweep também exige ai_pending=true.
  */
 export async function releaseAiPendingClaim(conversationId: string): Promise<void> {
-  await supabaseAdmin
-    .from('whatsapp_cloud_conversations')
-    .update({ ai_pending: true })
-    .eq('id', conversationId);
+  const { error } = await supabaseAdmin.rpc('release_legacy_ai_pending', {
+    p_conversation_id: conversationId,
+  });
+  if (error) throw error;
 }
 
 export async function maybeRunAgentForCloudConversation(
@@ -1049,7 +1074,7 @@ export async function maybeRunAgentForCloudConversation(
   // pausa por tamanho de texto), que sao a maior parte do tempo percebido.
   await step(AI_RUN_STEPS.SENDING, 'Enviando resposta');
 
-  const sendResult = await sendHumanizedReply({
+  const sendResult = await sendLegacyReply(organizationId, {
     account,
     conversation,
     text: response,
@@ -1069,6 +1094,18 @@ export async function maybeRunAgentForCloudConversation(
       traceId,
       agentId,
       skipped: 'opted_out',
+    };
+  }
+
+  if (!sendResult.sent && sendResult.reason === 'runtime_cutover') {
+    await step(AI_RUN_STEPS.SKIPPED, 'Organização migrou para o runtime durante a geração');
+    return {
+      replied: false,
+      transferred: false,
+      response,
+      traceId,
+      agentId,
+      skipped: 'runtime_cutover',
     };
   }
 

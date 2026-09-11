@@ -93,7 +93,9 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const result = await processWebhookPayload(claimed.raw_payload);
+    const result = await processWebhookPayload(claimed.raw_payload, {
+      resumeExistingMessages: claimed.attempts > 1,
+    });
     await markDone(eventId);
     return NextResponse.json({ ok: true, eventId, result });
   } catch (err: any) {
