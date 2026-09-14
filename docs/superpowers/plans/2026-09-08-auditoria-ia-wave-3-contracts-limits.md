@@ -57,7 +57,7 @@ Namespace de migrations coordenado: W0 `20260910000000`; W1 `20260910010000`; W2
 - Consumes: `_read_request(reader: asyncio.StreamReader) -> tuple[str, str, dict, bytes]`; `_as_chat(messages: Sequence[PendingMessage]) -> list[Message]`.
 - Produces: mesmas assinaturas; cabeçalho inválido é `ValueError`, corpo incompleto conserva `asyncio.IncompleteReadError`; nenhuma segunda cópia do transcript é introduzida no frame.
 
-- [ ] **Step 1 (3 min): Escrever o teste negativo do parser.**
+- [x] **Step 1 (3 min): Escrever o teste negativo do parser.**
 
 ```python
 import asyncio
@@ -81,8 +81,8 @@ async def test_accepts_the_preview_request_shape():
         "POST", "/internal/preview-prompt", {"content-length": "2"}, b"{}")
 ```
 
-- [ ] **Step 2 (2 min): RED.** `uv run --directory runtime pytest tests/unit/test_listener_request_contract.py -q`. Esperado: falha nos cabeçalhos sem dois-pontos/transfer-encoding e duplicidade; registrar a saída, sem transformar defeito em skip.
-- [ ] **Step 3 (4 min): Endurecer somente o enquadramento que o listener aceita.** Dentro do laço de headers, substituir a atribuição atual pelo fragmento; depois do `int(...)`, rejeitar comprimento negativo.
+- [x] **Step 2 (2 min): RED.** `uv run --directory runtime pytest tests/unit/test_listener_request_contract.py -q`. Esperado: falha nos cabeçalhos sem dois-pontos/transfer-encoding e duplicidade; registrar a saída, sem transformar defeito em skip.
+- [x] **Step 3 (4 min): Endurecer somente o enquadramento que o listener aceita.** Dentro do laço de headers, substituir a atribuição atual pelo fragmento; depois do `int(...)`, rejeitar comprimento negativo.
 
 ```python
 name, separator, value = line.partition(":")
@@ -99,7 +99,7 @@ if length < 0 or length > MAX_BODY_BYTES:
     raise ValueError("tamanho de corpo inválido para um preview")
 ```
 
-- [ ] **Step 4 (4 min): Acrescentar a trava de contagem usando os dois produtores existentes.** Criar o segundo teste completo abaixo; o script de medição é referência de cenário, não módulo de fixtures.
+- [x] **Step 4 (4 min): Acrescentar a trava de contagem usando os dois produtores existentes.** Criar o segundo teste completo abaixo; o script de medição é referência de cenário, não módulo de fixtures.
 
 ```python
 from agents_runtime.agent_core.responder import _as_chat
@@ -117,8 +117,10 @@ def test_contact_text_occurs_only_in_chat():
 ```
 
 Esse teste prova contagem de composição, não SQL; a exclusão de pendentes pela query exige o gate DB da Task 2.
-- [ ] **Step 5 (3 min): Provar sensibilidade e GREEN.** Temporariamente incluir o transcript no texto do bloco por `apply_patch`, executar `uv run --directory runtime pytest tests/unit/test_transcript_occurrences.py -q` e observar a falha; desfazer só essa mutação com `apply_patch`. Executar `uv run --directory runtime pytest tests/unit/test_listener_request_contract.py tests/unit/test_transcript_occurrences.py -q` e `uv run --directory runtime ruff check .`. Esperado: PASS, sem alteração no compilador no diff final.
-- [ ] **Step 6 (2 min): Commit e revisão.** `git add runtime/src/agents_runtime/server.py runtime/tests/unit/test_listener_request_contract.py runtime/tests/unit/test_transcript_occurrences.py`; `git commit -m "fix: reject ambiguous preview request framing"`. Terra implementa, Sol revisa; rollback por revert deste commit, preservando a evidência de contagem no relatório.
+- [x] **Step 5 (3 min): Provar sensibilidade e GREEN.** Temporariamente incluir o transcript no texto do bloco por `apply_patch`, executar `uv run --directory runtime pytest tests/unit/test_transcript_occurrences.py -q` e observar a falha; desfazer só essa mutação com `apply_patch`. Executar `uv run --directory runtime pytest tests/unit/test_listener_request_contract.py tests/unit/test_transcript_occurrences.py -q` e `uv run --directory runtime ruff check .`. Esperado: PASS, sem alteração no compilador no diff final.
+- [x] **Step 6 (2 min): Commit e revisão.** `git add runtime/src/agents_runtime/server.py runtime/tests/unit/test_listener_request_contract.py runtime/tests/unit/test_transcript_occurrences.py`; `git commit -m "fix: reject ambiguous preview request framing"`. Terra implementa, Sol revisa; rollback por revert deste commit, preservando a evidência de contagem no relatório.
+
+Evidência de 2026-09-14: `fb416860`; RED inicial `5 failed, 2 passed`, RED adicional da revisão `5 failed` para valores ambíguos e `1 failed` para whitespace antes de `:`, GREEN focal `14 passed`, suíte unitária `1717 passed`, Ruff e `git diff --check` verdes. O teste de composição já existente em `test_prompt_compiler_blocks.py` foi fortalecido em vez de criar `test_transcript_occurrences.py`; a mutação do ramo `turn` falhou na representação JSON real e o arquivo de produção foi restaurado pelo hash `d9634587…`. Revisões de especificação e qualidade: PASS/APPROVED.
 
 ### Task 2: Fechar a evidência restante do item 63 sem apagar lacunas DB (W3-T1)
 
