@@ -267,7 +267,7 @@ if not start <= local.strftime("%H:%M") <= end:
 - Consumes: `zoneinfo.ZoneInfo` da stdlib; `tzdata` fornece dados quando o sistema operacional não os tem.
 - Produces: `ZoneInfo("America/Sao_Paulo")` disponível também sem tzdb do sistema; não altera política de timezone digitado errado.
 
-- [ ] **Step 1 (3 min): Escrever prova de fallback real.**
+- [x] **Step 1 (3 min): Escrever prova de fallback real.**
 
 ```python
 from datetime import datetime
@@ -284,10 +284,12 @@ def test_packaged_tzdb_without_os_database():
         ZoneInfo.clear_cache()
 ```
 
-- [ ] **Step 2 (2 min): RED em ambiente limpo.** `uv run --directory runtime pytest tests/unit/test_timezone_database.py -q`. Esperado: `ZoneInfoNotFoundError` se nenhuma dependência transitiva já trouxe tzdata. Se passar por transitiva, registrar `uv tree --directory runtime` e provar ausência em instalação de produção isolada antes da dependência direta, sem remover pacote do ambiente do usuário.
-- [ ] **Step 3 (2 min): Declarar dependência direta.** Adicionar `"tzdata",` a `project.dependencies` por `apply_patch`; `uv lock --directory runtime`. O lock resolve versão real; não inventar versão ou baixar assets manualmente.
-- [ ] **Step 4 (2 min): GREEN.** `uv run --directory runtime pytest tests/unit/test_timezone_database.py tests/unit/test_behavior_guards.py -q`; `uv run --directory runtime ruff check .`. Onda 6 repete na imagem e no Windows.
-- [ ] **Step 5 (2 min): Commit.** `git add runtime/pyproject.toml runtime/uv.lock runtime/tests/unit/test_timezone_database.py`; `git commit -m "fix: ship timezone data with the runtime"`. Luna medium implementa, Sol revisa. Rollback: revert dos três arquivos juntos; não apagar tzdb do SO.
+- [x] **Step 2 (2 min): RED em ambiente limpo.** `uv run --directory runtime pytest tests/unit/test_timezone_database.py -q`. Esperado: `ZoneInfoNotFoundError` se nenhuma dependência transitiva já trouxe tzdata. Se passar por transitiva, registrar `uv tree --directory runtime` e provar ausência em instalação de produção isolada antes da dependência direta, sem remover pacote do ambiente do usuário.
+- [x] **Step 3 (2 min): Declarar dependência direta.** Adicionar `"tzdata",` a `project.dependencies` por `apply_patch`; `uv lock --directory runtime`. O lock resolve versão real; não inventar versão ou baixar assets manualmente.
+- [x] **Step 4 (2 min): GREEN.** `uv run --directory runtime pytest tests/unit/test_timezone_database.py tests/unit/test_behavior_guards.py -q`; `uv run --directory runtime ruff check .`. Onda 6 repete na imagem e no Windows.
+- [x] **Step 5 (2 min): Commit.** `git add runtime/pyproject.toml runtime/uv.lock runtime/tests/unit/test_timezone_database.py`; `git commit -m "fix: ship timezone data with the runtime"`. Luna medium implementa, Sol revisa. Rollback: revert dos três arquivos juntos; não apagar tzdb do SO.
+
+Evidência de 2026-09-14: `1f7c7107`; no lock anterior `tzdata` vinha apenas por `psycopg` no Windows e a resolução Linux de produção o removia. Depois da dependência direta, exportação `--locked --no-dev` inclui `tzdata==2026.3`; `61 passed` no gate focal, `1719 passed` na suíte unitária e Ruff verde. Docker estava indisponível e não deixou recursos; a imagem será repetida no gate da Onda 6. Revisões de especificação e qualidade: PASS/APPROVED.
 
 ### Task 6: Guard state econômico, alerta e identidade (W3-T2, condicional)
 
