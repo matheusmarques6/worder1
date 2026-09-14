@@ -373,21 +373,25 @@ O parser `_number` já existe em guards e mantém a semântica aprovada na Task 
 - Consumes: VT 60s, heartbeat 45s, lease 120s e limite de 16 chamadas existente; limites por chamada não são limites por turno.
 - Produces: valores aprovados `turn_timeout_seconds`, `connect_timeout_seconds`, `statement_timeout_ms`, prazo do probe e prazo de cleanup; política de retry/alerta pós-timeout. Esses nomes são os campos do registro de decisão, não configuração pública já existente.
 
-- [ ] **Step 1 (3 min): Coletar evidência autorizada.** Ler cadência/timeout do probe do Render e latências existentes, sem valores de env/DSN no relatório. Se indisponível, registrar dependência externa, não fabricar medição.
-- [ ] **Step 2 (4 min): Comparar opções.** Turno: A teto único para responder e toque, B tetos por tipo de job; conexão: A valor na composição comum, B valor no DSN documentado; statement: A `SET statement_timeout` por conexão após `SET ROLE`, B `ALTER ROLE` com prova de que `SET ROLE` realmente aplica o parâmetro (não presumir que aplique). Preferência técnica é A/A/A por cobertura dos quatro conectores, sem substituir escolha de valores. Ao cancelar: retry transitório com lease liberada versus arquivamento com alerta; usuário escolhe a consequência.
-- [ ] **Step 3 (2 min): RED documental.** Antes do aceite, afirmar no ledger que não existem valores aprovados; `rg -n 'aprovado|probe|cleanup' docs/superpowers/specs/2026-09-08-auditoria-ia-timeout-decisions.md` deve expor a ausência, não um default silencioso.
-- [ ] **Step 4 (3 min): Registrar resposta e critério GREEN.** Critério: unidade e faixa de cada valor, teto de cleanup, ordem connect/statement/probe e comportamento pós-timeout inequívocos, com responsável/data. Só depois liberar Task 8.
-- [ ] **Step 5 (2 min): Commit.** `git add docs/superpowers/specs/2026-09-08-auditoria-ia-timeout-decisions.md`; `git commit -m "docs: record runtime timeout budgets"`. Controlador Astra conduz; revisor Astra independente. Rollback é nova decisão versionada, sem efeito externo.
+- [x] **Step 1 (3 min): Coletar evidência autorizada.** Ler cadência/timeout do probe do Render e latências existentes, sem valores de env/DSN no relatório. Se indisponível, registrar dependência externa, não fabricar medição.
+- [x] **Step 2 (4 min): Comparar opções.** Turno: A teto único para responder e toque, B tetos por tipo de job; conexão: A valor na composição comum, B valor no DSN documentado; statement: A `SET statement_timeout` por conexão após `SET ROLE`, B `ALTER ROLE` com prova de que `SET ROLE` realmente aplica o parâmetro (não presumir que aplique). Preferência técnica é A/A/A por cobertura dos quatro conectores, sem substituir escolha de valores. Ao cancelar: retry transitório com lease liberada versus arquivamento com alerta; usuário escolhe a consequência.
+- [x] **Step 3 (2 min): RED documental.** Antes do aceite, afirmar no ledger que não existem valores aprovados; `rg -n 'aprovado|probe|cleanup' docs/superpowers/specs/2026-09-08-auditoria-ia-timeout-decisions.md` deve expor a ausência, não um default silencioso.
+- [x] **Step 4 (3 min): Registrar resposta e critério GREEN.** Critério: unidade e faixa de cada valor, teto de cleanup, ordem connect/statement/probe e comportamento pós-timeout inequívocos, com responsável/data. Só depois liberar Task 8.
+- [x] **Step 5 (2 min): Commit.** `git add docs/superpowers/specs/2026-09-08-auditoria-ia-timeout-decisions.md`; `git commit -m "docs: record runtime timeout budgets"`. Controlador Astra conduz; revisor Astra independente. Rollback é nova decisão versionada, sem efeito externo.
+
+Evidência de 2026-09-14: usuário aprovou teto único de turno 90s, conexão 3s nas quatro portas, statement 15000ms por sessão após `SET ROLE`, probe 4s, cleanup independente 10s e retry transitório com lease liberada. Registro `3cc07e4d`; documentação oficial do Render confirma resposta de health em até 5s e shutdown padrão de 30s, enquanto p95/p99 de produção permanecem não medidos. Revisões Spec/Quality: PASS/APPROVED após corrigir 5/3/2 como retentativas (6/4/3 execuções) e incluir preflight, HealthConnection e cenário pipeline C no escopo modificável da Task 8.
 
 ### Task 8: Envelopar os dois turnos e todas as conexões (W3-T3)
 
 **Files:**
 
-- Modify: `runtime/src/agents_runtime/config.py`, `runtime/src/agents_runtime/queueing/worker.py`, `runtime/src/agents_runtime/app.py::_connect`, `runtime/src/agents_runtime/server.py::_connection`, `runtime/src/agents_runtime/agent_core/responder.py`, `runtime/src/agents_runtime/agent_core/toucher.py`.
+- Modify: `runtime/src/agents_runtime/config.py`, `runtime/src/agents_runtime/queueing/worker.py`, `runtime/src/agents_runtime/app.py::_connect`, `runtime/src/agents_runtime/server.py::_connection`, `runtime/src/agents_runtime/__main__.py`, `runtime/src/agents_runtime/agent_core/responder.py`, `runtime/src/agents_runtime/agent_core/toucher.py`.
 - Create: `runtime/tests/unit/test_turn_time_limit.py`.
+- Modify: `runtime/tests/unit/test_healthz_reuses_one_connection.py`, `runtime/tests/unit/test_listener_connects_in_one_guarded_place.py`, `runtime/tests/db/test_server.py`.
 - Modify: `runtime/tests/db/test_startup_rls_guard.py`.
+- Modify: `runtime/tests/pipeline/test_scenarios_c.py`.
 - Create: `runtime/tests/db/test_database_time_limits.py`.
-- Read: `runtime/tests/unit/test_agent_llm_closes_after_the_turn.py`, `runtime/tests/pipeline` e testes de `HealthConnection` localizados por `rg -l 'HealthConnection' runtime/tests`.
+- Read: `runtime/tests/unit/test_agent_llm_closes_after_the_turn.py`, `runtime/tests/pipeline`.
 
 **Interfaces:**
 
