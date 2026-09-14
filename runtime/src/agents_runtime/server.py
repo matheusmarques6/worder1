@@ -85,10 +85,20 @@ async def _read_request(reader: asyncio.StreamReader) -> tuple[str, str, dict, b
         line = (await reader.readline()).decode("latin-1")
         if line in ("\r\n", "\n", ""):
             break
-        name, _, value = line.partition(":")
-        headers[name.strip().lower()] = value.strip()
+        name, separator, value = line.partition(":")
+        name = name.lower()
+        if not separator or not name or name != name.strip():
+            raise ValueError("header malformado")
+        if name in headers:
+            raise ValueError(f"header duplicado: {name}")
+        if name == "transfer-encoding":
+            raise ValueError("transfer-encoding não suportado")
+        headers[name] = value.strip()
 
-    length = int(headers.get("content-length", "0") or "0")
+    length_text = headers.get("content-length")
+    if length_text is not None and (not length_text.isascii() or not length_text.isdigit()):
+        raise ValueError("content-length inválido")
+    length = int(length_text) if length_text is not None else 0
     if length > MAX_BODY_BYTES:
         raise ValueError("corpo grande demais para um preview")
     body = await reader.readexactly(length) if length else b""

@@ -280,6 +280,10 @@ class TestTheConversationBlockDoesNotDuplicateTheChatArray:
         block = next(b for b in compiled.blocks if b.kind == "CONVERSATION")
         chat = _as_chat([PendingMessage(author="contact", text=hostile)])
         assert hostile not in block.text
+        assert (
+            json.dumps({"author": "contact", "text": hostile}, ensure_ascii=True)
+            not in block.text
+        )
         assert [message.content for message in chat] == [hostile]
 
     def test_store_media_rubric_is_rendered_as_json_data(self) -> None:
