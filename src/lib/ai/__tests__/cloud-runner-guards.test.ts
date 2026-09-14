@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // ---- Mock supabaseAdmin: resultados enfileirados POR TABELA ----
@@ -72,6 +73,10 @@ const account = {
   id: 'waba-1',
   organization_id: 'org-1',
   phone_number: '5511999990000',
+}
+
+const { state_cases: stateCases } = JSON.parse(readFileSync('fixtures/ai-guard-contract.json', 'utf8')) as {
+  state_cases: Array<{ id: string; now: string; settings: any; state: any; expected: string | null }>
 }
 
 function conv(overrides: Record<string, any> = {}) {
@@ -298,6 +303,41 @@ describe('cloud-runner guards — cooldown pos-transferencia', () => {
   })
 })
 
+describe('contrato comum de estado — cloud-runner', () => {
+  it.each(stateCases)('$id', async (testCase) => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(testCase.now))
+    try {
+      const state = testCase.state
+      if (state.ai_enabled !== false) queueResult('ai_agents', { data: agentRow({ settings: testCase.settings }) })
+      if (state.last_bot_message_at || state.bot_message_count !== undefined || state.has_human_reply !== undefined) {
+        queueResult('whatsapp_cloud_messages', {
+          data: state.last_bot_message_at ? { timestamp: state.last_bot_message_at } : null,
+        })
+      }
+      if (state.bot_message_count !== undefined) {
+        queueResult('whatsapp_cloud_messages', { data: null, count: state.bot_message_count, error: null })
+      } else if (state.has_human_reply !== undefined) {
+        queueResult('whatsapp_cloud_messages', { data: state.has_human_reply ? { id: 'human-1' } : null })
+      }
+
+      const r = await maybeRunAgentForCloudConversation({
+        account,
+        conversation: conv({
+          ai_enabled: state.ai_enabled ?? true,
+          ai_agent_id: state.assignment === 'self' ? 'agent-1' : state.assignment === 'other' ? 'other-agent' : null,
+          ai_transferred_at: state.transferred_at ?? null,
+        }),
+        text: 'oi',
+      })
+
+      expect(r.skipped ?? null).toBe(testCase.expected)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
 describe('cloud-runner guards — handoff keywords', () => {
   it('keyword desativa a IA, marca transferencia e NAO chama o engine', async () => {
     queueResult('ai_agents', {
@@ -347,7 +387,7 @@ describe('cloud-runner guards — handoff keywords', () => {
           safety: {
             handoff_keywords: ['humano'],
             handoff_confirmation_message: 'Certo! Vou te passar para um atendente humano.',
-            blocked_topics: [],
+            blocked_topics: ['humano'],
           },
         },
       }),
@@ -365,6 +405,7 @@ describe('cloud-runner guards — handoff keywords', () => {
     expect(mockSendHumanizedReply.mock.calls[0][0].text).toBe(
       'Certo! Vou te passar para um atendente humano.',
     )
+    expect(mockSendHumanizedReply.mock.calls[0][0].handoffConfirmation).toBe(true)
   })
 
   it('sem match segue o fluxo normal', async () => {

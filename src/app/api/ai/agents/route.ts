@@ -3,6 +3,7 @@ import { AIAgent, DEFAULT_PERSONA, DEFAULT_SETTINGS } from '@/lib/ai/types'
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { getAuthClient } from '@/lib/api-utils';
 import { hasActiveProviderKey, providerKeyMissingResponse } from '@/lib/ai/provider-key-check';
+import { hasBooleanTransferCooldown } from '@/lib/ai/guards';
 export const dynamic = 'force-dynamic';
 
 // =====================================================
@@ -88,8 +89,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
-    const supabase = getSupabase()
     const body = await request.json()
+
+    if (hasBooleanTransferCooldown(body.settings)) {
+      return NextResponse.json({ error: 'cooldown_after_transfer deve ser numérico' }, { status: 400 })
+    }
+    const supabase = getSupabase()
 
     // Validação
     const { name, provider, model } = body

@@ -263,7 +263,8 @@ class TestTheBehaviorGuardsAreWired:
             {
                 "safety": {
                     "handoff_keywords": ["atendente"],
-                    "handoff_confirmation_message": "Já vou chamar alguém do time!",
+                    "handoff_confirmation_message": "Vou chamar um humano.",
+                    "blocked_topics": ["humano"],
                 }
             },
         )
@@ -277,7 +278,7 @@ class TestTheBehaviorGuardsAreWired:
         draft = await responder(dsn)(a_job(tenant, thread.conversation_id))
 
         assert draft is not None
-        assert draft["text"] == "Já vou chamar alguém do time!"
+        assert draft["text"] == "Vou chamar um humano."
         (enabled,) = admin.execute(
             "select ai_enabled from public.whatsapp_cloud_conversations where id = %s",
             (mirror.conversation_id,),
@@ -289,6 +290,25 @@ class TestTheBehaviorGuardsAreWired:
             (tenant,),
         ).fetchone()
         assert alert["mirrored"] is True
+
+    async def test_an_empty_handoff_confirmation_transfers_silently(
+        self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+    ) -> None:
+        create_agent_version(admin, tenant, status="active")
+        create_mission(admin, tenant, event_type="whatsapp.received", status="active")
+        configure(admin, tenant, {"safety": {"handoff_keywords": ["humano"]}})
+        thread = create_thread(admin, tenant)
+        mirror = mirrored(admin, tenant, thread)
+        create_message(admin, tenant, thread, direction="inbound", seq=1, text="quero um humano")
+        llm = ScriptedLlm(reply="não deve gerar confirmação")
+
+        assert await responder(dsn, llm)(a_job(tenant, thread.conversation_id)) is None
+        assert llm.asked == []
+        (enabled,) = admin.execute(
+            "select ai_enabled from public.whatsapp_cloud_conversations where id = %s",
+            (mirror.conversation_id,),
+        ).fetchone()
+        assert enabled is False
 
     async def test_with_every_guard_configured_and_none_tripped_the_turn_goes_on(
         self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
@@ -375,10 +395,10 @@ class TestATransferThatDoesNotStick:
         tabela já tem existe exatamente para isso."""
         create_agent_version(admin, tenant, status="active")
         create_mission(admin, tenant, event_type="whatsapp.received", status="active")
-        configure(admin, tenant, {"safety": {"blocked_topics": ["processo judicial"]}})
+        configure(admin, tenant, {"safety": {"blocked_topics": ["humano"]}})
         thread = create_thread(admin, tenant)
         create_message(admin, tenant, thread, direction="inbound", seq=1, text="e aí")
-        llm = ScriptedLlm(reply="Sobre o seu Processo Judicial, melhor conversarmos.")
+        llm = ScriptedLlm(reply="Vou chamar um humano.")
 
         assert await responder(dsn, llm)(a_job(tenant, thread.conversation_id)) is None
         assert await responder(dsn, llm)(a_job(tenant, thread.conversation_id)) is None

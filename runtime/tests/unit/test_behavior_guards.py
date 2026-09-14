@@ -205,6 +205,18 @@ class TestTransferCooldown:
             is None
         )
 
+    def test_legacy_boolean_turns_only_this_cooldown_off(self) -> None:
+        for value in (True, False):
+            assert (
+                evaluate_inbound_guards(
+                    {"behavior": {"cooldown_after_transfer": value}},
+                    state(ai_transferred_at=NOW),
+                    agent_id=AGENT,
+                    now=NOW,
+                )
+                is None
+            )
+
     def test_never_transferred_answers(self) -> None:
         assert (
             evaluate_inbound_guards(
@@ -440,6 +452,15 @@ class TestHandoffKeywords:
         faria a mesma frase transferir num motor e não no outro."""
         assert resolve_handoff(HANDOFF_SETTINGS, ("atendenteeee",)) is not None
 
+    def test_mixed_keywords_ignore_each_non_string_individually(self) -> None:
+        handoff = resolve_handoff(
+            {"safety": {"handoff_keywords": [17, None, False, "atendente"]}},
+            ("Quero um ATÊNDENTE",),
+        )
+
+        assert handoff is not None
+        assert handoff.keyword == "atendente"
+
     def test_the_keyword_comes_back_in_the_configured_form(self) -> None:
         handoff = resolve_handoff(
             {"safety": {"handoff_keywords": ["Atendênte"]}}, ("quero atendente",)
@@ -501,6 +522,15 @@ class TestBlockedTopics:
                 {"safety": {"blocked_topics": ["jurídico"]}}, "Falo com o JURIDICO."
             )
             == "jurídico"
+        )
+
+    def test_mixed_topics_ignore_each_non_string_individually(self) -> None:
+        assert (
+            resolve_blocked_topic(
+                {"safety": {"blocked_topics": [17, None, False, "humano"]}},
+                "Quero um HUMANO",
+            )
+            == "humano"
         )
 
     def test_nothing_configured_blocks_nothing(self) -> None:

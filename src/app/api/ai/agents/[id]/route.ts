@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { getAuthClient } from '@/lib/api-utils';
 import { snapshotIfChanged } from '@/lib/ai/versions';
 import { hasActiveProviderKey, providerKeyMissingResponse } from '@/lib/ai/provider-key-check';
+import { hasBooleanTransferCooldown } from '@/lib/ai/guards';
 export const dynamic = 'force-dynamic';
 
 // =====================================================
@@ -76,9 +77,13 @@ export async function PUT(
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
-    const supabase = getSupabase()
     const agentId = params.id
     const body = await request.json()
+
+    if (hasBooleanTransferCooldown(body.settings)) {
+      return NextResponse.json({ error: 'cooldown_after_transfer deve ser numérico' }, { status: 400 })
+    }
+    const supabase = getSupabase()
 
     // ✅ CORREÇÃO: Usar organization_id do usuário autenticado
     const organization_id = auth.user.organization_id
@@ -196,9 +201,13 @@ export async function PATCH(
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
-    const supabase = getSupabase()
     const agentId = params.id
     const body = await request.json()
+
+    if (hasBooleanTransferCooldown(body.settings)) {
+      return NextResponse.json({ error: 'cooldown_after_transfer deve ser numérico' }, { status: 400 })
+    }
+    const supabase = getSupabase()
 
     // ✅ CORREÇÃO: Usar organization_id do usuário autenticado
     const organization_id = auth.user.organization_id

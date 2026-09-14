@@ -44,6 +44,11 @@ describe('matchHandoffKeyword', () => {
   it('ignora keywords vazias/whitespace na lista', () => {
     expect(matchHandoffKeyword('oi', ['', '  '])).toBeNull()
   })
+
+  it('ignora cada keyword não-string e preserva a string original que casa', () => {
+    expect(matchHandoffKeyword('Quero um ATÊNDENTE', [17, 'atendente'] as any)).toBe('atendente')
+    expect(matchHandoffKeyword('quero humano', [17, null, false, 'humano'] as any)).toBe('humano')
+  })
 })
 
 describe('findBlockedTopic', () => {
@@ -89,6 +94,12 @@ describe('isTransferCooldownActive', () => {
 
   it('data invalida => false (fail-open, nao trava a IA por lixo no banco)', () => {
     expect(isTransferCooldownActive({ transferredAt: 'not-a-date', cooldownSeconds: 300, now })).toBe(false)
+  })
+
+  it('booleano legado desliga somente este cooldown', () => {
+    const transferredAt = new Date(now - 1_000).toISOString()
+    expect(isTransferCooldownActive({ transferredAt, cooldownSeconds: true as any, now })).toBe(false)
+    expect(isTransferCooldownActive({ transferredAt, cooldownSeconds: false as any, now })).toBe(false)
   })
 })
 

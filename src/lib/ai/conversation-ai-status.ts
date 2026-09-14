@@ -52,6 +52,11 @@ export type AiBlockerReason =
   | 'stop_on_human'
   | 'outside_schedule';
 
+/** Python calls this runtime reason; the badge keeps its historical alias. */
+export const AI_BLOCKER_REASON_ALIASES = {
+  outside_business_hours: 'outside_schedule',
+} as const;
+
 export interface ConversationAiStatus {
   /** false => o agente NAO vai responder ao proximo inbound. */
   willRespond: boolean;

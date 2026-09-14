@@ -179,6 +179,7 @@ async function tryHandoffKeyword(params: HandoffKeywordParams): Promise<CloudRun
       agent: { id: agentId, ...agent },
       inboundMessageId,
       skipDelays,
+      handoffConfirmation: true,
     });
   }
 
