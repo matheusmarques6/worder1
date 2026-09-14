@@ -192,7 +192,8 @@ Evidência de 2026-09-14: usuário aprovou o pacote recomendado e o registro ver
 - Create: `fixtures/ai-guard-contract.json`.
 - Create: `src/lib/ai/__tests__/guard-contract.test.ts`.
 - Create: `runtime/tests/unit/test_guard_contract.py`.
-- Modify: `src/lib/ai/guards.ts`, `runtime/src/agents_runtime/agent_core/guards.py`.
+- Modify: `src/lib/ai/guards.ts`, `src/lib/ai/__tests__/guards.test.ts`, `runtime/src/agents_runtime/agent_core/guards.py`.
+- Modify: `src/app/api/ai/agents/route.ts`, `src/app/api/ai/agents/[id]/route.ts`; create one focused route contract test if no existing test can cover both writers.
 - Modify: `src/lib/ai/__tests__/cloud-runner-guards.test.ts`, `src/lib/ai/__tests__/conversation-ai-status.test.ts`.
 
 **Interfaces:**
