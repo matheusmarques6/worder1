@@ -194,7 +194,9 @@ Evidência de 2026-09-14: usuário aprovou o pacote recomendado e o registro ver
 - Create: `runtime/tests/unit/test_guard_contract.py`.
 - Modify: `src/lib/ai/guards.ts`, `src/lib/ai/__tests__/guards.test.ts`, `runtime/src/agents_runtime/agent_core/guards.py`.
 - Modify: `src/app/api/ai/agents/route.ts`, `src/app/api/ai/agents/[id]/route.ts`; create one focused route contract test if no existing test can cover both writers.
+- Modify: `src/lib/ai/cloud-runner.ts`, `src/lib/ai/cloud-sender.ts`, `src/lib/ai/cloud-sender.test.ts`.
 - Modify: `src/lib/ai/__tests__/cloud-runner-guards.test.ts`, `src/lib/ai/__tests__/conversation-ai-status.test.ts`.
+- Modify: `runtime/tests/unit/test_behavior_guards.py`, `runtime/tests/db/test_responder_guards.py`.
 
 **Interfaces:**
 
@@ -258,7 +260,7 @@ if not start <= local.strftime("%H:%M") <= end:
 
 - [ ] **Step 4 (4 min): Travar matching degenerado e aplicar o branch.** Nos testes TS/Python, usar palavra `ATÊNDENTE`, lista `[17,"atendente"]`, cooldown booleano e uma confirmação que contenha tópico proibido. Em TS ignorar itens não-string antes de `normalizeForMatch`; no branch que conserva coerção, Python usa `float(value)` também para bool. No branch que rejeita booleano, TS deve executar `if (typeof params.cooldownSeconds === 'boolean') return false` antes de `Number`. Testar a confirmação através de `cloud-sender` e `resolve_handoff`/responder, não apenas o matcher puro.
 - [ ] **Step 5 (5 min): Estender fixture para guards de estado e consumidores reais.** Casos obrigatórios: IA desligada; agente manual atribuído/outro/ausente; cooldown 299/300s; teto 2 com contagem 1/2; humano existente com knob ausente/false; conflito cooldown+teto (cooldown vence). Alimentar os mocks existentes do runner e badge com os mesmos valores e comparar `skipped`/`reason` com o Python. Acrescentar `expected_badge` explícito para o cooldown curto; não forçar paridade numa exceção já documentada. Cada caso usa o relógio fixo `2026-09-08T12:00:00Z`, sem relógio real.
-- [ ] **Step 6 (3 min): GREEN, commit e revisão.** `pnpm exec vitest run src/lib/ai/__tests__`; `pnpm typecheck`; `uv run --directory runtime pytest tests/unit/test_guard_contract.py tests/unit/test_behavior_guards.py -q`; `uv run --directory runtime ruff check .`. Commit `test: enforce shared guard contracts across runtimes`, com `git add` restrito aos arquivos desta task. Terra implementa/Sol revisa. Rollback atômico de fixture + ambos os motores, nunca só um lado.
+- [ ] **Step 6 (3 min): GREEN, commit e revisão.** `pnpm exec vitest run src/lib/ai/__tests__`; `pnpm typecheck`; `uv run --directory runtime pytest tests/unit/test_guard_contract.py tests/unit/test_behavior_guards.py -q`; `uv run --directory runtime ruff check .`. Guardião roda `uv run --directory runtime pytest tests/db/test_responder_guards.py -q` no descartável para provar a exceção restrita da confirmação no consumidor Python real. Commit `test: enforce shared guard contracts across runtimes`, com `git add` restrito aos arquivos desta task. Terra implementa/Sol revisa. Rollback atômico de fixture + ambos os motores, nunca só um lado.
 
 ### Task 5: Declarar o banco de fusos como dependência (W3-T2)
 
