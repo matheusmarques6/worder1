@@ -169,6 +169,32 @@ class TestSearchKnowledge:
 
 
 class TestTheTrail:
+    async def test_trail_uses_tool_identity_not_lookup_alias(
+        self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+    ) -> None:
+        class NamedTool:
+            name = "canonical_63"
+
+            async def __call__(self, conn, context, arguments):
+                return tools.ToolResult(tool=self.name, success=True, output={"ok": True})
+
+        thread = create_thread(admin, tenant)
+        lookup = {"alias_63": NamedTool()}
+
+        async with as_runtime_worker(dsn) as conn:
+            result = await tools.run_tool(
+                conn,
+                lookup["alias_63"],
+                _context(tenant, thread.conversation_id),
+                {},
+                clock=FrozenClock(START),
+            )
+
+        assert result.tool == "canonical_63"
+        (row,) = await _recorded(admin, thread.conversation_id)
+        assert row[0] == "canonical_63"
+        assert row[0] != "alias_63"
+
     async def test_every_execution_leaves_a_row(
         self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
     ) -> None:

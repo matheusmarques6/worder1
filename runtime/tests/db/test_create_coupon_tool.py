@@ -81,6 +81,50 @@ ARGS = {"object_kind": "cart", "object_ref": "cart-55"}
 
 
 class TestTheHappyPath:
+    async def test_coupon_cannot_read_a_foreign_conversation(
+        self, dsn: str, admin: psycopg.Connection, org: uuid.UUID
+    ) -> None:
+        foreign_org = create_tenant(admin)
+        try:
+            own = create_thread(admin, org)
+            foreign = create_thread(admin, foreign_org)
+            mission_id = create_mission(admin, org, status="active")
+            transport, seen = _shopify_transport()
+            tool = _tool(_mission(mission_id, {"kind": "none"}), transport)
+
+            async with as_runtime_worker(dsn) as conn:
+                rejected = await tool(
+                    conn,
+                    tools.ToolContext(
+                        organization_id=org,
+                        conversation_id=foreign.conversation_id,
+                    ),
+                    ARGS,
+                )
+                accepted = await tool(
+                    conn,
+                    tools.ToolContext(
+                        organization_id=org,
+                        conversation_id=own.conversation_id,
+                    ),
+                    ARGS,
+                )
+
+            assert rejected.success is False
+            assert rejected.error == "conversa não encontrada para este tenant"
+            assert rejected.output == {}
+            assert accepted.success is True
+            assert accepted.output["decision"] == "denied"
+            assert seen == []
+            assert admin.execute(
+                "select count(*) from public.incentive_grants where contact_id = %s",
+                (foreign.contact_id,),
+            ).fetchone() == (0,)
+        finally:
+            admin.execute(
+                "delete from public.organizations where id = %s", (foreign_org,)
+            )
+
     async def test_issue_then_provider_then_code(
         self, dsn: str, admin: psycopg.Connection, org: uuid.UUID
     ) -> None:
