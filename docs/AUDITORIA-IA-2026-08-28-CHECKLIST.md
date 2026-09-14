@@ -4665,12 +4665,13 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   no molde de `test_the_guard_has_someone_to_guard`
   (`runtime/tests/unit/test_resolved_names_do_not_collide.py:99-101`). **Não reabre** a política do
   `.env.example` da raiz (43 envs), que o item 62 devolveu ao dono do produto (`:4449-4455`).
-  **O que sobra, com dono — seis contratos vivos depois das Tasks 1 e 2 da Onda 3, cobertos por
-  sete node IDs planejados porque `never_say_ai` exige uma prova em cada chamador real:**
-  **Task 9:** seleção da missão pelo evento em
-  `runtime/tests/db/test_mission_event_selection.py::test_mission_is_selected_by_event_family`; e
-  máximo real de `last_order_at` em
-  `runtime/tests/db/test_purchase_history.py::test_last_order_is_max_of_shopify_time_or_local_time`.
+  **Fechado pela Task 9 da Onda 3:** seleção da missão por família, lookup do evento e isolamento
+  entre organizações em `runtime/tests/db/test_mission_event_selection.py::`
+  `test_mission_is_selected_by_event_family`; máximo real de `last_order_at` e fallback da data
+  local em `runtime/tests/db/test_purchase_history.py::`
+  `test_last_order_is_max_of_shopify_time_or_local_time` (`55600c15`).
+  **O que sobra, com dono — quatro contratos vivos, cobertos por cinco node IDs planejados porque
+  `never_say_ai` exige uma prova em cada chamador real:**
   **Task 10:** um contrato — literal e dois fios de `never_say_ai` — em
   `runtime/tests/db/test_responder_agent_identity.py::test_responder_never_say_ai_reaches_judge` e
   `runtime/tests/db/test_toucher.py::test_toucher_never_say_ai_reaches_judge`; e nome desconhecido
@@ -4681,7 +4682,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   conversa alheia recusada pela tool de dinheiro em
   `runtime/tests/db/test_create_coupon_tool.py::test_coupon_cannot_read_a_foreign_conversation`.
   **Por que o item NÃO fecha `[x]`, e isto é o resultado certo.** Ele fecha a **metade executável** —
-  riscada acima, com o teste que fecha cada uma — e continua `[ ]` como **dono nomeado** das seis
+  riscada acima, com o teste que fecha cada uma — e continua `[ ]` como **dono nomeado** das quatro
   que sobram. Sendo o último item da fila, um `[x]` aqui seria a diferença entre "pendência
   conhecida com nome" e "pendência esquecida", e a revisão do item 60 chamou sobra sem dono de
   **pior que item errado**. Abrir um item 96 só para hospedar o resto foi rejeitado: renomearia o 63

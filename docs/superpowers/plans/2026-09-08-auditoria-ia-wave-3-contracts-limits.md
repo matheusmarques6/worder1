@@ -442,7 +442,7 @@ await conn.execute("select set_config('statement_timeout', %s, false)",
 - Consumes: `load_active_mission(conn, *, event_type: str) -> MissionVersion | None`, `load_mission_event_type(conn, *, mission_version_id: UUID) -> str | None`, `load_purchase_history(conn, *, organization_id: UUID, contact_id: UUID) -> PurchaseHistory | None`.
 - Produces: provas DB dos predicados vivos; `last_order_at` é o máximo de `coalesce(shopify_created_at,created_at)`, não só qualquer data não-nula.
 
-- [ ] **Step 1 (5 min): Escrever teste de duas famílias ativas e uma ausente.** O novo arquivo importa `uuid`, `pytest`, `create_tenant/create_mission`, `as_worker` e `missions_repo`; fixture `tenant` cria organização e a remove no teardown, pelo padrão de `test_agent_loaders.py`. Corpo:
+- [x] **Step 1 (5 min): Escrever teste de duas famílias ativas e uma ausente.** O novo arquivo importa `uuid`, `pytest`, `create_tenant/create_mission`, `as_worker` e `missions_repo`; fixture `tenant` cria organização e a remove no teardown, pelo padrão de `test_agent_loaders.py`. Corpo:
 
 ```python
 async def test_mission_is_selected_by_event_family(dsn, admin, tenant):
@@ -462,8 +462,8 @@ async def test_mission_is_selected_by_event_family(dsn, admin, tenant):
 ```
 
 Adicionar org B com missão ativa da mesma família e chamar os dois loaders sob A: resultado ativo continua `cart`, lookup do UUID B retorna None. Teardown de B em `finally`, sem apagar outras organizações.
-- [ ] **Step 2 (3 min): RED por mutação da seleção, sem reescrever implementação correta.** Temporariamente substituir `where event_type = %s` por `where (%s::text is not null)` em `missions.py`, preservando aridade de parâmetros. Guardião roda `uv run --directory runtime pytest tests/db/test_mission_event_selection.py -q`; a família ausente deixa de retornar None ou a ativa errada é selecionada. Restaurar com `apply_patch`. Mutar `load_mission_event_type` para retornar constante `whatsapp.received`; a asserção do draft cart deve falhar; restaurar.
-- [ ] **Step 3 (5 min): Escrever teste do máximo com datas fixas e fallback.** Em `test_purchase_history.py`, aproveitar fixture `tenant`, `_load` e fábricas; importar `UTC,datetime`:
+- [x] **Step 2 (3 min): RED por mutação da seleção, sem reescrever implementação correta.** Temporariamente substituir `where event_type = %s` por `where (%s::text is not null)` em `missions.py`, preservando aridade de parâmetros. Guardião roda `uv run --directory runtime pytest tests/db/test_mission_event_selection.py -q`; a família ausente deixa de retornar None ou a ativa errada é selecionada. Restaurar com `apply_patch`. Mutar `load_mission_event_type` para retornar constante `whatsapp.received`; a asserção do draft cart deve falhar; restaurar.
+- [x] **Step 3 (5 min): Escrever teste do máximo com datas fixas e fallback.** Em `test_purchase_history.py`, aproveitar fixture `tenant`, `_load` e fábricas; importar `UTC,datetime`:
 
 ```python
 async def test_last_order_is_max_of_shopify_time_or_local_time(dsn, admin, tenant):
@@ -481,9 +481,11 @@ async def test_last_order_is_max_of_shopify_time_or_local_time(dsn, admin, tenan
 ```
 
 Este par distingue `min`, `max(created_at)` e `max(shopify_created_at)`, além de exigir a ordem do `coalesce` correta.
-- [ ] **Step 4 (3 min): RED do agregado.** Guardião roda `uv run --directory runtime pytest tests/db/test_purchase_history.py -k last_order_is_max -q` com mutação temporária de `max(coalesce(o.shopify_created_at, o.created_at))` para `min(coalesce(o.shopify_created_at, o.created_at))`: esperado data 01/08 em vez de 02/09. Restaurar e repetir mutação para `max(o.created_at)`: esperado 08/09 incorreto; restaurar. Sem mudança permanente de produção se os testes originais já passam.
-- [ ] **Step 5 (3 min): GREEN.** `uv run --directory runtime pytest tests/db/test_mission_event_selection.py tests/db/test_purchase_history.py -q`, somente pelo guardião; `uv run --directory runtime ruff check .`. Report registra ambos REDs e diff sem mutações de produção.
-- [ ] **Step 6 (2 min): Commit/review/rollback.** `git add runtime/tests/db/test_mission_event_selection.py runtime/tests/db/test_purchase_history.py`; `git commit -m "test: prove mission selection and latest purchase aggregate"`. Terra implementa/Sol revisa; rollback por revert do commit de testes.
+- [x] **Step 4 (3 min): RED do agregado.** Guardião roda `uv run --directory runtime pytest tests/db/test_purchase_history.py -k last_order_is_max -q` com mutação temporária de `max(coalesce(o.shopify_created_at, o.created_at))` para `min(coalesce(o.shopify_created_at, o.created_at))`: esperado data 01/08 em vez de 02/09. Restaurar e repetir mutação para `max(o.created_at)`: esperado 08/09 incorreto; restaurar. Sem mudança permanente de produção se os testes originais já passam.
+- [x] **Step 5 (3 min): GREEN.** `uv run --directory runtime pytest tests/db/test_mission_event_selection.py tests/db/test_purchase_history.py -q`, somente pelo guardião; `uv run --directory runtime ruff check .`. Report registra ambos REDs e diff sem mutações de produção.
+- [x] **Step 6 (2 min): Commit/review/rollback.** `git add runtime/tests/db/test_mission_event_selection.py runtime/tests/db/test_purchase_history.py`; `git commit -m "test: prove mission selection and latest purchase aggregate"`. Terra implementa/Sol revisa; rollback por revert do commit de testes.
+
+Evidência de 2026-09-14: `55600c15`; quatro mutações RED distinguiram família errada, event type constante, `min(coalesce(...))` e `max(created_at)`. Gate oficial no descartável `d7baff101d8943a9a44ad2050dedbbae`: `8 tests`, zero failures/errors/skips, estado `stopped`, zero contêineres e volumes. Diff de produção vazio; revisões de especificação e qualidade: PASS/APPROVED.
 
 ### Task 10: Fiação de never_say_ai e ferramenta desconhecida (W3-T1, item 63)
 
