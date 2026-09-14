@@ -135,8 +135,8 @@ Evidência de 2026-09-14: `fb416860`; RED inicial `5 failed, 2 passed`, RED adic
 - Consumes: `build_responder(dsn, *, llm, agent_llm_from_org_keys=True, set_role="worker_role")`; `build_toucher` aceita o mesmo opt-in; `resolve_agent_llm` retorna `ResolvedAgentLlm(port, built_here)`.
 - Produces: evidência comportamental da cascata BYO no chamador real e da ausência de duplicação entre `load_recent_transcript(..., exclude_inbound_after_seq=n)` e `load_pending_messages(..., after_seq=n, target_seq=m)`.
 
-- [ ] **Step 1 (3 min): Coletar node IDs existentes e conectar aos novos.** `rg -n 'agent_llm_from_org_keys|never_say_ai|load_active_mission|load_mission_event_type|last_order_at|exclude_inbound_after_seq' runtime/tests`. No ledger, ligar BYO/transcript a esta task e os outros seis contratos às Tasks 9–11, com seus node IDs explícitos. Não declarar que `agent_llm_from_org_keys` é uma função: é um argumento dos builders; `resolve_agent_llm` isolado já tem teste.
-- [ ] **Step 2 (5 min): Acrescentar caso da cascata real no fixture de agente/conversa existente.** Usar `ScriptedLlm`, `create_agent_version`, `create_mission`, `create_message`, `InboundJob` dos testes DB. Configurar agente ativo, missão `whatsapp.received`, mensagem inbound, zero chaves de organização; construir responder com `agent_llm_from_org_keys=True`. Núcleo do teste:
+- [x] **Step 1 (3 min): Coletar node IDs existentes e conectar aos novos.** `rg -n 'agent_llm_from_org_keys|never_say_ai|load_active_mission|load_mission_event_type|last_order_at|exclude_inbound_after_seq' runtime/tests`. No ledger, ligar BYO/transcript a esta task e os outros seis contratos às Tasks 9–11, com seus node IDs explícitos. Não declarar que `agent_llm_from_org_keys` é uma função: é um argumento dos builders; `resolve_agent_llm` isolado já tem teste.
+- [x] **Step 2 (5 min): Acrescentar caso da cascata real no fixture de agente/conversa existente.** Usar `ScriptedLlm`, `create_agent_version`, `create_mission`, `create_message`, `InboundJob` dos testes DB. Configurar agente ativo, missão `whatsapp.received`, mensagem inbound, zero chaves de organização; construir responder com `agent_llm_from_org_keys=True`. Núcleo do teste:
 
 ```python
 respond = build_responder(dsn, llm=llm, set_role="worker_role",
@@ -151,8 +151,8 @@ assert row == (1,)
 ```
 
 Neste arquivo, `job` é `InboundJob(conversation_id=thread.conversation_id, organization_id=tenant, generation=1, target_seq=1)`; `llm = ScriptedLlm()`; `tenant` já cria missão ativa, portanto não criar uma segunda. Criar somente versão ativa, thread e mensagem. Em `runtime/tests/db/test_toucher.py`, acrescentar o mesmo caso através de `_toucher(dsn, llm, agent_llm_from_org_keys=True)(_job(org, thread))`, com `create_mission(admin, org, event_type=FAMILY, status="active")`; o resultado é `TouchDraft`, portanto afirmar `draft.content is None`, `llm.asked == []` e um alerta para `org`.
-- [ ] **Step 3 (3 min): RED por mutação, operada somente no descartável.** Retirar temporariamente o argumento `agent_llm_from_org_keys=True` do builder do teste: a chamada não deve satisfazer as asserções de zero LLM/alerta. Guardião executa `uv run --directory runtime pytest tests/db/test_responder_agent_identity.py -q`. Restaurar o teste por `apply_patch`; este é endurecimento de cobertura de comportamento que já existe, não motivo para alterar produção.
-- [ ] **Step 4 (4 min): Acrescentar contagem real ao teste de loaders.** Criar duas inbound, seq 1/2, com textos `historia-63`/`pendente-63`. Dentro de `as_worker(dsn, tenant)`, ler transcript excluindo seq >1 e pending de 1 a 2; afirmar:
+- [x] **Step 3 (3 min): RED por mutação, operada somente no descartável.** Retirar temporariamente o argumento `agent_llm_from_org_keys=True` do builder do teste: a chamada não deve satisfazer as asserções de zero LLM/alerta. Guardião executa `uv run --directory runtime pytest tests/db/test_responder_agent_identity.py -q`. Restaurar o teste por `apply_patch`; este é endurecimento de cobertura de comportamento que já existe, não motivo para alterar produção.
+- [x] **Step 4 (4 min): Acrescentar contagem real ao teste de loaders.** Criar duas inbound, seq 1/2, com textos `historia-63`/`pendente-63`. Dentro de `as_worker(dsn, tenant)`, ler transcript excluindo seq >1 e pending de 1 a 2; afirmar:
 
 ```python
 assert [m.text for m in transcript + pending].count("pendente-63") == 1
@@ -160,8 +160,10 @@ assert [m.text for m in transcript + pending] == ["historia-63", "pendente-63"]
 ```
 
 Mutar apenas `exclude_inbound_after_seq=1` para `None`; RED esperado: contagem 2. Restaurar o argumento.
-- [ ] **Step 5 (3 min): GREEN e contabilização honesta.** Guardião executa `uv run --directory runtime pytest tests/db/test_responder_agent_identity.py tests/db/test_agent_loaders.py tests/db/test_toucher.py -q`; verificador executa `uv run --directory runtime pytest tests/unit/test_provider_cascade.py tests/unit/test_agent_llm_closes_after_the_turn.py -q`. A caixa 63 só pode fechar depois das Tasks 9–11; ausência de uma prova mantém a caixa aberta com dono explícito.
-- [ ] **Step 6 (2 min): Commit.** `git add runtime/tests/db/test_responder_agent_identity.py runtime/tests/db/test_agent_loaders.py runtime/tests/db/test_toucher.py docs/AUDITORIA-IA-2026-08-28-CHECKLIST.md`; `git commit -m "test: cover runtime provider wiring and transcript overlap"`. Terra implementa, Sol revisa. Rollback: revert do commit; nenhuma alteração de dados fora da fixture.
+- [x] **Step 5 (3 min): GREEN e contabilização honesta.** Guardião executa `uv run --directory runtime pytest tests/db/test_responder_agent_identity.py tests/db/test_agent_loaders.py tests/db/test_toucher.py -q`; verificador executa `uv run --directory runtime pytest tests/unit/test_provider_cascade.py tests/unit/test_agent_llm_closes_after_the_turn.py -q`. A caixa 63 só pode fechar depois das Tasks 9–11; ausência de uma prova mantém a caixa aberta com dono explícito.
+- [x] **Step 6 (2 min): Commit.** `git add runtime/tests/db/test_responder_agent_identity.py runtime/tests/db/test_agent_loaders.py runtime/tests/db/test_toucher.py docs/AUDITORIA-IA-2026-08-28-CHECKLIST.md`; `git commit -m "test: cover runtime provider wiring and transcript overlap"`. Terra implementa, Sol revisa. Rollback: revert do commit; nenhuma alteração de dados fora da fixture.
+
+Evidência de 2026-09-14: `e147c08e`; as mutações sem o opt-in BYO falharam separadamente no responder e toucher, e `exclude_inbound_after_seq=None` duplicou `pendente-63`. Gate oficial no descartável `6f2e1fbcb1f34204a6c936e2437edbb7`: `64 tests`, zero failures/errors/skips, estado `stopped`, zero contêineres e volumes. A caixa 63 permanece aberta com seis contratos e sete node IDs atribuídos às Tasks 9–11. Revisão independente: zero Critical/Important; duas âncoras documentais menores corrigidas.
 
 ### Task 3: Decidir semântica dos guards e seus alertas (W3-T2, decisão)
 
