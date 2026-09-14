@@ -37,6 +37,7 @@ ASK_COUPON = ToolCall(
     name="create_coupon",
     arguments={"object_kind": "cart", "object_ref": "cart-1"},
 )
+UNKNOWN_TOOL = ToolCall(id="bad", name="unknown_63", arguments={})
 
 
 @pytest.fixture
@@ -100,6 +101,91 @@ async def _respond(
 
 def agent_calls(llm: ScriptedLlm) -> list:
     return [r for r in llm.asked if r.model != JUDGE_MODEL]
+
+
+class UnknownToolLlm(ScriptedLlm):
+    def __init__(self) -> None:
+        super().__init__(reply="Tudo certo")
+        self._unknown_sent = False
+
+    async def chat(self, request):
+        if request.model != JUDGE_MODEL and not self._unknown_sent:
+            self._unknown_sent = True
+            self._tool_rounds.append((UNKNOWN_TOOL,))
+        return await super().chat(request)
+
+
+async def test_unknown_enabled_tool_is_never_offered(
+    dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+) -> None:
+    admin.execute(
+        "update public.ai_agent_versions set settings=%s where organization_id=%s",
+        (
+            psycopg.types.json.Jsonb(
+                {"tools": {"enabled": ["create_coupon", "unknown_63"]}}
+            ),
+            tenant,
+        ),
+    )
+    create_mission(
+        admin,
+        tenant,
+        event_type="whatsapp.received",
+        status="active",
+        enabled_tools=["create_coupon", "unknown_63"],
+    )
+    thread = create_thread(admin, tenant)
+    llm = ScriptedLlm(reply="Tudo certo")
+
+    result = await _respond(dsn, admin, tenant, thread, llm)
+
+    assert result["text"] == "Tudo certo"
+    names = [tool.name for request in agent_calls(llm) for tool in request.tools]
+    assert "create_coupon" in names
+    assert "unknown_63" not in names
+    assert admin.execute(
+        "select count(*) from internal.tool_calls"
+        " where conversation_id=%s and tool_name=%s",
+        (thread.conversation_id, "unknown_63"),
+    ).fetchone() == (0,)
+
+
+async def test_unoffered_unknown_tool_call_is_rejected_without_an_audit_row(
+    dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+) -> None:
+    admin.execute(
+        "update public.ai_agent_versions set settings=%s where organization_id=%s",
+        (
+            psycopg.types.json.Jsonb(
+                {"tools": {"enabled": ["create_coupon", "unknown_63"]}}
+            ),
+            tenant,
+        ),
+    )
+    create_mission(
+        admin,
+        tenant,
+        event_type="whatsapp.received",
+        status="active",
+        enabled_tools=["create_coupon", "unknown_63"],
+    )
+    thread = create_thread(admin, tenant)
+    llm = UnknownToolLlm()
+
+    await _respond(dsn, admin, tenant, thread, llm)
+
+    tool_messages = [
+        message
+        for message in agent_calls(llm)[1].messages
+        if message.role == "tool"
+    ]
+    assert len(tool_messages) == 1
+    assert "tool desconhecida: unknown_63" in tool_messages[0].content
+    assert admin.execute(
+        "select count(*) from internal.tool_calls"
+        " where conversation_id=%s and tool_name=%s",
+        (thread.conversation_id, "unknown_63"),
+    ).fetchone() == (0,)
 
 
 class TestTheDoD:

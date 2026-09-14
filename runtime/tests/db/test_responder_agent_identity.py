@@ -8,13 +8,17 @@ continua presente em QUALQUER modo — ela é do compilador, não da config.
 """
 
 import uuid
+from dataclasses import replace
 
 import psycopg
 import pytest
 
+from agents_runtime.agent_core import responder as responder_module
 from agents_runtime.agent_core.prompt_compiler import AI_DISCLOSURE_LINE
 from agents_runtime.agent_core.responder import build_responder
+from agents_runtime.judges.pre_send import JudgeContext as RealJudgeContext
 from agents_runtime.queueing.jobs import InboundJob
+from agents_runtime.repository import agent as agent_repo
 from tests.db.factories import (
     create_agent_version,
     create_message,
@@ -49,6 +53,36 @@ async def _system_prompt(dsn: str, admin: psycopg.Connection, tenant: uuid.UUID)
     )
     assert result is not None
     return llm.asked[0].messages[0].content
+
+
+@pytest.mark.parametrize("configured", [True, False])
+async def test_responder_never_say_ai_reaches_judge(
+    dsn: str,
+    admin: psycopg.Connection,
+    tenant: uuid.UUID,
+    monkeypatch: pytest.MonkeyPatch,
+    configured: bool,
+) -> None:
+    real_load = agent_repo.load_tenant_policy
+    seen: list[bool] = []
+
+    async def load_policy(conn, *, organization_id):
+        policy = await real_load(conn, organization_id=organization_id)
+        assert policy.never_say_ai is True
+        return replace(policy, policy=replace(policy.policy, never_say_ai=configured))
+
+    def capture_context(**kwargs):
+        context = RealJudgeContext(**kwargs)
+        seen.append(context.never_say_ai)
+        return context
+
+    monkeypatch.setattr(agent_repo, "load_tenant_policy", load_policy)
+    monkeypatch.setattr(responder_module, "JudgeContext", capture_context)
+    create_agent_version(admin, tenant, status="active")
+
+    await _system_prompt(dsn, admin, tenant)
+
+    assert seen == [configured]
 
 
 async def test_the_chosen_presentation_reaches_the_prompt(

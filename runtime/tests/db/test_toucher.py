@@ -9,16 +9,20 @@ DONA da conversa na mesma transação do conclude.
 """
 
 import uuid
+from dataclasses import replace
 
 import httpx
 import psycopg
 import pytest
 
+from agents_runtime.agent_core import toucher as toucher_module
 from agents_runtime.agent_core.toucher import TouchDraft, build_toucher
 from agents_runtime.clock import SystemClock
 from agents_runtime.config import QueueingConfig
+from agents_runtime.judges.pre_send import JudgeContext as RealJudgeContext
 from agents_runtime.queueing.jobs import MissionTouchJob
 from agents_runtime.queueing.worker import TurnResult, run_touch
+from agents_runtime.repository import agent as agent_repo
 from tests.db.factories import (
     create_agent_version,
     create_message,
@@ -61,6 +65,37 @@ def _job(org: uuid.UUID, thread, **kwargs) -> MissionTouchJob:
 
 def _toucher(dsn: str, llm: ScriptedLlm, **kwargs):
     return build_toucher(dsn, llm=llm, set_role="worker_role", **kwargs)
+
+
+@pytest.mark.parametrize("configured", [True, False])
+async def test_toucher_never_say_ai_reaches_judge(
+    dsn: str,
+    admin: psycopg.Connection,
+    org: uuid.UUID,
+    monkeypatch: pytest.MonkeyPatch,
+    configured: bool,
+) -> None:
+    real_load = agent_repo.load_tenant_policy
+    seen: list[bool] = []
+
+    async def load_policy(conn, *, organization_id):
+        policy = await real_load(conn, organization_id=organization_id)
+        assert policy.never_say_ai is True
+        return replace(policy, policy=replace(policy.policy, never_say_ai=configured))
+
+    def capture_context(**kwargs):
+        context = RealJudgeContext(**kwargs)
+        seen.append(context.never_say_ai)
+        return context
+
+    monkeypatch.setattr(agent_repo, "load_tenant_policy", load_policy)
+    monkeypatch.setattr(toucher_module, "JudgeContext", capture_context)
+    thread = create_thread(admin, org)
+    create_mission(admin, org, event_type=FAMILY, status="active")
+
+    await _toucher(dsn, ScriptedLlm())(_job(org, thread))
+
+    assert seen == [configured]
 
 
 class TestTheDraft:
