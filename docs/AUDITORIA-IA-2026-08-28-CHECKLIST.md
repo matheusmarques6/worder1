@@ -4498,12 +4498,12 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   dos quatro arquivos tocados é TypeScript, Python ou workflow, e **nenhum teste, script ou passo de
   CI lê um `.example`**.
 
-- [ ] **63. Lacunas de teste** `[relatado]`
+- [x] **63. Lacunas de teste** `[confirmado]`
   **Reescrito no fecho da fila da auditoria (âncora `ef5c5f1b`), lacuna por lacuna, por leitura do
   teste que fecharia cada uma.** Metade da lista de abertura já estava fechada e ninguém tinha
   registrado — um item cuja metade já está feita faz o próximo leitor refazer trabalho pronto. O que
-  fechou vai riscado com quem fechou; o que sobra fica com **rubrica e dono**. **O item continua
-  `[ ]` de propósito** — ver o fecho, no fim.
+  já estava fechado vai riscado com quem fechou; as lacunas restantes receberam testes executáveis
+  nas Tasks 1/2/9/10/11 da Onda 3. **O item agora fecha `[x]`** — ver o fecho, no fim.
   **Lista de abertura, estado MEDIDO:**
   ~~`toucher._node_delta` com `success_criteria`/`enabled_tools`/`forbidden`~~ — fechada **aqui**:
   `runtime/tests/unit/test_node_delta.py`, 4 casos, `-m unit`. O caso de maior consequência é
@@ -4675,18 +4675,15 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `runtime/tests/db/test_toucher.py::test_toucher_never_say_ai_reaches_judge`; nome desconhecido não
   oferecido, não executado e não persistido em `runtime/tests/db/test_responder_tool_loop.py`
   (`9e47145a`).
-  **O que sobra, com dono — dois contratos vivos, cobertos por dois node IDs planejados:**
-  **Task 11:** identidade da tool persistida na trilha em
+  **Fechado pela Task 11 da Onda 3:** identidade da tool persistida na trilha em
   `runtime/tests/db/test_tools.py::TestTheTrail::test_trail_uses_tool_identity_not_lookup_alias`; e
   conversa alheia recusada pela tool de dinheiro em
-  `runtime/tests/db/test_create_coupon_tool.py::test_coupon_cannot_read_a_foreign_conversation`.
-  **Por que o item NÃO fecha `[x]`, e isto é o resultado certo.** Ele fecha a **metade executável** —
-  riscada acima, com o teste que fecha cada uma — e continua `[ ]` como **dono nomeado** das duas
-  que sobram. Sendo o último item da fila, um `[x]` aqui seria a diferença entre "pendência
-  conhecida com nome" e "pendência esquecida", e a revisão do item 60 chamou sobra sem dono de
-  **pior que item errado**. Abrir um item 96 só para hospedar o resto foi rejeitado: renomearia o 63
-  e custaria renumeração de referências cruzadas por nada — o nome deste item **é** "Lacunas de
-  teste".
+  `runtime/tests/db/test_create_coupon_tool.py::test_coupon_cannot_read_a_foreign_conversation`
+  (`57d91304`). As duas mutações comportamentais e a mutação isolada da policy RLS ficaram RED; o
+  replay limpo ficou `20/20` GREEN, sem HTTP nem recursos Docker residuais.
+  **Por que o item agora fecha `[x]`.** As Tasks 1/2/9/10/11 registram teste, node ID, mutação RED e
+  GREEN para cada lacuna que ainda estava viva. O catálogo Python apagado não voltou: os testes
+  exercitam as instâncias e o fluxo reais, sem recriar registry ou abstração sem consumidor.
 
 - [ ] **64. Migrar cupom da Shopify de REST para GraphQL** `[proposto]` · *(descoberto no item 35)*
   `connectors/shopify.py` cria e busca cupom por três chamadas REST: `POST /price_rules.json`

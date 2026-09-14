@@ -559,7 +559,7 @@ Evidência de 2026-09-14: `9e47145a`; quatro mutações RED detectaram a remoç�
 - Consumes: `run_tool(conn, tool, ToolContext, arguments, *, clock) -> ToolResult`, `ToolResult(tool,success,output,error)` e `CreateCoupon` real.
 - Produces: o `tool_name` persistido corresponde à tool executada, não à chave do lookup; conversa B fornecida com contexto A não revela contato, cupom ou grant e não chama provedor.
 
-- [ ] **Step 1 (5 min): Escrever divergência real de alias/nome.** Em `test_tools.py`, usar o `_recorded` e fixtures existentes:
+- [x] **Step 1 (5 min): Escrever divergência real de alias/nome.** Em `test_tools.py`, usar o `_recorded` e fixtures existentes:
 
 ```python
 async def test_trail_uses_tool_identity_not_lookup_alias(dsn, admin, tenant):
@@ -579,8 +579,8 @@ async def test_trail_uses_tool_identity_not_lookup_alias(dsn, admin, tenant):
 ```
 
 O registry de produção não é recriado: o dicionário do teste torna a divergência explícita no ponto de execução que já recebe a instância de tool.
-- [ ] **Step 2 (3 min): RED de identidade e GREEN focal.** Mutar temporariamente `tool_name=result.tool` em `run_tool` para `tool_name="alias_63"`; guardião roda `uv run --directory runtime pytest tests/db/test_tools.py -k lookup_alias -q`, esperado falha canonical versus alias. Restaurar exatamente a linha; executar novamente e exigir PASS. Implementação mínima permanente é nenhuma se o contrato atual passar.
-- [ ] **Step 3 (5 min): Escrever negativo numa tool de dinheiro real sem emitir dinheiro.** Em `test_create_coupon_tool.py`, usar fixture org, `_mission`, `_tool`, `_shopify_transport` e `create_thread`:
+- [x] **Step 2 (3 min): RED de identidade e GREEN focal.** Mutar temporariamente `tool_name=result.tool` em `run_tool` para `tool_name="alias_63"`; guardião roda `uv run --directory runtime pytest tests/db/test_tools.py -k lookup_alias -q`, esperado falha canonical versus alias. Restaurar exatamente a linha; executar novamente e exigir PASS. Implementação mínima permanente é nenhuma se o contrato atual passar.
+- [x] **Step 3 (5 min): Escrever negativo numa tool de dinheiro real sem emitir dinheiro.** Em `test_create_coupon_tool.py`, usar fixture org, `_mission`, `_tool`, `_shopify_transport` e `create_thread`:
 
 ```python
 async def test_coupon_cannot_read_a_foreign_conversation(dsn, admin, org):
@@ -608,14 +608,16 @@ async def test_coupon_cannot_read_a_foreign_conversation(dsn, admin, org):
 ```
 
 Invocar a tool real diretamente evita gravar um `internal.tool_calls` de A com FK de conversa B só para testar a fronteira; a identidade da trilha já é objeto dos Steps 1–2. O positivo de negação comercial distingue “conversa própria sem concessão” de “conversa estrangeira inexistente”.
-- [ ] **Step 4 (3 min): RED da negativa, sem enfraquecer RLS.** Temporariamente substituir no teste `conversation_id=foreign.conversation_id` por `own.conversation_id`: guardião roda `uv run --directory runtime pytest tests/db/test_create_coupon_tool.py -k foreign_conversation -q` e exige falha na asserção `success is False` (a própria retorna negação comercial success=True). Restaurar o fixture. Também executar o teste sob policy propositalmente mutada somente no banco descartável pelo protocolo de mutações RLS da Onda 1: a tentativa de ler foreign deve ser detectada; restaurar por replay antes do GREEN. Nenhum role privilegiado ou bypass entra no teste definitivo.
-- [ ] **Step 5 (3 min): GREEN e revisão.** Guardião roda `uv run --directory runtime pytest tests/db/test_tools.py tests/db/test_create_coupon_tool.py -q`; verificar roles reais, duas organizações e zero HTTP. Ruff. Se o negativo revelar vazamento real, parar esta task e corrigir apenas o contrato responsável na Onda 1 com review Astra, sem registrar o comportamento inseguro como aprovado.
-- [ ] **Step 6 (2 min): Commit e fecho do item 63.** `git add runtime/tests/db/test_tools.py runtime/tests/db/test_create_coupon_tool.py`; `git commit -m "test: prove tool identity and foreign conversation isolation"`. Sol implementa/Astra revisa; rollback por revert dos testes. Controlador fecha item 63 só depois de registrar evidência das Tasks 1/2/9/10/11, incluindo o catálogo que deliberadamente não volta.
+- [x] **Step 4 (3 min): RED da negativa, sem enfraquecer RLS.** Temporariamente substituir no teste `conversation_id=foreign.conversation_id` por `own.conversation_id`: guardião roda `uv run --directory runtime pytest tests/db/test_create_coupon_tool.py -k foreign_conversation -q` e exige falha na asserção `success is False` (a própria retorna negação comercial success=True). Restaurar o fixture. Também executar o teste sob policy propositalmente mutada somente no banco descartável pelo protocolo de mutações RLS da Onda 1: a tentativa de ler foreign deve ser detectada; restaurar por replay antes do GREEN. Nenhum role privilegiado ou bypass entra no teste definitivo.
+- [x] **Step 5 (3 min): GREEN e revisão.** Guardião roda `uv run --directory runtime pytest tests/db/test_tools.py tests/db/test_create_coupon_tool.py -q`; verificar roles reais, duas organizações e zero HTTP. Ruff. Se o negativo revelar vazamento real, parar esta task e corrigir apenas o contrato responsável na Onda 1 com review Astra, sem registrar o comportamento inseguro como aprovado.
+- [x] **Step 6 (2 min): Commit e fecho do item 63.** `git add runtime/tests/db/test_tools.py runtime/tests/db/test_create_coupon_tool.py`; `git commit -m "test: prove tool identity and foreign conversation isolation"`. Sol implementa/Astra revisa; rollback por revert dos testes. Controlador fecha item 63 só depois de registrar evidência das Tasks 1/2/9/10/11, incluindo o catálogo que deliberadamente não volta.
+
+Evidência de 2026-09-14: `57d91304`; as mutações temporárias de identidade e conversa própria produziram `2 tests / 2 failures` no descartável `781d65f70d2644a6ae3c62b9f1a457d2`. A policy `conversations_worker_scoped` mutada para `using (true)` produziu `1 test / 1 failure` no descartável `820e3e617d974e89a735cca787cf75c2`. GREEN final no replay limpo `10a7ea4ae33b4b25a2fa08629be6300b`: `20 tests`, zero failures/errors/skips, estado `stopped`, zero contêineres e volumes. Ruff, diff check, revisão de especificação e revisão de qualidade: PASS/APPROVED; produção permaneceu sem diff.
 
 ## Gate de saída da onda
 
 - [ ] Verificador Terra, a partir do commit final: `pnpm exec vitest run src/lib/ai/__tests__`; `pnpm typecheck`; `uv run --directory runtime pytest -m unit`; `uv run --directory runtime ruff check .`; `uv run --directory runtime lint-imports`.
 - [ ] Guardião Astra: replay integral das migrations, suítes DB/RLS/pipeline conforme o protocolo já aprovado na Onda 0; registrar IDs coletados de RLS e o mesmo SHA do gate app/runtime.
-- [ ] Item 63: registrar também resultados de `tests/db/test_mission_event_selection.py`, `test_purchase_history.py`, `test_responder_agent_identity.py`, `test_toucher.py`, `test_responder_tool_loop.py`, `test_tools.py` e `test_create_coupon_tool.py`, incluindo provas de sensibilidade das Tasks 9–11; nenhuma lacuna fica apenas atribuída genericamente a outra onda.
+- [x] Item 63: registrar também resultados de `tests/db/test_mission_event_selection.py`, `test_purchase_history.py`, `test_responder_agent_identity.py`, `test_toucher.py`, `test_responder_tool_loop.py`, `test_tools.py` e `test_create_coupon_tool.py`, incluindo provas de sensibilidade das Tasks 9–11; nenhuma lacuna fica apenas atribuída genericamente a outra onda.
 - [ ] Revisor final Astra xhigh: pacote do diff BASE..HEAD, contratos Task 3/7, rollbacks, aliases do badge e evidência de cleanup. Zero Critical/Important.
 - [ ] Controlador: registrar antes/depois de 63/66/68 e os oito achados adicionais; decisões sem resposta ou prova de ambiente ausente permanecem abertas, com dependência explícita. Não liberar promoção nesta onda.
