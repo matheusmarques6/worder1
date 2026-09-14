@@ -4670,19 +4670,18 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `test_mission_is_selected_by_event_family`; máximo real de `last_order_at` e fallback da data
   local em `runtime/tests/db/test_purchase_history.py::`
   `test_last_order_is_max_of_shopify_time_or_local_time` (`55600c15`).
-  **O que sobra, com dono — quatro contratos vivos, cobertos por cinco node IDs planejados porque
-  `never_say_ai` exige uma prova em cada chamador real:**
-  **Task 10:** um contrato — literal e dois fios de `never_say_ai` — em
+  **Fechado pela Task 10 da Onda 3:** literal e os dois fios reais de `never_say_ai` em
   `runtime/tests/db/test_responder_agent_identity.py::test_responder_never_say_ai_reaches_judge` e
-  `runtime/tests/db/test_toucher.py::test_toucher_never_say_ai_reaches_judge`; e nome desconhecido
-  em `enabled_tools` em `runtime/tests/db/test_responder_tool_loop.py::`
-  `TestCustomTools::test_unknown_enabled_tool_is_never_offered`.
+  `runtime/tests/db/test_toucher.py::test_toucher_never_say_ai_reaches_judge`; nome desconhecido não
+  oferecido, não executado e não persistido em `runtime/tests/db/test_responder_tool_loop.py`
+  (`9e47145a`).
+  **O que sobra, com dono — dois contratos vivos, cobertos por dois node IDs planejados:**
   **Task 11:** identidade da tool persistida na trilha em
   `runtime/tests/db/test_tools.py::TestTheTrail::test_trail_uses_tool_identity_not_lookup_alias`; e
   conversa alheia recusada pela tool de dinheiro em
   `runtime/tests/db/test_create_coupon_tool.py::test_coupon_cannot_read_a_foreign_conversation`.
   **Por que o item NÃO fecha `[x]`, e isto é o resultado certo.** Ele fecha a **metade executável** —
-  riscada acima, com o teste que fecha cada uma — e continua `[ ]` como **dono nomeado** das quatro
+  riscada acima, com o teste que fecha cada uma — e continua `[ ]` como **dono nomeado** das duas
   que sobram. Sendo o último item da fila, um `[x]` aqui seria a diferença entre "pendência
   conhecida com nome" e "pendência esquecida", e a revisão do item 60 chamou sobra sem dono de
   **pior que item errado**. Abrir um item 96 só para hospedar o resto foi rejeitado: renomearia o 63
