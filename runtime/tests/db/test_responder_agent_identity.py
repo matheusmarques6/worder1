@@ -82,3 +82,32 @@ async def test_the_default_stays_nome_funcao_with_no_adaptation(
     assert "Apresente-se pelo nome e pelo time" in system
     assert "Espelhe o tom do cliente" not in system
     assert AI_DISCLOSURE_LINE in system
+
+
+async def test_byo_without_org_keys_stays_silent_and_alerts(
+    dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+) -> None:
+    create_agent_version(admin, tenant, status="active")
+    thread = create_thread(admin, tenant)
+    create_message(admin, tenant, thread, direction="inbound", seq=1, text="oi")
+    llm = ScriptedLlm()
+    respond = build_responder(
+        dsn,
+        llm=llm,
+        set_role="worker_role",
+        agent_llm_from_org_keys=True,
+    )
+    job = InboundJob(
+        conversation_id=thread.conversation_id,
+        organization_id=tenant,
+        generation=1,
+        target_seq=1,
+    )
+
+    assert await respond(job) is None
+    assert llm.asked == []
+    row = admin.execute(
+        "select count(*) from public.alerts where organization_id=%s and type=%s",
+        (tenant, "no_org_llm_key"),
+    ).fetchone()
+    assert row == (1,)

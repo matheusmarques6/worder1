@@ -4535,7 +4535,12 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   *"para permitir alertar quando a tabela abaixo envelhecer"*, e `Failure.UNKNOWN` tem **zero
   leitores fora de `failures.py`**: ninguém é avisado. **O defeito foi para o item 95**, com o
   critério de aceite já escrito (os quatro casos são `xfail(strict=True)`).
-  **Segue aberta:** contagem de duplicação do transcript; `server._read_request` malformado.
+  ~~contagem de duplicação do transcript~~ — fechada na Onda 3 em duas camadas: composição, por
+  `runtime/tests/unit/test_prompt_compiler_blocks.py::TestTheConversationBlockDoesNotDuplicateTheChatArray::`
+  `test_turn_transcript_remains_only_in_chat`; e overlap das consultas reais, por
+  `runtime/tests/db/test_agent_loaders.py::TestTheTranscript::test_transcript_and_pending_do_not_overlap`;
+  ~~`server._read_request` malformado~~ — fechado na Onda 3 por
+  `runtime/tests/unit/test_listener_request_contract.py` (`fb416860` + `50278a2f`).
   **O bug de tipo que morava na primeira lacuna NÃO foi consertado aqui, e o critério é a data.**
   `toucher.py:114` (era citado como `:92` — **citação podre**: `:92` é **linha em branco**; o campo
   `mission_version_id`, que a v1 desta nota atribuía a `:92`, está em `:100`. A correção do sítio
@@ -4559,14 +4564,14 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   esquecido. Gravar o comportamento atual seria o anti-padrão do item 40 com o sinal trocado. A
   linha de resumo do gate muda de **forma** (`N passed, M xfailed`) e **nada a lê**:
   `.github/workflows/runtime.yml` roda `pytest -m unit` e usa só o código de saída.
-  **Acrescentado pelo item 52 (revisão da execução, `2ee8c2f2`) — SEGUE ABERTO:**
-  `agent_llm_from_org_keys` tem **zero ocorrências em `runtime/tests/`** — nenhum tier chega nele,
-  nem com Postgres. O bloco inteiro é inalcançável por teste, e não é só a fiação da posse do item
-  52: ficam sem cobertura também a cascata D4 em contexto real e a **emissão do alerta
-  `no_org_llm_key`**, que aparece em teste apenas dentro de uma docstring. É o vão mais fundo desta
-  lista, porque não se fecha com banco — precisa de um teste que exercite a função. **Foi ele que
-  deixou passar a regressão que `ef5c5f1b` consertou**, e `test_resolved_names_do_not_collide.py`
-  fecha só a beirada (o nome ligado ao retorno), não o ramo.
+  **Acrescentado pelo item 52 (revisão da execução, `2ee8c2f2`) — FECHADO na Onda 3:**
+  `agent_llm_from_org_keys` é argumento dos builders, não função. Os dois chamadores reais agora
+  provam que zero chave da organização com o opt-in ligado produz zero chamada ao LLM e um alerta
+  `no_org_llm_key`: `runtime/tests/db/test_responder_agent_identity.py::`
+  `test_byo_without_org_keys_stays_silent_and_alerts` e
+  `runtime/tests/db/test_toucher.py::TestTheDraft::test_byo_without_org_keys_stays_silent_and_alerts`.
+  As duas travas falharam por mutação ao retirar o argumento do respectivo builder; a prova isolada de
+  `resolve_agent_llm` continua em `runtime/tests/unit/test_provider_cascade.py`.
   **Acrescentado pelo item 53 (revisão da execução, `89eca846`) — um dos três degraus fechou aqui:**
   a fiação de `never_say_ai` — do literal do loader (`agent.py:199`; era `:169`, **reancorado pelo
   item 56 em `ea5cbb35`**, que deslocou o arquivo +33 linhas) até `JudgeContext` — não tinha trava
@@ -4574,7 +4579,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   (`judges/pre_send.py:295`, o `if` que põe a "Regra fixa da plataforma" no prompt do juiz)~~ fechou
   aqui, pelos **dois lados**, em `test_pre_send_judge.py` — só o par prova: com um lado só, apagar o
   `if` e deixar a linha incondicional passaria igual. **Seguem sem trava** o literal do loader
-  (`agent.py:199`, SQL) e os dois call sites (`responder.py:640`, `toucher.py:423`), que vivem
+  (`agent.py:199`, SQL) e os dois call sites (`responder.py:641`, `toucher.py:424`), que vivem
   dentro de `respond`/`touch`.
   **Acrescentado pelo item 59 (`5f5dba63`) — quatro vãos que a deleção ABRIU, declarados na saída em
   vez de descobertos depois.** Os três primeiros existiam só em `tools/registry.py` +
@@ -4660,20 +4665,23 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   no molde de `test_the_guard_has_someone_to_guard`
   (`runtime/tests/unit/test_resolved_names_do_not_collide.py:99-101`). **Não reabre** a política do
   `.env.example` da raiz (43 envs), que o item 62 devolveu ao dono do produto (`:4449-4455`).
-  **O que sobra, com rubrica — nove lacunas vivas, contadas depois da medição acima:**
-  **(i) "só fecha com Postgres local"** — bloqueio de **ambiente**, não de prioridade (a memória do
-  projeto registra que o CI nunca viu as migrations): a fiação de `agent_llm_from_org_keys` e o
-  alerta `no_org_llm_key`; a seleção da missão pelo `event_type`; `last_order_at` × `max(...)`; a
-  contagem de duplicação do transcript (virou SQL, `exclude_inbound_after_seq`); os vãos **(3)** e
-  **(4)** do item 59; e o loader de `never_say_ai` (`agent.py:199`) com os dois call sites. **Sete.**
-  **(ii) "barato, backlog — a fila da auditoria termina aqui, então isto só sai se alguém abrir
-  trabalho novo"**: `server._read_request` malformado (executável e barato, mas não é caminho do
-  cliente, do dinheiro nem cross-tenant) e o vão **(1)** do item 59 (nome desconhecido em
-  `enabled_tools`, com cobertura parcial em `test_mission_resolver.py:93-99` e o silêncio descrito
-  em `FORK.md:274-275`). **Duas.** *(A rubrica diz "backlog" e não "fila de fundo" de propósito:
-  este é o último item da fila, e prometer que "a próxima sessão pega" seria promessa falsa.)*
+  **O que sobra, com dono — seis contratos vivos depois das Tasks 1 e 2 da Onda 3, cobertos por
+  sete node IDs planejados porque `never_say_ai` exige uma prova em cada chamador real:**
+  **Task 9:** seleção da missão pelo evento em
+  `runtime/tests/db/test_mission_event_selection.py::test_mission_is_selected_by_event_family`; e
+  máximo real de `last_order_at` em
+  `runtime/tests/db/test_purchase_history.py::test_last_order_is_max_of_shopify_time_or_local_time`.
+  **Task 10:** um contrato — literal e dois fios de `never_say_ai` — em
+  `runtime/tests/db/test_responder_agent_identity.py::test_responder_never_say_ai_reaches_judge` e
+  `runtime/tests/db/test_toucher.py::test_toucher_never_say_ai_reaches_judge`; e nome desconhecido
+  em `enabled_tools` em `runtime/tests/db/test_responder_tool_loop.py::`
+  `TestCustomTools::test_unknown_enabled_tool_is_never_offered`.
+  **Task 11:** identidade da tool persistida na trilha em
+  `runtime/tests/db/test_tools.py::TestTheTrail::test_trail_uses_tool_identity_not_lookup_alias`; e
+  conversa alheia recusada pela tool de dinheiro em
+  `runtime/tests/db/test_create_coupon_tool.py::test_coupon_cannot_read_a_foreign_conversation`.
   **Por que o item NÃO fecha `[x]`, e isto é o resultado certo.** Ele fecha a **metade executável** —
-  riscada acima, com o teste que fecha cada uma — e continua `[ ]` como **dono nomeado** das nove
+  riscada acima, com o teste que fecha cada uma — e continua `[ ]` como **dono nomeado** das seis
   que sobram. Sendo o último item da fila, um `[x]` aqui seria a diferença entre "pendência
   conhecida com nome" e "pendência esquecida", e a revisão do item 60 chamou sobra sem dono de
   **pior que item errado**. Abrir um item 96 só para hospedar o resto foi rejeitado: renomearia o 63

@@ -132,6 +132,25 @@ class TestTheDraft:
         ).fetchall()
         assert alert == ("no_active_mission",)
 
+    async def test_byo_without_org_keys_stays_silent_and_alerts(
+        self, dsn: str, admin: psycopg.Connection, org: uuid.UUID
+    ) -> None:
+        thread = create_thread(admin, org)
+        create_mission(admin, org, event_type=FAMILY, status="active")
+        llm = ScriptedLlm()
+
+        draft = await _toucher(dsn, llm, agent_llm_from_org_keys=True)(
+            _job(org, thread)
+        )
+
+        assert draft.content is None
+        assert llm.asked == []
+        row = admin.execute(
+            "select count(*) from public.alerts where organization_id=%s and type=%s",
+            (org, "no_org_llm_key"),
+        ).fetchone()
+        assert row == (1,)
+
     async def test_without_an_active_agent_the_touch_fails_visibly(
         self, dsn: str, admin: psycopg.Connection
     ) -> None:
