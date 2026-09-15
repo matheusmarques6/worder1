@@ -4,6 +4,7 @@
 // =============================================
 
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { trackAiUsage } from '@/lib/ai/cost-tracker'
 import { logger } from './logger'
 import type {
   AIAgent,
@@ -119,6 +120,7 @@ export async function processWithAI(
   // Call OpenAI
   try {
     const response = await callOpenAI(
+      organizationId,
       history,
       agent.model,
       agent.temperature,
@@ -268,7 +270,13 @@ export async function getCopilotSuggestion(
   history.push({ role: 'user', content: lastMessage })
 
   try {
-    const suggestion = await callOpenAI(history, model, temperature, maxTokens)
+    const suggestion = await callOpenAI(
+      organizationId,
+      history,
+      model,
+      temperature,
+      maxTokens
+    )
     return { data: { suggestion: suggestion || '' } }
   } catch (err: unknown) {
     const error = err as Error
@@ -352,38 +360,81 @@ export async function handleAIResponse(
 // =============================================
 
 async function callOpenAI(
+  organizationId: string,
   messages: ChatMessage[],
   model: string = 'gpt-4o-mini',
   temperature: number = 0.7,
   maxTokens: number = 500
 ): Promise<string | null> {
+  if (!organizationId) {
+    throw new Error('organizationId não informado')
+  }
+
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) {
     throw new Error('OPENAI_API_KEY not configured')
   }
 
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
+  let usageTracked = false
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer ' + apiKey,
+      },
+      body: JSON.stringify({
+        model,
+        messages,
+        temperature,
+        max_tokens: maxTokens,
+      }),
+      signal: AbortSignal.timeout(15000),
+    })
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}))
+      throw new Error(
+        'OpenAI API error: ' +
+          response.status +
+          ' - ' +
+          (error?.error?.message || 'Unknown')
+      )
+    }
+
+    const data = await response.json()
+    const usage = data.usage
+
+    await trackAiUsage({
+      organizationId,
+      provider: 'openai',
       model,
-      messages,
-      temperature,
-      max_tokens: maxTokens,
-    }),
-    signal: AbortSignal.timeout(15000),
-  })
+      feature: 'copilot',
+      ...(usage
+        ? {
+            promptTokens: usage.prompt_tokens,
+            completionTokens: usage.completion_tokens,
+          }
+        : { costUsdOverride: null }),
+      success: true,
+      metadata: { billable: false },
+    })
+    usageTracked = true
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}))
-    throw new Error(
-      `OpenAI API error: ${response.status} - ${error?.error?.message || 'Unknown'}`
-    )
+    return data.choices?.[0]?.message?.content?.trim() || null
+  } catch (error) {
+    if (!usageTracked) {
+      await trackAiUsage({
+        organizationId,
+        provider: 'openai',
+        model,
+        feature: 'copilot',
+        success: false,
+        costUsdOverride: null,
+        metadata: { billable: false },
+      })
+    }
+    throw error
   }
-
-  const data = await response.json()
-  return data.choices?.[0]?.message?.content?.trim() || null
 }
