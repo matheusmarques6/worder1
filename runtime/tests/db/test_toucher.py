@@ -8,23 +8,29 @@ run_touch concluindo com kind='funnel_touch' + moment_ids + a missão virando
 DONA da conversa na mesma transação do conclude.
 """
 
+import json
 import uuid
 from dataclasses import replace
+from unittest.mock import AsyncMock
 
 import httpx
 import psycopg
 import pytest
 
+from agents_runtime import server
+from agents_runtime.agent_core import responder as responder_module
 from agents_runtime.agent_core import toucher as toucher_module
+from agents_runtime.agent_core.llm import EMBEDDING_MODEL
 from agents_runtime.agent_core.toucher import TouchDraft, build_toucher
 from agents_runtime.clock import SystemClock
 from agents_runtime.config import QueueingConfig
 from agents_runtime.judges.pre_send import JudgeContext as RealJudgeContext
-from agents_runtime.queueing.jobs import MissionTouchJob
+from agents_runtime.queueing.jobs import InboundJob, MissionTouchJob
 from agents_runtime.queueing.worker import TurnResult, run_touch
 from agents_runtime.repository import agent as agent_repo
 from tests.db.factories import (
     create_agent_version,
+    create_knowledge_chunk,
     create_message,
     create_mission,
     create_moment,
@@ -33,6 +39,7 @@ from tests.db.factories import (
     create_thread,
 )
 from tests.support.database import as_runtime_worker
+from tests.support.embedding import embed_text
 from tests.support.llm import ScriptedLlm
 
 FAMILY = "cart.abandoned"
@@ -65,6 +72,159 @@ def _job(org: uuid.UUID, thread, **kwargs) -> MissionTouchJob:
 
 def _toucher(dsn: str, llm: ScriptedLlm, **kwargs):
     return build_toucher(dsn, llm=llm, set_role="worker_role", **kwargs)
+
+
+@pytest.fixture
+def knowledge_turn(admin, org, monkeypatch):
+    admin.execute(
+        "update public.ai_agent_versions set settings = %s where organization_id = %s",
+        (psycopg.types.json.Jsonb({"tools": {"enabled": ["search_knowledge"]}}), org),
+    )
+    create_mission(
+        admin, org, event_type=FAMILY, status="active",
+        objective="Retomar o carrinho abandonado.", enabled_tools=["search_knowledge"],
+    )
+    create_knowledge_chunk(
+        admin, org, content="Frete em 3 dias", embedding=json.dumps(embed_text("frete")),
+    )
+    stranger = create_tenant(admin)
+    create_knowledge_chunk(
+        admin, stranger, content="Segredo exclusivo da loja B",
+        embedding=json.dumps(embed_text("frete")),
+    )
+    contexts = []
+
+    def capture_context(**kwargs):
+        context = RealJudgeContext(**kwargs)
+        contexts.append(context)
+        return context
+
+    monkeypatch.setattr(toucher_module, "JudgeContext", capture_context)
+    llm = ScriptedLlm()
+    monkeypatch.setattr(llm, "embed", AsyncMock(wraps=llm.embed))
+    try:
+        yield llm, contexts, create_thread(admin, org)
+    finally:
+        admin.execute("delete from public.organizations where id = %s", (stranger,))
+
+
+class TestKnowledgeContext:
+    @pytest.mark.parametrize(
+        ("history", "delta", "query"),
+        [
+            (None, None, "Retomar o carrinho abandonado."),
+            ("Quero trocar o tamanho antigo.", None, "Retomar o carrinho abandonado."),
+            (
+                "Quero trocar o tamanho antigo.",
+                {"objective": "Confirmar disponibilidade do item reservado."},
+                "Confirmar disponibilidade do item reservado.",
+            ),
+        ],
+        ids=["cold-contact", "old-transcript", "node-delta"],
+    )
+    async def test_objective_retrieval_is_shared_and_metered_once(
+        self, dsn, admin, org, knowledge_turn, history, delta, query,
+    ):
+        llm, contexts, thread = knowledge_turn
+        if history:
+            create_message(admin, org, thread, text=history)
+
+        draft = await _toucher(dsn, llm)(_job(org, thread, delta=delta))
+
+        assert draft.content is not None
+        llm.embed.assert_awaited_once_with([query], model=EMBEDDING_MODEL)
+        assert contexts[0].knowledge == ("Frete em 3 dias",)
+        system = llm.asked[0].messages[0].content
+        assert system.count("# CONHECIMENTO") == 1
+        assert system.count("- Frete em 3 dias") == 1
+        assert "Segredo exclusivo da loja B" not in system
+        assert admin.execute(
+            "select input, success from internal.tool_calls"
+            " where conversation_id = %s and tool_name = 'search_knowledge'",
+            (thread.conversation_id,),
+        ).fetchall() == [({"query": query}, True)]
+        assert admin.execute(
+            "select input_tokens, cost_usd from internal.llm_calls"
+            " where conversation_id = %s and purpose = 'embedding'",
+            (thread.conversation_id,),
+        ).fetchall() == [(1, 0)]
+
+    @pytest.mark.parametrize("delta", [{"enabled_tools": []}, {"objective": " \n "}])
+    async def test_disabled_or_empty_query_does_no_retrieval(
+        self, dsn, admin, org, knowledge_turn, delta,
+    ):
+        llm, contexts, thread = knowledge_turn
+
+        draft = await _toucher(dsn, llm)(_job(org, thread, delta=delta))
+
+        assert draft.content is not None
+        llm.embed.assert_not_awaited()
+        assert contexts[0].knowledge == ()
+        assert "# CONHECIMENTO" not in llm.asked[0].messages[0].content
+        assert admin.execute(
+            "select count(*) from internal.tool_calls where conversation_id = %s",
+            (thread.conversation_id,),
+        ).fetchone() == (0,)
+        assert admin.execute(
+            "select count(*) from internal.llm_calls"
+            " where conversation_id = %s and purpose = 'embedding'",
+            (thread.conversation_id,),
+        ).fetchone() == (0,)
+
+    async def test_embedding_spends_the_same_turn_budget_as_agent_and_judge(
+        self, dsn, admin, org, knowledge_turn,
+    ):
+        llm, _contexts, thread = knowledge_turn
+
+        await _toucher(dsn, llm, turn_llm_call_limit=2)(_job(org, thread))
+
+        llm.embed.assert_awaited_once()
+        assert len(llm.asked) == 1
+        assert admin.execute(
+            "select purpose from internal.llm_calls where conversation_id = %s order by purpose",
+            (thread.conversation_id,),
+        ).fetchall() == [("agent_reply",), ("embedding",)]
+
+    async def test_reactive_query_keeps_all_pending_contact_messages(
+        self, dsn, admin, org, knowledge_turn,
+    ):
+        llm, _contexts, thread = knowledge_turn
+        create_mission(
+            admin, org, event_type="whatsapp.received", status="active",
+            enabled_tools=["search_knowledge"],
+        )
+        create_message(admin, org, thread, seq=1, text="frete")
+        create_message(admin, org, thread, seq=2, direction="outbound", text="fala da loja")
+        create_message(admin, org, thread, seq=3, text="do carrinho")
+
+        result = await responder_module.build_responder(dsn, llm=llm, set_role="worker_role")(
+            InboundJob(thread.conversation_id, 1, 3, org),
+        )
+
+        assert result is not None
+        llm.embed.assert_awaited_once_with(["frete do carrinho"], model=EMBEDDING_MODEL)
+        assert llm.asked[0].messages[0].content.count("- Frete em 3 dias") == 1
+
+    async def test_preview_declares_missing_state_without_retrieval_or_metering(
+        self, dsn, admin, org, knowledge_turn,
+    ):
+        response = await server._preview(
+            dsn, set_role="worker_role",
+            body={"organization_id": str(org), "event_type": FAMILY,
+                  "transcript": [["contact", "frete do carrinho"]]},
+        )
+
+        assert response.startswith(b"HTTP/1.1 200")
+        payload = json.loads(response.split(b"\r\n\r\n", 1)[1])
+        assert next(b for b in payload["blocks"] if b["kind"] == "STATE")["ghost"] is True
+        assert all(b["kind"] != "KNOWLEDGE" for b in payload["blocks"])
+        assert "Frete em 3 dias" not in payload["text"]
+        assert admin.execute(
+            "select count(*) from internal.tool_calls where organization_id = %s", (org,),
+        ).fetchone() == (0,)
+        assert admin.execute(
+            "select count(*) from internal.llm_calls where organization_id = %s", (org,),
+        ).fetchone() == (0,)
 
 
 @pytest.mark.parametrize("configured", [True, False])

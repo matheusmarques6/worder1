@@ -95,7 +95,7 @@ from agents_runtime.judges.pre_send import (
     with_merchant_judges,
 )
 from agents_runtime.obs.telemetry import annotate
-from agents_runtime.queueing.jobs import InboundJob
+from agents_runtime.queueing.jobs import InboundJob, MissionTouchJob
 from agents_runtime.repository import agent as agent_repo
 from agents_runtime.repository import alerts as alerts_repo
 from agents_runtime.repository import custom_tools as custom_tools_repo
@@ -573,11 +573,12 @@ def build_responder(
                     return None
 
             async with scoped_agent_llm(agent_llm, owns=owns_agent_llm):
+                query = " ".join(message.text for message in pending if message.author == "contact")
                 knowledge = await _knowledge(
                     conn,
                     job,
                     resolved.tools,
-                    pending,
+                    query,
                     metered("embedding", version.agent_id),
                     clock,
                     knowledge_limit,
@@ -609,6 +610,7 @@ def build_responder(
                         transcript=tuple((m.author, m.text) for m in transcript),
                     ),
                     mode="turn",
+                    knowledge=knowledge,
                 )
                 # 9.1: o span do turno (aberto pelo worker) ganha os IDs que a
                 # trilha interna já tem — telemetria e banco contam UMA história.
@@ -623,12 +625,6 @@ def build_responder(
                 )
 
                 system = compiled.text
-                if knowledge:
-                    # Conhecimento é recuperação, não área de config — anexa ao
-                    # frame sem virar bloco de dono (registro em tool_calls).
-                    system += "\n\n# CONHECIMENTO\n" + "\n".join(
-                        f"- {chunk}" for chunk in knowledge
-                    )
                 # Item 39: `transcript` já exclui a janela pendente (query em
                 # `repository/agent.py::load_recent_transcript`), então concatenar
                 # é seguro — nenhuma mensagem aparece duas vezes.
@@ -645,7 +641,7 @@ def build_responder(
                 )
                 context = JudgeContext(
                     conversation=tuple(f"{message.author}: {message.text}" for message in pending),
-                    knowledge=tuple(knowledge),
+                    knowledge=knowledge,
                     # A língua do juiz é a MESMA do bloco do agente — lida de
                     # volta dele, não recalculada: duas cópias da fórmula
                     # `persona["language"] or settings.primary_language` são o
@@ -953,7 +949,7 @@ def agent_responder(dsn: str):
 
 def _metered(
     conn: psycopg.AsyncConnection,
-    job: InboundJob,
+    job: InboundJob | MissionTouchJob,
     llm: LlmPort,
     clock: Clock,
     purpose: str,
@@ -1020,9 +1016,9 @@ def _recorder(
 
 async def _knowledge(
     conn: psycopg.AsyncConnection,
-    job: InboundJob,
+    job: InboundJob | MissionTouchJob,
     enabled_tools: tuple[str, ...],
-    pending: Sequence[PendingMessage],
+    query: str,
     embedder: MeteredLlm,
     clock: Clock,
     limit: int,
@@ -1038,7 +1034,6 @@ async def _knowledge(
     if "search_knowledge" not in enabled_tools:
         return ()
 
-    query = " ".join(message.text for message in pending if message.author == "contact")
     if not query.strip():
         return ()
 

@@ -55,6 +55,7 @@ from agents_runtime.agent_core.responder import (
     TRANSCRIPT_LIMIT,
     UNMIRRORED_DETAIL,
     _as_chat,
+    _knowledge,
     _metered,
     default_turn_llm_call_limit,
     delivery_flags,
@@ -89,6 +90,7 @@ from agents_runtime.repository.scope import (
 )
 from agents_runtime.tools.base import ToolContext, run_tool
 from agents_runtime.tools.coupon import CreateCoupon
+from agents_runtime.tools.knowledge import DEFAULT_LIMIT
 
 logger = logging.getLogger(__name__)
 
@@ -141,7 +143,7 @@ def build_toucher(
     config: QueueingConfig | None = None,
 ):
     """O toucher real. Mesmas costuras do build_responder — `llm` é a porta da
-    PLATAFORMA (Judge 1); a fala do agente sai pela cascata BYO em produção.
+    PLATAFORMA (Judge 1 e embeddings); a fala do agente sai pela cascata BYO em produção.
 
     `turn_llm_call_limit` (item 41, fix round 1): o toque é o SEGUNDO tipo de
     turno que passa por `guarded_reply`/`MeteredLlm` — sem isto ele ficava
@@ -370,6 +372,17 @@ def build_toucher(
                     # Negado ou provedor caído: o toque segue SEM benefício — a
                     # negativa já é ledger, e prometer sem cupom seria mentira.
 
+                # Um teto para embedding, resposta e juiz, como no responder.
+                turn_budget = TurnBudget(limit=turn_llm_call_limit)
+                knowledge = await _knowledge(
+                    conn, job, resolved.tools, resolved.objective,
+                    _metered(
+                        conn, job, llm, clock, "embedding", version.agent_id,
+                        budget=turn_budget,
+                    ),
+                    clock, DEFAULT_LIMIT,
+                )
+
                 agent = agent_block(version, settings)
                 window_open = (
                     state.last_inbound_at is not None
@@ -385,8 +398,7 @@ def build_toucher(
                     # modelo que ele podia emitir cupom e não lhe dava tool
                     # nenhuma. O modelo ou ignorava, ou prometia de novo o
                     # benefício que o prompt já dava como concedido. Zerar aqui,
-                    # e só aqui, é seguro porque no toque `resolved.tools` tem um
-                    # ÚNICO leitor, este anúncio: o cupom é dirigido por
+                    # e só aqui, preserva as permissões da busca acima: o cupom é dirigido por
                     # `job.concession_request` e `CreateCoupon` não lê
                     # `mission.tools`. O `resolved` que já foi para a tool
                     # continua intocado, e um tool-loop futuro no toque
@@ -411,12 +423,9 @@ def build_toucher(
                         transcript=tuple((m.author, m.text) for m in transcript),
                     ),
                     mode="turn",
+                    knowledge=knowledge,
                 )
 
-                # Item 41, fix round 1: UM teto por toque, compartilhado pelas
-                # duas finalidades (`agent_reply`, `judge_pre`) — mesmo padrão
-                # de `respond()` em `responder.py`.
-                turn_budget = TurnBudget(limit=turn_llm_call_limit)
                 chat = _metered(
                     conn, job, agent_llm, clock, "agent_reply", version.agent_id,
                     budget=turn_budget,
@@ -430,7 +439,7 @@ def build_toucher(
                 )
                 context = JudgeContext(
                     conversation=tuple(f"{m.author}: {m.text}" for m in transcript[-5:]),
-                    knowledge=(),
+                    knowledge=knowledge,
                     # Lida de volta do bloco do agente, não recalculada — uma
                     # fórmula só para a língua em todo o runtime (item 45).
                     language=agent.language,
