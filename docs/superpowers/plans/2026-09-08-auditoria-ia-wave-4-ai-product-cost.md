@@ -82,7 +82,7 @@ Namespace coordenado de migrations: W2 termina em `20260910020800`; W3 usa `2026
 - Consumes: `Generator(attempt: int, feedback: tuple[str,...]) -> Awaitable[str]`; tentativas indexadas a partir de zero.
 - Produces: campo novo `GuardedOutcome.selected_attempt: int | None = None`; `None` quando nada pode sair; mantém `draft`, `judgements`, `attempts`, `blocked_by`. Não usar `attempts - 1` para deduzir a vencedora.
 
-- [ ] **Step 1 (4 min): Escrever teste que distingue primeira/última tentativa.** No teste existente, reutilizar `Generator`, `ScriptedJudge`, `standard_failure`, `critical_failure` e a fixture `SAFETY`. O caso com scores diferentes usa `Judgement` explícito e rubrica utilizável:
+- [x] **Step 1 (4 min): Escrever teste que distingue primeira/última tentativa.** No teste existente, reutilizar `Generator`, `ScriptedJudge`, `standard_failure`, `critical_failure` e a fixture `SAFETY`. O caso com scores diferentes usa `Judgement` explícito e rubrica utilizável:
 
 ```python
 async def test_selected_attempt_is_the_best_not_the_last():
@@ -99,16 +99,18 @@ async def test_selected_attempt_is_the_best_not_the_last():
 ```
 
 `Judgement.usable` depende de `bool(rubrics)`, portanto a rubrica concreta é necessária. O teste exerce o ramo de melhor score real, sem monkeypatch da seleção.
-- [ ] **Step 2 (2 min): RED.** `uv run --directory runtime pytest tests/unit/test_pre_send_judge.py -k selected_attempt -q`; esperado: atributo inexistente. Acrescentar PASS na segunda tentativa, CRITICAL depois de uma tentativa utilizável, juiz inutilizável e teto durante geração/julgamento; todos afirmam índice ou `None`.
-- [ ] **Step 3 (4 min): Estender o acumulador existente.**
+- [x] **Step 2 (2 min): RED.** `uv run --directory runtime pytest tests/unit/test_pre_send_judge.py -k selected_attempt -q`; esperado: atributo inexistente. Acrescentar PASS na segunda tentativa, CRITICAL depois de uma tentativa utilizável, juiz inutilizável e teto durante geração/julgamento; todos afirmam índice ou `None`.
+- [x] **Step 3 (4 min): Estender o acumulador existente.**
 
 ```python
 selected_attempt: int | None = None
 ```
 
 Adicionar esse campo ao final de `GuardedOutcome`; `best` passa a `tuple[str, Judgement, int] | None`, armazenado como `(draft, judgement, attempt)`. No retorno PASS, passar `selected_attempt=attempt`; ao desempacotar best, usar `best_draft, judgement, selected_attempt = best` e retornar `draft=best_draft,last_draft=draft`, preservando a última geração separadamente. Retornos bloqueados mantêm índice `None`. Empate preserva a primeira tentativa porque a comparação continua `>`.
-- [ ] **Step 4 (3 min): GREEN.** `uv run --directory runtime pytest tests/unit/test_pre_send_judge.py tests/unit/test_llm_metering.py -q`; `uv run --directory runtime ruff check .`. Provar explicitamente que o último rascunho bloqueado continua disponível; não reescrever `last_draft` com a vencedora por conveniência do trace.
-- [ ] **Step 5 (2 min): Commit.** `git add runtime/src/agents_runtime/judges/pre_send.py runtime/tests/unit/test_pre_send_judge.py`; `git commit -m "fix: identify the selected generation attempt"`. Sol implementa, Astra revisa. Rollback: revert simples, antes de retirar consumidores adicionados na Task 3.
+- [x] **Step 4 (3 min): GREEN.** `uv run --directory runtime pytest tests/unit/test_pre_send_judge.py tests/unit/test_llm_metering.py -q`; `uv run --directory runtime ruff check .`. Provar explicitamente que o último rascunho bloqueado continua disponível; não reescrever `last_draft` com a vencedora por conveniência do trace.
+- [x] **Step 5 (2 min): Commit.** `git add runtime/src/agents_runtime/judges/pre_send.py runtime/tests/unit/test_pre_send_judge.py`; `git commit -m "fix: identify the selected generation attempt"`. Sol implementa, Astra revisa. Rollback: revert simples, antes de retirar consumidores adicionados na Task 3.
+
+Evidência de 2026-09-14: `86bc8c23`. RED focal: `2 failed, 31 deselected`, ambos por `selected_attempt` ausente. GREEN independente: `44 passed` em `test_pre_send_judge.py` + `test_llm_metering.py`, Ruff e `git diff --check` verdes. `selected_attempt` é zero-based, acompanha PASS ou a melhor tentativa utilizável, preserva a primeira em empate e permanece `None` em veto/bloqueio; `last_draft` conserva separadamente a última geração, inclusive sem julgamento. Revisões: Spec PASS e Quality APPROVED, zero Critical/Important/Minor.
 
 ### Task 3: Traces atribuídos e contadores compatíveis (W4-T1, condicional)
 
