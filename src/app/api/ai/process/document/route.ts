@@ -42,12 +42,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'source_id e organization_id são obrigatórios' }, { status: 400 })
     }
 
-    // Verificação de orçamento (soft gate): se excedido, marca fonte como erro
-    // com mensagem de budget em vez de processar embeddings (custo desnecessário).
-    // Fail-open: erro de DB no checkAiBudget nunca bloqueia o fluxo.
+    // Verificação de orçamento antes de processar embeddings pagos.
     const budgetCheck = await checkAiBudget(organization_id, { skipCache: false })
     if (!budgetCheck.allowed) {
-      const budgetMsg = `Orçamento AI excedido: $${budgetCheck.spentUsd.toFixed(4)} de $${budgetCheck.budgetUsd?.toFixed(4)} USD/mês`
+      const unavailable = budgetCheck.unknownReason !== undefined
+      const budgetMsg = unavailable
+        ? 'Não foi possível verificar o orçamento de IA'
+        : `Orçamento AI excedido: $${budgetCheck.spentUsd.toFixed(4)} de $${budgetCheck.budgetUsd?.toFixed(4)} USD/mês`
       if (sourceId) {
         await supabase
           .from('ai_agent_sources')
@@ -58,7 +59,14 @@ export async function POST(request: NextRequest) {
           })
           .eq('id', sourceId)
       }
-      return NextResponse.json({ error: budgetMsg, code: 'AI_BUDGET_EXCEEDED' }, { status: 402 })
+      return NextResponse.json(
+        {
+          error: budgetMsg,
+          code: unavailable ? 'AI_BUDGET_UNAVAILABLE' : 'AI_BUDGET_EXCEEDED',
+          ...(unavailable ? { unknownReason: budgetCheck.unknownReason } : {}),
+        },
+        { status: unavailable ? 503 : 402 },
+      )
     }
 
     // Buscar fonte

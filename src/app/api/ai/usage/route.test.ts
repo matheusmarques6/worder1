@@ -57,4 +57,42 @@ describe('GET /api/ai/usage', () => {
     expect(response.status).toBe(200)
     expect(body.totals).toMatchObject({ calls: 0, totalTokens: 0, costUsd: 0 })
   })
+
+  it('separates billable and platform totals while historical rows stay billable', async () => {
+    usageResult = {
+      data: [
+        { provider: 'openai', model: 'a', feature: 'embedding', total_tokens: 1, cost_usd: 10, success: true, created_at: '2026-09-01T00:00:00Z', metadata: { billable: true } },
+        { provider: 'openai', model: 'b', feature: 'copilot', total_tokens: 1, cost_usd: 90, success: true, created_at: '2026-09-01T00:00:00Z', metadata: { billable: false } },
+        { provider: 'openai', model: 'c', feature: 'copilot', total_tokens: 1, cost_usd: null, success: true, created_at: '2026-09-01T00:00:00Z', metadata: { billable: false } },
+        { provider: 'openai', model: 'd', feature: 'legacy', total_tokens: 1, cost_usd: 5, success: true, created_at: '2026-09-01T00:00:00Z', metadata: null },
+        { provider: 'openai', model: 'e', feature: 'embedding', total_tokens: 1, cost_usd: null, success: true, created_at: '2026-09-01T00:00:00Z', metadata: { billable: true } },
+      ],
+      error: null,
+    }
+
+    const response = await GET(request())
+    const body = await response.json()
+
+    expect(body.totals).toMatchObject({
+      costUsd: 15,
+      unknownCostCalls: 1,
+      platformCostUsd: 90,
+      platformUnknownCostCalls: 1,
+    })
+  })
+
+  it('preserves the budget unknown reason in the response', async () => {
+    mockBudget.mockResolvedValue({
+      allowed: false,
+      budgetUsd: 50,
+      spentUsd: 10,
+      hasUnknownCost: true,
+      unknownReason: 'unpriced_model',
+    })
+
+    const response = await GET(request())
+    const body = await response.json()
+
+    expect(body.budget.unknownReason).toBe('unpriced_model')
+  })
 })
