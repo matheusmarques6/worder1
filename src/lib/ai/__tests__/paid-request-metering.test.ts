@@ -35,6 +35,7 @@ import {
   getCopilotSuggestion,
   processWithAI,
 } from '@/lib/services/whatsapp/ai-chatbot-service'
+import { generateSegmentRule } from '@/lib/segments/ai-generator'
 
 type QueryResult = { data: unknown; error: unknown }
 
@@ -289,4 +290,268 @@ describe('metering do copiloto e da caixa compartilhada', () => {
     expect(mocks.trackAiUsage).not.toHaveBeenCalled()
     expect(mocks.checkAiBudget).not.toHaveBeenCalled()
   })
+})
+
+describe('metering de segmento por tentativa', () => {
+  const fetchMock = vi.fn()
+  const validRule = {
+    version: 2,
+    root: {
+      type: 'group',
+      logic: 'AND',
+      children: [
+        {
+          type: 'profile',
+          field: 'predicted_clv',
+          operator: 'gte',
+          value: 500,
+        },
+      ],
+    },
+  }
+
+  function anthropicResponse(
+    body: Record<string, unknown>,
+    options?: { ok?: boolean; status?: number; text?: string }
+  ) {
+    return {
+      ok: options?.ok ?? true,
+      status: options?.status ?? 200,
+      json: vi.fn().mockResolvedValue(body),
+      text: vi.fn().mockResolvedValue(options?.text ?? ''),
+    }
+  }
+
+  function validResponse(usage?: {
+    input_tokens: number
+    output_tokens: number
+  }) {
+    return anthropicResponse({
+      content: [
+        {
+          type: 'tool_use',
+          name: 'create_segment',
+          input: validRule,
+        },
+      ],
+      ...(usage ? { usage } : {}),
+    })
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    fetchMock.mockReset()
+    mocks.trackAiUsage.mockResolvedValue(undefined)
+    vi.stubEnv('ANTHROPIC_API_KEY', 'sk-ant-test')
+    vi.stubGlobal('fetch', fetchMock)
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    vi.unstubAllGlobals()
+  })
+
+  it('registra a resposta sem tool_use e o retry válido como duas tentativas', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        anthropicResponse({
+          content: [{ type: 'text', text: 'malformed-output' }],
+          usage: { input_tokens: 10, output_tokens: 2 },
+        })
+      )
+      .mockResolvedValueOnce(
+        validResponse({ input_tokens: 12, output_tokens: 3 })
+      )
+
+    const result = await generateSegmentRule('clientes com CLV alto', {
+      orgId: 'org-a',
+    })
+
+    expect(result.ok).toBe(true)
+    expect(result.attempts).toBe(2)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(mocks.trackAiUsage).toHaveBeenCalledTimes(2)
+    expect(mocks.trackAiUsage.mock.calls.map(([input]) => input)).toEqual([
+      {
+        organizationId: 'org-a',
+        provider: 'anthropic',
+        model: 'claude-haiku-4-5-20251001',
+        feature: 'segment_generation',
+        promptTokens: 10,
+        completionTokens: 2,
+        success: true,
+        metadata: { billable: false, attempt: 1 },
+      },
+      {
+        organizationId: 'org-a',
+        provider: 'anthropic',
+        model: 'claude-haiku-4-5-20251001',
+        feature: 'segment_generation',
+        promptTokens: 12,
+        completionTokens: 3,
+        success: true,
+        metadata: { billable: false, attempt: 2 },
+      },
+    ])
+    expect(mocks.checkAiBudget).not.toHaveBeenCalled()
+
+    const trackerPayload = JSON.stringify(mocks.trackAiUsage.mock.calls)
+    expect(trackerPayload).not.toContain('sk-ant-test')
+    expect(trackerPayload).not.toContain('clientes com CLV alto')
+    expect(trackerPayload).not.toContain('malformed-output')
+    expect(trackerPayload).not.toContain('create_segment')
+    expect(trackerPayload).not.toContain('x-api-key')
+  })
+
+  it('mantém o registro quando a regra falha na validação e não duplica no catch', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        anthropicResponse({
+          content: [
+            {
+              type: 'tool_use',
+              name: 'create_segment',
+              input: {
+                version: 1,
+                root: {
+                  type: 'group',
+                  logic: 'AND',
+                  children: [
+                    {
+                      type: 'profile',
+                      field: 'campo_inventado',
+                      operator: 'equals',
+                      value: true,
+                    },
+                  ],
+                },
+              },
+            },
+          ],
+          usage: { input_tokens: 7, output_tokens: 1 },
+        })
+      )
+      .mockResolvedValueOnce(
+        validResponse({ input_tokens: 8, output_tokens: 2 })
+      )
+
+    const result = await generateSegmentRule('clientes válidos', {
+      orgId: 'org-a',
+    })
+
+    expect(result.ok).toBe(true)
+    expect(result.attempts).toBe(2)
+    expect(mocks.trackAiUsage).toHaveBeenCalledTimes(2)
+    expect(
+      mocks.trackAiUsage.mock.calls.map(([input]) => input.metadata.attempt)
+    ).toEqual([1, 2])
+  })
+
+  it('registra falha HTTP e registra separadamente o retry bem-sucedido', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        anthropicResponse(
+          {},
+          { ok: false, status: 429, text: 'request refused' }
+        )
+      )
+      .mockResolvedValueOnce(
+        validResponse({ input_tokens: 12, output_tokens: 3 })
+      )
+
+    const result = await generateSegmentRule('clientes com CLV alto', {
+      orgId: 'org-a',
+    })
+
+    expect(result.ok).toBe(true)
+    expect(result.attempts).toBe(2)
+    expect(mocks.trackAiUsage).toHaveBeenCalledTimes(2)
+    expect(mocks.trackAiUsage.mock.calls[0][0]).toEqual({
+      organizationId: 'org-a',
+      provider: 'anthropic',
+      model: 'claude-haiku-4-5-20251001',
+      feature: 'segment_generation',
+      success: false,
+      costUsdOverride: null,
+      metadata: { billable: false, attempt: 1 },
+    })
+    expect(mocks.trackAiUsage.mock.calls[1][0]).toEqual(
+      expect.objectContaining({
+        success: true,
+        metadata: { billable: false, attempt: 2 },
+      })
+    )
+  })
+
+  it('registra fetch rejeitado e registra separadamente o retry bem-sucedido', async () => {
+    fetchMock
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockResolvedValueOnce(
+        validResponse({ input_tokens: 12, output_tokens: 3 })
+      )
+
+    const result = await generateSegmentRule('clientes com CLV alto', {
+      orgId: 'org-a',
+    })
+
+    expect(result.ok).toBe(true)
+    expect(result.attempts).toBe(2)
+    expect(mocks.trackAiUsage).toHaveBeenCalledTimes(2)
+    expect(mocks.trackAiUsage.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        success: false,
+        costUsdOverride: null,
+        metadata: { billable: false, attempt: 1 },
+      })
+    )
+    expect(mocks.trackAiUsage.mock.calls[1][0]).toEqual(
+      expect.objectContaining({
+        success: true,
+        metadata: { billable: false, attempt: 2 },
+      })
+    )
+  })
+
+  it('registra custo desconhecido quando a resposta não informa usage', async () => {
+    fetchMock.mockResolvedValue(validResponse())
+
+    const result = await generateSegmentRule('clientes com CLV alto', {
+      orgId: 'org-a',
+    })
+
+    expect(result.ok).toBe(true)
+    expect(result.attempts).toBe(1)
+    expect(mocks.trackAiUsage).toHaveBeenCalledTimes(1)
+    expect(mocks.trackAiUsage).toHaveBeenCalledWith({
+      organizationId: 'org-a',
+      provider: 'anthropic',
+      model: 'claude-haiku-4-5-20251001',
+      feature: 'segment_generation',
+      success: true,
+      costUsdOverride: null,
+      metadata: { billable: false, attempt: 1 },
+    })
+  })
+
+  it.each([
+    ['ausente', {} as { orgId: string }],
+    ['vazia', { orgId: '' }],
+  ])(
+    'bloqueia organização %s antes de fetch, metering ou budget',
+    async (_label, opts) => {
+      const result = await generateSegmentRule(
+        'clientes com CLV alto',
+        opts
+      )
+
+      expect(result).toEqual({
+        ok: false,
+        error: 'organizationId não informado',
+        attempts: 0,
+      })
+      expect(fetchMock).not.toHaveBeenCalled()
+      expect(mocks.trackAiUsage).not.toHaveBeenCalled()
+      expect(mocks.checkAiBudget).not.toHaveBeenCalled()
+    }
+  )
 })

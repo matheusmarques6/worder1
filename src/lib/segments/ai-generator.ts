@@ -11,6 +11,7 @@
 // from the same merchant session.
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { trackAiUsage } from '@/lib/ai/cost-tracker';
 import { FIELD_CATALOG, CATEGORY_LABELS, OPERATORS_BY_TYPE, OPERATOR_LABELS } from './catalog';
 import { validateSegmentRule } from './dsl';
 import type { SegmentRule } from './dsl';
@@ -297,13 +298,17 @@ export interface GenerateOptions {
   // keys instead of guessing 'placed_order' for a store that named it
   // 'order_completed'.
   supabase?: SupabaseClient;
-  orgId?: string;
+  orgId: string;
 }
 
 export async function generateSegmentRule(
   userPrompt: string,
-  opts: GenerateOptions = {},
+  opts: GenerateOptions,
 ): Promise<GenerateResult> {
+  if (!opts?.orgId) {
+    return { ok: false, error: 'organizationId não informado', attempts: 0 };
+  }
+
   if (!process.env.ANTHROPIC_API_KEY) {
     return { ok: false, error: 'AI não está configurada (ANTHROPIC_API_KEY ausente).', attempts: 0 };
   }
@@ -338,6 +343,7 @@ export async function generateSegmentRule(
 
   let lastError = '';
   for (let attempt = 1; attempt <= MAX_RETRIES + 1; attempt++) {
+    let usageTracked = false;
     try {
       const res = await fetch(ANTHROPIC_URL, {
         method: 'POST',
@@ -363,10 +369,37 @@ export async function generateSegmentRule(
       if (!res.ok) {
         const text = await res.text();
         lastError = `Anthropic ${res.status}: ${text.slice(0, 200)}`;
+        await trackAiUsage({
+          organizationId: opts.orgId,
+          provider: 'anthropic',
+          model: MODEL,
+          feature: 'segment_generation',
+          success: false,
+          costUsdOverride: null,
+          metadata: { billable: false, attempt },
+        });
+        usageTracked = true;
         continue;
       }
 
       const data = await res.json();
+      const usage = data.usage;
+      await trackAiUsage({
+        organizationId: opts.orgId,
+        provider: 'anthropic',
+        model: MODEL,
+        feature: 'segment_generation',
+        ...(usage
+          ? {
+              promptTokens: usage.input_tokens,
+              completionTokens: usage.output_tokens,
+            }
+          : { costUsdOverride: null }),
+        success: true,
+        metadata: { billable: false, attempt },
+      });
+      usageTracked = true;
+
       // Find the tool_use block in the response
       const toolUse = (data.content || []).find((b: any) => b.type === 'tool_use');
       if (!toolUse?.input) {
@@ -380,6 +413,17 @@ export async function generateSegmentRule(
       }
       lastError = validation.errors.join('; ');
     } catch (err: any) {
+      if (!usageTracked) {
+        await trackAiUsage({
+          organizationId: opts.orgId,
+          provider: 'anthropic',
+          model: MODEL,
+          feature: 'segment_generation',
+          success: false,
+          costUsdOverride: null,
+          metadata: { billable: false, attempt },
+        });
+      }
       lastError = err?.message || 'unknown error';
     }
   }
