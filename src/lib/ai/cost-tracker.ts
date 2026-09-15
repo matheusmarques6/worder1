@@ -132,7 +132,7 @@ export async function trackAiUsage(input: TrackAiUsageInput): Promise<void> {
       )
     }
 
-    await supabaseAdmin.from('ai_usage_logs').insert({
+    const { error } = await supabaseAdmin.from('ai_usage_logs').insert({
       organization_id: input.organizationId,
       provider: input.provider,
       model: input.model,
@@ -147,6 +147,7 @@ export async function trackAiUsage(input: TrackAiUsageInput): Promise<void> {
       error: input.error || null,
       metadata: input.metadata || {},
     })
+    if (error) throw error
   } catch (err: any) {
     // Não bloquear fluxo de IA se logging falhar
     console.warn('[trackAiUsage]', err?.message)

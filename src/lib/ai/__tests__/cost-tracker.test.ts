@@ -149,4 +149,19 @@ describe('trackAiUsage', () => {
     await trackAiUsage({ organizationId: 'org-1', provider: 'openai', model: 'gpt-4o-mini', feature: 'eval_judge', promptTokens: 1000 })
     expect(insertMock.mock.calls[0][0].cost_usd).toBeNull()
   })
+
+  it('avisa quando o PostgREST recusa a escrita sem bloquear o fluxo', async () => {
+    insertMock.mockResolvedValueOnce({ data: null, error: { message: 'write refused' } })
+
+    await expect(trackAiUsage({
+      organizationId: 'org-a',
+      provider: 'openai',
+      model: 'gpt-4o-mini',
+      feature: 'copilot',
+      promptTokens: 10,
+      completionTokens: 5,
+    })).resolves.toBeUndefined()
+
+    expect(warnSpy).toHaveBeenCalledWith('[trackAiUsage]', 'write refused')
+  })
 })
