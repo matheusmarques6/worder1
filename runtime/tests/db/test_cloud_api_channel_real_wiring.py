@@ -276,3 +276,57 @@ class TestFromEnvAsksTheRealTemplatePort:
 
         assert wamid == "wamid.OK"
         assert seen["template"] == {"name": "volta_pra_loja", "language": {"code": "pt_BR"}}
+
+
+@pytest.mark.parametrize("foreign", [False, True])
+async def test_token_number_is_exact_even_with_multiple_accounts(
+    admin, dsn, two_tenants, monkeypatch, foreign,
+):
+    org = two_tenants.a.id
+    create_channel_account(admin, org, access_token="token-first-must-not-win")
+    selected = create_channel_account(
+        admin, two_tenants.b.id if foreign else org, access_token="token-selected",
+    )
+    seen = []
+
+    def handler(request):
+        seen.append((str(request.url), request.headers["authorization"]))
+        return httpx.Response(200, json={"messages": [{"id": "wamid.selected"}]})
+
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        cloud_api.httpx, "AsyncClient",
+        lambda **kwargs: real_client(**(kwargs | {"transport": httpx.MockTransport(handler)})),
+    )
+    monkeypatch.setenv("ENCRYPTION_KEY", "x" * 32)
+    channel = cloud_api.from_env(dsn)
+    conn = await _sender_shaped_connection(dsn)
+    send = ClaimedSend(
+        outbox_id=uuid.uuid4(), organization_id=org, channel_type="whatsapp",
+        channel_external_id=selected.external_account_id, channel_account_id=selected.id,
+        to_phone_e164="+5511987654321", payload={"text": "selected"},
+        idempotency_key=str(uuid.uuid4()), attempt_count=1,
+        last_inbound_wamid="wamid.inbound-selected",
+    )
+    try:
+        if foreign:
+            with pytest.raises(RuntimeError):
+                await channel.send(conn, send)
+            assert seen == []
+        else:
+            await channel.mark_read_and_typing(conn, send)
+            assert await channel.send(conn, send) == "wamid.selected"
+            assert len(seen) == 2
+            assert all(url.endswith(f"/{selected.external_account_id}/messages")
+                       and token == "Bearer token-selected" for url, token in seen)
+    finally:
+        await conn.close()
+        await channel.aclose()
+    assert admin.execute(
+        "select has_function_privilege('sender_role',"
+        " 'internal.whatsapp_business_account_for_number(uuid,text)', 'execute'),"
+        " has_function_privilege('worker_role',"
+        " 'internal.whatsapp_business_account_for_number(uuid,text)', 'execute'),"
+        " has_function_privilege('authenticated',"
+        " 'internal.whatsapp_business_account_for_number(uuid,text)', 'execute')",
+    ).fetchone() == (True, False, False)

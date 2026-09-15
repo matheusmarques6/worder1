@@ -216,6 +216,11 @@ describe('fallback síncrono (QStash indisponível) — claim compartilhado com 
     expect(claimAiPendingResponse).toHaveBeenNthCalledWith(1, CONVERSATION_ID);
     expect(claimAiPendingResponse).toHaveBeenNthCalledWith(2, CONVERSATION_ID);
     expect(maybeRunAgentForCloudConversation).toHaveBeenCalledTimes(1);
+    expect(maybeRunAgentForCloudConversation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        account: expect.objectContaining({ id: ACCOUNT_ID, organization_id: ORG }),
+      }),
+    );
   });
 
   it('claim não obtido: nem chama o runner nem libera (não havia claim seu pra liberar)', async () => {

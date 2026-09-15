@@ -362,6 +362,7 @@ def build_responder(
                     conn,
                     organization_id=job.organization_id,
                     conversation_id=job.conversation_id,
+                    channel_account_id=job.channel_account_id,
                 )
                 custom_rows = await custom_tools_repo.load_enabled_custom_tools(conn)
                 key_rows = (
@@ -401,6 +402,7 @@ def build_responder(
                         detail=step_detail,
                         agent_id=version.agent_id,
                         conversation_id=job.conversation_id,
+                        channel_account_id=job.channel_account_id,
                     )
                 except Exception:  # adereço nunca vira causa de morte do turno
                     logger.debug("run-step emit failed", exc_info=True)
@@ -431,6 +433,7 @@ def build_responder(
                     organization_id=job.organization_id,
                     conversation_id=job.conversation_id,
                     reason="handoff_keyword",
+                    channel_account_id=job.channel_account_id,
                     severity="warning",
                     title="Cliente pediu atendimento humano — IA transferida",
                     payload={"keyword": handoff.keyword},
@@ -485,6 +488,7 @@ def build_responder(
                         organization_id=job.organization_id,
                         conversation_id=job.conversation_id,
                         reason="media_handoff",
+                        channel_account_id=job.channel_account_id,
                         severity="warning",
                         title="Cliente enviou mídia que a IA não interpreta — IA transferida",
                         payload={"media_kind": speechless},
@@ -802,6 +806,7 @@ def build_responder(
                         organization_id=job.organization_id,
                         conversation_id=job.conversation_id,
                         reason="blocked_topic",
+                        channel_account_id=job.channel_account_id,
                         severity="critical",
                         title="Resposta tocou num assunto proibido — nada foi enviado",
                         # Mesma regra do veto do Judge 1: o bloqueio segura o
@@ -838,6 +843,7 @@ async def transfer_to_human(
     severity: str,
     title: str,
     payload: dict,
+    channel_account_id: UUID | None = None,
 ) -> bool:
     """Tira a IA de cena e registra — devolvendo se a marca PEGOU.
 
@@ -867,6 +873,7 @@ async def transfer_to_human(
             organization_id=organization_id,
             conversation_id=conversation_id,
             reason=reason,
+            channel_account_id=channel_account_id,
         )
         await alerts_repo.open_alert(
             conn,

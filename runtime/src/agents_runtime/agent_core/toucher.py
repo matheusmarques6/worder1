@@ -199,6 +199,7 @@ def build_toucher(
                     conn,
                     organization_id=job.organization_id,
                     conversation_id=job.conversation_id,
+                    channel_account_id=job.channel_account_id,
                 )
                 # E3 — o toque também fala com quem já comprou (ou nunca
                 # comprou): mesmo dado fixo do responder, mesma decisão 81b.
@@ -245,6 +246,7 @@ def build_toucher(
                         detail=step_detail,
                         agent_id=version.agent_id,
                         conversation_id=job.conversation_id,
+                        channel_account_id=job.channel_account_id,
                     )
                 except Exception:  # adereço nunca vira causa de morte do turno
                     logger.debug("run-step emit failed", exc_info=True)
@@ -540,6 +542,7 @@ def build_toucher(
                         organization_id=job.organization_id,
                         conversation_id=job.conversation_id,
                         reason="blocked_topic",
+                        channel_account_id=job.channel_account_id,
                         severity="critical",
                         title="Toque tocou num assunto proibido — nada foi enviado",
                         payload={

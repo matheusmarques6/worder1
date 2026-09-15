@@ -331,7 +331,8 @@ async def load_recent_transcript(
 
 
 async def load_legacy_guard_state(
-    conn: psycopg.AsyncConnection, *, organization_id: UUID, conversation_id: UUID
+    conn: psycopg.AsyncConnection, *, organization_id: UUID, conversation_id: UUID,
+    channel_account_id: UUID | None = None,
 ) -> GuardState:
     """O estado que os guards de comportamento leem (auditoria item 30).
 
@@ -347,8 +348,8 @@ async def load_legacy_guard_state(
     o bot não respondeu, nenhum humano falou, e o bot segue ligado.
     """
     cursor = await conn.execute(
-        "select * from internal.legacy_conversation_guard_state(%s, %s)",
-        (organization_id, conversation_id),
+        "select * from internal.legacy_conversation_guard_state(%s, %s, %s)",
+        (organization_id, conversation_id, channel_account_id),
     )
     row = await cursor.fetchone()
     if row is None:
@@ -369,6 +370,7 @@ async def mark_ai_handoff(
     organization_id: UUID,
     conversation_id: UUID,
     reason: str,
+    channel_account_id: UUID | None = None,
 ) -> bool:
     """Transfere a conversa para humano no espelho legado (item 30).
 
@@ -377,7 +379,7 @@ async def mark_ai_handoff(
     transferência vale para os turnos SEGUINTES e não só para este.
     """
     cursor = await conn.execute(
-        "select internal.mark_ai_handoff(%s, %s, %s)",
-        (organization_id, conversation_id, reason),
+        "select internal.mark_ai_handoff(%s, %s, %s, %s)",
+        (organization_id, conversation_id, reason, channel_account_id),
     )
     return bool((await cursor.fetchone())[0])

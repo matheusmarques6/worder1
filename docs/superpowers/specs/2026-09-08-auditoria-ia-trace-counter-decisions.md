@@ -36,6 +36,8 @@ Impacto: o produto deixa de sugerir atividade atual a partir de `total_messages`
 
 ## Retenção, destino e dependências
 
+A implementação W2-T5 usa a migration `supabase/migrations/20260915010000_account_scoped_conversation_bridge.sql`: `p_waba_id uuid` identifica `whatsapp_business_accounts.id`, e `channel_account_id` acompanha o job, o turno e a outbox. O aceite independente da ponte continua sendo requisito para o transporte de trace.
+
 Retenção: nenhuma linha ou conteúdo novo neste lote; a retenção existente permanece inalterada. Futuro trace aceito usa somente o destino existente `agent_traces`, depois de consumidor e transporte aprovados. Segredos e headers nunca são retidos. Não copiar conteúdo para `internal.llm_calls` nem alterar histórico.
 
 Task 3 bloqueada, não implementada: exige consumidor/dono confirmado de `agent_trace_annotations`, plano filho `docs/superpowers/plans/2026-09-08-auditoria-ia-accepted-trace-transport.md` aprovado e executado, e ponte multi-WABA W2-T5 implementada e aceita. `selected_attempt` sozinho não autoriza persistência. Critérios futuros incluem transporte até commit/CAS, retry idempotente, vínculo tenant/WABA correto e custo das tentativas perdedoras preservado. Não se cria o plano filho neste lote.

@@ -11,6 +11,10 @@ def test_touch_identity_survives_transport_replay() -> None:
         "conversation_id": "33333333-3333-3333-3333-333333333333",
         "touch_id": "44444444-4444-4444-8444-444444444444",
         "event_family": "cart.abandoned",
+        "channel_account_id": "55555555-5555-4555-8555-555555555555",
     }
 
     assert MissionTouchJob.from_payload(payload).touch_id == UUID(payload["touch_id"])
+    assert MissionTouchJob.from_payload(payload).channel_account_id == UUID(
+        payload["channel_account_id"]
+    )

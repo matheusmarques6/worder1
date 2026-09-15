@@ -532,6 +532,7 @@ async function processMessage(
           ingestContent.caption = mediaCaption ?? null;
         }
         const { error: ingestError } = await supabase.rpc('ingest_inbound_message', {
+          p_waba_id: account.id,
           p_organization_id: account.organization_id,
           p_channel: 'whatsapp',
           p_external_id: String(phoneNumber ?? ''),

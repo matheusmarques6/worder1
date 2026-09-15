@@ -357,6 +357,7 @@ describe('org migrada (runtime) — o caminho canônico', () => {
 
     expect(ingestCalls()).toHaveLength(1);
     expect(ingestCalls()[0].args).toMatchObject({
+      p_waba_id: ACCOUNT_ID,
       p_organization_id: ORG,
       p_channel: 'whatsapp',
       p_provider_message_id: 'wamid.TESTE1',

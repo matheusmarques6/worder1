@@ -18,12 +18,18 @@ from psycopg.types.json import Jsonb
 
 from agents_runtime.queueing.jobs import MissionTouchJob
 from tests.db.conftest import TwoTenants, as_app_role
-from tests.db.factories import create_contact, create_mission, create_tenant
+from tests.db.factories import (
+    create_channel_account,
+    create_contact,
+    create_mission,
+    create_tenant,
+)
 
 
 @pytest.fixture
 def org(admin: psycopg.Connection) -> uuid.UUID:
     organization_id = create_tenant(admin)
+    create_channel_account(admin, organization_id)
     admin.execute(
         "insert into public.ai_runtime_rollout (organization_id, mode)"
         " values (%s, 'runtime')",

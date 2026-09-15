@@ -154,8 +154,8 @@ def create_message(
             """
             insert into public.messages
                 (organization_id, conversation_id, direction, seq, channel, author_type,
-                 content, provider_message_id)
-            values (%s, %s, %s, %s, 'whatsapp', %s, %s, %s)
+                 content, provider_message_id, channel_account_id)
+            values (%s, %s, %s, %s, 'whatsapp', %s, %s, %s, %s)
             returning id
             """,
             (
@@ -166,6 +166,7 @@ def create_message(
                 "contact" if direction == "inbound" else "agent",
                 psycopg.types.json.Jsonb(content if content is not None else {"text": text}),
                 provider_message_id,
+                thread.channel_account_id,
             ),
         )
         (message_id,) = cur.fetchone()

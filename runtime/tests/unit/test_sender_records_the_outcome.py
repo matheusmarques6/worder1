@@ -46,6 +46,7 @@ def _a_claimed_send(channel_type: str = "email") -> ClaimedSend:
         payload={"text": "Uma bolha só."},
         idempotency_key="k-47",
         attempt_count=0,
+        channel_account_id=uuid.UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
     )
 
 
@@ -176,6 +177,9 @@ class TestTheChipTheMerchantReadsDoesNotPromiseAReturnThatWontHappen:
         _, chips = await _run_held_pass(monkeypatch, requeued=False)
 
         assert [chip["step"] for chip in chips] == ["failed"]
+        assert chips[0]["channel_account_id"] == uuid.UUID(
+            "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        )
         assert "retomando" not in chips[0]["detail"]
         assert "não sai sozinha" in chips[0]["detail"]
 

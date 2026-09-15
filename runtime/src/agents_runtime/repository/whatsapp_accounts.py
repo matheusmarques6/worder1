@@ -1,4 +1,7 @@
-"""A conta WhatsApp Cloud API ativa da org — via porta SECURITY DEFINER
+"""A conta WhatsApp Cloud API da org e do número exato da outbox.
+
+Sem número, a porta legada só aceita uma conta ativa; nunca escolhe entre duas.
+As credenciais continuam restritas ao sender via porta SECURITY DEFINER
 (migration 20260901000001), no mesmo molde de `internal.active_shopify_store`
 (stores.py): `whatsapp_business_accounts` é legada, sem RLS, e guarda o token
 em DUAS colunas possíveis — `sender_role` não tem SELECT nela. A função valida
@@ -46,24 +49,47 @@ class WhatsAppAccountRow:
 
 
 async def load_active_account(
-    conn: psycopg.AsyncConnection, *, organization_id: UUID
+    conn: psycopg.AsyncConnection, *, organization_id: UUID,
+    channel_external_id: str | None = None,
 ) -> WhatsAppAccountRow | None:
     """Escopa a org NESTA operação, dentro da própria função — não confia em
     nenhum chamador ter escopado a conexão por fora (a do sender não escopa;
     ver docstring do módulo)."""
     async with conn.transaction():
         await scope_to_organization(conn, organization_id)
-        cursor = await conn.execute(
-            "select id, phone_number_id, access_token, access_token_encrypted"
-            " from internal.active_whatsapp_business_account(%s)",
-            (organization_id,),
-        )
+        if channel_external_id is None:
+            cursor = await conn.execute(
+                "select * from internal.active_whatsapp_business_account(%s)",
+                (organization_id,),
+            )
+        else:
+            cursor = await conn.execute(
+                "select * from internal.whatsapp_business_account_for_number(%s, %s)",
+                (organization_id, channel_external_id),
+            )
         row = await cursor.fetchone()
     if row is None:
         return None
     return WhatsAppAccountRow(
         id=row[0], phone_number_id=row[1], access_token=row[2], access_token_encrypted=row[3]
     )
+
+
+async def resolve_account_id(
+    conn: psycopg.AsyncConnection, *, organization_id: UUID, conversation_id: UUID,
+    channel_account_id: UUID | None,
+) -> UUID | None:
+    """Resolve old jobs once, in the worker's scoped phase-one transaction."""
+    cursor = await conn.execute(
+        "select case when coalesce(last_channel, 'whatsapp') = 'whatsapp'"
+        " then internal.resolve_whatsapp_account(%s, %s) end"
+        " from public.conversations where id=%s and organization_id=%s",
+        (organization_id, channel_account_id, conversation_id, organization_id),
+    )
+    row = await cursor.fetchone()
+    if row is None:
+        raise ValueError(f"conversation {conversation_id} is not this tenant's")
+    return row[0]
 
 
 def resolve_token(account: WhatsAppAccountRow, *, base_secret: str) -> str:

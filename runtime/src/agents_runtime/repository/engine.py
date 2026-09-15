@@ -107,6 +107,7 @@ async def conclude_turn(
     moment_ids: tuple[UUID, ...] = (),
     otel: dict[str, Any] | None = None,
     require_runtime: bool = False,
+    channel_account_id: UUID | None = None,
 ) -> TurnOutcome:
     """`content=None` means Judge 1 refused the draft: the turn concludes, the
     sequence advances and NOTHING goes out (S8, migration 20260803000003).
@@ -114,7 +115,8 @@ async def conclude_turn(
     para o preflight do sender (migrations 0007/0008). `otel` é o carrier do
     turno — a linha de outbox o carrega até o sender (9.1b, migration 0012)."""
     cursor = await conn.execute(
-        "select * from internal.conclude_turn(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+        "select * from internal.conclude_turn"
+        "(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
         (
             conversation_id,
             token,
@@ -130,6 +132,7 @@ async def conclude_turn(
             list(moment_ids),
             Jsonb(otel) if otel is not None else None,
             require_runtime,
+            channel_account_id,
         ),
     )
     committed, outbound_seq, outbox_id = await cursor.fetchone()
@@ -224,6 +227,7 @@ async def claim_outbox_batch(
             moment_ids=tuple(row[9] or ()),
             otel=row[10],
             last_inbound_wamid=row[11],
+            channel_account_id=row[12],
         )
         for row in await cursor.fetchall()
     ]
@@ -349,10 +353,11 @@ async def mirror_outbound_to_inbox(
     to_phone: str,
     wamid: str,
     text: str,
+    channel_account_id: UUID | None = None,
 ) -> bool:
     cursor = await conn.execute(
-        "select internal.mirror_outbound_to_inbox(%s, %s, %s, %s)",
-        (organization_id, to_phone, wamid, text),
+        "select internal.mirror_outbound_to_inbox(%s, %s, %s, %s, %s)",
+        (organization_id, to_phone, wamid, text, channel_account_id),
     )
     return bool((await cursor.fetchone())[0])
 
@@ -367,14 +372,16 @@ async def emit_ai_run_step(
     agent_id: UUID | None = None,
     conversation_id: UUID | None = None,
     phone: str | None = None,
+    channel_account_id: UUID | None = None,
 ) -> bool:
     """Um chip de progresso no chat do inbox (whatsapp_ai_run_steps, lida por
     Realtime). Resolve a conversa CLOUD pela canônica (worker) ou pelo telefone
     (sender). Adereço de UI: quem chama embrulha em try/except — um chip
     perdido jamais custa um turno."""
     cursor = await conn.execute(
-        "select internal.emit_ai_run_step(%s, %s, %s, %s, %s, null, %s, %s)",
-        (organization_id, run_id, step, detail, agent_id, conversation_id, phone),
+        "select internal.emit_ai_run_step(%s, %s, %s, %s, %s, null, %s, %s, %s)",
+        (organization_id, run_id, step, detail, agent_id, conversation_id, phone,
+         channel_account_id),
     )
     return bool((await cursor.fetchone())[0])
 

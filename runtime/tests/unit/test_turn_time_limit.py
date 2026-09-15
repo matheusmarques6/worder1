@@ -15,6 +15,7 @@ from agents_runtime.queueing import worker
 from agents_runtime.queueing.jobs import InboundJob, MissionTouchJob
 from agents_runtime.queueing.worker import TurnResult
 from agents_runtime.repository import scope as db_scope
+from agents_runtime.repository import whatsapp_accounts
 
 
 class _Transaction:
@@ -81,6 +82,10 @@ class _RealTransactionConnection(_Connection):
 
 @pytest.fixture
 def engine(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
+    monkeypatch.setattr(
+        whatsapp_accounts, "resolve_account_id",
+        AsyncMock(return_value=UUID("00000000-0000-4000-8000-000000000805")),
+    )
     mocked = SimpleNamespace(
         runtime_rollout_is_enabled=AsyncMock(return_value=True),
         scope_to_organization=AsyncMock(),

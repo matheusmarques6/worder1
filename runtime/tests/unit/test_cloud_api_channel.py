@@ -44,7 +44,7 @@ def a_send(**overrides) -> ClaimedSend:
 
 
 def channel_answering(handler, *, token: str = "token-de-teste") -> CloudApiChannel:
-    async def load_token(conn, organization_id) -> str:
+    async def load_token(conn, organization_id, channel_external_id) -> str:
         return token
 
     return CloudApiChannel(load_token=load_token, transport=httpx.MockTransport(handler))
@@ -95,9 +95,11 @@ async def test_each_send_asks_the_loader_for_that_sends_organization() -> None:
     """`load_token` recebe a org de CADA linha — duas orgs na mesma fila
     nunca podem compartilhar a credencial que uma delas resolveu."""
     seen_orgs: list[uuid.UUID] = []
+    seen_numbers: list[str] = []
 
-    async def load_token(conn, organization_id) -> str:
+    async def load_token(conn, organization_id, channel_external_id) -> str:
         seen_orgs.append(organization_id)
+        seen_numbers.append(channel_external_id)
         return f"token-{organization_id}"
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -106,10 +108,11 @@ async def test_each_send_asks_the_loader_for_that_sends_organization() -> None:
     channel = CloudApiChannel(load_token=load_token, transport=httpx.MockTransport(handler))
     org_a, org_b = uuid.uuid4(), uuid.uuid4()
 
-    await channel.send(None, a_send(organization_id=org_a))
-    await channel.send(None, a_send(organization_id=org_b))
+    await channel.send(None, a_send(organization_id=org_a, channel_external_id="number-A"))
+    await channel.send(None, a_send(organization_id=org_b, channel_external_id="number-B"))
 
     assert seen_orgs == [org_a, org_b]
+    assert seen_numbers == ["number-A", "number-B"]
 
 
 async def test_the_idempotency_key_travels_in_the_opaque_field() -> None:
@@ -325,7 +328,7 @@ async def test_a_malformed_payload_never_reached_the_provider() -> None:
 
 
 async def test_a_token_that_does_not_open_never_reached_the_provider() -> None:
-    async def load_token(conn, organization_id) -> str:
+    async def load_token(conn, organization_id, channel_external_id) -> str:
         raise RuntimeError("conta whatsapp sem token (nem cifrado, nem legado)")
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -367,7 +370,7 @@ def channel_knowing(handler, shape, *, token: str = "token-de-teste") -> CloudAp
     ruling C, que manda como sempre mandou.
     """
 
-    async def load_token(conn, organization_id) -> str:
+    async def load_token(conn, organization_id, channel_external_id) -> str:
         return token
 
     async def load_template_shape(conn, organization_id, name, language):
@@ -526,7 +529,7 @@ async def test_the_template_lookup_asks_for_the_sends_own_name_and_language() ->
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"messages": [{"id": "wamid.T"}]})
 
-    async def load_token(conn, organization_id) -> str:
+    async def load_token(conn, organization_id, channel_external_id) -> str:
         return "t"
 
     channel = CloudApiChannel(

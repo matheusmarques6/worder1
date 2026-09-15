@@ -15,6 +15,7 @@ non-happening: a long turn with the keepalive breathing ends with read_ct 1.
 import asyncio
 import logging
 import uuid
+from dataclasses import replace
 from enum import Enum
 
 import psycopg
@@ -24,7 +25,7 @@ from agents_runtime.config import QueueingConfig
 from agents_runtime.obs import carrier
 from agents_runtime.obs.telemetry import annotate, span
 from agents_runtime.queueing.jobs import InboundJob, MissionTouchJob
-from agents_runtime.repository import engine
+from agents_runtime.repository import engine, whatsapp_accounts
 from agents_runtime.repository.queue import PgmqQueue
 from agents_runtime.repository.scope import abort_connection
 
@@ -253,6 +254,10 @@ async def _turn(
         await engine.scope_to_organization(conn, job.organization_id)
         if not await engine.runtime_rollout_is_enabled(conn, job.organization_id):
             return TurnResult.SUPERSEDED
+        job = replace(job, channel_account_id=await whatsapp_accounts.resolve_account_id(
+            conn, organization_id=job.organization_id, conversation_id=job.conversation_id,
+            channel_account_id=job.channel_account_id,
+        ))
         claimed = await engine.claim_conversation(
             conn, job.conversation_id, token, lease=config.conversation_lease
         )
@@ -329,6 +334,7 @@ async def _turn(
             # coalescer segue viagem — o sender retoma o que houver.
             otel=carrier.inject() or job.otel,
             require_runtime=True,
+            channel_account_id=job.channel_account_id,
         )
 
     if outcome.committed:
@@ -389,6 +395,10 @@ async def _touch(
     # FASE 1 — claim + alvos do CAS, uma transação curta.
     async with conn.transaction():
         await engine.scope_to_organization(conn, job.organization_id)
+        job = replace(job, channel_account_id=await whatsapp_accounts.resolve_account_id(
+            conn, organization_id=job.organization_id, conversation_id=job.conversation_id,
+            channel_account_id=job.channel_account_id,
+        ))
         claimed = await engine.claim_conversation(
             conn, job.conversation_id, token, lease=config.conversation_lease
         )
@@ -458,6 +468,7 @@ async def _touch(
             content=draft.content,
             idempotency_key=idempotency_key,
             kind="funnel_touch",
+            channel_account_id=job.channel_account_id,
             moment_ids=draft.moment_ids,
             otel=carrier.inject() or job.otel,
         )

@@ -397,6 +397,7 @@ async def sender_pass(
                             " registrado: esta resposta não sai sozinha"
                         ),
                         phone=send.to_phone_e164,
+                        channel_account_id=send.channel_account_id,
                     )
                 except psycopg.Error:
                     pass
@@ -426,6 +427,7 @@ async def sender_pass(
                     step="sending",
                     detail="Enviando resposta",
                     phone=send.to_phone_e164,
+                    channel_account_id=send.channel_account_id,
                 )
             except psycopg.Error:
                 pass
@@ -507,6 +509,7 @@ async def sender_pass(
                         step="failed",
                         detail="Falha no envio da resposta",
                         phone=send.to_phone_e164,
+                        channel_account_id=send.channel_account_id,
                     )
                 except psycopg.Error:
                     pass
@@ -562,6 +565,7 @@ async def sender_pass(
                         send.to_phone_e164,
                         wamid,
                         bubble,
+                        channel_account_id=send.channel_account_id,
                     )
                 except psycopg.Error:
                     # O canônico já registrou o envio; o espelho se
@@ -576,6 +580,7 @@ async def sender_pass(
                     step="sent",
                     detail="Resposta enviada",
                     phone=send.to_phone_e164,
+                    channel_account_id=send.channel_account_id,
                 )
             except psycopg.Error:
                 pass
