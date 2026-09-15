@@ -405,9 +405,6 @@ export async function runEvaluation(
   const cases = (caseRows ?? []) as CaseRow[]
   if (cases.length === 0) return
 
-  // Budget check: 402 via AiBudgetExceededError (caller/rota captura)
-  await checkAiBudget(orgId, { throwOnExceeded: true })
-
   const judge = await resolveJudgeKey(supabase, orgId, agent.provider)
   if (!judge) return
   const apiKey = judge.apiKey
@@ -419,6 +416,7 @@ export async function runEvaluation(
     const output = await resolveJudgedOutput(supabase, agent.id, orgId, c)
     if (output === null) continue // sem resposta armazenada → não há o que julgar
 
+    await checkAiBudget(orgId, { throwOnExceeded: true })
     let verdict
     try {
       verdict = await judgeCase({
@@ -441,8 +439,19 @@ export async function runEvaluation(
         completionTokens: verdict.usage?.completionTokens,
         costUsdOverride: verdict.usage?.costUsd,
         success: true,
+        metadata: { billable: true },
       })
     } catch {
+      await trackAiUsage({
+        organizationId: orgId,
+        provider,
+        model: judgeModel,
+        feature: 'eval_judge',
+        agentId: agent.id,
+        costUsdOverride: null,
+        success: false,
+        metadata: { billable: true },
+      })
       verdict = {
         score: 0,
         verdict: 'fail' as const,

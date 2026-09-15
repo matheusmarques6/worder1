@@ -290,7 +290,8 @@ function _setCached(organizationId: string, result: BudgetCheckResult) {
   cache.set(organizationId, { result, expiresAt: Date.now() + CACHE_TTL_MS })
 }
 
-/** Limpa cache (útil em testes) */
-export function clearBudgetCache() {
-  cache.clear()
+/** Invalida uma organização após consumo; sem argumento, limpa tudo (testes). */
+export function clearBudgetCache(organizationId?: string) {
+  if (organizationId !== undefined) cache.delete(organizationId)
+  else cache.clear()
 }

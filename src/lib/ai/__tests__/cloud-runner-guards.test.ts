@@ -56,6 +56,17 @@ vi.mock('../cloud-sender', () => ({
   sendHumanizedReply: (...args: any[]) => mockSendHumanizedReply(...args),
 }))
 
+const mockResolveSttConfig = vi.fn()
+const mockTranscribeAudio = vi.fn()
+const mockFetchInboundMedia = vi.fn()
+vi.mock('../media/transcription', () => ({
+  resolveSttConfig: (...args: any[]) => mockResolveSttConfig(...args),
+  transcribeAudio: (...args: any[]) => mockTranscribeAudio(...args),
+}))
+vi.mock('../media/fetch-media', () => ({
+  fetchInboundMedia: (...args: any[]) => mockFetchInboundMedia(...args),
+}))
+
 vi.mock('@/lib/whatsapp/alerts', () => ({
   sendAlert: vi.fn(async () => {}),
 }))
@@ -68,6 +79,7 @@ import {
   maybeRunAgentForCloudConversation,
   releaseAiPendingClaim,
 } from '../cloud-runner'
+import { AiBudgetExceededError, AiBudgetUnavailableError } from '../budget'
 
 const account = {
   id: 'waba-1',
@@ -124,7 +136,91 @@ beforeEach(() => {
   mockRpc.mockReset()
   mockCreateAgentEngine.mockReset()
   mockSendHumanizedReply.mockReset()
+  mockResolveSttConfig.mockReset()
+  mockTranscribeAudio.mockReset()
+  mockFetchInboundMedia.mockReset()
   mockRpc.mockResolvedValue({ data: [{ agent_id: 'agent-1' }], error: null })
+})
+
+describe('cloud-runner — orçamento da transcrição', () => {
+  function prepare(mode: 'handoff' | 'ask_text') {
+    queueResult('ai_agents', { data: agentRow({ settings: { media_fallback: { mode } } }) })
+    queueResult('whatsapp_cloud_messages', { data: null }) // última resposta do bot
+    queueResult('whatsapp_cloud_messages', { data: null }) // resposta humana
+    queueResult('organization_api_keys', { data: { api_key: 'sk-test', is_active: true } })
+    mockResolveSttConfig.mockResolvedValue({ provider: 'openai', model: 'whisper-1', apiKey: 'sk-test' })
+    mockFetchInboundMedia.mockResolvedValue({ buffer: Buffer.from('audio'), mimeType: 'audio/ogg' })
+    mockSendHumanizedReply.mockResolvedValue({ sent: true })
+    return {
+      account, conversation: conv(), text: '', messageType: 'audio',
+      inboundMedia: { type: 'audio' as const, storagePath: 'org-1/audio.ogg', mediaUrl: null, mimeType: 'audio/ogg', caption: null },
+    }
+  }
+
+  it.each(['handoff', 'ask_text'] as const)('503 é transitório sem fallback %s ou desativação', async (mode) => {
+    const params = prepare(mode)
+    const error = new AiBudgetUnavailableError('lookup_error')
+    mockTranscribeAudio.mockRejectedValue(error)
+
+    const result = await maybeRunAgentForCloudConversation(params)
+
+    expect(mockTranscribeAudio).toHaveBeenCalledOnce()
+    expect(result).toEqual({ replied: false, transferred: false, agentId: 'agent-1', failure: 'transient', error: error.message })
+    expect(findUpdate('whatsapp_cloud_conversations')).toBeUndefined()
+    expect(calls.some((c) => c.table === 'notifications' && c.method === 'insert')).toBe(false)
+    expect(mockSendHumanizedReply).not.toHaveBeenCalled()
+    expect(mockCreateAgentEngine).not.toHaveBeenCalled()
+  })
+
+  it.each(['handoff', 'ask_text'] as const)('402 é budget_exceeded, não fallback %s', async (mode) => {
+    const params = prepare(mode)
+    mockTranscribeAudio.mockRejectedValue(new AiBudgetExceededError(50, 50))
+
+    const result = await maybeRunAgentForCloudConversation(params)
+
+    expect(mockTranscribeAudio).toHaveBeenCalledOnce()
+    expect(result).toEqual({ replied: false, transferred: false, agentId: 'agent-1', skipped: 'budget_exceeded' })
+    expect(findUpdate('whatsapp_cloud_conversations')?.args[0]).toEqual({
+      ai_enabled: false, ai_disabled_at: expect.any(String), ai_disabled_reason: 'budget_exceeded',
+    })
+    expect(calls.some((c) => c.table === 'notifications' && c.method === 'insert')).toBe(false)
+    expect(mockSendHumanizedReply).not.toHaveBeenCalled()
+    expect(mockCreateAgentEngine).not.toHaveBeenCalled()
+  })
+
+  it.each(['handoff', 'ask_text'] as const)('erro comum de transcrição preserva fallback %s', async (mode) => {
+    const params = prepare(mode)
+    mockTranscribeAudio.mockRejectedValue(new Error('invalid audio'))
+
+    const result = await maybeRunAgentForCloudConversation(params)
+
+    expect(result.transferred).toBe(mode === 'handoff')
+    expect(result.replied).toBe(mode === 'ask_text')
+    expect(result.failure).toBeUndefined()
+    if (mode === 'handoff') {
+      expect(findUpdate('whatsapp_cloud_conversations')?.args[0].ai_disabled_reason).toBe('media_handoff')
+    } else {
+      expect(mockSendHumanizedReply).toHaveBeenCalledOnce()
+      expect(findUpdate('whatsapp_cloud_conversations')).toBeUndefined()
+    }
+  })
+
+  it('preserva budget_exceeded lançado pelo engine', async () => {
+    const params = prepare('handoff')
+    queueResult('whatsapp_cloud_messages', { data: [] })
+    mockCreateAgentEngine.mockResolvedValue({
+      processMessage: vi.fn().mockRejectedValue(new AiBudgetExceededError(50, 50)),
+    })
+
+    const result = await maybeRunAgentForCloudConversation({ ...params, text: 'Olá', messageType: 'text' })
+
+    expect(result).toEqual({ replied: false, transferred: false, agentId: 'agent-1', skipped: 'budget_exceeded' })
+    expect(findUpdate('whatsapp_cloud_conversations')?.args[0]).toEqual({
+      ai_enabled: false, ai_disabled_at: expect.any(String), ai_disabled_reason: 'budget_exceeded',
+    })
+    expect(mockTranscribeAudio).not.toHaveBeenCalled()
+    expect(mockSendHumanizedReply).not.toHaveBeenCalled()
+  })
 })
 
 describe('cloud-runner — claim legado', () => {

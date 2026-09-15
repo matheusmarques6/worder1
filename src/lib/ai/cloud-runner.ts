@@ -27,7 +27,7 @@ import { createAgentEngine } from './engine';
 import type { EngineMessage } from './types';
 import type { ToolContext } from './tools/types';
 import { sendHumanizedReply } from './cloud-sender';
-import { AiBudgetExceededError } from './budget';
+import { AiBudgetExceededError, AiBudgetUnavailableError } from './budget';
 import { classifyAiFailure } from './failure-classifier';
 import { sendAlert } from '@/lib/whatsapp/alerts';
 import { wlog } from '@/lib/observability/whatsapp-logger';
@@ -509,6 +509,29 @@ export async function maybeRunAgentForCloudConversation(
     return r;
   };
 
+  // Mesma política de orçamento para transcrição e engine; nunca é handoff de mídia.
+  const stopForExceededBudget = async (): Promise<CloudRunnerResult> => {
+    await step(AI_RUN_STEPS.FAILED, 'Orçamento de IA excedido — agente desativado');
+    await supabaseAdmin
+      .from('whatsapp_cloud_conversations')
+      .update({
+        ai_enabled: false,
+        ai_disabled_at: new Date().toISOString(),
+        ai_disabled_reason: 'budget_exceeded',
+      })
+      .eq('id', conversation.id);
+    console.warn(
+      `[cloud-runner] budget_exceeded — org=${organizationId} agent=${agentId} ` +
+        `conversation=${conversation.id}. IA desabilitada até renovacao do orcamento.`,
+    );
+    return {
+      replied: false,
+      transferred: false,
+      agentId,
+      skipped: 'budget_exceeded',
+    };
+  };
+
   // ---------- activate_on: 'manual' NUNCA dispara automaticamente ----------
   // Mecanismo de ativação manual JÁ existe: POST /api/whatsapp/inbox/
   // conversations/[id]/bot com ai_agent_id grava conversation.ai_agent_id.
@@ -727,6 +750,18 @@ export async function maybeRunAgentForCloudConversation(
         mimeType: fetched.mimeType,
       });
     } catch (sttErr: any) {
+      if (sttErr instanceof AiBudgetExceededError) return stopForExceededBudget();
+      // Falha de verificação do orçamento deve permitir retry do worker, sem
+      // transformar indisponibilidade temporária em resposta/handoff de mídia.
+      if (sttErr instanceof AiBudgetUnavailableError) {
+        return finish({
+          replied: false,
+          transferred: false,
+          agentId,
+          failure: 'transient',
+          error: sttErr.message,
+        });
+      }
       wlog.warn('whatsapp.ai.transcription_failed', {
         organization_id: organizationId,
         conversation_id: conversation.id,
@@ -865,25 +900,7 @@ export async function maybeRunAgentForCloudConversation(
     // Budget excedido: silenciar + marcar conversa para revisão humana.
     // NÃO é falha permanente — budget pode renovar no próximo mês.
     if (engineErr instanceof AiBudgetExceededError) {
-      await step(AI_RUN_STEPS.FAILED, 'Orçamento de IA excedido — agente desativado');
-      await supabaseAdmin
-        .from('whatsapp_cloud_conversations')
-        .update({
-          ai_enabled: false,
-          ai_disabled_at: new Date().toISOString(),
-          ai_disabled_reason: 'budget_exceeded',
-        })
-        .eq('id', conversation.id);
-      console.warn(
-        `[cloud-runner] budget_exceeded — org=${organizationId} agent=${agentId} ` +
-          `conversation=${conversation.id}. IA desabilitada até renovacao do orcamento.`,
-      );
-      return {
-        replied: false,
-        transferred: false,
-        agentId,
-        skipped: 'budget_exceeded',
-      };
+      return stopForExceededBudget();
     }
 
     const failureClass = classifyAiFailure(engineErr);

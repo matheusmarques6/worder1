@@ -11,6 +11,7 @@
 // =============================================
 
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { clearBudgetCache } from './budget'
 
 // =============================================
 // Preços em USD por 1M tokens (snapshot 2026-04).
@@ -149,6 +150,7 @@ export async function trackAiUsage(input: TrackAiUsageInput): Promise<void> {
       metadata: input.metadata || {},
     })
     if (error) throw error
+    if (input.metadata?.billable !== false) clearBudgetCache(input.organizationId)
   } catch (err: any) {
     // Não bloquear fluxo de IA se logging falhar
     console.warn('[trackAiUsage]', err?.message)

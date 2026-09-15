@@ -15,6 +15,8 @@ import {
   AIMessageImage,
 } from '@/lib/whatsapp/ai-providers'
 import type { Tool, ToolContext, ToolResultPayload } from './types'
+import { checkAiBudget } from '../budget'
+import { trackAiUsage } from '../cost-tracker'
 
 export interface ToolLoopProviderConfig {
   provider: AIProvider
@@ -93,6 +95,15 @@ export async function runToolLoop(params: RunToolLoopParams): Promise<ToolLoopRe
 
   const toolMap = new Map(tools.map((t) => [t.name, t]))
   const providerTools = toProviderTools(tools)
+  const usageContext = {
+    organizationId: context.organizationId,
+    provider: providerConfig.provider,
+    model: providerConfig.model,
+    feature: 'whatsapp_agent',
+    agentId: context.agentId,
+    conversationId: context.conversationId,
+    metadata: { billable: true },
+  }
 
   // Histórico no formato neutro do loop. System vai como primeira msg 'system'.
   const loopMessages: ToolLoopMessage[] = [
@@ -133,6 +144,7 @@ export async function runToolLoop(params: RunToolLoopParams): Promise<ToolLoopRe
       }
     }
 
+    await checkAiBudget(context.organizationId, { throwOnExceeded: true })
     let step
     try {
       step = await callAIWithTools(
@@ -149,6 +161,7 @@ export async function runToolLoop(params: RunToolLoopParams): Promise<ToolLoopRe
         providerTools,
       )
     } catch (err: any) {
+      await trackAiUsage({ ...usageContext, costUsdOverride: null, success: false })
       // Erro de transporte/parse: abortar gracioso com o que temos.
       console.error('[tool-loop] erro na chamada ao provedor:', err?.message)
       return {
@@ -162,6 +175,14 @@ export async function runToolLoop(params: RunToolLoopParams): Promise<ToolLoopRe
         rateLimited: false,
       }
     }
+
+    await trackAiUsage({
+      ...usageContext,
+      promptTokens: step.usage?.promptTokens,
+      completionTokens: step.usage?.completionTokens,
+      costUsdOverride: step.usage?.costUsd,
+      success: !step.rateLimited,
+    })
 
     completedRounds++
     if (typeof step.usage?.totalTokens === 'number') totalTokens += step.usage.totalTokens
