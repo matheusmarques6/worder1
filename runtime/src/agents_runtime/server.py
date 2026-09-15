@@ -25,6 +25,7 @@ import hmac
 import json
 import logging
 from collections.abc import AsyncIterator
+from datetime import timedelta
 from typing import Any
 from uuid import UUID
 
@@ -40,14 +41,17 @@ from agents_runtime.agent_core.prompt_compiler import (
 )
 from agents_runtime.app import _connect
 from agents_runtime.commerce.moments import apply_moment_restrictions, resolve_moments
+from agents_runtime.config import QueueingConfig
 from agents_runtime.repository import agent as agent_repo
 from agents_runtime.repository import engine as engine_repo
 from agents_runtime.repository import missions as missions_repo
 from agents_runtime.repository import moments as moments_repo
 from agents_runtime.repository.scope import (
     WORKER_ROLE,
+    abort_connection,
     assert_rls_enforced,
     scope_to_organization,
+    set_statement_timeout,
 )
 
 logger = logging.getLogger(__name__)
@@ -106,7 +110,12 @@ async def _read_request(reader: asyncio.StreamReader) -> tuple[str, str, dict, b
 
 
 @contextlib.asynccontextmanager
-async def _connection(dsn: str, set_role: str | None) -> AsyncIterator[psycopg.AsyncConnection]:
+async def _connection(
+    dsn: str,
+    set_role: str | None,
+    *,
+    config: QueueingConfig | None = None,
+) -> AsyncIterator[psycopg.AsyncConnection]:
     """O ÚNICO lugar onde o listener abre conexão — com a guarda de RLS dentro.
 
     Eram dois lugares com `if set_role:` e nada mais: sem a env, ambos rodavam
@@ -114,9 +123,15 @@ async def _connection(dsn: str, set_role: str | None) -> AsyncIterator[psycopg.A
     chamava `scope_to_organization` sobre uma conexão para quem escopo não
     significa nada. Um ponto só para que o próximo endpoint não consiga escapar.
     """
-    async with await psycopg.AsyncConnection.connect(dsn, autocommit=True) as conn:
+    config = config or QueueingConfig()
+    async with await psycopg.AsyncConnection.connect(
+        dsn,
+        autocommit=True,
+        connect_timeout=config.connect_timeout_seconds,
+    ) as conn:
         if set_role:
             await conn.execute("set role " + set_role)
+        await set_statement_timeout(conn, config.statement_timeout_ms)
         # O listener lê como worker: a constante é do código, não da env.
         await assert_rls_enforced(conn, WORKER_ROLE)
         yield conn
@@ -166,20 +181,12 @@ class HealthConnection:
       lock um probe fica suspenso nela enquanto outro reabre e fecha a conexão
       que ele segurava, e a exceção sobe como 503 com o banco vivo.
 
-    Uma consequência do lock que o operador precisa saber: os probes agora
-    ENFILEIRAM. Nenhum caminho de banco do processo tem teto — nenhum DSN do
-    repositório carrega `connect_timeout`, nenhum role tem `statement_timeout`,
-    e o único `asyncio.wait_for` deste módulo é o do parse HTTP —, então um
-    socket pendurado segura todos os probes, e não só o dele como antes. Por que
-    não há um `wait_for` aqui: ele converteria "banco lento" em 503, que é
-    exatamente a mentira "doente" que este item existe para não contar, e o
-    buraco de timeout é do processo inteiro (pulse, workers e sender penduram
-    igual), não do healthz — consertar só esta boca deixaria os irmãos
-    pendurando. *A favor dele, para quem for reabrir a decisão:* o teto
-    desenfileiraria os probes, que é justamente o acoplamento acima. Está
-    registrado no item 48 com os dois lados, e como achado próprio — que tem
-    precedente escrito no repositório (`OBSERVABILIDADE-PLANO-V3.md:250` já
-    manda `ALTER ROLE … SET statement_timeout` para o role do Grafana).
+    Uma consequência do lock que o operador precisa saber: os probes
+    ENFILEIRAM. A decisão W3-TD-04 limita a sequência inteira em 4s, começando
+    antes desse lock e incluindo abertura, inicialização, leitura e eventual
+    reconexão. A conexão ainda tem seu teto próprio de 3s e cada statement,
+    15s; o menor orçamento vence. O probe expirado responde 503, libera o lock
+    e a tentativa seguinte reabre pela porta guardada quando a sessão caiu.
 
     O `/internal/preview-prompt` NÃO entra aqui: continua abrindo a sua por
     requisição, via `_connection`. Ele roda `scope_to_organization` dentro de
@@ -193,32 +200,77 @@ class HealthConnection:
         dsn: str,
         set_role: str | None,
         conn: psycopg.AsyncConnection | None = None,
+        *,
+        config: QueueingConfig | None = None,
     ) -> None:
         self._dsn = dsn
         self._set_role = set_role
+        self._config = config or QueueingConfig()
         #: `None` = ainda não aberta (ou fechada por queda). O primeiro probe abre.
         self._conn = conn
         self._lock = asyncio.Lock()
+        self._opening: psycopg.AsyncConnection | None = None
+        self._owner: asyncio.Task | None = None
+        self._active_probe: object | None = None
+        self._expired_probes: set[object] = set()
+        self._closed = False
 
-    async def beat_age_seconds(self) -> float | None:
+    @staticmethod
+    def _finish(conn: psycopg.AsyncConnection | None) -> None:
+        if conn is not None:
+            try:
+                abort_connection(conn)
+            except Exception:
+                logger.exception("healthz: falha ao invalidar conexão")
+
+    def expire(self, probe: object, owner: asyncio.Task) -> None:
+        self._expired_probes.add(probe)
+        if self._owner is not owner or self._active_probe is not probe:
+            return
+        self._finish(self._opening or self._conn)
+        self._conn = None
+
+    def finish_probe(self, probe: object) -> None:
+        self._expired_probes.discard(probe)
+
+    def _probe_expired(self) -> bool:
+        return (
+            self._active_probe is not None
+            and self._active_probe in self._expired_probes
+        )
+
+    async def beat_age_seconds(self, *, probe: object | None = None) -> float | None:
         """A idade do beat, reabrindo a conexão uma vez se ela tiver caído."""
         async with self._lock:
-            if self._conn is None:
-                await self._open()
+            if self._closed:
+                raise RuntimeError("health connection is closed")
+            if probe is not None and probe in self._expired_probes:
+                raise TimeoutError
+            self._owner = asyncio.current_task()
+            self._active_probe = probe
             try:
-                return await engine_repo.heartbeat_age_seconds(self._conn)
-            except Exception:
-                # Uma retentativa, e uma só: se a segunda estourar, a exceção
-                # sobe e vira o 503 — que aí é verdade, não sequela de sessão
-                # morta. O operador vê este WARNING uma vez por queda de sessão,
-                # não uma por probe: se ele estiver em toda linha do log, o que
-                # caiu não foi a sessão.
-                logger.warning(
-                    "healthz: a conexão longeva caiu; reabrindo pela porta guardada",
-                    exc_info=True,
-                )
-                await self._open()
-                return await engine_repo.heartbeat_age_seconds(self._conn)
+                if self._conn is None:
+                    await self._open()
+                try:
+                    age = await engine_repo.heartbeat_age_seconds(self._conn)
+                except Exception:
+                    # Uma retentativa, e uma só: se a segunda estourar, a exceção
+                    # sobe e vira o 503 — que aí é verdade, não sequela de sessão
+                    # morta. O operador vê este WARNING uma vez por queda de sessão,
+                    # não uma por probe: se ele estiver em toda linha do log, o que
+                    # caiu não foi a sessão.
+                    logger.warning(
+                        "healthz: a conexão longeva caiu; reabrindo pela porta guardada",
+                        exc_info=True,
+                    )
+                    await self._open()
+                    age = await engine_repo.heartbeat_age_seconds(self._conn)
+                if self._probe_expired():
+                    raise TimeoutError
+                return age
+            finally:
+                self._owner = None
+                self._active_probe = None
 
     async def _open(self) -> None:
         # Descarta a morta ANTES de abrir e zera o campo primeiro: se o
@@ -226,22 +278,69 @@ class HealthConnection:
         # conexão em vez de guardar uma inutilizável, e o próximo probe tenta do
         # zero em vez de repetir a mesma falha contra o mesmo cadáver.
         dead, self._conn = self._conn, None
-        if dead is not None:
-            with contextlib.suppress(Exception):
-                await dead.close()
-        self._conn = await _connect(self._dsn, self._set_role, WORKER_ROLE)
+        self._opening = dead
+        try:
+            if dead is not None:
+                with contextlib.suppress(Exception):
+                    await dead.close()
+            if self._closed or self._probe_expired():
+                raise TimeoutError
+
+            def remember(conn: psycopg.AsyncConnection) -> None:
+                if self._closed or self._probe_expired():
+                    self._finish(conn)
+                else:
+                    self._opening = conn
+
+            conn = await _connect(
+                self._dsn,
+                self._set_role,
+                WORKER_ROLE,
+                config=self._config,
+                on_open=remember,
+            )
+            if self._closed or self._probe_expired():
+                self._finish(conn)
+                raise TimeoutError
+            self._conn = conn
+        finally:
+            self._opening = None
 
     async def aclose(self) -> None:
-        async with self._lock:
-            conn, self._conn = self._conn, None
-            if conn is not None:
-                with contextlib.suppress(Exception):
-                    await conn.close()
+        self._closed = True
+        self._finish(self._opening or self._conn)
+        async with asyncio.timeout(self._config.cleanup_timeout.total_seconds()):
+            async with self._lock:
+                conn, self._conn = self._conn, None
+                self._opening = None
+                if conn is not None:
+                    with contextlib.suppress(Exception):
+                        await conn.close()
 
 
-async def _healthz(health: HealthConnection, *, max_age_s: float) -> bytes:
+async def _healthz(
+    health: HealthConnection,
+    *,
+    max_age_s: float,
+    probe_timeout: timedelta | None = None,
+) -> bytes:
+    loop = asyncio.get_running_loop()
+    timeout_seconds = (probe_timeout or QueueingConfig().probe_timeout).total_seconds()
+    owner = asyncio.current_task()
+    assert owner is not None
+    probe = object()
     try:
-        age = await health.beat_age_seconds()
+        async with asyncio.timeout(None) as budget:
+            def expire() -> None:
+                health.expire(probe, owner)
+                budget.reschedule(0)
+
+            timer = loop.call_later(timeout_seconds, expire)
+            try:
+                age = await health.beat_age_seconds(probe=probe)
+            finally:
+                timer.cancel()
+                health.finish_probe(probe)
     except Exception:
         logger.exception("healthz não alcançou o banco")
         return _response(503, {"status": "error", "detail": "database unreachable"})
@@ -267,7 +366,13 @@ def _serialize(compiled: CompiledPrompt) -> dict:
     }
 
 
-async def _preview(dsn: str, *, set_role: str | None, body: dict[str, Any]) -> bytes:
+async def _preview(
+    dsn: str,
+    *,
+    set_role: str | None,
+    body: dict[str, Any],
+    config: QueueingConfig | None = None,
+) -> bytes:
     try:
         organization_id = UUID(str(body["organization_id"]))
     except (KeyError, ValueError):
@@ -277,7 +382,7 @@ async def _preview(dsn: str, *, set_role: str | None, body: dict[str, Any]) -> b
         (str(author), str(text)) for author, text in (body.get("transcript") or ())
     )
 
-    async with _connection(dsn, set_role) as conn:
+    async with _connection(dsn, set_role, config=config) as conn:
         async with conn.transaction():
             await scope_to_organization(conn, organization_id)
             settings = await agent_repo.load_tenant_policy(conn, organization_id=organization_id)
@@ -357,6 +462,7 @@ async def serve(
     preview_token: str | None = None,
     set_role: str | None = "worker_role",
     health_max_age_s: float = 180.0,
+    config: QueueingConfig | None = None,
 ) -> asyncio.AbstractServer:
     """Sobe o listener e devolve o server (o chamador fecha no shutdown).
 
@@ -366,6 +472,8 @@ async def serve(
     conexão que ninguém fecha. `dsn` continua sendo pedido porque o `/preview`
     abre a sua por requisição, por `_connection`.
     """
+
+    config = config or QueueingConfig()
 
     async def handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:
@@ -381,7 +489,13 @@ async def serve(
                 if method != "GET":
                     writer.write(_response(405, {"error": "GET only"}))
                     return
-                writer.write(await _healthz(health, max_age_s=health_max_age_s))
+                writer.write(
+                    await _healthz(
+                        health,
+                        max_age_s=health_max_age_s,
+                        probe_timeout=config.probe_timeout,
+                    )
+                )
                 return
 
             if path == "/internal/preview-prompt":
@@ -402,7 +516,9 @@ async def serve(
                     writer.write(_response(400, {"error": f"JSON inválido: {exc}"}))
                     return
                 try:
-                    writer.write(await _preview(dsn, set_role=set_role, body=body))
+                    writer.write(
+                        await _preview(dsn, set_role=set_role, body=body, config=config)
+                    )
                 except Exception:
                     logger.exception("preview falhou")
                     writer.write(_response(503, {"error": "preview indisponível"}))

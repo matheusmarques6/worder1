@@ -62,6 +62,7 @@ from agents_runtime.agent_core.responder import (
 )
 from agents_runtime.clock import Clock, SystemClock
 from agents_runtime.commerce.moments import apply_moment_restrictions, resolve_moments
+from agents_runtime.config import QueueingConfig, config_from_env
 from agents_runtime.evals.pack import load_rubrics
 from agents_runtime.judges.pre_send import (
     JUDGE_MODEL,
@@ -80,7 +81,12 @@ from agents_runtime.repository import missions as missions_repo
 from agents_runtime.repository import moments as moments_repo
 from agents_runtime.repository import orders as orders_repo
 from agents_runtime.repository import provider_keys as keys_repo
-from agents_runtime.repository.scope import WORKER_ROLE, assert_rls_enforced, scope_to_organization
+from agents_runtime.repository.scope import (
+    WORKER_ROLE,
+    assert_rls_enforced,
+    scope_to_organization,
+    set_statement_timeout,
+)
 from agents_runtime.tools.base import ToolContext, run_tool
 from agents_runtime.tools.coupon import CreateCoupon
 
@@ -132,6 +138,7 @@ def build_toucher(
     base_secret: str | None = None,
     shopify_transport: httpx.AsyncBaseTransport | None = None,
     turn_llm_call_limit: int | None = None,
+    config: QueueingConfig | None = None,
 ):
     """O toucher real. Mesmas costuras do build_responder — `llm` é a porta da
     PLATAFORMA (Judge 1); a fala do agente sai pela cascata BYO em produção.
@@ -140,6 +147,7 @@ def build_toucher(
     turno que passa por `guarded_reply`/`MeteredLlm` — sem isto ele ficava
     inteiramente fora do teto de chamadas do item 41 (achado da review)."""
     clock = clock or SystemClock()
+    config = config or QueueingConfig()
     from agents_runtime.agent_core.responder import default_rubrics_directory
 
     rubrics = load_rubrics(rubrics_directory or default_rubrics_directory())
@@ -148,9 +156,14 @@ def build_toucher(
     )
 
     async def touch(job: MissionTouchJob) -> TouchDraft:
-        async with await psycopg.AsyncConnection.connect(dsn, autocommit=True) as conn:
+        async with await psycopg.AsyncConnection.connect(
+            dsn,
+            autocommit=True,
+            connect_timeout=config.connect_timeout_seconds,
+        ) as conn:
             if set_role:
                 await conn.execute("set role " + set_role)
+            await set_statement_timeout(conn, config.statement_timeout_ms)
             await assert_rls_enforced(conn, WORKER_ROLE)
 
             # --- leitura: uma transação curta, fechada antes de qualquer rede
@@ -563,4 +576,5 @@ def agent_toucher(dsn: str):
         set_role=os.environ.get("AGENTS_WORKER_SET_ROLE"),
         agent_llm_from_org_keys=True,
         base_secret=os.environ.get("ENCRYPTION_KEY") or None,
+        config=config_from_env(dict(os.environ)),
     )

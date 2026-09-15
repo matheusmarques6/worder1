@@ -85,6 +85,7 @@ from agents_runtime.agent_core.providers import NoOrgLlmKey, resolve_agent_llm, 
 from agents_runtime.agent_core.think_gate import PendingMessage, should_think
 from agents_runtime.clock import Clock, SystemClock
 from agents_runtime.commerce.moments import apply_moment_restrictions, resolve_moments
+from agents_runtime.config import QueueingConfig, config_from_env
 from agents_runtime.evals.pack import load_rubrics
 from agents_runtime.judges.pre_send import (
     JUDGE_MODEL,
@@ -106,7 +107,12 @@ from agents_runtime.repository import missions as missions_repo
 from agents_runtime.repository import moments as moments_repo
 from agents_runtime.repository import orders as orders_repo
 from agents_runtime.repository import provider_keys as keys_repo
-from agents_runtime.repository.scope import WORKER_ROLE, assert_rls_enforced, scope_to_organization
+from agents_runtime.repository.scope import (
+    WORKER_ROLE,
+    assert_rls_enforced,
+    scope_to_organization,
+    set_statement_timeout,
+)
 from agents_runtime.tools.base import ToolContext, run_tool
 from agents_runtime.tools.coupon import BENEFIT_KINDS, OBJECT_KINDS, CreateCoupon
 from agents_runtime.tools.custom_http import CustomHttpTool, tool_spec_for
@@ -263,6 +269,7 @@ def build_responder(
     base_secret: str | None = None,
     shopify_transport: httpx.AsyncBaseTransport | None = None,
     turn_llm_call_limit: int | None = None,
+    config: QueueingConfig | None = None,
 ):
     """O responder real. `llm` é a porta da PLATAFORMA (Judge 1 + embeddings —
     D4); com `agent_llm_from_org_keys` ligado (produção), a resposta do agente
@@ -273,15 +280,21 @@ def build_responder(
     `None` lê o default/override de ambiente uma vez aqui, na composição, do
     mesmo jeito que `rubrics_directory` lê o seu."""
     clock = clock or SystemClock()
+    config = config or QueueingConfig()
     rubrics = load_rubrics(rubrics_directory or default_rubrics_directory())
     turn_llm_call_limit = (
         turn_llm_call_limit if turn_llm_call_limit is not None else default_turn_llm_call_limit()
     )
 
     async def respond(job: InboundJob) -> dict[str, Any] | None:
-        async with await psycopg.AsyncConnection.connect(dsn, autocommit=True) as conn:
+        async with await psycopg.AsyncConnection.connect(
+            dsn,
+            autocommit=True,
+            connect_timeout=config.connect_timeout_seconds,
+        ) as conn:
             if set_role:
                 await conn.execute("set role " + set_role)
+            await set_statement_timeout(conn, config.statement_timeout_ms)
             await assert_rls_enforced(conn, WORKER_ROLE)
 
             # --- leitura: uma transação curta, fechada antes de qualquer rede
@@ -934,6 +947,7 @@ def agent_responder(dsn: str):
         set_role=os.environ.get("AGENTS_WORKER_SET_ROLE"),
         agent_llm_from_org_keys=True,
         base_secret=os.environ.get("ENCRYPTION_KEY") or None,
+        config=config_from_env(dict(os.environ)),
     )
 
 

@@ -81,6 +81,8 @@ class TestTheGuardIsWiredIntoTheOnlySeam:
         conn = await _connect(dsn, WORKER_ROLE, WORKER_ROLE)
         try:
             assert not conn.closed
+            timeout = await (await conn.execute("show statement_timeout")).fetchone()
+            assert timeout == ("15s",)
         finally:
             await conn.close()
 

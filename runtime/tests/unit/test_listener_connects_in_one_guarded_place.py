@@ -42,11 +42,44 @@ continua 200, o bloco só fica vazio. Por isso a garantia é estrutural aqui.
 """
 
 import ast
+import asyncio
+from datetime import timedelta
 from pathlib import Path
+from uuid import UUID
+
+import pytest
 
 import agents_runtime
+from agents_runtime import __main__ as runtime_main
+from agents_runtime import app, server
+from agents_runtime.agent_core import responder, toucher
+from agents_runtime.config import QueueingConfig
+from agents_runtime.queueing.jobs import InboundJob, MissionTouchJob
+from agents_runtime.repository.scope import WORKER_ROLE
 
 _SERVER = Path(agents_runtime.__file__).parent / "server.py"
+
+
+class _Initialized(Exception):
+    pass
+
+
+class _Connection:
+    def __init__(self) -> None:
+        self.executed: list[tuple[str, tuple | None]] = []
+        self.closed = False
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_):
+        await self.close()
+
+    async def execute(self, statement: str, params: tuple | None = None):
+        self.executed.append((statement, params))
+
+    async def close(self) -> None:
+        self.closed = True
 
 
 def _functions(tree: ast.Module) -> list[ast.AsyncFunctionDef | ast.FunctionDef]:
@@ -179,3 +212,188 @@ class TestTheListenerHasOneDoorToTheDatabase:
             "autocommit — fora da transação a RLS vê organização NULL e a "
             "query volta zero linhas, sem erro e sem log."
         )
+
+
+@pytest.mark.parametrize(
+    ("config", "expected"),
+    [
+        (QueueingConfig(), (3, "15000")),
+        (QueueingConfig(connect_timeout_seconds=7, statement_timeout_ms=23), (7, "23")),
+    ],
+)
+async def test_all_four_connection_doors_apply_the_same_time_limits(
+    config: QueueingConfig,
+    expected: tuple[int, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    opened: list[tuple[dict, _Connection]] = []
+
+    async def connect(_dsn: str, **kwargs):
+        conn = _Connection()
+        opened.append((kwargs, conn))
+        return conn
+
+    async def stop_after_initialization(*_):
+        raise _Initialized
+
+    monkeypatch.setattr(app.psycopg.AsyncConnection, "connect", connect)
+    monkeypatch.setattr(app, "assert_rls_enforced", stop_after_initialization)
+    monkeypatch.setattr(server, "assert_rls_enforced", stop_after_initialization)
+    monkeypatch.setattr(responder, "assert_rls_enforced", stop_after_initialization)
+    monkeypatch.setattr(toucher, "assert_rls_enforced", stop_after_initialization)
+    with pytest.raises(_Initialized):
+        await app._connect("postgresql://unused", WORKER_ROLE, WORKER_ROLE, config=config)
+    with pytest.raises(_Initialized):
+        async with server._connection("postgresql://unused", WORKER_ROLE, config=config):
+            pass
+
+    reply = responder.build_responder(
+        "postgresql://unused",
+        llm=object(),
+        set_role=WORKER_ROLE,
+        config=config,
+    )
+    with pytest.raises(_Initialized):
+        await reply(
+            InboundJob(
+                organization_id=UUID("00000000-0000-4000-8000-000000000811"),
+                conversation_id=UUID("00000000-0000-4000-8000-000000000812"),
+                generation=1,
+                target_seq=1,
+            )
+        )
+
+    touch = toucher.build_toucher(
+        "postgresql://unused",
+        llm=object(),
+        set_role=WORKER_ROLE,
+        config=config,
+    )
+    with pytest.raises(_Initialized):
+        await touch(
+            MissionTouchJob(
+                organization_id=UUID("00000000-0000-4000-8000-000000000811"),
+                contact_id=UUID("00000000-0000-4000-8000-000000000813"),
+                conversation_id=UUID("00000000-0000-4000-8000-000000000812"),
+                touch_id=UUID("00000000-0000-4000-8000-000000000814"),
+                event_family="cart.abandoned",
+            )
+        )
+
+    assert len(opened) == 4
+    for kwargs, conn in opened:
+        assert kwargs["connect_timeout"] == expected[0]
+        assert conn.executed[:2] == [
+            ("set role worker_role", None),
+            (
+                "select set_config('statement_timeout', %s, false)",
+                (expected[1],),
+            ),
+        ]
+        assert conn.closed
+
+
+def test_real_agent_factories_snapshot_timeout_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: list[QueueingConfig] = []
+
+    def build(_dsn, **kwargs):
+        captured.append(kwargs["config"])
+        return object()
+
+    monkeypatch.setenv("AGENTS_TURN_TIMEOUT_MS", "31")
+    monkeypatch.setattr(responder.openrouter, "from_env", lambda: object())
+    monkeypatch.setattr(toucher.openrouter, "from_env", lambda: object())
+    monkeypatch.setattr(responder, "build_responder", build)
+    monkeypatch.setattr(toucher, "build_toucher", build)
+
+    responder.agent_responder("postgresql://unused")
+    toucher.agent_toucher("postgresql://unused")
+
+    assert [config.turn_timeout.total_seconds() for config in captured] == [0.031, 0.031]
+    assert [config.connect_timeout_seconds for config in captured] == [3, 3]
+    assert [config.statement_timeout_ms for config in captured] == [15_000, 15_000]
+
+
+async def test_one_config_snapshot_reaches_preflight_health_listener_and_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    snapshot = QueueingConfig(
+        turn_timeout=timedelta(milliseconds=31),
+        connect_timeout_seconds=7,
+        statement_timeout_ms=23,
+    )
+    seen: list[tuple[str, QueueingConfig]] = []
+
+    class Http:
+        def close(self):
+            return None
+
+        async def wait_closed(self):
+            return None
+
+    class Health:
+        def __init__(self, *_, config, **__):
+            seen.append(("health", config))
+
+        async def aclose(self):
+            return None
+
+    async def connect(*_, config, **__):
+        seen.append(("preflight", config))
+        return object()
+
+    async def serve(*_, config, **__):
+        seen.append(("listener", config))
+        return Http()
+
+    async def run(*_, config, **__):
+        seen.append(("runtime", config))
+
+    monkeypatch.setenv("AGENTS_HTTP_PORT", "1234")
+    monkeypatch.setattr(runtime_main, "config_from_env", lambda _: snapshot)
+    monkeypatch.setattr(runtime_main, "_connect", connect)
+    monkeypatch.setattr(runtime_main.server, "HealthConnection", Health)
+    monkeypatch.setattr(runtime_main.server, "serve", serve)
+    monkeypatch.setattr(runtime_main, "run", run)
+    monkeypatch.setattr(runtime_main, "_factory_from_env", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(runtime_main, "_channel_from_env", lambda _: None)
+
+    await runtime_main._serve("postgresql://unused")
+
+    assert [name for name, _ in seen] == ["preflight", "health", "listener", "runtime"]
+    assert all(config is snapshot for _, config in seen)
+
+
+async def test_runtime_pools_receive_the_same_config_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    snapshot = QueueingConfig(turn_timeout=timedelta(milliseconds=31))
+    seen: list[tuple[str, QueueingConfig]] = []
+
+    async def connect(_dsn, _set_role, expected_role, *, config, **__):
+        seen.append((expected_role, config))
+        return _Connection()
+
+    monkeypatch.setattr(app, "_connect", connect)
+    stop = asyncio.Event()
+    stop.set()
+    await app.run(
+        "postgresql://unused",
+        stop=stop,
+        config=snapshot,
+        respond=object(),
+        touch=object(),
+        channel=object(),
+        workers=2,
+    )
+
+    assert [role for role, _ in seen] == [
+        "worker_role",
+        "worker_role",
+        "worker_role",
+        "worker_role",
+        "sender_role",
+    ]
+    assert all(config is snapshot for _, config in seen)

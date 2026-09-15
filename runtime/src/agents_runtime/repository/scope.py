@@ -18,6 +18,7 @@ para `repository.outbox`. Este módulo continua valendo por si: escopo de tenant
 não é assunto do motor.
 """
 
+import asyncio
 from uuid import UUID
 
 import psycopg
@@ -32,6 +33,30 @@ SENDER_ROLE = "sender_role"
 
 class RlsNotEnforced(RuntimeError):
     """A conexão enxerga o banco inteiro: a RLS não vale para ela."""
+
+
+def abort_connection(conn: psycopg.AsyncConnection) -> None:
+    """Desregistra o socket do loop antes de invalidar a conexão."""
+    if conn.closed:
+        return
+    pgconn = conn.pgconn
+    fd = pgconn.socket
+    loop = asyncio.get_running_loop()
+    for remove in (loop.remove_reader, loop.remove_writer):
+        try:
+            remove(fd)
+        except (NotImplementedError, OSError, ValueError):
+            pass
+    pgconn.finish()
+
+
+async def set_statement_timeout(
+    conn: psycopg.AsyncConnection, statement_timeout_ms: int
+) -> None:
+    await conn.execute(
+        "select set_config('statement_timeout', %s, false)",
+        (str(statement_timeout_ms),),
+    )
 
 
 async def assert_rls_enforced(conn: psycopg.AsyncConnection, expected_role: str | None) -> None:

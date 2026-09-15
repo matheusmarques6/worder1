@@ -19,6 +19,7 @@ import psycopg
 import pytest
 
 from agents_runtime import server
+from agents_runtime.config import QueueingConfig
 from agents_runtime.repository import engine as engine_repo
 from tests.db.factories import create_agent_version, create_mission, create_tenant
 
@@ -108,6 +109,99 @@ class TestHealthz:
         )
         status, _ = await _request(listener, "GET", "/healthz")
         assert status == 503
+
+    async def test_a_slow_query_is_503_and_the_following_probe_recovers(
+        self,
+        dsn: str,
+        admin: psycopg.Connection,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        health = server.HealthConnection(dsn, "worker_role")
+        original = server.engine_repo.heartbeat_age_seconds
+        probe = None
+
+        async def slow(conn):
+            await conn.execute("select pg_sleep(5) /* health-time-limit-proof */")
+            return 0.0
+
+        async def fresh(_):
+            return 0.0
+
+        try:
+            monkeypatch.setattr(server.engine_repo, "heartbeat_age_seconds", fresh)
+            assert (await server._healthz(health, max_age_s=180.0)).startswith(
+                b"HTTP/1.1 200"
+            )
+            first = health._conn
+            first_pid = (await (await first.execute("select pg_backend_pid()")).fetchone())[0]
+            first_role = (await (await first.execute("select current_user")).fetchone())[0]
+            first_timeout = (await (await first.execute("show statement_timeout")).fetchone())[0]
+
+            monkeypatch.setattr(server.engine_repo, "heartbeat_age_seconds", slow)
+            probe = asyncio.create_task(
+                server._healthz(
+                    health,
+                    max_age_s=180.0,
+                    probe_timeout=QueueingConfig().probe_timeout / 20,
+                )
+            )
+            for _ in range(30):
+                active = admin.execute(
+                    "select count(*) from pg_stat_activity"
+                    " where pid = %s and state = 'active'"
+                    " and query like '%%health-time-limit-proof%%'",
+                    (first_pid,),
+                ).fetchone()[0]
+                if active:
+                    break
+                await asyncio.sleep(0.005)
+            assert active == 1, "pg_sleep nunca iniciou; o teste não exerceu cancelamento SQL"
+            timed_out = await probe
+
+            assert health._conn is None
+            backend_deadline = asyncio.get_running_loop().time() + 6.0
+            while True:
+                backend_count = admin.execute(
+                    "select count(*) from pg_stat_activity where pid = %s", (first_pid,)
+                ).fetchone()
+                if backend_count == (0,):
+                    break
+                if asyncio.get_running_loop().time() >= backend_deadline:
+                    break
+                await asyncio.sleep(0.01)
+            assert backend_count == (0,), "backend do probe expirado não encerrou no prazo"
+
+            monkeypatch.setattr(server.engine_repo, "heartbeat_age_seconds", original)
+            async with await psycopg.AsyncConnection.connect(dsn, autocommit=True) as conn:
+                await engine_repo.beat(conn, "test-process")
+            recovered = await server._healthz(
+                health,
+                max_age_s=180.0,
+                probe_timeout=QueueingConfig().probe_timeout,
+            )
+            second = health._conn
+            second_state = await (
+                await second.execute(
+                    "select pg_backend_pid(), current_user,"
+                    " current_setting('app.organization_id', true)"
+                )
+            ).fetchone()
+            second_timeout = await (await second.execute("show statement_timeout")).fetchone()
+        finally:
+            monkeypatch.setattr(server.engine_repo, "heartbeat_age_seconds", original)
+            if probe is not None:
+                if not probe.done():
+                    probe.cancel()
+                await asyncio.gather(probe, return_exceptions=True)
+            await health.aclose()
+
+        assert timed_out.startswith(b"HTTP/1.1 503")
+        assert recovered.startswith(b"HTTP/1.1 200")
+        assert first_role == "worker_role"
+        assert first_timeout == "15s"
+        assert second_state[1:] == ("worker_role", None)
+        assert second_state[0] != first_pid
+        assert second_timeout == ("15s",)
 
 
 class TestPreviewRefusals:

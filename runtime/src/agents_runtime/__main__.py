@@ -71,6 +71,7 @@ def _stop_on_shutdown_signals(stop: asyncio.Event) -> None:
 async def _serve(dsn: str) -> None:
     stop = asyncio.Event()
     _stop_on_shutdown_signals(stop)
+    config = config_from_env(dict(os.environ))
 
     # O listener HTTP (healthz + preview) é opt-in por porta: a suíte pipeline
     # roda `app.run` sem ele, e um processo sem porta configurada continua
@@ -90,7 +91,12 @@ async def _serve(dsn: str) -> None:
             # processo com a env de role errada (ou sem env) subia e servia — o
             # preview escopando uma conexão do dono do DSN. Morrer na partida é a
             # única resposta útil; servir 503 para sempre não é.
-            preflight = await _connect(dsn, os.environ.get("AGENTS_WORKER_SET_ROLE"), WORKER_ROLE)
+            preflight = await _connect(
+                dsn,
+                os.environ.get("AGENTS_WORKER_SET_ROLE"),
+                WORKER_ROLE,
+                config=config,
+            )
 
             # Item 48: o preflight deixa de ser jogado fora e vira A conexão do
             # `/healthz`. Não é economia de handshake — é UM por deploy —, é que ela
@@ -100,7 +106,10 @@ async def _serve(dsn: str) -> None:
             # fecha, depois do listener, para nenhum probe em voo achar conexão
             # fechada.
             health = server.HealthConnection(
-                dsn, os.environ.get("AGENTS_WORKER_SET_ROLE"), preflight
+                dsn,
+                os.environ.get("AGENTS_WORKER_SET_ROLE"),
+                preflight,
+                config=config,
             )
             http_server = await server.serve(
                 dsn,
@@ -108,11 +117,12 @@ async def _serve(dsn: str) -> None:
                 health=health,
                 preview_token=os.environ.get("AGENTS_PREVIEW_TOKEN") or None,
                 set_role=os.environ.get("AGENTS_WORKER_SET_ROLE"),
+                config=config,
             )
         await run(
             dsn,
             stop=stop,
-            config=config_from_env(dict(os.environ)),
+            config=config,
             channel=_channel_from_env(dsn),
             # The responder seam, reachable from outside the process: cenário 4
             # holds a REAL subprocess inside FASE 2 through this.

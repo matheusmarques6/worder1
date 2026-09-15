@@ -12,13 +12,16 @@ observable of its flow.
 
 import asyncio
 import time
+import uuid
 
 import psycopg
 from psycopg.types.json import Jsonb
 
+from agents_runtime.agent_core.toucher import TouchDraft
 from agents_runtime.app import run
 from agents_runtime.config import QueueingConfig, config_from_env
-from agents_runtime.queueing import INBOUND
+from agents_runtime.queueing import DOMAIN_EVENTS, INBOUND
+from agents_runtime.queueing import worker as worker_module
 from agents_runtime.queueing.jobs import InboundJob
 from tests.db.factories import (
     create_outbox_item,
@@ -339,6 +342,395 @@ async def test_scenario_7_exhaustion_also_ends_in_the_dlq(
 
     dead = await (await admin.execute("select read_ct from pgmq.a_q_inbound")).fetchone()
     assert dead[0] == 6, "five retries allowed, the sixth read is the one that gives up"
+
+
+async def test_a_timed_out_turn_releases_its_lease_and_retries(
+    dsn: str,
+    admin: psycopg.AsyncConnection,
+    sync_admin: psycopg.Connection,
+) -> None:
+    config = config_from_env(
+        {
+            **TINY_INTERVALS,
+            "AGENTS_TURN_TIMEOUT_MS": "20",
+            "AGENTS_BACKOFF_BASE_MS": "500",
+            "AGENTS_BACKOFF_CAP_MS": "500",
+        }
+    )
+    organization_id = create_tenant(sync_admin)
+    set_runtime_mode(sync_admin, organization_id, "runtime")
+    thread = create_thread(sync_admin, organization_id)
+    make_due(sync_admin, thread.conversation_id, last_inbound_seq=1)
+    calls = 0
+    first_started = asyncio.Event()
+
+    async def slow_once(job: InboundJob):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            first_started.set()
+            await asyncio.Event().wait()
+        return {"text": "retry concluiu"}
+
+    stop = asyncio.Event()
+    running = asyncio.create_task(
+        run(
+            dsn,
+            stop=stop,
+            config=config,
+            respond=slow_once,
+            worker_set_role="worker_role",
+        )
+    )
+    try:
+        await asyncio.wait_for(first_started.wait(), DEADLINE)
+
+        async def released_after_timeout():
+            row = await (
+                await admin.execute(
+                    "select processing_token from public.conversations where id = %s",
+                    (thread.conversation_id,),
+                )
+            ).fetchone()
+            reads = await (
+                await admin.execute("select read_ct from pgmq.q_q_inbound")
+            ).fetchone()
+            return reads is not None and reads[0] == 1 and row == (None,)
+
+        await eventually(released_after_timeout, note="timeout releasing its lease")
+        aborted = await (
+            await admin.execute(
+                "select last_processed_seq, processing_token,"
+                " (select count(*) from internal.message_outbox)"
+                " from public.conversations where id = %s",
+                (thread.conversation_id,),
+            )
+        ).fetchone()
+        assert aborted == (0, None, 0)
+
+        async def retried_and_concluded():
+            row = await (
+                await admin.execute(
+                    "select last_processed_seq, processing_token"
+                    " from public.conversations where id = %s",
+                    (thread.conversation_id,),
+                )
+            ).fetchone()
+            return row == (1, None)
+
+        await eventually(retried_and_concluded, note="transient timeout retry succeeding")
+    finally:
+        stop.set()
+        await asyncio.wait_for(running, DEADLINE)
+
+    assert calls == 2
+    read_count = await (
+        await admin.execute("select read_ct from pgmq.a_q_inbound")
+    ).fetchone()
+    assert read_count == (2,)
+
+
+async def test_a_timed_out_touch_releases_its_lease_and_retries(
+    dsn: str,
+    admin: psycopg.AsyncConnection,
+    sync_admin: psycopg.Connection,
+) -> None:
+    config = config_from_env(
+        {
+            **TINY_INTERVALS,
+            "AGENTS_TURN_TIMEOUT_MS": "20",
+            "AGENTS_BACKOFF_BASE_MS": "500",
+            "AGENTS_BACKOFF_CAP_MS": "500",
+        }
+    )
+    organization_id = create_tenant(sync_admin)
+    set_runtime_mode(sync_admin, organization_id, "runtime")
+    thread = create_thread(sync_admin, organization_id)
+    touch_id = uuid.uuid4()
+    sync_admin.execute(
+        "select pgmq.send(%s, %s)",
+        (
+            DOMAIN_EVENTS,
+            Jsonb(
+                {
+                    "kind": "mission_touch",
+                    "organization_id": str(organization_id),
+                    "contact_id": str(thread.contact_id),
+                    "conversation_id": str(thread.conversation_id),
+                    "touch_id": str(touch_id),
+                    "event_family": "cart.abandoned",
+                }
+            ),
+        ),
+    )
+    calls = 0
+    first_started = asyncio.Event()
+
+    async def slow_once(_job):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            first_started.set()
+            await asyncio.Event().wait()
+        return TouchDraft(
+            content={"text": "retry concluiu"},
+            moment_ids=(),
+            mission_version_id=None,
+        )
+
+    stop = asyncio.Event()
+    running = asyncio.create_task(
+        run(
+            dsn,
+            stop=stop,
+            config=config,
+            touch=slow_once,
+            worker_set_role="worker_role",
+        )
+    )
+    try:
+        await asyncio.wait_for(first_started.wait(), DEADLINE)
+
+        async def released_without_conclusion():
+            row = await (
+                await admin.execute(
+                    "select processing_token,"
+                    " (select count(*) from internal.message_outbox)"
+                    " from public.conversations where id = %s",
+                    (thread.conversation_id,),
+                )
+            ).fetchone()
+            reads = await (
+                await admin.execute("select read_ct from pgmq.q_q_domain_events")
+            ).fetchone()
+            return reads == (1,) and row == (None, 0)
+
+        await eventually(
+            released_without_conclusion,
+            note="touch timeout released without outbox",
+        )
+
+        async def retried_and_concluded():
+            archived = await (
+                await admin.execute("select read_ct from pgmq.a_q_domain_events")
+            ).fetchone()
+            outbox = await (
+                await admin.execute("select count(*) from internal.message_outbox")
+            ).fetchone()
+            return archived == (2,) and outbox == (1,)
+
+        await eventually(retried_and_concluded, note="touch timeout retry succeeding")
+    finally:
+        stop.set()
+        await asyncio.wait_for(running, DEADLINE)
+
+    assert calls == 2
+
+
+async def test_timeout_exhaustion_keeps_existing_dlq_and_alert_policy(
+    dsn: str,
+    admin: psycopg.AsyncConnection,
+    sync_admin: psycopg.Connection,
+) -> None:
+    config = config_from_env(
+        {
+            **TINY_INTERVALS,
+            "AGENTS_TURN_TIMEOUT_MS": "10",
+            "AGENTS_BACKOFF_BASE_MS": "20",
+            "AGENTS_BACKOFF_CAP_MS": "20",
+        }
+    )
+    organization_id = create_tenant(sync_admin)
+    set_runtime_mode(sync_admin, organization_id, "runtime")
+    thread = create_thread(sync_admin, organization_id)
+    make_due(sync_admin, thread.conversation_id, last_inbound_seq=1)
+
+    async def always_slow(_job):
+        await asyncio.Event().wait()
+
+    stop = asyncio.Event()
+    running = asyncio.create_task(
+        run(
+            dsn,
+            stop=stop,
+            config=config,
+            respond=always_slow,
+            worker_set_role="worker_role",
+        )
+    )
+    try:
+        async def exhausted():
+            return (
+                await (
+                    await admin.execute(
+                        "select queue_length from pgmq.metrics('q_inbound_dlq')"
+                    )
+                ).fetchone()
+            )[0] == 1
+
+        await eventually(exhausted, note="timeouts exhausting into the inbound DLQ")
+    finally:
+        stop.set()
+        await asyncio.wait_for(running, DEADLINE)
+
+    archived = await (
+        await admin.execute(
+            "select read_ct from pgmq.a_q_inbound"
+        )
+    ).fetchone()
+    dead = await (
+        await admin.execute(
+            "select message->>'error_class', message->>'failure_kind'"
+            " from pgmq.q_q_inbound_dlq"
+        )
+    ).fetchone()
+    alert = await (
+        await admin.execute(
+            "select type from public.alerts where organization_id = %s",
+            (organization_id,),
+        )
+    ).fetchone()
+    state = await (
+        await admin.execute(
+            "select last_processed_seq, processing_token,"
+            " (select count(*) from internal.message_outbox)"
+            " from public.conversations where id = %s",
+            (thread.conversation_id,),
+        )
+    ).fetchone()
+    assert archived == (6,)
+    assert dead == ("TimeoutError", "transient")
+    assert alert == ("send_failed",)
+    assert state == (0, None, 0)
+
+
+async def test_external_cancellation_does_not_ack_or_conclude(
+    dsn: str,
+    admin: psycopg.AsyncConnection,
+    sync_admin: psycopg.Connection,
+) -> None:
+    organization_id = create_tenant(sync_admin)
+    set_runtime_mode(sync_admin, organization_id, "runtime")
+    thread = create_thread(sync_admin, organization_id)
+    make_due(sync_admin, thread.conversation_id, last_inbound_seq=1)
+    started = asyncio.Event()
+
+    async def held(_job):
+        started.set()
+        await asyncio.Event().wait()
+
+    stop = asyncio.Event()
+    running = asyncio.create_task(
+        run(
+            dsn,
+            stop=stop,
+            config=config_from_env(TINY_INTERVALS),
+            respond=held,
+            worker_set_role="worker_role",
+        )
+    )
+    await asyncio.wait_for(started.wait(), DEADLINE)
+    running.cancel()
+    result = await asyncio.gather(running, return_exceptions=True)
+
+    assert isinstance(result[0], asyncio.CancelledError)
+    assert await (
+        await admin.execute("select count(*) from pgmq.q_q_inbound")
+    ).fetchone() == (1,)
+    assert await (
+        await admin.execute("select count(*) from pgmq.a_q_inbound")
+    ).fetchone() == (0,)
+    state = await (
+        await admin.execute(
+            "select last_processed_seq, processing_token,"
+            " (select count(*) from internal.message_outbox)"
+            " from public.conversations where id = %s",
+            (thread.conversation_id,),
+        )
+    ).fetchone()
+    assert state == (0, None, 0)
+
+
+async def test_failed_release_recovers_by_lease_and_visibility_expiry(
+    dsn: str,
+    admin: psycopg.AsyncConnection,
+    sync_admin: psycopg.Connection,
+    monkeypatch,
+) -> None:
+    config = config_from_env(
+        {
+            **TINY_INTERVALS,
+            "AGENTS_TURN_TIMEOUT_MS": "20",
+            "AGENTS_LEASE_MS": "100",
+            "AGENTS_VT_MS": "100",
+            "AGENTS_WORK_HEARTBEAT_MS": "50",
+            "AGENTS_BACKOFF_BASE_MS": "100",
+            "AGENTS_BACKOFF_CAP_MS": "100",
+        }
+    )
+    organization_id = create_tenant(sync_admin)
+    set_runtime_mode(sync_admin, organization_id, "runtime")
+    thread = create_thread(sync_admin, organization_id)
+    make_due(sync_admin, thread.conversation_id, last_inbound_seq=1)
+    original_release = worker_module.engine.release_lease
+    release_failed = asyncio.Event()
+    calls = 0
+
+    async def fail_first_release(*args, **kwargs):
+        if not release_failed.is_set():
+            release_failed.set()
+            raise ConnectionError("release unavailable")
+        return await original_release(*args, **kwargs)
+
+    async def slow_once(_job):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            await asyncio.Event().wait()
+        return {"text": "lease expiry recovered"}
+
+    monkeypatch.setattr(worker_module.engine, "release_lease", fail_first_release)
+    stop = asyncio.Event()
+    running = asyncio.create_task(
+        run(
+            dsn,
+            stop=stop,
+            config=config,
+            respond=slow_once,
+            worker_set_role="worker_role",
+        )
+    )
+    try:
+        await asyncio.wait_for(release_failed.wait(), DEADLINE)
+        aborted = await (
+            await admin.execute(
+                "select last_processed_seq, processing_token is not null,"
+                " (select count(*) from internal.message_outbox)"
+                " from public.conversations where id = %s",
+                (thread.conversation_id,),
+            )
+        ).fetchone()
+        assert aborted == (0, True, 0)
+
+        async def recovered():
+            row = await (
+                await admin.execute(
+                    "select last_processed_seq, processing_token"
+                    " from public.conversations where id = %s",
+                    (thread.conversation_id,),
+                )
+            ).fetchone()
+            return row == (1, None)
+
+        await eventually(recovered, note="lease/VT expiry recovering failed release")
+    finally:
+        stop.set()
+        await asyncio.wait_for(running, DEADLINE)
+
+    assert calls == 2
+    assert await (
+        await admin.execute("select read_ct from pgmq.a_q_inbound")
+    ).fetchone() == (2,)
 
 
 # --- cenário 10 · ADR-8, o unknown sem reenvio cego ----------------------------
