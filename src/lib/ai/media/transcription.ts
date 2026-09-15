@@ -11,6 +11,8 @@
  */
 
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { AiBudgetUnavailableError, checkAiBudget } from '../budget'
+import { trackAiUsage } from '../cost-tracker'
 import { decodeProviderKey } from '../provider-key-codec'
 
 export interface SttConfig {
@@ -27,6 +29,11 @@ const STT_MODELS: Record<SttConfig['provider'], string> = {
 const STT_ENDPOINTS: Record<SttConfig['provider'], string> = {
   openai: 'https://api.openai.com/v1/audio/transcriptions',
   groq: 'https://api.groq.com/openai/v1/audio/transcriptions',
+}
+
+const STT_PRICING: Record<string, { usdPerSecond: number; minimumSeconds: number }> = {
+  'openai/whisper-1': { usdPerSecond: 0.006 / 60, minimumSeconds: 0 },
+  'groq/whisper-large-v3': { usdPerSecond: 0.111 / 3600, minimumSeconds: 10 },
 }
 
 const STT_PROVIDER_PRIORITY: SttConfig['provider'][] = ['openai', 'groq']
@@ -64,11 +71,21 @@ function extensionForMime(mimeType: string): string {
 }
 
 export async function transcribeAudio(params: {
+  organizationId: string
   config: SttConfig
   audio: Buffer
   mimeType: string
 }): Promise<string> {
-  const { config, audio, mimeType } = params
+  const { organizationId, config, audio, mimeType } = params
+
+  if (!organizationId) {
+    throw new Error('organizationId não informado')
+  }
+
+  const pricing = STT_PRICING[`${config.provider}/${config.model}`]
+  if (!pricing) {
+    throw new AiBudgetUnavailableError('unpriced_model')
+  }
 
   const form = new FormData()
   form.append(
@@ -77,32 +94,77 @@ export async function transcribeAudio(params: {
     `audio.${extensionForMime(mimeType)}`,
   )
   form.append('model', config.model)
+  form.append('response_format', 'verbose_json')
 
-  const response = await fetch(STT_ENDPOINTS[config.provider], {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${config.apiKey}` },
-    body: form,
-  })
+  const billable = true
+  await checkAiBudget(organizationId, { throwOnExceeded: true })
+  let usageTracked = false
 
-  if (!response.ok) {
-    // Corpo de erro nem sempre é JSON (ex.: gateway 502/504 devolvendo HTML) —
-    // parseia defensivamente pra nunca deixar um SyntaxError opaco escapar no
-    // lugar da mensagem de erro do provider.
-    let detail = `status ${response.status}`
-    try {
-      const errData = await response.json()
-      detail = errData?.error?.message || detail
-    } catch {
+  try {
+    const response = await fetch(STT_ENDPOINTS[config.provider], {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${config.apiKey}` },
+      body: form,
+    })
+
+    if (!response.ok) {
+      // Corpo de erro nem sempre é JSON (ex.: gateway 502/504 devolvendo HTML) —
+      // parseia defensivamente pra nunca deixar um SyntaxError opaco escapar no
+      // lugar da mensagem de erro do provider.
+      let detail = `status ${response.status}`
       try {
-        const text = await response.text()
-        if (text) detail = text
+        const errData = await response.json()
+        detail = errData?.error?.message || detail
       } catch {
-        // mantém o detail de status
+        try {
+          const text = await response.text()
+          if (text) detail = text
+        } catch {
+          // mantém o detail de status
+        }
       }
+      throw new Error(`${config.provider} transcription error: ${detail}`)
     }
-    throw new Error(`${config.provider} transcription error: ${detail}`)
-  }
 
-  const data = await response.json()
-  return (data.text || '').trim()
+    const data = await response.json()
+    let durationSeconds: number | null = null
+    if (typeof data.duration === 'number' && Number.isFinite(data.duration) && data.duration > 0) {
+      durationSeconds = data.duration
+    } else if (Array.isArray(data.segments)) {
+      const segmentEnds = data.segments
+        .map((segment: any) => segment?.end)
+        .filter((end: unknown): end is number =>
+          typeof end === 'number' && Number.isFinite(end) && end > 0,
+        )
+      if (segmentEnds.length > 0) durationSeconds = Math.max(...segmentEnds)
+    }
+
+    await trackAiUsage({
+      organizationId,
+      provider: config.provider,
+      model: config.model,
+      feature: 'transcription',
+      success: true,
+      costUsdOverride: durationSeconds === null
+        ? null
+        : Math.max(durationSeconds, pricing.minimumSeconds) * pricing.usdPerSecond,
+      metadata: { billable },
+    })
+    usageTracked = true
+
+    return (data.text || '').trim()
+  } catch (error) {
+    if (!usageTracked) {
+      await trackAiUsage({
+        organizationId,
+        provider: config.provider,
+        model: config.model,
+        feature: 'transcription',
+        success: false,
+        costUsdOverride: null,
+        metadata: { billable },
+      })
+    }
+    throw error
+  }
 }

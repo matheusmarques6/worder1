@@ -721,6 +721,7 @@ export async function maybeRunAgentForCloudConversation(
     let transcript = '';
     try {
       transcript = await transcribeAudio({
+        organizationId,
         config: sttConfig,
         audio: fetched.buffer,
         mimeType: fetched.mimeType,
