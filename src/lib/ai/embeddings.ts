@@ -16,6 +16,8 @@
 
 import crypto from 'crypto'
 import { getRedis, isRedisConfigured, CACHE_TTL, CACHE_PREFIX } from '@/lib/redis'
+import { checkAiBudget } from './budget'
+import { trackAiUsage } from './cost-tracker'
 
 const OPENAI_EMBEDDING_MODEL = 'text-embedding-3-small'
 const OPENAI_EMBEDDING_DIMENSIONS = 1536
@@ -50,7 +52,8 @@ function hashText(text: string): string {
  */
 export async function generateEmbedding(
   text: string,
-  apiKey: string
+  apiKey: string,
+  organizationId: string
 ): Promise<number[]> {
   if (!text || !text.trim()) {
     throw new Error('Texto não pode estar vazio')
@@ -93,6 +96,14 @@ export async function generateEmbedding(
   cacheStats.misses++
   console.log(`[Embeddings] 🔄 Cache MISS - Gerando embedding (${cacheStats.hits} hits, ${cacheStats.misses} misses)`)
 
+  if (!organizationId) {
+    throw new Error('organizationId não informado')
+  }
+
+  const billable = true
+  await checkAiBudget(organizationId, { throwOnExceeded: true })
+  let usageTracked = false
+
   try {
     const response = await fetch('https://api.openai.com/v1/embeddings', {
       method: 'POST',
@@ -114,6 +125,18 @@ export async function generateEmbedding(
     const data = await response.json()
     const embedding = data.data[0].embedding as number[]
 
+    await trackAiUsage({
+      organizationId,
+      provider: 'openai',
+      model: OPENAI_EMBEDDING_MODEL,
+      feature: 'embedding',
+      promptTokens: data.usage?.prompt_tokens,
+      completionTokens: data.usage ? 0 : undefined,
+      ...(data.usage ? {} : { costUsdOverride: null }),
+      metadata: { billable },
+    })
+    usageTracked = true
+
     // ============================================
     // 3. SALVAR NO CACHE (async, não bloqueia)
     // ============================================
@@ -130,6 +153,17 @@ export async function generateEmbedding(
     return embedding
 
   } catch (error: any) {
+    if (!usageTracked) {
+      await trackAiUsage({
+        organizationId,
+        provider: 'openai',
+        model: OPENAI_EMBEDDING_MODEL,
+        feature: 'embedding',
+        success: false,
+        costUsdOverride: null,
+        metadata: { billable },
+      })
+    }
     console.error('[Embeddings] ❌ Erro ao gerar embedding:', error)
     throw new Error(`Erro ao gerar embedding: ${error.message}`)
   }
