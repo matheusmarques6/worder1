@@ -4729,7 +4729,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   *(Nota de correção: a citação original apontava `agent_core/pre_send.py`; o arquivo real é
   `judges/pre_send.py` — corrigido acima.)*
 
-- [ ] **66. Paridade da regra de guard entre TS e Python** `[relatado]` · *(descoberto no item 37)*
+- [x] **66. Paridade da regra de guard entre TS e Python** `[relatado]` · *(descoberto no item 37)*
   A mesma regra de guard existe em **três** cópias para os quatro motivos comportamentais
   (`stop_on_human_reply`, teto de mensagens, cooldown de transferência, ativação manual):
   `src/lib/ai/cloud-runner.ts` (decisão real, org legacy), o badge em
@@ -4745,6 +4745,10 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   a mentir por outro caminho, sem ninguém perceber. Esta auditoria já corrigiu cinco vezes o defeito
   de "duas cópias da mesma regra que divergem"; vale um teste de paridade (fixture compartilhada)
   antes que aconteça de novo aqui.
+
+  **Fechado na Onda 3 (`f9bb5e8a` + `ecc292ea`).** Uma fixture comum, lida diretamente por
+  Vitest e pytest, cobre 20 horários e 12 estados. Os dois achados da revisão final — chave herdada
+  de `Object.prototype` e dígito Unicode — também falham fechado nos dois runtimes.
 
 - [ ] **67. Contadores de agente sem escritor no runtime** `[relatado]` · *(descoberto no item 37)*
   `update_agent_stats(p_agent_id, p_tokens, p_response_time)` e
@@ -4799,7 +4803,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   do item 49 se aplica: **não promover**, porque não há motor que use. Colateral menor do lado TS:
   `ai_usage_logs.actions_triggered` passa a receber `[]` em todo turno.
 
-- [ ] **68. Teto de TEMPO do turno** `[relatado]` · *(descoberto no item 41)*
+- [x] **68. Teto de TEMPO do turno** `[relatado]` · *(descoberto no item 41)*
   A recon do item 41 mostrou que só existe teto POR CHAMADA (`DEFAULT_TIMEOUT_SECONDS = 60.0`, os
   dois em `agent_core/openrouter.py:43` e `agent_core/direct_providers.py:81`) — nenhum teto agregado
   cobre o turno inteiro. `respond(job)` é chamado dentro de `_turn`
@@ -4818,6 +4822,10 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   não cobre isto: um turno pode ficar dentro do teto de CHAMADAS e ainda assim demorar minutos numa
   única chamada lenta. Não implementado no item 41 por ruling F explícito do controlador — é achado
   vizinho, não o mesmo item.
+
+  **Fechado na Onda 3 (`3cc07e4d` + `c28e1b9d`).** A baseline aprovada e implementada limita a
+  fase 2 dos dois produtores a 90s, conexão a 3s, statement a 15s, probe a 4s e cleanup a 10s;
+  timeout continua sendo retry transitório. Não mede p95/p99 nem prova drenagem no shutdown de 30s.
 
 - [ ] **69. Decidir o que fazer quando `checkAiBudget` não sabe o gasto real** `[relatado]` · *(descoberto no item 42)*
   `checkAiBudget` (`src/lib/ai/budget.ts`) tem HOJE duas fontes independentes de "não sei o gasto
@@ -6040,22 +6048,36 @@ você decidir se entram na fila.
   Agora o toque paga a mesma leitura. O índice é do item 50; o "só pague o que o knob pede" é
   desta linha. *(descoberto no review do item 30)*
 
-- [ ] **`settings.schedule.hours` presente e incompleto diverge entre os motores.**
+  **Decisão aprovada; implementação aberta.** A Task 6 continua bloqueada até W2-T5 estar
+  implementada e aceita e existir a migration multi-WABA
+  `20260910020100_account_scoped_conversation_bridge.sql` com a assinatura real.
+
+- [x] **`settings.schedule.hours` presente e incompleto diverge entre os motores.**
   Com o bloco `hours` gravado sem uma das pontas, o TS cala 24×7 e o Python responde. Idem hora
   sem zero à esquerda e `days` com maiúscula. O teste do item 30 usa justamente o formato em que
   os dois concordam — nenhum é forma que a UI de hoje produza, mas jsonb editado à mão produz.
   *(descoberto no review do item 30)*
 
-- [ ] **O fail-open do fuso engole também tzdb ausente, e `tzdata` não é dependência declarada.**
+  **Fechado na Onda 3 (`f9bb5e8a` + `ecc292ea`).** Horário parcial ou não canônico, dia inválido,
+  chave herdada e dígito Unicode agora falham fechado igualmente em TS e Python, presos pelos 20
+  casos comuns.
+
+- [x] **O fail-open do fuso engole também tzdb ausente, e `tzdata` não é dependência declarada.**
   Fuso que o `zoneinfo` não conhece faz o guard de horário abrir mão e deixar responder — decisão
   deliberada para não calar a loja por um typo na tela. Mas a mesma porta cobre "a imagem não tem
   banco de fusos": uma troca de base desligaria o horário de TODAS as lojas em silêncio. A imagem
   viva tem tzdb (verificado); a garantia é que não está escrita. *(descoberto no review do item 30)*
 
-- [ ] **Três divergências degeneradas de matching entre os guards TS e Python.**
+  **Fechado na Onda 3 (`1f7c7107`).** `tzdata` virou dependência direta e o fallback sem tzdb do
+  sistema tem teste. A imagem será revalidada na Onda 6.
+
+- [x] **Três divergências degeneradas de matching entre os guards TS e Python.**
   Confirmação de handoff que não passa por `blocked_topics`, item não-string dentro da lista de
   keywords, e `cooldown_after_transfer: true`. Nenhuma é forma que a UI produza; todas são jsonb
   editado à mão. *(descoberto no review do item 30)*
+
+  **Fechado na Onda 3 (`f9bb5e8a`).** Os três casos têm semântica comum e cobertura nos
+  consumidores reais.
 
 - [ ] **Guard que cala apaga o alerta de fluxo quebrado que viria depois.**
   Os guards de comportamento rodam ANTES da arbitragem de missão — que é a ordem do TS e o certo
@@ -6063,16 +6085,27 @@ você decidir se entram na fila.
   `no_active_mission`, então uma órbita quebrada fica invisível enquanto o guard estiver valendo.
   *(descoberto no re-review do item 30)*
 
+  **Decisão aprovada; implementação aberta.** W3-GD-05 preserva o alerta operacional, mas a Task 6
+  continua bloqueada pela migration multi-WABA W2-T5 ausente.
+
 - [ ] **Estado de guard não encontrado é fail-open, e o toque frio é o caminho mais exposto.**
   Conversa sem linha no espelho legado devolve estado zerado — "ninguém transferiu, o bot não
   respondeu, nenhum humano falou" —, que é a verdade para conversa nova e é otimismo para conversa
   cuja ponte canônica → espelho não resolveu. Quando a ponte não resolve, o passo `skipped` também
   não espelha: no toque, o único registro que sobrevive é o alerta. *(descoberto no re-review do item 30)*
 
+  **Decisão aprovada; implementação aberta.** W3-GD-06 exige fail-closed, mas faltam a migration
+  multi-WABA e um sinal persistido autoritativo de conversa nova; não inferir por ausência,
+  recência ou telefone.
+
 - [ ] **`activate_on: manual` no toque só funciona porque o runtime tem um agente por org.**
   O guard compara o `ai_agent_id` da conversa com o agente do turno; no runtime esse agente vem de
   `load_active_version`, que não filtra por canal (ausência 3 do `FORK.md`). Org com dois agentes
   ativos torna a comparação uma coincidência. *(descoberto no re-review do item 30)*
+
+  **Decisão aprovada; implementação aberta.** W3-GD-07 exige no máximo um agente ativo por
+  organização, mas a persistência ainda não garante essa unicidade; a Task 6 continua bloqueada
+  pela W2-T5.
 
 - [ ] **Resposta de botão carrega palavras do cliente e cai em `unsupported`.**
   A classe pior não é mídia: `interactive`/`button` são a resposta que o cliente DÁ a um botão da
@@ -6142,7 +6175,7 @@ você decidir se entram na fila.
   copia na hora de configurar — estão desatualizadas, e o modo de falha é um DSN que não resolve, na
   partida, no lugar mais caro para descobrir. *(descoberto no item 48, conferido no fix round 1)*
 
-- [ ] **Nenhuma conexão do runtime tem timeout — nem de conexão, nem de statement.**
+- [x] **Nenhuma conexão do runtime tem timeout — nem de conexão, nem de statement.**
   **Nenhum código de `runtime/src` pede teto**, e a afirmação vai escrita assim de propósito: um
   `grep` cru por `connect_timeout`/`statement_timeout` em `runtime/src` **não** dá mais zero, porque a
   docstring de `HealthConnection` cita as duas palavras — o que se sustenta é o fato, não o comando.
@@ -6168,6 +6201,9 @@ você decidir se entram na fila.
   `connect_timeout` no DSN mais um `statement_timeout` por role — o mesmo desenho do `grafana_ro` —,
   com os valores decididos com a cadência de probe do Render na mão, que ninguém mediu.
   *(descoberto no item 48; precedente e contagem corrigidos no fix round 2)*
+
+  **Fechado na Onda 3 (`3cc07e4d` + `c28e1b9d`).** As quatro portas do runtime aplicam timeout de
+  conexão e de statement, e os dois produtores têm teto e cleanup. Não mede latência implantada.
 
 - [ ] **Numa org multi-WABA, as cinco funções escolhem a conversa MAIS RECENTE em vez da conversa do
   NÚMERO certo** `[confirmado]` · *(descoberto no item 50)*
