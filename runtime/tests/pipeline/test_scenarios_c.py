@@ -559,34 +559,39 @@ async def test_timeout_exhaustion_keeps_existing_dlq_and_alert_policy(
         )
     )
     try:
-        async def exhausted():
-            return (
-                await (
-                    await admin.execute(
-                        "select queue_length from pgmq.metrics('q_inbound_dlq')"
-                    )
-                ).fetchone()
-            )[0] == 1
+        async def terminal_dead_letter():
+            row = await (
+                await admin.execute(
+                    "select message->>'error_class', message->>'failure_kind',"
+                    " message->>'replay_count' from pgmq.q_q_inbound_dlq"
+                    " where message->>'replay_count' = '1'"
+                )
+            ).fetchone()
+            return row == ("TimeoutError", "transient", "1")
 
-        await eventually(exhausted, note="timeouts exhausting into the inbound DLQ")
+        await eventually(
+            terminal_dead_letter,
+            note="timeouts exhausting after the single automatic replay",
+        )
     finally:
         stop.set()
         await asyncio.wait_for(running, DEADLINE)
 
     archived = await (
         await admin.execute(
-            "select read_ct from pgmq.a_q_inbound"
+            "select count(*), min(read_ct), max(read_ct) from pgmq.a_q_inbound"
         )
     ).fetchone()
     dead = await (
         await admin.execute(
-            "select message->>'error_class', message->>'failure_kind'"
-            " from pgmq.q_q_inbound_dlq"
+            "select message->>'error_class', message->>'failure_kind',"
+            " message->>'replay_count' from pgmq.q_q_inbound_dlq"
         )
     ).fetchone()
     alert = await (
         await admin.execute(
-            "select type from public.alerts where organization_id = %s",
+            "select count(*) from public.alerts"
+            " where organization_id = %s and type = 'send_failed'",
             (organization_id,),
         )
     ).fetchone()
@@ -598,9 +603,9 @@ async def test_timeout_exhaustion_keeps_existing_dlq_and_alert_policy(
             (thread.conversation_id,),
         )
     ).fetchone()
-    assert archived == (6,)
-    assert dead == ("TimeoutError", "transient")
-    assert alert == ("send_failed",)
+    assert archived == (2, 6, 6)
+    assert dead == ("TimeoutError", "transient", "1")
+    assert alert == (1,)
     assert state == (0, None, 0)
 
 
