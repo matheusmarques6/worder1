@@ -184,6 +184,7 @@ class TestTheHappyPath:
         outcome = await guarded_reply(generate, judge)
 
         assert outcome.draft == "rascunho 0"
+        assert outcome.selected_attempt == 0
         assert outcome.blocked_by is None
         assert len(judge.seen) == 1, "no free regeneration for a draft that passed"
 
@@ -195,6 +196,7 @@ class TestCritical:
         outcome = await guarded_reply(generate, judge)
 
         assert outcome.draft is None
+        assert outcome.selected_attempt is None
         assert outcome.blocked_by == "critical"
         # The second attempt at a security violation is another security
         # violation — and it would cost a second model call to find out.
@@ -202,6 +204,28 @@ class TestCritical:
 
 
 class TestStandard:
+    async def test_selected_attempt_is_the_best_not_the_last(self) -> None:
+        from agents_runtime.judges.pre_send import FAIL, Judgement, RubricVerdict
+
+        scores = iter((0.8, 0.4, 0.3))
+
+        async def judge(draft, context):
+            value = next(scores)
+            rubric = RubricVerdict("tom", FAIL, value, ("tom-amigavel",))
+            return Judgement(
+                outcome=FAIL,
+                score=value,
+                rubrics=(rubric,),
+                rationale="roteiro",
+            )
+
+        outcome = await guarded_reply(Generator(), judge)
+
+        assert outcome.draft == "rascunho 0"
+        assert outcome.selected_attempt == 0
+        assert outcome.attempts == 3
+        assert outcome.last_draft == "rascunho 2"
+
     async def test_a_standard_failure_regenerates_with_the_failed_criteria(self) -> None:
         generate = Generator()
         judge = ScriptedJudge(standard_failure(), passing())
@@ -209,6 +233,7 @@ class TestStandard:
         outcome = await guarded_reply(generate, judge)
 
         assert outcome.draft == "rascunho 1"
+        assert outcome.selected_attempt == 1
         assert outcome.blocked_by is None
         # First attempt gets no feedback; the regeneration is told what failed.
         assert generate.feedback == [(), ("recusa-educada",)]
@@ -232,9 +257,19 @@ class TestStandard:
 
         outcome = await guarded_reply(generate, judge)
 
-        assert outcome.draft is not None
+        assert outcome.draft == "rascunho 0"
+        assert outcome.selected_attempt == 0
         assert outcome.blocked_by is None
         assert outcome.judgement.outcome == "fail"
+
+    async def test_a_later_critical_veto_has_no_selected_attempt(self) -> None:
+        outcome = await guarded_reply(
+            Generator(), ScriptedJudge(standard_failure(), critical_failure())
+        )
+
+        assert outcome.draft is None
+        assert outcome.selected_attempt is None
+        assert outcome.last_draft == "rascunho 1"
 
 
 class TestAJudgeThatCannotBeRead:
@@ -246,6 +281,7 @@ class TestAJudgeThatCannotBeRead:
         outcome = await guarded_reply(generate, judge)
 
         assert outcome.draft == "rascunho 1"
+        assert outcome.selected_attempt == 1
         assert len(judge.seen) == 2
 
     async def test_a_draft_nobody_could_judge_never_goes_out(self) -> None:
@@ -257,6 +293,7 @@ class TestAJudgeThatCannotBeRead:
         outcome = await guarded_reply(generate, judge)
 
         assert outcome.draft is None
+        assert outcome.selected_attempt is None
         assert outcome.blocked_by == "judge_unusable"
         assert outcome.attempts == REGENERATION_LIMIT + 1
 
@@ -490,6 +527,7 @@ class TestTheTurnBudget:
         outcome = await guarded_reply(generate, judge)
 
         assert outcome.draft == "rascunho 0"
+        assert outcome.selected_attempt == 0
         assert outcome.blocked_by is None
         assert outcome.attempts == 1
         assert budget.used == 2
@@ -516,13 +554,13 @@ class TestTheTurnBudget:
         # "rascunho 1" foi gerado (consumiu o 3º slot) mas NUNCA foi julgado
         # — não pode ser o que sai. O que sai é o `best` julgado da tentativa 0.
         assert outcome.draft == "rascunho 0"
+        assert outcome.selected_attempt == 0
         assert outcome.blocked_by is None
         assert outcome.attempts == 1
         assert budget.used == 3
-        # last_draft acompanha o que SAI no ramo de sucesso (é o mesmo texto);
-        # "rascunho 1" — gerado, nunca julgado — não aparece em lugar nenhum
-        # de `outcome`, e é isso que este teste prova.
-        assert outcome.last_draft == "rascunho 0"
+        # A seleção não promove o draft sem julgamento, mas a trilha conserva
+        # a última geração separadamente do texto vencedor.
+        assert outcome.last_draft == "rascunho 1"
 
     async def test_a_normal_turn_never_touches_the_budget(self) -> None:
         """A outra metade do ruling G: um turno que passa de primeira (1
@@ -551,6 +589,7 @@ class TestTheTurnBudget:
         outcome = await guarded_reply(generate, judge)
 
         assert outcome.draft is None
+        assert outcome.selected_attempt is None
         assert outcome.blocked_by == "budget_exceeded"
         assert outcome.last_draft is None
         assert outcome.judgements == ()
