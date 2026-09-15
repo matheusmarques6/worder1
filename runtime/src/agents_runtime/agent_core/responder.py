@@ -48,7 +48,6 @@ from agents_runtime.agent_core.guards import (
     schedule_silence,
 )
 from agents_runtime.agent_core.llm import (
-    ChatRequest,
     LlmPort,
     Message,
     ToolCall,
@@ -83,6 +82,8 @@ from agents_runtime.agent_core.prompt_compiler import (
 )
 from agents_runtime.agent_core.providers import NoOrgLlmKey, resolve_agent_llm, scoped_agent_llm
 from agents_runtime.agent_core.think_gate import PendingMessage, should_think
+from agents_runtime.agent_core.tool_loop import MAX_TOOL_ROUNDS as MAX_TOOL_ROUNDS
+from agents_runtime.agent_core.tool_loop import generate_with_tools
 from agents_runtime.clock import Clock, SystemClock
 from agents_runtime.commerce.moments import apply_moment_restrictions, resolve_moments
 from agents_runtime.config import QueueingConfig, config_from_env
@@ -145,12 +146,6 @@ TRANSCRIPT_LIMIT = 20
 
 #: Variável de ambiente que sobrescreve de onde as rubricas do Judge 1 são lidas.
 RUBRICS_DIRECTORY_VARIABLE = "AGENTS_RUBRICS_DIR"
-
-#: Rodadas de tool por TENTATIVA de geração (9.3b). Esgotou, a chamada final
-#: sai sem tools — o modelo é obrigado a concluir em texto. Regeneração do
-#: Judge reabre o loop, e o dinheiro aguenta: o offer engine reusa antes de
-#: emitir e o idempotency_key mata a duplicata no banco.
-MAX_TOOL_ROUNDS = 3
 
 #: O que o modelo lê antes de decidir pedir. A autoridade está no texto: quem
 #: decide é o engine — o modelo só PEDE (§3.3.5).
@@ -709,50 +704,14 @@ def build_responder(
                                 ),
                             )
                         )
-                    for _ in range(MAX_TOOL_ROUNDS):
-                        answer = await chat.chat(
-                            ChatRequest(
-                                model=version.config.model,
-                                messages=tuple(messages),
-                                think=gate.think,
-                                tools=tool_specs,
-                            )
-                        )
-                        if not answer.tool_calls:
-                            # Cru de propósito: o desembrulho do envelope JSON
-                            # mora em `guarded_reply` (item 44), o ponto único
-                            # por onde este `generate` e o do toque passam.
-                            # Desembrulhar aqui também seria a mesma correção
-                            # duas vezes no mesmo caminho.
-                            return answer.text
-                        # A volta do loop: o pedido do modelo e a resposta da tool
-                        # entram na conversa; nenhuma transação fica aberta aqui
-                        # (run_tool abre e fecha as suas — ADR-6 vale no loop).
-                        messages.append(
-                            Message(
-                                role="assistant",
-                                content=answer.text,
-                                tool_calls=answer.tool_calls,
-                            )
-                        )
-                        for call in answer.tool_calls:
-                            messages.append(
-                                Message(
-                                    role="tool",
-                                    content=await run_turn_tool(call),
-                                    tool_call_id=call.id,
-                                )
-                            )
-                    # Rodadas esgotadas: a última chamada sai SEM tools — concluir
-                    # em texto deixa de ser opcional.
-                    answer = await chat.chat(
-                        ChatRequest(
-                            model=version.config.model,
-                            messages=tuple(messages),
-                            think=gate.think,
-                        )
+                    return await generate_with_tools(
+                        chat,
+                        model=version.config.model,
+                        messages=tuple(messages),
+                        tools=tool_specs,
+                        execute=run_turn_tool,
+                        think=gate.think,
                     )
-                    return answer.text
 
                 await note_step("started", f"{version.name} assumiu a conversa")
 

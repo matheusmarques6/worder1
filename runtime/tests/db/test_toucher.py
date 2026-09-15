@@ -20,14 +20,16 @@ import pytest
 from agents_runtime import server
 from agents_runtime.agent_core import responder as responder_module
 from agents_runtime.agent_core import toucher as toucher_module
-from agents_runtime.agent_core.llm import EMBEDDING_MODEL
+from agents_runtime.agent_core.llm import EMBEDDING_MODEL, ToolCall
 from agents_runtime.agent_core.toucher import TouchDraft, build_toucher
 from agents_runtime.clock import SystemClock
 from agents_runtime.config import QueueingConfig
+from agents_runtime.judges.pre_send import JUDGE_MODEL
 from agents_runtime.judges.pre_send import JudgeContext as RealJudgeContext
 from agents_runtime.queueing.jobs import InboundJob, MissionTouchJob
 from agents_runtime.queueing.worker import TurnResult, run_touch
 from agents_runtime.repository import agent as agent_repo
+from agents_runtime.tools.custom_http import CustomHttpTool
 from tests.db.factories import (
     create_agent_version,
     create_knowledge_chunk,
@@ -72,6 +74,155 @@ def _job(org: uuid.UUID, thread, **kwargs) -> MissionTouchJob:
 
 def _toucher(dsn: str, llm: ScriptedLlm, **kwargs):
     return build_toucher(dsn, llm=llm, set_role="worker_role", **kwargs)
+
+
+ASK_STOCK = ToolCall("stock-1", "stock", {"sku": "shoe-1"})
+ASK_COUPON = ToolCall(
+    "coupon-1", "create_coupon", {"object_kind": "cart", "object_ref": "cart-9"},
+)
+
+
+@pytest.fixture
+def custom_catalog(admin, org, monkeypatch):
+    admin.execute(
+        "update public.ai_agent_versions set settings = %s where organization_id = %s",
+        (psycopg.types.json.Jsonb({"tools": {"enabled": ["create_coupon"]}}), org),
+    )
+    create_mission(
+        admin, org, event_type=FAMILY, status="active", enabled_tools=["create_coupon"],
+        concession={"kind": "percent", "max_value": 15, "validity_hours": 24},
+    )
+    stranger = create_tenant(admin)
+    seen = []
+
+    async def resolve_public(_host):
+        return ["93.184.216.34"]
+
+    def stock_response(request):
+        seen.append(request)
+        return httpx.Response(200, json={"stock": 2})
+
+    monkeypatch.setattr(
+        toucher_module, "CustomHttpTool",
+        lambda row, *, base_secret: CustomHttpTool(
+            row, base_secret=base_secret, transport=httpx.MockTransport(stock_response),
+            resolver=resolve_public,
+        ),
+        raising=False,
+    )
+    try:
+        for tenant_id, name, enabled in (
+            (org, "stock", True), (org, "disabled_stock", False),
+            (stranger, "private_stock", True),
+        ):
+            admin.execute(
+                """
+                insert into public.ai_agent_custom_tools
+                    (organization_id, name, label, description, when_to_use,
+                     endpoint, method, params, enabled, last_test_status)
+                values (%s, %s, 'Estoque', 'Consulta estoque.', 'Antes do toque.',
+                        'https://localhost/stock', 'GET',
+                        '[{"name":"sku","type":"string","required":true}]', %s, 'ok')
+                """,
+                (tenant_id, name, enabled),
+            )
+        yield create_thread(admin, org), seen
+    finally:
+        admin.execute("delete from public.organizations where id = %s", (stranger,))
+
+
+class TestCustomToolLoop:
+    async def test_only_enabled_tenant_tools_run_and_unknown_names_return_errors(
+        self, dsn, admin, org, custom_catalog,
+    ):
+        thread, seen = custom_catalog
+        unknown = ToolCall("unknown-1", "unknown", {})
+        llm = ScriptedLlm(
+            tool_rounds=[(ASK_STOCK,), (ASK_COUPON, unknown)], reply="Há duas unidades",
+        )
+
+        draft = await _toucher(dsn, llm)(_job(org, thread))
+
+        assert draft.content["text"] == "Há duas unidades"
+        calls = [request for request in llm.asked if request.model != JUDGE_MODEL]
+        assert len(calls) == 3
+        assert all([tool.name for tool in request.tools] == ["stock"] for request in calls)
+        assert all(request.think is False for request in calls)
+        responses = {m.tool_call_id: json.loads(m.content)
+                     for m in calls[-1].messages if m.role == "tool"}
+        assert responses == {
+            "stock-1": {"status": 200, "body": {"stock": 2}},
+            "coupon-1": {"error": "tool desconhecida: create_coupon"},
+            "unknown-1": {"error": "tool desconhecida: unknown"},
+        }
+        assert len(seen) == 1
+        assert seen[0].method == "GET"
+        assert seen[0].url.params["sku"] == "shoe-1"
+        assert admin.execute(
+            "select organization_id, tool_name, input, success from internal.tool_calls"
+            " where conversation_id = %s", (thread.conversation_id,),
+        ).fetchall() == [(org, "stock", {"sku": "shoe-1"}, True)]
+        assert admin.execute(
+            "select count(*) from public.incentive_grants where organization_id = %s", (org,),
+        ).fetchone() == (0,)
+
+    async def test_loop_does_not_repeat_the_pre_materialized_concession(
+        self, dsn, admin, org, custom_catalog,
+    ):
+        thread, seen = custom_catalog
+        create_store(admin, org)
+        issued = []
+
+        def shopify_ok(request):
+            issued.append(request.url.path)
+            if request.url.path.endswith("/price_rules.json"):
+                return httpx.Response(201, json={"price_rule": {"id": 1}})
+            return httpx.Response(201, json={"discount_code": {"code": "x"}})
+
+        llm = ScriptedLlm(tool_rounds=[(ASK_STOCK,), (ASK_COUPON,), (ASK_STOCK,)])
+        draft = await _toucher(dsn, llm, shopify_transport=httpx.MockTransport(shopify_ok))(
+            _job(org, thread, concession_request={
+                "kind": "percent", "value": 10, "object_kind": "cart", "object_ref": "cart-9",
+            }),
+        )
+
+        assert draft.content is not None
+        calls = [request for request in llm.asked if request.model != JUDGE_MODEL]
+        assert len(calls) == 4
+        assert calls[-1].tools == ()
+        assert all("Benefício autorizado" in request.messages[0].content for request in calls)
+        assert all(tool.name != "create_coupon" for request in calls for tool in request.tools)
+        assert len(seen) == 2
+        assert len(issued) == 2  # One price rule and one discount code.
+        assert admin.execute(
+            "select count(*) from public.incentive_grants where organization_id = %s", (org,),
+        ).fetchone() == (1,)
+        assert admin.execute(
+            "select tool_name, count(*) from internal.tool_calls"
+            " where conversation_id = %s group by tool_name order by tool_name",
+            (thread.conversation_id,),
+        ).fetchall() == [("create_coupon", 1), ("stock", 2)]
+        assert admin.execute(
+            "select purpose, count(*) from internal.llm_calls"
+            " where conversation_id = %s group by purpose order by purpose",
+            (thread.conversation_id,),
+        ).fetchall() == [("agent_reply", 4), ("judge_pre", 1)]
+
+    async def test_tool_rounds_spend_the_existing_turn_budget(
+        self, dsn, admin, org, custom_catalog,
+    ):
+        thread, seen = custom_catalog
+        llm = ScriptedLlm(tool_rounds=[(ASK_STOCK,)] * 8)
+
+        draft = await _toucher(dsn, llm, turn_llm_call_limit=2)(_job(org, thread))
+
+        assert draft.content is None
+        assert len(llm.asked) == len(seen) == 2
+        assert all(request.model != JUDGE_MODEL for request in llm.asked)
+        assert admin.execute(
+            "select purpose, count(*) from internal.llm_calls"
+            " where conversation_id = %s group by purpose", (thread.conversation_id,),
+        ).fetchall() == [("agent_reply", 2)]
 
 
 @pytest.fixture

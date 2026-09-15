@@ -17,6 +17,7 @@ As diferenças que importam:
     no meio da geração mata o rascunho e o turno de RESPOSTA assume.
 """
 
+import json
 import logging
 import os
 from dataclasses import dataclass, replace
@@ -33,7 +34,7 @@ from agents_runtime.agent_core.guards import (
     resolve_blocked_topic,
     schedule_silence,
 )
-from agents_runtime.agent_core.llm import ChatRequest, LlmPort, Message
+from agents_runtime.agent_core.llm import LlmPort, Message, ToolCall, ToolSpec
 from agents_runtime.agent_core.metering import TurnBudget
 from agents_runtime.agent_core.mission_resolver import (
     NodeDelta,
@@ -61,6 +62,7 @@ from agents_runtime.agent_core.responder import (
     delivery_flags,
     transfer_to_human,
 )
+from agents_runtime.agent_core.tool_loop import generate_with_tools
 from agents_runtime.clock import Clock, SystemClock
 from agents_runtime.commerce.moments import apply_moment_restrictions, resolve_moments
 from agents_runtime.config import QueueingConfig, config_from_env
@@ -76,6 +78,7 @@ from agents_runtime.obs.telemetry import annotate
 from agents_runtime.queueing.jobs import MissionTouchJob
 from agents_runtime.repository import agent as agent_repo
 from agents_runtime.repository import alerts as alerts_repo
+from agents_runtime.repository import custom_tools as custom_tools_repo
 from agents_runtime.repository import engine as engine_repo
 from agents_runtime.repository import judge_scores as scores_repo
 from agents_runtime.repository import missions as missions_repo
@@ -90,6 +93,7 @@ from agents_runtime.repository.scope import (
 )
 from agents_runtime.tools.base import ToolContext, run_tool
 from agents_runtime.tools.coupon import CreateCoupon
+from agents_runtime.tools.custom_http import CustomHttpTool, tool_spec_for
 from agents_runtime.tools.knowledge import DEFAULT_LIMIT
 
 logger = logging.getLogger(__name__)
@@ -203,6 +207,7 @@ def build_toucher(
                     organization_id=job.organization_id,
                     contact_id=state.contact_id,
                 )
+                custom_rows = await custom_tools_repo.load_enabled_custom_tools(conn)
                 key_rows = (
                     await keys_repo.load_org_provider_keys(
                         conn, organization_id=job.organization_id
@@ -383,6 +388,36 @@ def build_toucher(
                     clock, DEFAULT_LIMIT,
                 )
 
+                turn_tools: dict[str, CustomHttpTool] = {}
+                tool_specs: tuple[ToolSpec, ...] = ()
+                for row in custom_rows:
+                    if row.name == "create_coupon":
+                        continue
+                    turn_tools[row.name] = CustomHttpTool(row, base_secret=base_secret)
+                    tool_specs = (*tool_specs, tool_spec_for(row))
+
+                async def run_turn_tool(call: ToolCall) -> str:
+                    tool = turn_tools.get(call.name)
+                    if tool is None:
+                        payload = {"error": f"tool desconhecida: {call.name}"}
+                    else:
+                        result = await run_tool(
+                            conn,
+                            tool,
+                            ToolContext(
+                                organization_id=job.organization_id,
+                                conversation_id=job.conversation_id,
+                            ),
+                            dict(call.arguments),
+                            clock=clock,
+                        )
+                        payload = (
+                            dict(result.output or {})
+                            if result.success
+                            else {"error": result.error}
+                        )
+                    return json.dumps(payload, ensure_ascii=False)
+
                 agent = agent_block(version, settings)
                 window_open = (
                     state.last_inbound_at is not None
@@ -390,20 +425,9 @@ def build_toucher(
                 )
                 compiled = compile_prompt(
                     agent=agent,
-                    # Item 44: o toque NÃO passa `tools=` ao modelo — o dinheiro
-                    # dele já virou cupom antes da geração e entra no prompt
-                    # como FATO (`grant_lines` acima). Mas `resolved.tools` é a
-                    # interseção missão∩agente, e o compilador a despejava no
-                    # prompt como "Ferramentas desta situação": o toque dizia ao
-                    # modelo que ele podia emitir cupom e não lhe dava tool
-                    # nenhuma. O modelo ou ignorava, ou prometia de novo o
-                    # benefício que o prompt já dava como concedido. Zerar aqui,
-                    # e só aqui, preserva as permissões da busca acima: o cupom é dirigido por
-                    # `job.concession_request` e `CreateCoupon` não lê
-                    # `mission.tools`. O `resolved` que já foi para a tool
-                    # continua intocado, e um tool-loop futuro no toque
-                    # encontrará a lista de verdade em vez de uma mentira.
-                    mission=replace(resolved, tools=()),
+                    # A oferta do toque contém só consultas custom. O cupom já
+                    # foi materializado por concession_request e entra como fato.
+                    mission=replace(resolved, tools=tuple(turn_tools)),
                     state=StateBlock(
                         moment_ids=tuple(str(m) for m in moment_view.moment_ids),
                         moment_facts=moment_view.facts,
@@ -459,14 +483,14 @@ def build_toucher(
                                 ),
                             )
                         )
-                    answer = await chat.chat(
-                        ChatRequest(
-                            model=version.config.model,
-                            messages=tuple(messages),
-                            think=False,
-                        )
+                    return await generate_with_tools(
+                        chat,
+                        model=version.config.model,
+                        messages=tuple(messages),
+                        tools=tool_specs,
+                        execute=run_turn_tool,
+                        think=False,
                     )
-                    return answer.text
 
                 outcome = await guarded_reply(generate, judge, context=context)
 

@@ -347,3 +347,9 @@ class TestTheGates:
         }
         final = agent_calls(llm)[-1]
         assert final.tools == (), "a rodada de encerramento deveria sair SEM tools"
+        assert len(agent_calls(llm)) == MAX_TOOL_ROUNDS + 1
+        assert admin.execute(
+            "select count(*) from internal.tool_calls"
+            " where conversation_id = %s and tool_name = 'create_coupon'",
+            (thread.conversation_id,),
+        ).fetchone() == (MAX_TOOL_ROUNDS,)
