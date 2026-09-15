@@ -212,7 +212,10 @@ def is_transfer_cooldown_active(
 
 
 def _is_hhmm(value: Any) -> bool:
-    return isinstance(value, str) and re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", value) is not None
+    return (
+        isinstance(value, str)
+        and re.fullmatch(r"(?:[01][0-9]|2[0-3]):[0-5][0-9]", value) is not None
+    )
 
 
 def is_within_schedule(settings: Any, *, now: datetime) -> bool:

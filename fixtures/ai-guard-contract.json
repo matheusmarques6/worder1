@@ -17,7 +17,9 @@
     {"id":"W3-GD-02-days-string","now":"2026-09-07T12:00:00Z","schedule":{"hours":{"start":"08:00","end":"18:00"},"days":"mon"},"expected":false},
     {"id":"W3-GD-02-days-object","now":"2026-09-07T12:00:00Z","schedule":{"hours":{"start":"08:00","end":"18:00"},"days":{}},"expected":false},
     {"id":"W3-GD-02-days-number","now":"2026-09-07T12:00:00Z","schedule":{"hours":{"start":"08:00","end":"18:00"},"days":0},"expected":false},
-    {"id":"W3-GD-02-days-non-string","now":"2026-09-07T12:00:00Z","schedule":{"hours":{"start":"08:00","end":"18:00"},"days":["mon",{}]},"expected":false}
+    {"id":"W3-GD-02-days-non-string","now":"2026-09-07T12:00:00Z","schedule":{"hours":{"start":"08:00","end":"18:00"},"days":["mon",{}]},"expected":false},
+    {"id":"W3-GD-02-dia-herdado","now":"2026-09-14T15:00:00Z","schedule":{"hours":{"start":"08:00","end":"18:00"},"days":["mon","constructor"]},"expected":false},
+    {"id":"W3-GD-02-hora-digito-unicode","now":"2026-09-14T15:00:00Z","schedule":{"hours":{"start":"0０:00","end":"23:59"},"days":["mon"]},"expected":false}
   ],
   "state_cases": [
     {"id":"W3-GD-03-ai-disabled","now":"2026-09-08T12:00:00Z","settings":{},"state":{"ai_enabled":false},"expected":"ai_disabled","expected_badge":"ai_disabled"},

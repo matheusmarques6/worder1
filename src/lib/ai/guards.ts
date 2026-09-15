@@ -126,7 +126,7 @@ export function isWithinSchedule(
   const today = dayMap[dayName];
 
   const days = schedule.days === undefined ? ['mon', 'tue', 'wed', 'thu', 'fri'] : schedule.days;
-  if (!Array.isArray(days) || !days.every((day) => typeof day === 'string' && day in dayMap)) {
+  if (!Array.isArray(days) || !days.every((day) => typeof day === 'string' && Object.hasOwn(dayMap, day))) {
     return false;
   }
   const inDayRange = days.includes(today);
