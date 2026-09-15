@@ -351,6 +351,7 @@
 .agents-theme .prompt-box { background: #1A1D23; border-radius: 13px; padding: 16px 18px; font-family: var(--mono); font-size: 12px; line-height: 1.7; color: #C9D1D9; white-space: pre-wrap; max-height: 320px; overflow-y: auto; }
 .agents-theme .prompt-box .h { color: #FF9D4D; font-weight: 600; }
 .agents-theme .prompt-box .b { color: #fff; }
+.agents-theme .prompt-box .preview-ghost { border-left: 2px dashed currentColor; padding-left: 8px; color: #AEB5BF; font-style: italic; }
 
 /* callout (+ tone modifiers) */
 .agents-theme .callout { display: flex; gap: 9px; padding: 11px 13px; border-radius: 11px; font-size: 12.5px; line-height: 1.5; background: var(--surface-3); color: var(--text-2); }
