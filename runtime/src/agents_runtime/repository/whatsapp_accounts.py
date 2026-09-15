@@ -81,10 +81,10 @@ async def resolve_account_id(
 ) -> UUID | None:
     """Resolve old jobs once, in the worker's scoped phase-one transaction."""
     cursor = await conn.execute(
-        "select case when coalesce(last_channel, 'whatsapp') = 'whatsapp'"
+        "select case when %s::uuid is not null or coalesce(last_channel, 'whatsapp') = 'whatsapp'"
         " then internal.resolve_whatsapp_account(%s, %s) end"
         " from public.conversations where id=%s and organization_id=%s",
-        (organization_id, channel_account_id, conversation_id, organization_id),
+        (channel_account_id, organization_id, channel_account_id, conversation_id, organization_id),
     )
     row = await cursor.fetchone()
     if row is None:

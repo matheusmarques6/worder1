@@ -99,6 +99,39 @@ def queued_payloads(admin: psycopg.Connection) -> list[dict]:
     return [row[0] for row in rows]
 
 
+@pytest.mark.parametrize("channel", ["email", "instagram"])
+def test_non_whatsapp_mission_preserves_exact_legacy_payload(admin, org, channel):
+    contact = create_contact(admin, org)
+    mission = create_mission(admin, org, event_type="cart.abandoned", status="active")
+    run_id = create_run(admin, org, contact)
+    status, conversation_id, msg_id = emit(
+        admin, org, contact, run_id=run_id, channel=channel, delta={"optional": None},
+    )
+    assert status == "queued"
+    touch_id = admin.execute(
+        "select touch_id from internal.mission_touch_emissions"
+        " where organization_id=%s and run_id=%s and node_ref='flow-1:node-9'",
+        (org, run_id),
+    ).fetchone()[0]
+    payload = admin.execute(
+        "select message from pgmq.q_q_domain_events where msg_id=%s", (msg_id,),
+    ).fetchone()[0]
+    assert payload == {
+        "kind": "mission_touch",
+        "touch_id": str(touch_id),
+        "organization_id": str(org),
+        "contact_id": str(contact),
+        "conversation_id": str(conversation_id),
+        "event_family": "cart.abandoned",
+        "mission_version_id": str(mission),
+        "node_ref": "flow-1:node-9",
+        "delta": {"optional": None},
+        "concession_request": None,
+        "preferred_channel": channel,
+        "otel": None,
+    }
+
+
 class TestTheOneTransaction:
     def test_queued_means_conversation_and_job_together(
         self, admin: psycopg.Connection, org: uuid.UUID

@@ -850,9 +850,8 @@ begin
             'delta', coalesce(p_delta, '{}'::jsonb),
             'concession_request', p_concession_request,
             'preferred_channel', p_preferred_channel,
-            'channel_account_id', v_waba_id,
             'otel', p_otel
-        )
+        ) || jsonb_strip_nulls(jsonb_build_object('channel_account_id', v_waba_id))
     ) into v_msg_id;
 
     update internal.mission_touch_emissions

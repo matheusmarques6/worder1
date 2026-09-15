@@ -203,6 +203,59 @@ async def test_old_jobs_resolve_real_account_before_generation(
     ).fetchone() == (0,)
 
 
+@pytest.mark.parametrize("last_channel", ["email", "instagram"])
+@pytest.mark.parametrize("identity", ["valid", "foreign", "unknown", "legacy"])
+async def test_non_whatsapp_channel_never_discards_explicit_account(
+    admin, dsn, two_tenants, last_channel, identity,
+):
+    org = two_tenants.a.id
+    thread = create_thread(admin, org)
+    set_runtime_mode(admin, org)
+    # A non-WhatsApp legacy job must not try the ambiguous WhatsApp fallback.
+    create_channel_account(admin, org)
+    account = thread.channel_account_id
+    if identity == "foreign":
+        account = create_channel_account(admin, two_tenants.b.id).id
+    elif identity == "unknown":
+        account = uuid.uuid4()
+    elif identity == "legacy":
+        account = None
+    admin.execute(
+        "update public.conversations set last_channel=%s, next_inbound_seq=1 where id=%s",
+        (last_channel, thread.conversation_id),
+    )
+    job = InboundJob(
+        conversation_id=thread.conversation_id, generation=0, target_seq=1,
+        organization_id=org, channel_account_id=account,
+    )
+    generated = []
+
+    async def produce(resolved):
+        generated.append(resolved.channel_account_id)
+        return None
+
+    async with await psycopg.AsyncConnection.connect(dsn, autocommit=True) as worker:
+        await worker.execute("set role worker_role")
+        if identity in {"foreign", "unknown"}:
+            with pytest.raises(psycopg.errors.InvalidParameterValue):
+                await run_turn(
+                    worker, job, produce, config=QueueingConfig(), clock=SystemClock(),
+                )
+            assert generated == []
+            assert admin.execute(
+                "select processing_token, version from public.conversations where id=%s",
+                (thread.conversation_id,),
+            ).fetchone() == (None, 0)
+        else:
+            assert await run_turn(
+                worker, job, produce, config=QueueingConfig(), clock=SystemClock(),
+            ) is TurnResult.DONE
+            assert generated == [account]
+    assert admin.execute(
+        "select count(*) from internal.message_outbox where organization_id=%s", (org,),
+    ).fetchone() == (0,)
+
+
 def test_legacy_ingest_resolves_one_active_account(admin, two_tenants):
     org = two_tenants.a.id
     thread = create_thread(admin, org)
@@ -304,6 +357,11 @@ async def test_new_account_supersedes_a_draft_but_never_reroutes_a_committed_sen
                 "select channel_account_id from internal.message_outbox"
                 " where organization_id=%s", (org,),
             ).fetchone() == (account_b.id,)
+            assert admin.execute(
+                "select channel_account_id from public.messages"
+                " where organization_id=%s and conversation_id=%s and direction='outbound'",
+                (org, thread.conversation_id),
+            ).fetchall() == [(account_b.id,)]
             return
         assert result is TurnResult.DONE
 
