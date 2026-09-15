@@ -390,7 +390,7 @@ Evidência de 2026-09-14: usuário aprovou teto único de turno 90s, conexão 3s
 
 **Files:**
 
-- Modify: `runtime/src/agents_runtime/config.py`, `runtime/src/agents_runtime/queueing/worker.py`, `runtime/src/agents_runtime/app.py::_connect`, `runtime/src/agents_runtime/server.py::_connection`, `runtime/src/agents_runtime/__main__.py`, `runtime/src/agents_runtime/agent_core/responder.py`, `runtime/src/agents_runtime/agent_core/toucher.py`.
+- Modify: `runtime/src/agents_runtime/config.py`, `runtime/src/agents_runtime/queueing/worker.py`, `runtime/src/agents_runtime/app.py::_connect`, `runtime/src/agents_runtime/server.py::_connection`, `runtime/src/agents_runtime/__main__.py`, `runtime/src/agents_runtime/agent_core/responder.py`, `runtime/src/agents_runtime/agent_core/toucher.py`, `runtime/src/agents_runtime/repository/scope.py` (ampliação autorizada: centraliza `set_statement_timeout` e o aborto seguro da conexão sem violar o contrato que reserva acesso ao banco ao repositório).
 - Create: `runtime/tests/unit/test_turn_time_limit.py`.
 - Modify: `runtime/tests/unit/test_healthz_reuses_one_connection.py`, `runtime/tests/unit/test_listener_connects_in_one_guarded_place.py`, `runtime/tests/db/test_server.py`.
 - Modify: `runtime/tests/db/test_startup_rls_guard.py`.
@@ -403,7 +403,7 @@ Evidência de 2026-09-14: usuário aprovou teto único de turno 90s, conexão 3s
 - Consumes: valores da Task 7; configuração injetável `QueueingConfig` e factories reais; `_turn`, `_touch` fazem cleanup antes de propagar exceção.
 - Produces: `QueueingConfig.turn_timeout: timedelta`, lido por `config_from_env` via `AGENTS_TURN_TIMEOUT_MS`; mesmos retornos `TurnResult`. `TimeoutError` segue apenas a consequência aprovada; `CancelledError` externo nunca vira sucesso.
 
-- [ ] **Step 1 (5 min): Escrever teste de cancelamento determinístico.** No novo teste unit, usar `AsyncMock` para engine e um contexto transacional assíncrono vazio, `SimpleNamespace` para claim com `version=1,last_processed_seq=0`, e `asyncio.Event` no responder. Parametrizar `_turn` e `_touch`. Config de teste `turn_timeout=timedelta(milliseconds=10)`; a rotina responde apenas quando cancelada e marca `closed.set()` no `finally`. Asserções centrais:
+- [x] **Step 1 (5 min): Escrever teste de cancelamento determinístico.** No novo teste unit, usar `AsyncMock` para engine e um contexto transacional assíncrono vazio, `SimpleNamespace` para claim com `version=1,last_processed_seq=0`, e `asyncio.Event` no responder. Parametrizar `_turn` e `_touch`. Config de teste `turn_timeout=timedelta(milliseconds=10)`; a rotina responde apenas quando cancelada e marca `closed.set()` no `finally`. Asserções centrais:
 
 ```python
 with pytest.raises(TimeoutError):
@@ -414,8 +414,8 @@ engine.conclude_turn.assert_not_awaited()
 ```
 
 Configurar explicitamente mocks de `runtime_rollout_is_enabled=True`, `claim_conversation`, `scope_to_organization`, `renew_lease`, `release_lease`; para toque também `outbox_key_exists=False` e `turn_pointers=(1,1)`. `conn.transaction()` fornece o contexto async sem SQL; usar `SystemClock` de `agents_runtime.clock` para o sleep do keepalive ceder o event loop. Não usar `FrozenClock.sleep` aqui: ele retorna imediatamente e, com mocks também imediatos, faria o laço girar sem permitir timeout. Acrescentar sucesso antes do prazo e cancelamento externo, verificando nenhuma task de keepalive pendente criada pelo caso.
-- [ ] **Step 2 (2 min): RED.** `uv run --directory runtime pytest tests/unit/test_turn_time_limit.py -q`. Esperado inicial: `QueueingConfig` rejeita `turn_timeout`; depois do campo, a prova deve falhar por não cancelar. O teste possui deadline externo apenas para terminar com falha, nunca para produzir o timeout afirmado.
-- [ ] **Step 3 (4 min): Implementar o envelope stdlib nos dois produtores.** Copiar o valor aprovado da Task 7 para o default da configuração; validar override positivo/finito. Dentro do `try/finally` que já mata o keepalive:
+- [x] **Step 2 (2 min): RED.** `uv run --directory runtime pytest tests/unit/test_turn_time_limit.py -q`. Esperado inicial: `QueueingConfig` rejeita `turn_timeout`; depois do campo, a prova deve falhar por não cancelar. O teste possui deadline externo apenas para terminar com falha, nunca para produzir o timeout afirmado.
+- [x] **Step 3 (4 min): Implementar o envelope stdlib nos dois produtores.** Copiar o valor aprovado da Task 7 para o default da configuração; validar override positivo/finito. Dentro do `try/finally` que já mata o keepalive:
 
 ```python
 async with asyncio.timeout(config.turn_timeout.total_seconds()):
@@ -428,8 +428,8 @@ async with asyncio.timeout(config.turn_timeout.total_seconds()):
 ```
 
 Não envolver a liberação de lease no mesmo deadline já vencido. Cleanup tem o teto independente aprovado e erro de cleanup preserva a causa original em log/exceção encadeada.
-- [ ] **Step 4 (5 min): RED de statement e conexão.** Teste de conexão inspeciona kwargs passados a `psycopg.AsyncConnection.connect` nos quatro lugares, após monkeypatch, e exige o connect timeout aprovado. Teste DB executa `select pg_sleep(0.1)` numa conexão de teste configurada com `statement_timeout=20` ms; deve levantar `psycopg.errors.QueryCanceled` e uma transação seguinte deve retornar `select 1 = 1`. Esses 20ms são exclusivamente do teste, não a decisão de produção. Aguardar resposta de health após timeout deve produzir 503 e permitir reconnect no probe seguinte.
-- [ ] **Step 5 (5 min): Aplicar a estratégia aprovada em todas as portas.** Branch A de conexão passa `connect_timeout` positivo como kwarg nas quatro chamadas existentes. Branch A de statement usa após `SET ROLE`:
+- [x] **Step 4 (5 min): RED de statement e conexão.** Teste de conexão inspeciona kwargs passados a `psycopg.AsyncConnection.connect` nos quatro lugares, após monkeypatch, e exige o connect timeout aprovado. Teste DB executa `select pg_sleep(0.1)` numa conexão de teste configurada com `statement_timeout=20` ms; deve levantar `psycopg.errors.QueryCanceled` e uma transação seguinte deve retornar `select 1 = 1`. Esses 20ms são exclusivamente do teste, não a decisão de produção. Aguardar resposta de health após timeout deve produzir 503 e permitir reconnect no probe seguinte.
+- [x] **Step 5 (5 min): Aplicar a estratégia aprovada em todas as portas.** Branch A de conexão passa `connect_timeout` positivo como kwarg nas quatro chamadas existentes. Branch A de statement usa após `SET ROLE`:
 
 ```python
 await conn.execute("select set_config('statement_timeout', %s, false)",
@@ -437,8 +437,12 @@ await conn.execute("select set_config('statement_timeout', %s, false)",
 ```
 
 `statement_timeout_ms` vem da configuração aprovada lida na composição; se criar helper de configuração, nomeá-lo no brief e usar o mesmo em todas as portas, sem mover SQL para fora do repository contra o Import Linter. Branch B conserva DSN real fora dos artefatos e exige prova por `SHOW statement_timeout` depois da troca de papel; se essa prova falhar, não declarar cobertura e devolver a estratégia ao controlador. Não promover env em ambiente externo nesta task.
-- [ ] **Step 6 (3 min): GREEN.** `uv run --directory runtime pytest tests/unit/test_turn_time_limit.py tests/unit/test_agent_llm_closes_after_the_turn.py -q`; `uv run --directory runtime ruff check .`; `uv run --directory runtime lint-imports`. Guardião executa `uv run --directory runtime pytest tests/db/test_startup_rls_guard.py tests/db/test_database_time_limits.py -q` e os cenários pipeline de lease, retry e cancelamento da Onda 2. Nenhuma exceção escondida ou repetição até passar.
-- [ ] **Step 7 (2 min): Commit e rollback.** `git add` apenas arquivos efetivamente alterados acima; `git commit -m "fix: bound runtime turns and database waits"`. Sol implementa, Astra revisa. Reverter código/configuração juntos; para eventual `ALTER ROLE` aprovado, compensar somente os dois roles exatos para o valor anterior registrado. Timeout unitário verde não substitui cancelamento DB real.
+- [x] **Step 6 (3 min): GREEN.** `uv run --directory runtime pytest tests/unit/test_turn_time_limit.py tests/unit/test_agent_llm_closes_after_the_turn.py -q`; `uv run --directory runtime ruff check .`; `uv run --directory runtime lint-imports`. Guardião executa `uv run --directory runtime pytest tests/db/test_startup_rls_guard.py tests/db/test_database_time_limits.py -q` e os cenários pipeline de lease, retry e cancelamento da Onda 2. Nenhuma exceção escondida ou repetição até passar.
+- [x] **Step 7 (2 min): Commit e rollback.** `git add` apenas arquivos efetivamente alterados acima; `git commit -m "fix: bound runtime turns and database waits"`. Sol implementa, Astra revisa. Reverter código/configuração juntos; para eventual `ALTER ROLE` aprovado, compensar somente os dois roles exatos para o valor anterior registrado. Timeout unitário verde não substitui cancelamento DB real.
+
+Evidência de 2026-09-14: implementação `c28e1b9d`. O TDD começou com REDs de configuração, timeout dos dois produtores, cleanup do psycopg, corrida de expiração do health e composição; as revisões independentes ainda reproduziram transação de keepalive interrompida, descritor Windows fechado ainda registrado, expiração entre `settled` e release, task auxiliar sem dono e cancelamento no yield final. As correções mantêm um orçamento único por etapa, parada cooperativa do keepalive, ownership forte de produtor residual e aborto compartilhado `remove_reader`/`remove_writer` antes de `pgconn.finish()`. GREEN final local executado pelo controlador: `92 passed` no foco, `1831 passed` na suíte unitária, Ruff verde, `4 kept, 0 broken` no Import Linter e `git diff --check` limpo.
+
+Gate real descartável: nonce final `053c58c3b3544183ab3a3a0cef9eaf60`, Supabase CLI 2.111.0, replay integral das migrations e `45 passed`, `0 failed`, `0 errors`, `0 skipped` nos testes DB/pipeline selecionados (RLS/startup, statement e health reais; lease, retry, cancelamento, DLQ/alerta, composição e processo). `gates.json` terminou em `state=stopped`, `failure=null`; zero containers/volumes `waudit` remanescentes. O primeiro gate expôs as regressões e o segundo isolou a expectativa assíncrona de desaparecimento do backend; nenhum resultado vermelho foi promovido. Revisões finais: Spec PASS e Quality APPROVED. Limites declarados permanecem: Python não encerra à força produtor que ignore cancelamento indefinidamente, e esta task não comprova drenagem completa dentro do shutdown padrão de 30s.
 
 ### Task 9: Missão por evento e data da última compra (W3-T1, item 63)
 
