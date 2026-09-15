@@ -6,7 +6,7 @@ import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type D
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { TRAFFIC_TYPES, PAGE_TEMPLATES } from '@/lib/popups/targeting'
-import { wheelSectorPath, wheelLabelPos, wheelPinPos, WHEEL_R, WHEEL_RIM_R, WHEEL_RIM_W } from '@/lib/popups/games'
+import { wheelSectorPath, wheelLabelPos, wheelPinPos, WHEEL_R, WHEEL_C, WHEEL_RIM_W } from '@/lib/popups/games'
 import { splitLines } from '@/lib/popups/lines'
 import {
   ArrowLeft, Save, Loader2, Monitor, Smartphone, Plus, Trash2, X, Undo2, Redo2, Copy,
@@ -19,7 +19,7 @@ import {
   BarChart3,
   SlidersHorizontal, Layers, Square, Sun, CornerDownRight,
   MoveHorizontal, MoveVertical, Check, MoreHorizontal, Pencil,
-  AlertTriangle,
+  AlertTriangle, RotateCcw, Rows,
 } from 'lucide-react'
 import {
   type HistoryState, historySeed, historyPush, historyUndo, historyRedo, canUndo, canRedo,
@@ -48,6 +48,13 @@ interface PopupDesign {
     overlay: { enabled: boolean; color: string; opacity: number; closeOnClick: boolean }
     closeButton: { show: boolean; color: string; size: number }
     sideImage: { enabled: boolean; src: string; position: 'left' | 'right'; width: number }
+    // A foto sangrando atrás do conteúdo inteiro — o formato dos popups
+    // que convertem hoje. Diferente da imagem LATERAL, que é formato de
+    // e-mail: aqui o texto fica POR CIMA da foto, e o véu é o que mantém
+    // ele legível.
+    backgroundImage?: { enabled: boolean; src: string; overlay?: { enabled?: boolean; color?: string; opacity?: number; style?: 'gradient' | 'flat' } }
+    /** No celular o popup ocupa a tela inteira, sem cantos nem margem. */
+    fullscreenMobile?: boolean
     animation: 'fade' | 'slide-up' | 'none'
     // Barra de progresso entre etapas (só aparece com 2+ etapas).
     progress?: { enabled: boolean; color?: string; trackColor?: string; height?: number }
@@ -226,12 +233,16 @@ const BLOCK_CATEGORIES: Array<{ name: string; items: Array<{ type: string; label
     items: [
       { type: 'wheel', label: 'Roleta', icon: Disc3 },
       { type: 'scratch', label: 'Raspadinha', icon: Eraser },
+      { type: 'cards', label: 'Cartas', icon: Layers },
     ],
   },
   {
     name: 'Campos',
     items: [
       { type: 'email', label: 'Email', icon: AtSign },
+      // Botões empilhados que respondem E avançam num clique só — o
+      // primeiro passo de quase todo popup que converte por aí.
+      { type: 'choice', label: 'Escolhas', icon: Rows },
       { type: 'name-input', label: 'Nome', icon: User },
       { type: 'phone', label: 'Telefone', icon: Phone },
       { type: 'text-input', label: 'Texto', icon: TextCursorInput },
@@ -319,6 +330,22 @@ const defaultProps: Record<string, Record<string, any>> = {
   text: { content: 'Ganhe 10% de desconto!', fontSize: 28, color: '#111827', fontWeight: 'bold', align: 'center', tag: 'h2', lineHeight: 1.3 },
   button: { text: 'QUERO MEU DESCONTO', bgColor: '#F97316', textColor: '#fff', fontSize: 15, borderRadius: 8, fullWidth: true, action: 'submit', paddingV: 14, paddingH: 28 },
   image: { src: '', alt: '', imgWidth: 100, maxHeight: 300, borderRadius: 0, align: 'center', padding: 0 },
+  // Escolhas: os botões empilhados que abrem quase todo popup bom que
+  // existe por aí ("O que você está procurando?"). Clicar é a resposta E o
+  // avanço — sem bolinha de rádio e sem um segundo botão "continuar".
+  choice: {
+    label: 'O que você está procurando?', showLabel: true, labelSize: 17, labelColor: '#111827', labelGap: 16,
+    options: [
+      { id: 'o1', label: 'Opção 1', value: 'opcao-1', next: '' },
+      { id: 'o2', label: 'Opção 2', value: 'opcao-2', next: '' },
+      { id: 'o3', label: 'Opção 3', value: 'opcao-3', next: '' },
+    ],
+    mapTo: 'custom', mapToCustom: 'escolha',
+    optionBg: '#FFFFFF', optionColor: '#111827', hoverBg: '#F3F4F6',
+    fontSize: 16, fontWeight: '600', paddingV: 16, paddingH: 18,
+    borderRadius: 4, gap: 10, borderWidth: 1, borderColor: '#E5E7EB', uppercase: false,
+    declineText: '', declineColor: '#6B7280', declineSize: 13, declineGap: 16,
+  },
   spacer: { height: 24 },
   line: { color: '#E5E7EB', thickness: 1, style: 'solid', width: 100 },
   coupon: { code: 'DESCONTO10', description: 'Seu cupom de desconto:', bgColor: '#FFF7ED', borderColor: '#F97316', borderStyle: 'dashed', fontSize: 20 },
@@ -334,6 +361,25 @@ const defaultProps: Record<string, Record<string, any>> = {
       { id: 's4', label: 'Tente de novo', prize: 'none', weight: 15, color: '#374151' },
     ],
     buttonText: 'Girar a roleta', size: 320, labelSize: 13, labelColor: '#FFFFFF', strokeColor: '#FFFFFF', pointerColor: '#111827', rimColor: '#111827', sound: true,
+    dividerWidth: 2, rimWidth: 17, rimLights: true,
+    // Miolo vazado e tocável por padrão: o convite fica no centro, onde o
+    // olho já está, em vez de num botão embaixo que disputa com o e-mail.
+    hubRadius: 72, hubMode: 'tap', hubText: 'Toque para girar', hubBg: '#FFFFFF', hubColor: '#111827', hubFontSize: 14,
+    bgColor: '#F97316', textColor: '#FFFFFF', fontSize: 15, borderRadius: 8, fullWidth: false,
+  },
+  // Cartas: viradas para baixo, o visitante escolhe uma e ela vira em 3D
+  // no envio. Escolher é o jogo — e o prêmio continua sendo do servidor.
+  cards: {
+    segments: [
+      { id: 's1', label: '10% OFF', prize: 'base', weight: 50, color: '#F97316' },
+      { id: 's2', label: 'Frete grátis', prize: 'none', weight: 30, color: '#111827' },
+      { id: 's3', label: 'Não foi dessa vez', prize: 'none', weight: 20, color: '#374151' },
+    ],
+    buttonText: 'Revelar', count: 3, cardWidth: 96, cardHeight: 128, cardRadius: 12, gap: 12,
+    backColor: '#FFFFFF', backText: '?', backTextColor: '#F97316',
+    faceBg: '#111827', faceColor: '#FFFFFF', faceSize: 15,
+    teaserText: '★', teaserBg: '#F3F4F6', teaserColor: '#9CA3AF',
+    lockedText: 'Deixe seu e-mail para virar a última carta', lockedColor: '#6B7280',
     bgColor: '#F97316', textColor: '#FFFFFF', fontSize: 15, borderRadius: 8, fullWidth: false,
   },
   scratch: {
@@ -341,7 +387,7 @@ const defaultProps: Record<string, Record<string, any>> = {
       { id: 's1', label: '10% OFF', prize: 'base', weight: 80, color: '#F97316' },
       { id: 's2', label: 'Não foi dessa vez', prize: 'none', weight: 20, color: '#111827' },
     ],
-    buttonText: 'Raspar', width: 320, height: 190, coverColor: '#C0C6CF', coverText: 'Raspe aqui', coverTextColor: '#FFFFFF', prizeBg: '#FFF7ED', prizeColor: '#F97316', prizeSize: 26, cardRadius: 14,
+    buttonText: 'Raspar', width: 320, height: 190, coverStyle: 'foil', coverImage: '', coverColor: '#C0C6CF', coverText: 'Raspe aqui', coverTextColor: '#FFFFFF', prizeBg: '#FFF7ED', prizeColor: '#F97316', prizeSize: 26, cardRadius: 14,
     bgColor: '#F97316', textColor: '#FFFFFF', fontSize: 15, borderRadius: 8, fullWidth: false,
   },
 }
@@ -361,6 +407,8 @@ const defaultDesign: PopupDesign = {
     overlay: { enabled: true, color: '#000000', opacity: 50, closeOnClick: true },
     closeButton: { show: true, color: '#6B7280', size: 24 },
     sideImage: { enabled: false, src: '', position: 'left', width: 50 },
+    backgroundImage: { enabled: false, src: '', overlay: { enabled: true, color: '#000000', opacity: 45, style: 'gradient' } },
+    fullscreenMobile: false,
     animation: 'fade',
   },
   behavior: {
@@ -919,14 +967,11 @@ function offerLabelOf(cp: any): string {
   if (cp.discountType === 'fixed_amount' || cp.discountType === 'fixed') return `R$ ${Math.round(Number(cp.discountValue) * 100) / 100} OFF`
   return `${Math.round(Number(cp.discountValue) || 0)}% OFF`
 }
-function designOfferLabel(steps: Step[]): string {
-  for (const st of steps) for (const b of st.blocks) if (b.type === 'coupon') return offerLabelOf(b.props)
-  return ''
-}
 function applyOfferPreview(text: string, label: string | undefined, prize?: string): string {
   if (label === undefined) return text
   return String(text || '').replace(/\{\{\s*offer\s*\}\}/g, label).replace(/\{\{\s*prize\s*\}\}/g, prize || '')
 }
+const GAME_TYPES = new Set(['wheel', 'scratch', 'cards'])
 // O que impede publicar: erros que o visitante veria como popup quebrado.
 function publishProblems(design: PopupDesign): string[] {
   const out: string[] = []
@@ -936,7 +981,8 @@ function publishProblems(design: PopupDesign): string[] {
     const segs = gameSegments(b.props)
     if (b.type === 'wheel' && segs.length < 2) out.push('A roleta precisa de pelo menos dois segmentos para ir ao ar.')
     if (b.type === 'scratch' && segs.length < 1) out.push('A raspadinha precisa de pelo menos um prêmio para ir ao ar.')
-    if ((b.type === 'wheel' || b.type === 'scratch') && !hasCoupon) out.push('O jogo promete um prêmio, mas não há bloco de cupom na etapa de sucesso.')
+    if (b.type === 'cards' && segs.length < 2) out.push('As cartas precisam de pelo menos dois prêmios para ir ao ar.')
+    if (GAME_TYPES.has(b.type) && !hasCoupon) out.push('O jogo promete um prêmio, mas não há bloco de cupom na etapa de sucesso.')
     if (b.type === 'countdown' && !b.props?.endDate) out.push('A contagem regressiva está sem data final — ficaria zerada na loja.')
   }
   // Jogo sem botão próprio depende do botão da etapa. Se a etapa não tem
@@ -944,20 +990,17 @@ function publishProblems(design: PopupDesign): string[] {
   // fica de enfeite, sem nada quebrado à vista.
   for (const st of design.steps) {
     const blocks = st.blocks || []
-    if (!blocks.some(b => (b.type === 'wheel' || b.type === 'scratch') && b.props?.showButton === false)) continue
+    if (!blocks.some(b => GAME_TYPES.has(b.type) && b.props?.showButton === false)) continue
     if (!blocks.some(b => b.type === 'button' && (b.props?.action || 'submit') === 'submit')) {
       out.push('O jogo está sem botão próprio e a etapa não tem botão de envio — ninguém conseguiria jogar.')
     }
   }
   return Array.from(new Set(out))
 }
-// O rótulo do primeiro segmento do primeiro jogo: é o que a visualização
-// mostra onde o lojista escreveu {{prize}}.
-function designPrizeLabel(steps: Step[]): string {
-  for (const st of steps) for (const b of st.blocks) if (b.type === 'wheel' || b.type === 'scratch') return String(b.props?.segments?.[0]?.label || '')
-  return ''
-}
-const GAME_PALETTE = ['#F97316', '#111827', '#FDBA74', '#374151', '#FB923C', '#1F2937', '#FED7AA', '#4B5563']
+// Alternância estrita entre a cor da marca e o escuro. Seis tons
+// diferentes (laranja, preto, laranja claro, cinza…) viram uma roleta
+// suja: o olho não acha o padrão, e sem padrão não há roda.
+const GAME_PALETTE = ['#F97316', '#111827', '#F97316', '#111827', '#F97316', '#111827', '#F97316', '#111827']
 function gameSegments(p: any): Array<{ id: string; label: string; prize: string; weight: number; color: string; textColor?: string }> {
   const list: any[] = Array.isArray(p?.segments) ? p.segments.slice(0, 12) : []
   return list.map((s, i) => ({
@@ -974,6 +1017,22 @@ function GameButtonPreview({ p, fallback }: { p: any; fallback: string }) {
 }
 
 /** Clareia (amt>0) ou escurece um #rrggbb. Espelha wfShade do runtime. */
+// O acabamento da lâmina da raspadinha em CSS — o mesmo que paintFoil
+// pinta no canvas do runtime. Os dois têm de casar: a pré-visualização
+// que mostra outra coisa é o bug que esta tela já pagou caro.
+function laminaCss(p: any, cor: string): string {
+  const estilo = p?.coverStyle || 'foil'
+  if (estilo === 'image') {
+    return p?.coverImage ? `url("${String(p.coverImage).replace(/"/g, '%22')}")` : 'none'
+  }
+  if (estilo === 'solid') return 'none'
+  if (estilo === 'gold') {
+    // Ouro não é uma cor só: é uma sequência de claros e escuros. Um
+    // dourado chapado lê como amarelo mostarda.
+    return 'linear-gradient(135deg, #8C6D1F 0%, #E8C766 22%, #FFF3C4 42%, #D8AE3E 55%, #B8892A 78%, #F0D07A 100%), repeating-linear-gradient(135deg, rgba(255,255,255,.16) 0 1px, transparent 1px 7px)'
+  }
+  return `linear-gradient(135deg, ${shadeHex(cor, 20)} 0%, ${cor} 45%, ${shadeHex(cor, 12)} 55%, ${shadeHex(cor, -16)} 100%), repeating-linear-gradient(135deg, rgba(255,255,255,.10) 0 1px, transparent 1px 12px)`
+}
 function shadeHex(hex: string, amt: number): string {
   const m = /^#([0-9a-fA-F]{6})$/.exec(String(hex || ''))
   if (!m) return String(hex || '#C0C6CF')
@@ -983,8 +1042,8 @@ function shadeHex(hex: string, amt: number): string {
   return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)
 }
 
-const NO_LAYOUT_BORDER = new Set(['email', 'phone', 'name-input', 'text-input', 'date-input', 'dropdown', 'radio', 'checkbox', 'legal-consent', 'coupon', 'countdown', 'wheel', 'scratch'])
-const NO_LAYOUT_SHADOW = new Set(['wheel', 'scratch', 'image'])
+const NO_LAYOUT_BORDER = new Set(['email', 'phone', 'name-input', 'text-input', 'date-input', 'dropdown', 'radio', 'checkbox', 'legal-consent', 'coupon', 'countdown', 'wheel', 'scratch', 'cards'])
+const NO_LAYOUT_SHADOW = new Set(['wheel', 'scratch', 'cards', 'image'])
 
 function BlockPreview({ block, selected, onContentChange, onSelect, offerLabel, prizeLabel }: { block: Block; selected?: boolean; onContentChange?: (key: string, value: string) => void; onSelect?: () => void; offerLabel?: string; prizeLabel?: string }) {
   const p = block.props
@@ -1101,6 +1160,33 @@ function BlockPreview({ block, selected, onContentChange, onSelect, offerLabel, 
     // Prop-less spacers render 24px on the storefront (generator.ts
     // nv(p.height,24)); match that default here so the canvas doesn't
     // under-draw the gap. New inserts already carry height: 24.
+    // Escolhas: o mesmo empilhado que o runtime desenha. Clicar responde
+    // E avança — na tela de edição os botões são só a forma.
+    case 'choice': {
+      const opts: any[] = Array.isArray(p.options) ? p.options.slice(0, 8) : []
+      if (!opts.length) return <div style={{ ...blockStyle, padding: 16, textAlign: 'center', border: '1px dashed #FCA5A5', borderRadius: 8, color: '#B91C1C', fontSize: 12 }}>Adicione pelo menos uma opção.</div>
+      return <div style={blockStyle}>
+        {p.showLabel !== false && p.label && (
+          <div style={{ fontSize: p.labelSize || 17, color: p.labelColor || '#111827', textAlign: 'center', margin: `0 0 ${p.labelGap ?? 16}px` }}>{p.label}</div>
+        )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: p.gap ?? 10 }}>
+          {opts.map((o: any, i: number) => (
+            <button key={o?.id || i} type="button" style={{
+              boxSizing: 'border-box', display: 'block', width: '100%',
+              padding: `${p.paddingV ?? 16}px ${p.paddingH ?? 18}px`,
+              background: p.optionBg || '#FFFFFF', color: p.optionColor || '#111827',
+              fontSize: p.fontSize || 16, fontWeight: (p.fontWeight as any) || 600, lineHeight: 1.25, textAlign: 'center',
+              textTransform: p.uppercase ? 'uppercase' : 'none', letterSpacing: p.uppercase ? (p.letterSpacing ?? 1) : undefined,
+              border: (p.borderWidth ?? 1) > 0 ? `${p.borderWidth ?? 1}px solid ${p.borderColor || '#E5E7EB'}` : 'none',
+              borderRadius: p.borderRadius ?? 4, cursor: 'pointer',
+            }}>{String(o?.label ?? o ?? '')}</button>
+          ))}
+        </div>
+        {p.declineText && (
+          <button type="button" style={{ display: 'block', margin: `${p.declineGap ?? 16}px auto 0`, background: 'none', border: 'none', padding: 4, fontSize: p.declineSize || 13, color: p.declineColor || '#6B7280', textDecoration: 'underline', cursor: 'pointer' }}>{p.declineText}</button>
+        )}
+      </div>
+    }
     case 'spacer': return <div style={{ ...blockStyle, height: p.height ?? 24 }} />
     case 'line': return <div style={blockStyle}><hr style={{ border: 'none', borderTop: `${p.thickness || 1}px ${p.style || 'solid'} ${p.color || '#E5E7EB'}`, margin: '0 auto', width: `${p.width ?? 100}%` }} /></div>
     case 'coupon': {
@@ -1133,6 +1219,11 @@ function BlockPreview({ block, selected, onContentChange, onSelect, offerLabel, 
       const ptr = p.pointerColor || '#111827'
       const hub = p.strokeColor || '#FFFFFF'
       const gid = `wprev-${String(block.id).replace(/[^a-zA-Z0-9_-]/g, "")}`
+      // Miolo vazado: a roleta vira anel e o centro pode ser o botão.
+      const hubR = Math.max(0, Math.min(WHEEL_R - 8, Number(p.hubRadius) || 0))
+      const tap = p.hubMode === 'tap' && hubR >= 30
+      const rimW = Math.max(4, Math.min(34, Number(p.rimWidth) || WHEEL_RIM_W))
+      const rimR = WHEEL_R + rimW / 2 - 2.5
       return <div style={{ ...blockStyle, textAlign: 'center' }}>
         <div style={{ position: 'relative', display: 'inline-block', width: size, maxWidth: '100%', filter: 'drop-shadow(0 14px 28px rgba(0,0,0,.24))' }}>
           <svg viewBox="0 0 300 300" role="img" aria-label="Roleta de prêmios" style={{ width: '100%', height: 'auto', display: 'block', overflow: 'visible' }}>
@@ -1148,12 +1239,12 @@ function BlockPreview({ block, selected, onContentChange, onSelect, offerLabel, 
                 <stop offset="1" stopColor="#000000" stopOpacity=".16" />
               </radialGradient>
             </defs>
-            <circle cx={150} cy={150} r={WHEEL_RIM_R} fill="none" stroke={`url(#${gid}-rim)`} strokeWidth={WHEEL_RIM_W} />
+            <circle cx={150} cy={150} r={rimR} fill="none" stroke={`url(#${gid}-rim)`} strokeWidth={rimW} />
             <g>
               {segs.map((sg, i) => {
-                const lp = wheelLabelPos(i, segs.length)
+                const lp = wheelLabelPos(i, segs.length, WHEEL_R, WHEEL_C, hubR)
                 return <g key={sg.id + i}>
-                  <path d={wheelSectorPath(i, segs.length)} fill={sg.color} stroke={hub} strokeWidth={2} />
+                  <path d={wheelSectorPath(i, segs.length, WHEEL_R, WHEEL_C, hubR)} fill={sg.color} stroke={hub} strokeWidth={p.dividerWidth ?? 2} />
                   <text x={lp.x} y={lp.y} transform={`rotate(${lp.angle} ${lp.x} ${lp.y})`} textAnchor="middle" dominantBaseline="middle" fontSize={p.labelSize || 13} fontWeight={800} fill={sg.textColor || p.labelColor || '#FFFFFF'}>{sg.label}</text>
                 </g>
               })}
@@ -1163,10 +1254,29 @@ function BlockPreview({ block, selected, onContentChange, onSelect, offerLabel, 
               })}
             </g>
             <circle cx={150} cy={150} r={WHEEL_R} fill={`url(#${gid}-sheen)`} pointerEvents="none" />
-            <circle cx={150} cy={150} r={26} fill={hub} />
-            <circle cx={150} cy={150} r={26} fill="none" stroke="rgba(0,0,0,.12)" strokeWidth={1} />
-            <circle cx={150} cy={150} r={8.5} fill={ptr} />
+            <circle cx={150} cy={150} r={WHEEL_R + 0.5} fill="none" stroke="rgba(255,255,255,.45)" strokeWidth={1.5} />
+            {/* As luzinhas do aro não giram: é o que faz o aro parecer a
+                moldura da máquina, e não a borda do desenho que roda. */}
+            {p.rimLights !== false && Array.from({ length: Math.min(24, Math.max(12, segs.length * 3)) }).map((_, i, arr) => {
+              const a = (i * 360 / arr.length - 90) * Math.PI / 180
+              return <circle key={`luz${i}`} cx={(150 + rimR * Math.cos(a)).toFixed(2)} cy={(150 + rimR * Math.sin(a)).toFixed(2)} r={2.3} fill="#FFFFFF" fillOpacity={i % 2 ? 0.32 : 0.62} />
+            })}
+            {hubR <= 0 && <>
+              <circle cx={150} cy={150} r={26} fill={hub} />
+              <circle cx={150} cy={150} r={26} fill="none" stroke="rgba(0,0,0,.12)" strokeWidth={1} />
+              <circle cx={150} cy={150} r={8.5} fill={ptr} />
+            </>}
           </svg>
+          {tap && (
+            <div style={{ position: 'absolute', left: '50%', top: '50%', width: `${(200 * hubR / 300).toFixed(2)}%`, transform: 'translate(-50%,-50%)', zIndex: 3 }}>
+              <div style={{
+                width: '100%', padding: '50% 0', position: 'relative', borderRadius: '50%',
+                background: p.hubBg || '#FFFFFF', color: p.hubColor || '#111827', boxShadow: '0 4px 14px rgba(0,0,0,.22)',
+              }}>
+                <span style={{ position: 'absolute', left: '10%', right: '10%', top: '50%', transform: 'translateY(-50%)', fontSize: p.hubFontSize || 14, fontWeight: 800, lineHeight: 1.15, letterSpacing: '.4px', textTransform: 'uppercase', textAlign: 'center' }}>{p.hubText || 'Toque para girar'}</span>
+              </div>
+            </div>
+          )}
           <div style={{ position: 'absolute', left: '50%', top: -3, width: 30, height: 46, marginLeft: -15, zIndex: 2, pointerEvents: 'none' }}>
             <svg viewBox="0 0 30 46" width={30} height={46} aria-hidden="true" style={{ display: 'block', filter: 'drop-shadow(0 3px 4px rgba(0,0,0,.32))' }}>
               <path d="M15 46 L4.4 17.5 A11 11 0 1 1 25.6 17.5 Z" fill={ptr} stroke="#FFFFFF" strokeWidth={2.6} strokeLinejoin="round" />
@@ -1175,6 +1285,29 @@ function BlockPreview({ block, selected, onContentChange, onSelect, offerLabel, 
           </div>
         </div>
         <GameButtonPreview p={p} fallback="Girar" />
+      </div>
+    }
+    // Cartas: viradas para baixo, como o visitante vê antes de escolher.
+    // Aqui na tela de edição elas não viram — quem vira é o runtime, no
+    // envio, e a pré-visualização roda o runtime.
+    case 'cards': {
+      const segs = gameSegments(p)
+      if (segs.length < 2) return <div style={{ ...blockStyle, padding: 16, textAlign: 'center', border: '1px dashed #FCA5A5', borderRadius: 8, color: '#B91C1C', fontSize: 12 }}>As cartas precisam de pelo menos dois prêmios.</div>
+      const n = Math.max(2, Math.min(5, Number(p.count) || 3))
+      const cw = Math.max(60, Math.min(160, Number(p.cardWidth) || 96))
+      const ch = Math.max(80, Math.min(220, Number(p.cardHeight) || 128))
+      return <div style={{ ...blockStyle, textAlign: 'center' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: p.gap ?? 12 }}>
+          {Array.from({ length: n }).map((_, i) => (
+            <div key={`cd${i}`} style={{
+              width: cw, height: ch, flex: '0 0 auto', borderRadius: p.cardRadius ?? 12,
+              background: p.backColor || '#FFFFFF', color: p.backTextColor || '#F97316',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: Math.round(ch * 0.34), fontWeight: 800, boxShadow: '0 6px 16px rgba(0,0,0,.16)',
+            }}>{String(p.backText || '?').slice(0, 3)}</div>
+          ))}
+        </div>
+        <GameButtonPreview p={p} fallback="Revelar" />
       </div>
     }
     case 'scratch': {
@@ -1189,11 +1322,13 @@ function BlockPreview({ block, selected, onContentChange, onSelect, offerLabel, 
       return <div style={{ ...blockStyle, textAlign: 'center' }}>
         <div style={{ position: 'relative', display: 'inline-block', width: w, maxWidth: '100%', height: h, borderRadius: p.cardRadius ?? 14, overflow: 'hidden', background: p.prizeBg || '#FFF7ED', boxShadow: '0 6px 20px rgba(0,0,0,.14)' }}>
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12, fontSize: p.prizeSize || 26, fontWeight: 800, color: p.prizeColor || '#F97316', lineHeight: 1.2 }}>{segs[0]?.label || '?'}</div>
-          {/* A lâmina: o mesmo gradiente + listras finas que o runtime pinta no canvas. */}
+          {/* A lâmina: o MESMO acabamento que o runtime pinta no canvas —
+              metalizado, dourado escovado, cor chapada ou uma foto. */}
           <div style={{
             position: 'absolute', inset: 0,
             backgroundColor: foil,
-            backgroundImage: `linear-gradient(135deg, ${shadeHex(foil, 20)} 0%, ${foil} 45%, ${shadeHex(foil, 12)} 55%, ${shadeHex(foil, -16)} 100%), repeating-linear-gradient(135deg, rgba(255,255,255,.10) 0 1px, transparent 1px 12px)`,
+            backgroundImage: laminaCss(p, foil),
+            backgroundSize: 'cover', backgroundPosition: 'center',
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
             color: p.coverTextColor || '#FFFFFF', fontWeight: 800, fontSize: 13, letterSpacing: 1.6, textTransform: 'uppercase', textShadow: '0 1px 2px rgba(0,0,0,.28)',
           }}>
@@ -1509,11 +1644,15 @@ function SmartOfferEditor({ p, up }: { p: any; up: (k: string, v: any) => void }
 // Roleta e raspadinha: segmentos com rótulo, prêmio (oferta base, nível
 // progressivo ou nada) e peso. O sorteio é do servidor no envio; aqui só
 // se descreve o que pode sair e com que chance.
-function GameEditor({ type, p, up, hints }: { type: string; p: any; up: (k: string, v: any) => void; hints: { hasCoupon: boolean; couponTiers: any[]; baseOfferLabel: string; gameBlocks: number } }) {
+function GameEditor({ type, p, up, hints, onOpenMedia }: { type: string; p: any; up: (k: string, v: any) => void; hints: { hasCoupon: boolean; couponTiers: any[]; baseOfferLabel: string; gameBlocks: number }; onOpenMedia?: (cb: (url: string) => void) => void }) {
   const isWheel = type === 'wheel'
+  const isCards = type === 'cards'
+  const nomeDoJogo = isWheel ? 'Roleta' : isCards ? 'Cartas' : 'Raspadinha'
+  const acaoPadrao = isWheel ? 'Girar' : isCards ? 'Revelar' : 'Raspar'
+  const oQueFaz = isWheel ? 'a roleta para' : isCards ? 'a carta escolhida vira' : 'a raspadinha revela'
   const segs: any[] = Array.isArray(p.segments) ? p.segments : []
   const total = segs.reduce((a, s) => a + Math.max(0, Number(s?.weight) || 0), 0)
-  const minSegs = isWheel ? 2 : 1
+  const minSegs = type === 'scratch' ? 1 : 2
   const setSeg = (i: number, patch: Record<string, any>) => up('segments', segs.map((s, j) => (j === i ? { ...s, ...patch } : s)))
   const addSeg = () => up('segments', [...segs, { id: 's' + Math.random().toString(36).slice(2, 8), label: hints.baseOfferLabel || 'Prêmio', prize: 'base', weight: 10, color: GAME_PALETTE[segs.length % GAME_PALETTE.length] }])
   const tierText = (t: any) => t.discountType === 'free_shipping' ? 'Frete grátis' : `${t.discountValue ?? 0}${t.discountType === 'fixed_amount' ? '' : '%'} OFF`
@@ -1525,13 +1664,14 @@ function GameEditor({ type, p, up, hints }: { type: string; p: any; up: (k: stri
   )
   return <div className="space-y-5">
     <div className="space-y-3">
-      <SectionHeader title={isWheel ? 'Roleta' : 'Raspadinha'} icon={<Gift className="w-3 h-3" />} />
+      <SectionHeader title={nomeDoJogo} icon={<Gift className="w-3 h-3" />} />
       <p className="text-[11px] text-gray-500 leading-snug bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
-        O visitante preenche, clica em "{p.buttonText || (isWheel ? 'Girar' : 'Raspar')}" e o servidor sorteia pelo peso — {isWheel ? 'a roleta para' : 'a raspadinha revela'} no prêmio decidido. O cupom sai pelo bloco de cupom, no nível escolhido aqui. Na etapa de sucesso, <code className="px-1 bg-white border border-gray-200 rounded text-[10px]">{'{{prize}}'}</code> vira o prêmio sorteado.
+        {isCards ? 'O visitante escolhe uma carta, preenche e envia' : 'O visitante preenche e envia'} — o servidor sorteia pelo peso e {oQueFaz} no prêmio decidido. O cupom sai pelo bloco de cupom, no nível escolhido aqui. Na etapa de sucesso, <code className="px-1 bg-white border border-gray-200 rounded text-[10px]">{'{{prize}}'}</code> vira o prêmio sorteado.
       </p>
       {!hints.hasCoupon && <Warn>Sem bloco de cupom neste popup: o jogo mostra o prêmio, mas nenhum código é emitido. Adicione um bloco de cupom na etapa de sucesso.</Warn>}
       {hints.gameBlocks > 1 && <Warn>Há {hints.gameBlocks} jogos neste popup. Só o primeiro sorteia; os outros ficam decorativos.</Warn>}
-      {segs.length < minSegs && <Warn>{isWheel ? 'A roleta precisa de pelo menos dois segmentos.' : 'A raspadinha precisa de pelo menos um prêmio.'}</Warn>}
+      {segs.length < minSegs && <Warn>{type === 'scratch' ? 'A raspadinha precisa de pelo menos um prêmio.' : `${nomeDoJogo} ${isCards ? 'precisam' : 'precisa'} de pelo menos dois prêmios.`}</Warn>}
+      {isCards && segs.length < (Number(p.count) || 3) && <Warn>Há {Number(p.count) || 3} cartas e só {segs.length} prêmios. As cartas que sobram viram vazias — cadastre um prêmio por carta.</Warn>}
       <div className="flex items-center justify-between">
         <p className="text-[11px] font-bold text-gray-500 uppercase tracking-[0.08em]">Segmentos</p>
         <button type="button" onClick={addSeg} disabled={segs.length >= 12} className="text-[11px] font-semibold text-zinc-900 underline underline-offset-2 disabled:opacity-40">Adicionar</button>
@@ -1577,7 +1717,7 @@ function GameEditor({ type, p, up, hints }: { type: string; p: any; up: (k: stri
       ) : (
         <>
           <LabeledField label="Texto">
-            <input className={inp} value={p.buttonText || ''} onChange={e => up('buttonText', e.target.value.slice(0, 40))} placeholder={isWheel ? 'Girar a roleta' : 'Raspar'} />
+            <input className={inp} value={p.buttonText || ''} onChange={e => up('buttonText', e.target.value.slice(0, 40))} placeholder={acaoPadrao} />
           </LabeledField>
           <ColorRow label="Fundo" value={p.bgColor || '#F97316'} onChange={v => up('bgColor', v)} />
           <ColorRow label="Texto" value={p.textColor || '#FFFFFF'} onChange={v => up('textColor', v)} />
@@ -1585,6 +1725,49 @@ function GameEditor({ type, p, up, hints }: { type: string; p: any; up: (k: stri
         </>
       )}
     </div>
+    {isCards && (
+      <div className="pt-4 border-t border-gray-100 space-y-3">
+        <SectionHeader title="A trava do e-mail" icon={<AtSign className="w-3 h-3" />} />
+        <p className="text-[11px] text-gray-400 leading-snug">As primeiras cartas viram de graça e mostram só um brinde. A última cobra o e-mail — e é ela que traz o prêmio. É o que transforma curiosidade em inscrição: a pessoa já gastou dois cliques, e parar ali custa mais do que preencher um campo.</p>
+        <LabeledField label="Viram de graça" hint={`Sempre sobra pelo menos uma. Máximo: ${Math.max(1, (Number(p.count) || 3) - 1)}.`}>
+          <Slider value={p.freeFlips == null ? (Number(p.count) || 3) - 1 : p.freeFlips} onChange={v => up('freeFlips', v)} min={0} max={Math.max(1, (Number(p.count) || 3) - 1)} unit="" />
+        </LabeledField>
+        <LabeledField label="Marca do brinde" hint="O que aparece nas cartas viradas de graça. Nunca um prêmio — prêmio quem decide é o servidor.">
+          <input className={inp} value={p.teaserText || ''} onChange={e => up('teaserText', e.target.value.slice(0, 16))} placeholder="★" />
+        </LabeledField>
+        <ColorRow label="Fundo do brinde" value={p.teaserBg || '#F3F4F6'} onChange={v => up('teaserBg', v)} />
+        <ColorRow label="Texto do brinde" value={p.teaserColor || '#9CA3AF'} onChange={v => up('teaserColor', v)} />
+        <LabeledField label="Aviso da trava">
+          <input className={inp} value={p.lockedText || ''} onChange={e => up('lockedText', e.target.value.slice(0, 120))} placeholder="Deixe seu e-mail para virar a última carta" />
+        </LabeledField>
+        <ColorRow label="Cor do aviso" value={p.lockedColor || '#6B7280'} onChange={v => up('lockedColor', v)} />
+      </div>
+    )}
+    {isWheel && (
+      <div className="pt-4 border-t border-gray-100 space-y-3">
+        <SectionHeader title="Miolo" icon={<Disc3 className="w-3 h-3" />} />
+        <p className="text-[11px] text-gray-400 leading-snug">Com o miolo vazado a roleta vira um anel e o centro pode ser o próprio botão — o convite fica onde o olho já está, em vez de num botão embaixo.</p>
+        <LabeledField label="Miolo vazado" hint="0 mantém o disco cheio, com o cubo no centro.">
+          <Slider value={p.hubRadius ?? 0} onChange={v => up('hubRadius', v)} min={0} max={110} unit="px" />
+        </LabeledField>
+        {(p.hubRadius ?? 0) >= 30 && (
+          <>
+            <Toggle label="Tocar no miolo gira" checked={p.hubMode === 'tap'} onChange={v => up('hubMode', v ? 'tap' : 'plain')} />
+            {p.hubMode === 'tap' && (
+              <>
+                <LabeledField label="Texto do miolo">
+                  <input className={inp} value={p.hubText || ''} onChange={e => up('hubText', e.target.value.slice(0, 30))} placeholder="Toque para girar" />
+                </LabeledField>
+                <ColorRow label="Fundo do miolo" value={p.hubBg || '#FFFFFF'} onChange={v => up('hubBg', v)} />
+                <ColorRow label="Texto do miolo" value={p.hubColor || '#111827'} onChange={v => up('hubColor', v)} />
+                <LabeledField label="Tamanho do texto"><Slider value={p.hubFontSize || 14} onChange={v => up('hubFontSize', v)} min={9} max={24} unit="px" /></LabeledField>
+                <Toggle label="Manter também o botão embaixo" checked={p.showButton === true} onChange={v => up('showButton', v ? true : undefined)} />
+              </>
+            )}
+          </>
+        )}
+      </div>
+    )}
     <div className="pt-4 border-t border-gray-100 space-y-3">
       <SectionHeader title="Aparência" icon={<Palette className="w-3 h-3" />} />
       {isWheel ? (
@@ -1595,21 +1778,140 @@ function GameEditor({ type, p, up, hints }: { type: string; p: any; up: (k: stri
           <ColorRow label="Aro" value={p.rimColor || '#111827'} onChange={v => up('rimColor', v)} />
           <ColorRow label="Ponteiro e cubo" value={p.pointerColor || '#111827'} onChange={v => up('pointerColor', v)} />
           <ColorRow label="Divisórias" value={p.strokeColor || '#FFFFFF'} onChange={v => up('strokeColor', v)} />
+          <LabeledField label="Espessura das divisórias"><Slider value={p.dividerWidth ?? 2} onChange={v => up('dividerWidth', v)} min={0} max={8} unit="px" /></LabeledField>
+          <LabeledField label="Espessura do aro"><Slider value={p.rimWidth ?? 17} onChange={v => up('rimWidth', v)} min={4} max={34} unit="px" /></LabeledField>
+          <Toggle label="Luzinhas no aro" checked={p.rimLights !== false} onChange={v => up('rimLights', v)} />
           {/* O tique de cada pino que passa é o que faz o giro parecer
               mecânico. Quem não quiser som na loja desliga aqui. */}
           <Toggle label="Tique ao girar" checked={p.sound !== false} onChange={v => up('sound', v)} />
+        </>
+      ) : isCards ? (
+        <>
+          <LabeledField label="Quantas cartas"><Slider value={Number(p.count) || 3} onChange={v => up('count', v)} min={2} max={5} unit="" /></LabeledField>
+          <LabeledField label="Largura da carta"><Slider value={p.cardWidth || 96} onChange={v => up('cardWidth', v)} min={60} max={160} unit="px" /></LabeledField>
+          <LabeledField label="Altura da carta"><Slider value={p.cardHeight || 128} onChange={v => up('cardHeight', v)} min={80} max={220} unit="px" /></LabeledField>
+          <LabeledField label="Cantos"><Slider value={p.cardRadius ?? 12} onChange={v => up('cardRadius', v)} min={0} max={28} unit="px" /></LabeledField>
+          <LabeledField label="Espaço entre cartas"><Slider value={p.gap ?? 12} onChange={v => up('gap', v)} min={0} max={28} unit="px" /></LabeledField>
+          <LabeledField label="Marca do verso" hint="O que aparece na carta virada para baixo.">
+            <input className={inp} value={p.backText || ''} onChange={e => up('backText', e.target.value.slice(0, 3))} placeholder="?" />
+          </LabeledField>
+          <ColorRow label="Verso da carta" value={p.backColor || '#FFFFFF'} onChange={v => up('backColor', v)} />
+          <ColorRow label="Marca do verso" value={p.backTextColor || '#F97316'} onChange={v => up('backTextColor', v)} />
+          <ColorRow label="Frente (prêmio)" value={p.faceBg || '#111827'} onChange={v => up('faceBg', v)} />
+          <ColorRow label="Texto do prêmio" value={p.faceColor || '#FFFFFF'} onChange={v => up('faceColor', v)} />
+          <LabeledField label="Tamanho do prêmio"><Slider value={p.faceSize || 15} onChange={v => up('faceSize', v)} min={11} max={28} unit="px" /></LabeledField>
         </>
       ) : (
         <>
           <LabeledField label="Altura"><Slider value={p.height || 150} onChange={v => up('height', v)} min={80} max={320} unit="px" /></LabeledField>
           <LabeledField label="Texto da cobertura"><input className={inp} value={p.coverText || ''} onChange={e => up('coverText', e.target.value.slice(0, 40))} placeholder="Raspe aqui" /></LabeledField>
-          <ColorRow label="Cobertura" value={p.coverColor || '#9CA3AF'} onChange={v => up('coverColor', v)} />
+          {/* O acabamento da lâmina. "Foto" é o que as marcas boas fazem:
+              o que se raspa é a embalagem do produto, e o produto aparece
+              antes do desconto. */}
+          <LabeledField label="Acabamento">
+            <div className="grid grid-cols-2 gap-1.5">
+              {([['foil', 'Metalizado'], ['gold', 'Dourado'], ['solid', 'Cor chapada'], ['image', 'Foto']] as const).map(([v, rot]) => (
+                <button key={v} onClick={() => up('coverStyle', v)}
+                  className={`py-2 text-[12px] font-medium rounded-lg border transition-colors ${(p.coverStyle || 'foil') === v ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>{rot}</button>
+              ))}
+            </div>
+          </LabeledField>
+          {p.coverStyle === 'image' ? (
+            p.coverImage ? (
+              <div className="space-y-2">
+                <img src={p.coverImage} alt="" className="w-full h-24 object-cover rounded-lg border border-gray-200" />
+                <div className="flex gap-2">
+                  <button onClick={() => onOpenMedia?.(url => up('coverImage', url))} className="flex-1 py-2 text-[12px] font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">Trocar</button>
+                  <button onClick={() => up('coverImage', '')} className="flex-1 py-2 text-[12px] font-medium text-red-600 bg-white border border-gray-200 rounded-lg hover:bg-red-50">Remover</button>
+                </div>
+              </div>
+            ) : (
+              <button onClick={() => onOpenMedia?.(url => up('coverImage', url))}
+                className="w-full border-2 border-dashed border-gray-200 rounded-lg p-5 text-center hover:border-gray-400 hover:bg-gray-100/40 transition-colors">
+                <Upload className="w-5 h-5 text-gray-300 mx-auto mb-1.5" />
+                <span className="text-[12px] text-gray-500">Escolher a foto da lâmina</span>
+              </button>
+            )
+          ) : null}
+          {(p.coverStyle || 'foil') !== 'gold' && <ColorRow label="Cobertura" value={p.coverColor || '#9CA3AF'} onChange={v => up('coverColor', v)} />}
           <ColorRow label="Texto da cobertura" value={p.coverTextColor || '#FFFFFF'} onChange={v => up('coverTextColor', v)} />
           <ColorRow label="Fundo do prêmio" value={p.prizeBg || '#FFF7ED'} onChange={v => up('prizeBg', v)} />
           <ColorRow label="Texto do prêmio" value={p.prizeColor || '#F97316'} onChange={v => up('prizeColor', v)} />
           <LabeledField label="Tamanho do prêmio"><Slider value={p.prizeSize || 24} onChange={v => up('prizeSize', v)} min={14} max={40} unit="px" /></LabeledField>
         </>
       )}
+    </div>
+  </div>
+}
+
+// ── Escolhas ─────────────────────────────────────────────────────────
+// Um clique é a resposta E o avanço. É por isso que este bloco não tem
+// "botão continuar": pedir dois cliques onde um basta é o que separa um
+// popup que converte de um formulário.
+function ChoiceEditor({ p, up, steps }: { p: any; up: (k: string, v: any) => void; steps: Array<{ id: string; name: string }> }) {
+  const opts: any[] = Array.isArray(p.options) ? p.options : []
+  const setOpt = (i: number, patch: Record<string, any>) => up('options', opts.map((o, j) => (j === i ? { ...(typeof o === 'string' ? { label: o, value: o } : o), ...patch } : o)))
+  const rotulo = (o: any) => String(typeof o === 'string' ? o : o?.label ?? '')
+  return <div className="space-y-5">
+    <div className="space-y-3">
+      <SectionHeader title="Escolhas" icon={<Rows className="w-3 h-3" />} />
+      <p className="text-[11px] text-gray-400 leading-snug">O visitante clica numa opção e já avança — a resposta entra na submissão no campo abaixo. Cada opção pode levar a uma etapa própria.</p>
+      <LabeledField label="Pergunta">
+        <input className={inp} value={p.label || ''} onChange={e => up('label', e.target.value.slice(0, 120))} placeholder="O que você está procurando?" />
+      </LabeledField>
+      <Toggle label="Mostrar a pergunta" checked={p.showLabel !== false} onChange={v => up('showLabel', v)} />
+      <LabeledField label="Nome do campo" hint="É como a resposta aparece no contato e nos segmentos.">
+        <input className={inp} value={p.mapToCustom || ''} onChange={e => up('mapToCustom', e.target.value.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 30))} placeholder="escolha" />
+      </LabeledField>
+    </div>
+
+    <div className="space-y-2">
+      <SectionHeader title="Opções" icon={<LayoutGrid className="w-3 h-3" />} />
+      {opts.map((o, i) => (
+        <div key={(typeof o === 'object' && o?.id) || i} className="p-2.5 rounded-lg border border-gray-200 bg-white space-y-2">
+          <div className="flex items-center gap-2">
+            <input className={inp} value={rotulo(o)} onChange={e => setOpt(i, { label: e.target.value.slice(0, 60), value: (typeof o === 'object' && o?.value) || e.target.value.slice(0, 60) })} placeholder={`Opção ${i + 1}`} />
+            <button onClick={() => up('options', opts.filter((_, j) => j !== i))} disabled={opts.length <= 1}
+              className="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-gray-400" title="Remover opção">
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <select className={inp} value={(typeof o === 'object' && o?.next) || ''} onChange={e => setOpt(i, { next: e.target.value })}>
+            <option value="">Avançar para a próxima etapa</option>
+            {steps.map(st => <option key={st.id} value={st.id}>Ir para: {st.name}</option>)}
+          </select>
+        </div>
+      ))}
+      {opts.length < 8 && (
+        <button onClick={() => up('options', [...opts, { id: `o${Date.now().toString(36)}`, label: `Opção ${opts.length + 1}`, value: `opcao-${opts.length + 1}`, next: '' }])}
+          className="w-full py-2 text-[12px] font-medium text-gray-600 bg-white border border-dashed border-gray-300 rounded-lg hover:bg-gray-50">
+          + Adicionar opção
+        </button>
+      )}
+    </div>
+
+    <div className="pt-4 border-t border-gray-100 space-y-3">
+      <SectionHeader title="Aparência" icon={<Palette className="w-3 h-3" />} />
+      <ColorRow label="Fundo do botão" value={p.optionBg || '#FFFFFF'} onChange={v => up('optionBg', v)} />
+      <ColorRow label="Texto do botão" value={p.optionColor || '#111827'} onChange={v => up('optionColor', v)} />
+      <ColorRow label="Fundo ao passar o mouse" value={p.hoverBg || '#F3F4F6'} onChange={v => up('hoverBg', v)} />
+      <ColorRow label="Cor da pergunta" value={p.labelColor || '#111827'} onChange={v => up('labelColor', v)} />
+      <LabeledField label="Tamanho do texto"><Slider value={p.fontSize || 16} onChange={v => up('fontSize', v)} min={12} max={24} unit="px" /></LabeledField>
+      <LabeledField label="Altura do botão"><Slider value={p.paddingV ?? 16} onChange={v => up('paddingV', v)} min={8} max={28} unit="px" /></LabeledField>
+      <LabeledField label="Cantos"><Slider value={p.borderRadius ?? 4} onChange={v => up('borderRadius', v)} min={0} max={30} unit="px" /></LabeledField>
+      <LabeledField label="Espaço entre botões"><Slider value={p.gap ?? 10} onChange={v => up('gap', v)} min={0} max={24} unit="px" /></LabeledField>
+      <LabeledField label="Borda"><Slider value={p.borderWidth ?? 1} onChange={v => up('borderWidth', v)} min={0} max={4} unit="px" /></LabeledField>
+      {(p.borderWidth ?? 1) > 0 && <ColorRow label="Cor da borda" value={p.borderColor || '#E5E7EB'} onChange={v => up('borderColor', v)} />}
+      <Toggle label="Tudo em maiúsculas" checked={!!p.uppercase} onChange={v => up('uppercase', v)} />
+    </div>
+
+    <div className="pt-4 border-t border-gray-100 space-y-3">
+      <SectionHeader title="Recusar" icon={<X className="w-3 h-3" />} />
+      <p className="text-[11px] text-gray-400 leading-snug">O link discreto de saída. Vazio, não aparece — e quem quiser sair usa o X do popup.</p>
+      <LabeledField label="Texto">
+        <input className={inp} value={p.declineText || ''} onChange={e => up('declineText', e.target.value.slice(0, 40))} placeholder="Não, obrigado" />
+      </LabeledField>
+      {p.declineText && <ColorRow label="Cor" value={p.declineColor || '#6B7280'} onChange={v => up('declineColor', v)} />}
     </div>
   </div>
 }
@@ -1763,7 +2065,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
     email: 'Email', phone: 'Telefone', 'name-input': 'Nome', 'text-input': 'Campo',
     'date-input': 'Data', dropdown: 'Dropdown', radio: 'Radio', checkbox: 'Checkbox',
     'legal-consent': 'Consentimento', text: 'Conteúdo', button: 'Botão', image: 'Imagem',
-    spacer: 'Espaçador', line: 'Linha', coupon: 'Cupom', countdown: 'Contagem', wheel: 'Roleta', scratch: 'Raspadinha',
+    spacer: 'Espaçador', line: 'Linha', coupon: 'Cupom', countdown: 'Contagem', wheel: 'Roleta', scratch: 'Raspadinha', choice: 'Escolhas', cards: 'Cartas',
   }
 
   // Unified input "Input" tab renderer (Omnisend-style clean sections)
@@ -2607,9 +2909,12 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
           </div>
         </div>
 
+      case 'choice':
+        return <ChoiceEditor p={p} up={up} steps={steps} />
       case 'wheel':
       case 'scratch':
-        return <GameEditor type={block.type} p={p} up={up} hints={hints || { hasCoupon: true, couponTiers: [], baseOfferLabel: '', gameBlocks: 1 }} />
+      case 'cards':
+        return <GameEditor type={block.type} p={p} up={up} onOpenMedia={onOpenMedia} hints={hints || { hasCoupon: true, couponTiers: [], baseOfferLabel: '', gameBlocks: 1 }} />
       case 'countdown':
         return <div className="space-y-5">
           <div className="space-y-3">
@@ -3584,6 +3889,10 @@ function ThemePanel({ design, onChange, onOpenMedia }: { design: PopupDesign; on
   const setS = (val: Partial<PopupDesign['styles']>) => onChange({ ...design, styles: { ...s, ...val } })
   const setOv = (val: Partial<PopupDesign['styles']['overlay']>) => onChange({ ...design, styles: { ...s, overlay: { ...s.overlay, ...val } } })
   const setSi = (val: Partial<PopupDesign['styles']['sideImage']>) => onChange({ ...design, styles: { ...s, sideImage: { ...s.sideImage, ...val } } })
+  const bgi = s.backgroundImage || { enabled: false, src: '' }
+  const bgOv = bgi.overlay || {}
+  const setBgi = (val: Partial<NonNullable<PopupDesign['styles']['backgroundImage']>>) => onChange({ ...design, styles: { ...s, backgroundImage: { ...bgi, ...val } } })
+  const setBgOv = (val: Partial<NonNullable<NonNullable<PopupDesign['styles']['backgroundImage']>['overlay']>>) => onChange({ ...design, styles: { ...s, backgroundImage: { ...bgi, overlay: { ...bgOv, ...val } } } })
   const setCb = (val: Partial<PopupDesign['styles']['closeButton']>) => onChange({ ...design, styles: { ...s, closeButton: { ...s.closeButton, ...val } } })
 
   // Resolve per-side padding (fallback to legacy single value)
@@ -3677,6 +3986,56 @@ function ThemePanel({ design, onChange, onOpenMedia }: { design: PopupDesign; on
               </Field>
             </div>
           )}
+        </div>
+      </Section>
+
+      {/* A foto sangrando atrás de tudo. É o formato dos popups que
+          convertem hoje — logo pequena, título gigante e a foto inteira
+          por trás —, e até agora o runtime sabia desenhar e o editor não
+          sabia pedir. */}
+      <Section title="Imagem de fundo">
+        <ToggleRow label="Foto atrás do conteúdo" checked={!!bgi.enabled} onChange={v => setBgi({ enabled: v })} />
+        {bgi.enabled && (
+          <div className="mt-3 space-y-3">
+            {bgi.src ? (
+              <div className="space-y-2">
+                <img src={bgi.src} alt="" className="w-full h-28 object-cover rounded-lg border border-gray-200" />
+                <div className="flex gap-2">
+                  <button onClick={() => onOpenMedia?.(url => setBgi({ src: url }))}
+                    className="flex-1 py-2 text-[12px] font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">Trocar</button>
+                  <button onClick={() => setBgi({ src: '' })} className="flex-1 py-2 text-[12px] font-medium text-red-600 bg-white border border-gray-200 rounded-lg hover:bg-red-50">Remover</button>
+                </div>
+              </div>
+            ) : (
+              <button onClick={() => onOpenMedia?.(url => setBgi({ src: url }))}
+                className="w-full border-2 border-dashed border-gray-200 rounded-lg p-6 text-center hover:border-gray-400 hover:bg-gray-100/40 transition-colors">
+                <Upload className="w-6 h-6 text-gray-300 mx-auto mb-2" />
+                <span className="text-[12px] text-gray-500">Escolher imagem da biblioteca</span>
+              </button>
+            )}
+            {/* Sem véu, texto branco sobre foto clara some. Com véu demais,
+                a foto vira fundo cinza e não valeu a pena. */}
+            <ToggleRow label="Escurecer a foto" checked={bgOv.enabled !== false} onChange={v => setBgOv({ enabled: v })} />
+            {bgOv.enabled !== false && (
+              <div className="space-y-3">
+                <Field label="Cor do véu"><ColorPicker value={bgOv.color || '#000000'} onChange={v => setBgOv({ color: v })} /></Field>
+                <Field label={`Intensidade: ${bgOv.opacity ?? 45}%`}>
+                  <input type="range" min={0} max={100} value={bgOv.opacity ?? 45} onChange={e => setBgOv({ opacity: +e.target.value })} className="w-full accent-orange-500" />
+                </Field>
+                <Field label="Como escurecer">
+                  <div className="flex border border-gray-200 rounded-lg overflow-hidden">
+                    <button onClick={() => setBgOv({ style: 'gradient' })} className={`flex-1 py-2 text-[12px] font-medium transition-colors ${(bgOv.style || 'gradient') === 'gradient' ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>Degradê</button>
+                    <button onClick={() => setBgOv({ style: 'flat' })} className={`flex-1 py-2 text-[12px] font-medium transition-colors ${bgOv.style === 'flat' ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-50'}`}>Chapado</button>
+                  </div>
+                </Field>
+                <p className="text-[11px] text-gray-400 leading-snug">Degradê escurece só onde o texto fica, preservando a foto em cima. Chapado é para foto muito clara.</p>
+              </div>
+            )}
+          </div>
+        )}
+        <div className="mt-3">
+          <ToggleRow label="Tela cheia no celular" checked={!!s.fullscreenMobile} onChange={v => setS({ fullscreenMobile: v })} />
+          <p className="mt-1 text-[11px] text-gray-400 leading-snug">O popup ocupa a tela inteira do celular, sem cantos nem margem — é o que as lojas grandes fazem com foto de fundo.</p>
         </div>
       </Section>
 
@@ -3966,6 +4325,11 @@ export default function PopupEditorPage() {
   const [leftTab, setLeftTab] = useState<'blocks' | 'styles' | 'targeting'>('blocks')
   const [showPreview, setShowPreview] = useState(false)
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop')
+  // A pré-visualização roda o popup DE VERDADE num iframe (/popup-preview).
+  // O nonce remonta o iframe: é o "rodar de novo" depois de fechar o popup
+  // ou de jogar uma vez.
+  const [previewNonce, setPreviewNonce] = useState(0)
+  const previewFrameRef = useRef<HTMLIFrameElement>(null)
   const [showMediaLibrary, setShowMediaLibrary] = useState(false)
   const mediaCallbackRef = useRef<((url: string) => void) | null>(null)
   // Undo/Redo — index-consistent history (seeded on load, trimmed with the
@@ -3977,9 +4341,62 @@ export default function PopupEditorPage() {
   // crash the canvas. Steps are also repaired on load — this is the belt.
   const activeStep: Step = (showSuccess ? design.successStep : (design.steps[activeStepIdx] ?? design.steps[0])) ?? EMPTY_FALLBACK_STEP
   const selectedBlock = activeStep?.blocks.find(b => b.id === selectedBlockId) ?? null
-  // No modo de visualização, {{offer}} vira a oferta base (o runtime troca pela oferta escolhida).
-  const previewOfferLabel = useMemo(() => designOfferLabel([...design.steps, design.successStep].filter(Boolean) as Step[]), [design.steps, design.successStep])
-  const previewPrizeLabel = useMemo(() => designPrizeLabel(design.steps), [design.steps])
+
+  // ── A bancada de teste ──────────────────────────────────────────────
+  // O que o lojista vê ao clicar em "Visualizar" é o POPUP DE VERDADE: o
+  // mesmo script que o snippet carrega na loja, rodando dentro de um
+  // iframe com a rede encenada (/popup-preview). Antes, aqui, havia uma
+  // segunda implementação em React que só DESENHAVA o popup — não dava
+  // para avançar de etapa, nem raspar, nem girar, e qualquer diferença
+  // entre as duas só aparecia na loja do cliente.
+  //
+  // Os gatilhos e as travas de frequência são neutralizados na cópia
+  // enviada: teste tem de abrir na hora e quantas vezes for preciso.
+  const previewDadosRef = useRef({ design, formId, formName })
+  previewDadosRef.current = { design, formId, formName }
+  useEffect(() => {
+    if (!showPreview) return
+    let vivo = true
+    let carga: { script: string; design: any } | null = null
+    let quadroPronto = false
+    const enviar = () => {
+      const w = previewFrameRef.current?.contentWindow
+      if (!vivo || !quadroPronto || !carga || !w) return
+      w.postMessage({ type: 'wf-preview-script', script: carga.script, design: carga.design, formId: previewDadosRef.current.formId }, window.location.origin)
+    }
+    const aoReceber = (ev: MessageEvent) => {
+      if (ev.origin !== window.location.origin) return
+      if ((ev.data as any)?.type !== 'wf-preview-ready') return
+      quadroPronto = true
+      enviar()
+    }
+    window.addEventListener('message', aoReceber)
+    void (async () => {
+      try {
+        const { buildPopupScript } = await import('@/app/api/public/forms/[id]/script/generator')
+        const { design: d, formId: fid, formName: fname } = previewDadosRef.current
+        const comportamento = {
+          ...(d.behavior || {}),
+          display: { timeEnabled: true, delay: 0, exitEnabled: false, scrollEnabled: false, pageViewEnabled: false, matchAll: false },
+          visibility: { devices: 'all', visitorType: 'all', hideFromSubscribers: false },
+          frequency: { showAfterDays: 0, stopAfterSubmission: false },
+          // Segmento, carrinho, país, agenda, UTM, re-disparo inteligente e
+          // gatilho por código: todos fora. Nenhum deles se pode conferir
+          // aqui, e qualquer um deles seguraria o popup para sempre.
+          audienceTargeting: null, cart: null, location: null, page: null,
+          scheduling: null, smartTrigger: null, targeting: null, traffic: null,
+          urls: null, utm: null, customTrigger: null, experiment: null,
+        }
+        const script = buildPopupScript({ id: fid, name: fname, design_json: d, behavior: comportamento }, window.location.origin)
+        if (!vivo) return
+        carga = { script, design: d }
+        enviar()
+      } catch (e) {
+        console.error('[preview] não deu para montar o script do popup', e)
+      }
+    })()
+    return () => { vivo = false; window.removeEventListener('message', aoReceber) }
+  }, [showPreview, previewNonce])
   // O que o editor de blocos precisa saber do popup inteiro: o bloco de
   // cupom (níveis e oferta base, para os prêmios do jogo) e quantos jogos há.
   const designHints = useMemo(() => {
@@ -3990,7 +4407,7 @@ export default function PopupEditorPage() {
       // A mesma leitura do servidor: nível sem id não existe para o jogo.
       couponTiers: (Array.isArray(cp?.props?.tiers) ? cp!.props.tiers.filter((t: any) => t && String(t.id || '').replace(/[^a-zA-Z0-9_-]/g, '')) : []) as any[],
       baseOfferLabel: cp ? offerLabelOf(cp.props) : '',
-      gameBlocks: all.filter(b => b.type === 'wheel' || b.type === 'scratch').length,
+      gameBlocks: all.filter(b => GAME_TYPES.has(b.type)).length,
     }
   }, [design.steps, design.successStep])
 
@@ -4079,6 +4496,7 @@ export default function PopupEditorPage() {
             overlay: { ...defaultDesign.styles.overlay, ...(saved.styles?.overlay || {}) },
             closeButton: { ...defaultDesign.styles.closeButton, ...(saved.styles?.closeButton || {}) },
             sideImage: { ...defaultDesign.styles.sideImage, ...(saved.styles?.sideImage || {}) },
+            backgroundImage: { ...defaultDesign.styles.backgroundImage, ...(saved.styles?.backgroundImage || {}), overlay: { ...defaultDesign.styles.backgroundImage?.overlay, ...(saved.styles?.backgroundImage?.overlay || {}) } },
           },
           behavior: {
             ...defaultDesign.behavior,
@@ -4432,48 +4850,10 @@ export default function PopupEditorPage() {
 
   const s = design.styles
 
-  // Canvas-preview parity with the storefront script (generator.ts
-  // popCss()/ovStyle): the box size, its position and the backdrop all
-  // depend on formType. Without this the editor drew EVERY type as a
-  // centered popup, so a merchant designing a banner/flyout/fullpage/embed
-  // saw a layout that didn't match what publishes.
-  const ft = design.formType || 'popup'
-  const isBannerFt = ft === 'banner'
-  const isFlyoutFt = ft === 'flyout'
-  const isFullpageFt = ft === 'fullpage'
-  const isEmbedFt = ft === 'embed'
-  // Dark backdrop only for the two types that dim the page.
-  const showBackdrop = (ft === 'popup' || ft === 'fullpage') && s.overlay.enabled
-  // Where the box sits within the canvas viewport.
-  const canvasAlign: React.CSSProperties =
-    isFlyoutFt ? { alignItems: 'flex-end', justifyContent: 'flex-end', padding: 16 }
-    : isBannerFt ? { alignItems: 'flex-start', justifyContent: 'center' }
-    : { alignItems: 'center', justifyContent: 'center' }
-  const boxWidth: number | string =
-    isBannerFt || isFullpageFt || isEmbedFt ? '100%'
-    : previewDevice === 'mobile' ? 360
-    : isFlyoutFt ? Math.min(s.width, 400)
-    : s.width
-  const boxStyle: React.CSSProperties = {
-    width: boxWidth,
-    maxWidth: isBannerFt || isFullpageFt || isEmbedFt ? '100%' : '95%',
-    height: isFullpageFt ? '100%' : undefined,
-    minHeight: isBannerFt || isFlyoutFt || isEmbedFt ? undefined : (s.minHeight ?? 500),
-    borderRadius: isBannerFt || isFullpageFt ? 0 : s.borderRadius,
-    // Inline shadow wins over the shadow-2xl class for non-popup types;
-    // popup leaves it undefined so the class applies.
-    boxShadow: isFullpageFt || isEmbedFt ? 'none'
-      : isBannerFt ? '0 2px 8px rgba(0,0,0,0.08)'
-      : isFlyoutFt ? '0 20px 40px -10px rgba(0,0,0,0.3)'
-      : undefined,
-    animation: s.animation === 'fade' ? 'fadeIn 0.3s ease' : s.animation === 'slide-up' ? 'slideUp 0.3s ease' : undefined,
-  }
-  // Banner/flyout flow top-aligned; popup/fullpage/embed keep the
-  // vertically-centered column.
-  const contentVCenter = !(isBannerFt || isFlyoutFt)
-  // Side image never renders on banner/flyout or on mobile (matches the
-  // script's hasSideAt()).
-  const sideAllowed = !isBannerFt && !isFlyoutFt && previewDevice !== 'mobile'
+  // A paridade entre editor e loja não mora mais aqui: a
+  // pré-visualização roda o script de verdade (/popup-preview), então
+  // tipo de formulário, fundo, tamanho e alinhamento são calculados uma
+  // vez só — no runtime. O que sobra nesta tela é a tela de edição.
 
   return (
     <div className="h-screen flex flex-col bg-gray-100">
@@ -4587,7 +4967,7 @@ export default function PopupEditorPage() {
                         'text-input': 'Campo de texto', 'date-input': 'Data',
                         dropdown: 'Dropdown', radio: 'Radio', checkbox: 'Checkbox',
                         'legal-consent': 'Consentimento', text: 'Texto', button: 'Botão', image: 'Imagem',
-                        spacer: 'Espaçador', line: 'Linha', coupon: 'Cupom', countdown: 'Contagem', wheel: 'Roleta', scratch: 'Raspadinha',
+                        spacer: 'Espaçador', line: 'Linha', coupon: 'Cupom', countdown: 'Contagem', wheel: 'Roleta', scratch: 'Raspadinha', choice: 'Escolhas', cards: 'Cartas',
                       }
                       return labels[selectedBlock.type] || selectedBlock.type
                     })()}
@@ -4890,52 +5270,33 @@ export default function PopupEditorPage() {
                   <Smartphone className="w-4 h-4 inline mr-1" />Mobile
                 </button>
               </div>
+              {/* Fechou o popup, jogou uma vez, quer testar outro caminho:
+                  recarregar devolve tudo ao começo. */}
+              <button onClick={() => setPreviewNonce(n => n + 1)} className="px-3 py-1.5 rounded text-xs font-medium text-gray-300 hover:text-white hover:bg-gray-800" title="Rodar de novo">
+                <RotateCcw className="w-4 h-4 inline mr-1" />Rodar de novo
+              </button>
             </div>
             <button autoFocus onClick={() => setShowPreview(false)} className="flex items-center gap-2 px-4 py-1.5 bg-white text-gray-900 rounded-lg text-sm font-medium hover:bg-gray-100">
               <X className="w-4 h-4" /> Fechar Preview
             </button>
           </div>
-          {/* Simulated website background */}
-          <div className="flex-1 overflow-auto bg-gray-200" style={{ backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 40px, #d1d5db 40px, #d1d5db 41px)' }}>
-            {/* Fake website content */}
-            <div className="max-w-4xl mx-auto px-8 py-12">
-              <div className="h-8 w-48 bg-gray-300 rounded mb-8" />
-              <div className="flex gap-6 mb-6">
-                <div className="h-4 flex-1 bg-gray-300 rounded" /><div className="h-4 w-24 bg-gray-300 rounded" /><div className="h-4 w-32 bg-gray-300 rounded" />
-              </div>
-              <div className="space-y-3 mb-8">
-                <div className="h-3 w-full bg-gray-300/60 rounded" /><div className="h-3 w-5/6 bg-gray-300/60 rounded" /><div className="h-3 w-4/6 bg-gray-300/60 rounded" />
-              </div>
-              <div className="h-48 bg-gray-300/40 rounded-lg mb-8" />
-              <div className="space-y-3">
-                <div className="h-3 w-full bg-gray-300/60 rounded" /><div className="h-3 w-3/4 bg-gray-300/60 rounded" /><div className="h-3 w-5/6 bg-gray-300/60 rounded" />
-              </div>
-            </div>
-            {/* Popup overlay — position/backdrop/box mirror the storefront per formType */}
-            <div className="fixed inset-0 top-[52px] flex" style={{ zIndex: 10, ...canvasAlign }}>
-              {showBackdrop && <div className="absolute inset-0" style={{ backgroundColor: s.overlay.color, opacity: s.overlay.opacity / 100 }} />}
-              <div className="relative flex overflow-hidden shadow-2xl" style={boxStyle}>
-                {s.closeButton.show && (
-                  <button className="absolute top-3 right-3 rounded-full bg-black/30 flex items-center justify-center z-20"
-                    style={{ width: s.closeButton.size ?? 24, height: s.closeButton.size ?? 24 }}>
-                    <X style={{ color: s.closeButton.color || '#FFFFFF', width: Math.round((s.closeButton.size ?? 24) * 0.58), height: Math.round((s.closeButton.size ?? 24) * 0.58) }} />
-                  </button>
-                )}
-                {s.sideImage.enabled && s.sideImage.position === 'left' && s.sideImage.src && sideAllowed && (
-                  <div style={{ flex: 1, flexBasis: 0, minWidth: 0 }} className="overflow-hidden">
-                    <img src={s.sideImage.src} className="w-full h-full object-cover" alt="" />
-                  </div>
-                )}
-                <div style={{ backgroundColor: s.backgroundColor, paddingTop: s.paddingTop ?? s.padding ?? 32, paddingRight: s.paddingRight ?? s.padding ?? 32, paddingBottom: s.paddingBottom ?? s.padding ?? 32, paddingLeft: s.paddingLeft ?? s.padding ?? 32, fontFamily: s.fontFamily, flex: 1, flexBasis: 0, minWidth: 0, minHeight: (isBannerFt || isFlyoutFt) ? undefined : (s.minHeight ?? 500), display: 'flex', flexDirection: 'column', justifyContent: contentVCenter ? 'center' : 'flex-start' }}>
-                  {activeStep.blocks.filter(b => previewDevice === 'mobile' ? !b.props?.hideOnMobile : !b.props?.hideOnDesktop).map(block => <BlockPreview key={block.id} block={block} offerLabel={previewOfferLabel} prizeLabel={previewPrizeLabel} />)}
-                </div>
-                {s.sideImage.enabled && s.sideImage.position === 'right' && s.sideImage.src && sideAllowed && (
-                  <div style={{ flex: 1, flexBasis: 0, minWidth: 0 }} className="overflow-hidden">
-                    <img src={s.sideImage.src} className="w-full h-full object-cover" alt="" />
-                  </div>
-                )}
-              </div>
-            </div>
+          {/* O popup DE VERDADE, num iframe: mesmo script que a loja
+              carrega, com a rede encenada. É onde se avança de etapa, se
+              raspa e se gira — não há segunda implementação para mentir. */}
+          <div className="flex-1 overflow-hidden bg-gray-200 flex justify-center">
+            <iframe
+              key={previewNonce}
+              ref={previewFrameRef}
+              src="/popup-preview?wf_debug=1"
+              title="Pré-visualização do popup"
+              className="border-0 bg-gray-200"
+              style={{
+                width: previewDevice === 'mobile' ? 390 : '100%',
+                height: '100%',
+                maxWidth: '100%',
+                boxShadow: previewDevice === 'mobile' ? '0 0 0 1px rgba(0,0,0,.18)' : undefined,
+              }}
+            />
           </div>
           <style>{`
             @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
