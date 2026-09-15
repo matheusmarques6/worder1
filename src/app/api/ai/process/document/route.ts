@@ -3,7 +3,7 @@ import { chunkText, cleanTextForIndexing, extractTextMetadata } from '@/lib/ai/p
 import { generateEmbeddingsBatch, EMBEDDING_SPACE } from '@/lib/ai/embeddings'
 import { resolveEmbeddingKey } from '@/lib/ai/embedding-key'
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
-import { checkAiBudget } from '@/lib/ai/budget';
+import { AiBudgetExceededError, AiBudgetUnavailableError, checkAiBudget } from '@/lib/ai/budget';
 import { extractTextFromFile } from '@/lib/ai/processors/file-extractor'
 import { extractStoragePathFromFileUrl, AI_SOURCES_BUCKET } from '@/lib/ai/source-storage'
 import { crawlSite } from '@/lib/ai/crawler'
@@ -234,6 +234,15 @@ export async function POST(request: NextRequest) {
         .eq('id', sourceId)
     }
 
+    if (error instanceof AiBudgetExceededError) {
+      return NextResponse.json({ error: error.message, code: 'AI_BUDGET_EXCEEDED' }, { status: 402 })
+    }
+    if (error instanceof AiBudgetUnavailableError) {
+      return NextResponse.json(
+        { error: error.message, code: 'AI_BUDGET_UNAVAILABLE', unknownReason: error.unknownReason },
+        { status: 503 },
+      )
+    }
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
