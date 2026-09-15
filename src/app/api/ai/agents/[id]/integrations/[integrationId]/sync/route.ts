@@ -131,7 +131,7 @@ export async function POST(
       )
     }
 
-    const embeddings = await generateEmbeddingsBatch(productTexts, openaiKey)
+    const embeddings = await generateEmbeddingsBatch(productTexts, openaiKey, organization_id)
 
     // Inserir chunks
     const chunks = productTexts.map((text, i) => ({

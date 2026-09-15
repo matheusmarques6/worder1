@@ -178,7 +178,8 @@ export async function generateEmbedding(
  */
 export async function generateEmbeddingsBatch(
   texts: string[],
-  apiKey: string
+  apiKey: string,
+  organizationId: string
 ): Promise<number[][]> {
   if (!texts || texts.length === 0) {
     return []
@@ -226,11 +227,21 @@ export async function generateEmbeddingsBatch(
   // 2. GERAR EMBEDDINGS PARA TEXTOS NÃO CACHEADOS
   // ============================================
   if (toGenerate.length > 0) {
+    if (!organizationId) {
+      throw new Error('organizationId não informado')
+    }
+
+    const billable = true
     const batchSize = 100 // OpenAI permite até 2048, mas 100 é mais seguro
 
     for (let i = 0; i < toGenerate.length; i += batchSize) {
       const batch = toGenerate.slice(i, i + batchSize)
       const batchTexts = batch.map(b => b.text)
+      if (estimateCostUsd('openai', OPENAI_EMBEDDING_MODEL, 1, 0) === null) {
+        throw new AiBudgetUnavailableError('unpriced_model')
+      }
+      await checkAiBudget(organizationId, { throwOnExceeded: true })
+      let usageTracked = false
 
       try {
         const response = await fetch('https://api.openai.com/v1/embeddings', {
@@ -251,6 +262,19 @@ export async function generateEmbeddingsBatch(
         }
 
         const data = await response.json()
+
+        await trackAiUsage({
+          organizationId,
+          provider: 'openai',
+          model: OPENAI_EMBEDDING_MODEL,
+          feature: 'embedding',
+          promptTokens: data.usage?.prompt_tokens,
+          completionTokens: data.usage ? 0 : undefined,
+          ...(data.usage ? {} : { costUsdOverride: null }),
+          metadata: { billable },
+        })
+        usageTracked = true
+
         const sortedData = data.data.sort((a: any, b: any) => a.index - b.index)
 
         // Processar resultados e salvar no cache
@@ -269,8 +293,19 @@ export async function generateEmbeddingsBatch(
         }
 
       } catch (error: any) {
+        if (!usageTracked) {
+          await trackAiUsage({
+            organizationId,
+            provider: 'openai',
+            model: OPENAI_EMBEDDING_MODEL,
+            feature: 'embedding',
+            success: false,
+            costUsdOverride: null,
+            metadata: { billable },
+          })
+        }
         console.error('[Embeddings Batch] ❌ Erro:', error)
-        throw new Error(`Erro ao gerar embeddings em batch: ${error.message}`)
+        throw error
       }
 
       // Rate limiting entre batches

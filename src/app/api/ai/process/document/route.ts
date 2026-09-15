@@ -159,7 +159,7 @@ export async function POST(request: NextRequest) {
     }
 
     const chunkTexts = chunks.map(c => c.content)
-    const embeddings = await generateEmbeddingsBatch(chunkTexts, openaiKey)
+    const embeddings = await generateEmbeddingsBatch(chunkTexts, openaiKey, organization_id)
 
     console.log(`Generated ${embeddings.length} embeddings for source ${sourceId}`)
 
