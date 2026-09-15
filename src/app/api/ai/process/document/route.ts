@@ -45,7 +45,9 @@ export async function POST(request: NextRequest) {
     // Verificação de orçamento antes de processar embeddings pagos.
     const budgetCheck = await checkAiBudget(organization_id, { skipCache: false })
     if (!budgetCheck.allowed) {
-      const unavailable = budgetCheck.unknownReason !== undefined
+      const exceeded =
+        budgetCheck.budgetUsd !== null && budgetCheck.spentUsd >= budgetCheck.budgetUsd
+      const unavailable = !exceeded && budgetCheck.unknownReason !== undefined
       const budgetMsg = unavailable
         ? 'Não foi possível verificar o orçamento de IA'
         : `Orçamento AI excedido: $${budgetCheck.spentUsd.toFixed(4)} de $${budgetCheck.budgetUsd?.toFixed(4)} USD/mês`

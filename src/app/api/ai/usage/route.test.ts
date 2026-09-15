@@ -55,7 +55,7 @@ describe('GET /api/ai/usage', () => {
     const body = await response.json()
 
     expect(response.status).toBe(200)
-    expect(body.totals).toMatchObject({ calls: 0, totalTokens: 0, costUsd: 0 })
+    expect(body.totals).toMatchObject({ calls: 0, totalTokens: 0, billableCostUsd: 0, platformCostUsd: 0 })
   })
 
   it('separates billable and platform totals while historical rows stay billable', async () => {
@@ -74,11 +74,17 @@ describe('GET /api/ai/usage', () => {
     const body = await response.json()
 
     expect(body.totals).toMatchObject({
-      costUsd: 15,
-      unknownCostCalls: 1,
+      billableCostUsd: 15,
+      billableUnknownCostCalls: 1,
       platformCostUsd: 90,
       platformUnknownCostCalls: 1,
     })
+    expect(body.grouped).toEqual([
+      expect.objectContaining({
+        billableCostUsd: 15,
+        platformCostUsd: 90,
+      }),
+    ])
   })
 
   it('preserves the budget unknown reason in the response', async () => {

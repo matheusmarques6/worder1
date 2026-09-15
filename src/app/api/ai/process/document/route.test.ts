@@ -79,4 +79,21 @@ describe('/api/ai/process/document internal authorization', () => {
 
     expect(response.status).toBe(402)
   })
+
+  it('keeps 402 when known spend is exhausted even with unpriced usage', async () => {
+    mockCheckAiBudget.mockResolvedValue({
+      allowed: false,
+      budgetUsd: 50,
+      spentUsd: 50,
+      hasUnknownCost: true,
+      unknownReason: 'unpriced_model',
+    })
+
+    const response = await POST(request({ authorization: 'Bearer internal-secret' }))
+    const body = await response.json()
+
+    expect(response.status).toBe(402)
+    expect(body.code).toBe('AI_BUDGET_EXCEEDED')
+    expect(body).not.toHaveProperty('unknownReason')
+  })
 })

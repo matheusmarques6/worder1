@@ -347,6 +347,23 @@ describe('checkAiBudget', () => {
     })
   })
 
+  it('lookup_error com limite zero continua indisponivel 503, nao teto 402', async () => {
+    ;(supabaseAdmin as any).from = vi.fn()
+      .mockReturnValueOnce(makeChain({ data: { monthly_limit_usd: 0 }, error: null }))
+    ;(supabaseAdmin as any).rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: '08006', message: 'connection failure' },
+    })
+
+    await expect(checkAiBudget(ORG, { throwOnExceeded: true }))
+      .rejects
+      .toMatchObject({
+        name: 'AiBudgetUnavailableError',
+        status: 503,
+        unknownReason: 'lookup_error',
+      })
+  })
+
   it('bloqueia com lookup_error quando o fallback falha', async () => {
     ;(supabaseAdmin as any).from = vi.fn()
       .mockReturnValueOnce(makeChain({ data: { monthly_limit_usd: 10 }, error: null }))

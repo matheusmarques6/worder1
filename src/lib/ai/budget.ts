@@ -268,6 +268,9 @@ export async function checkAiBudget(
 
 function _throwIfBlocked(result: BudgetCheckResult, throwOnExceeded: boolean) {
   if (!throwOnExceeded || result.allowed) return
+  if (result.unknownReason === 'lookup_error') {
+    throw new AiBudgetUnavailableError(result.unknownReason)
+  }
   if (result.budgetUsd !== null && result.spentUsd >= result.budgetUsd) {
     throw new AiBudgetExceededError(result.budgetUsd, result.spentUsd)
   }
