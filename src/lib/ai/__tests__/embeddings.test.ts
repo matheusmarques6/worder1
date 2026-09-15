@@ -17,6 +17,7 @@ const {
   redisGetMock,
   redisSetexMock,
   trackAiUsageMock,
+  estimateCostUsdMock,
   checkAiBudgetMock,
 } = vi.hoisted(() => {
   const redisGetMock = vi.fn()
@@ -26,6 +27,7 @@ const {
     redisGetMock,
     redisSetexMock,
     trackAiUsageMock: vi.fn(),
+    estimateCostUsdMock: vi.fn(),
     checkAiBudgetMock: vi.fn(),
   }
 })
@@ -40,8 +42,15 @@ vi.mock('@/lib/redis', async (importOriginal) => ({
   getRedis: getRedisMock,
 }))
 
-vi.mock('../cost-tracker', () => ({ trackAiUsage: trackAiUsageMock }))
-vi.mock('../budget', () => ({ checkAiBudget: checkAiBudgetMock }))
+vi.mock('../cost-tracker', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../cost-tracker')>()
+  estimateCostUsdMock.mockImplementation(actual.estimateCostUsd)
+  return { ...actual, estimateCostUsd: estimateCostUsdMock, trackAiUsage: trackAiUsageMock }
+})
+vi.mock('../budget', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../budget')>()),
+  checkAiBudget: checkAiBudgetMock,
+}))
 
 // Redis desligado por declaração, não por sorte: `isRedisConfigured()`
 // (`src/lib/redis.ts:35`) é só a presença das duas envs, lida em tempo de
@@ -54,6 +63,7 @@ beforeEach(() => {
   redisGetMock.mockReset().mockResolvedValue(null)
   redisSetexMock.mockReset().mockResolvedValue('OK')
   trackAiUsageMock.mockReset().mockResolvedValue(undefined)
+  estimateCostUsdMock.mockClear()
   checkAiBudgetMock.mockReset().mockResolvedValue({
     allowed: true,
     budgetUsd: 50,
@@ -87,6 +97,7 @@ describe('generateEmbedding unitário', () => {
     expect(await generateEmbedding('frete', 'sk-teste', 'org-b')).toEqual(embedding)
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(estimateCostUsdMock).toHaveBeenCalledWith('openai', 'text-embedding-3-small', 1, 0)
     expect(checkAiBudgetMock).toHaveBeenCalledTimes(1)
     expect(checkAiBudgetMock).toHaveBeenCalledWith('org-a', { throwOnExceeded: true })
     expect(trackAiUsageMock).toHaveBeenCalledTimes(1)
@@ -103,10 +114,27 @@ describe('generateEmbedding unitário', () => {
     expect(JSON.stringify(trackAiUsageMock.mock.calls)).not.toContain('frete')
   })
 
-  it('registra custo desconhecido uma vez quando o fetch unitário rejeita', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')))
+  it('bloqueia modelo unitário sem preço antes de budget, request ou registro', async () => {
+    estimateCostUsdMock.mockReturnValueOnce(null)
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
 
-    await expect(generateEmbedding('frete', 'sk-teste', 'org-a')).rejects.toThrow(/network down/)
+    await expect(generateEmbedding('frete', 'sk-teste', 'org-a')).rejects.toMatchObject({
+      name: 'AiBudgetUnavailableError',
+      status: 503,
+      unknownReason: 'unpriced_model',
+    })
+
+    expect(checkAiBudgetMock).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(trackAiUsageMock).not.toHaveBeenCalled()
+  })
+
+  it('registra custo desconhecido uma vez quando o fetch unitário rejeita', async () => {
+    const originalError = new Error('network down')
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(originalError))
+
+    await expect(generateEmbedding('frete', 'sk-teste', 'org-a')).rejects.toBe(originalError)
 
     expect(trackAiUsageMock).toHaveBeenCalledTimes(1)
     expect(trackAiUsageMock).toHaveBeenCalledWith(expect.objectContaining({

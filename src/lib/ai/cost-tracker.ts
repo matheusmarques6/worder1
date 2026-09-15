@@ -43,6 +43,7 @@ const PRICING: Record<string, { in: number; out: number }> = {
   'openai/gpt-3.5-turbo': { in: 0.50,  out: 1.50 },
   'openai/o1-preview':    { in: 15.00, out: 60.00 },
   'openai/o1-mini':       { in: 3.00,  out: 12.00 },
+  'openai/text-embedding-3-small': { in: 0.02, out: 0 },
 
   // Anthropic
   'anthropic/claude-opus-4-6':   { in: 15.00, out: 75.00 },

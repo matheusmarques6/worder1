@@ -16,8 +16,8 @@
 
 import crypto from 'crypto'
 import { getRedis, isRedisConfigured, CACHE_TTL, CACHE_PREFIX } from '@/lib/redis'
-import { checkAiBudget } from './budget'
-import { trackAiUsage } from './cost-tracker'
+import { AiBudgetUnavailableError, checkAiBudget } from './budget'
+import { estimateCostUsd, trackAiUsage } from './cost-tracker'
 
 const OPENAI_EMBEDDING_MODEL = 'text-embedding-3-small'
 const OPENAI_EMBEDDING_DIMENSIONS = 1536
@@ -101,6 +101,9 @@ export async function generateEmbedding(
   }
 
   const billable = true
+  if (estimateCostUsd('openai', OPENAI_EMBEDDING_MODEL, 1, 0) === null) {
+    throw new AiBudgetUnavailableError('unpriced_model')
+  }
   await checkAiBudget(organizationId, { throwOnExceeded: true })
   let usageTracked = false
 
@@ -165,7 +168,7 @@ export async function generateEmbedding(
       })
     }
     console.error('[Embeddings] ❌ Erro ao gerar embedding:', error)
-    throw new Error(`Erro ao gerar embedding: ${error.message}`)
+    throw error
   }
 }
 
