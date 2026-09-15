@@ -67,6 +67,25 @@ describe('/api/ai/process/document internal authorization', () => {
     })
   })
 
+  it('returns 503 for lookup_error when the configured budget is zero', async () => {
+    mockCheckAiBudget.mockResolvedValue({
+      allowed: false,
+      budgetUsd: 0,
+      spentUsd: 0,
+      hasUnknownCost: false,
+      unknownReason: 'lookup_error',
+    })
+
+    const response = await POST(request({ authorization: 'Bearer internal-secret' }))
+    const body = await response.json()
+
+    expect(response.status).toBe(503)
+    expect(body).toMatchObject({
+      code: 'AI_BUDGET_UNAVAILABLE',
+      unknownReason: 'lookup_error',
+    })
+  })
+
   it('keeps a known exhausted budget as 402', async () => {
     mockCheckAiBudget.mockResolvedValue({
       allowed: false,

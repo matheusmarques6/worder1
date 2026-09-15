@@ -47,7 +47,8 @@ export async function POST(request: NextRequest) {
     if (!budgetCheck.allowed) {
       const exceeded =
         budgetCheck.budgetUsd !== null && budgetCheck.spentUsd >= budgetCheck.budgetUsd
-      const unavailable = !exceeded && budgetCheck.unknownReason !== undefined
+      const unavailable = budgetCheck.unknownReason === 'lookup_error' ||
+        (!exceeded && budgetCheck.unknownReason !== undefined)
       const budgetMsg = unavailable
         ? 'Não foi possível verificar o orçamento de IA'
         : `Orçamento AI excedido: $${budgetCheck.spentUsd.toFixed(4)} de $${budgetCheck.budgetUsd?.toFixed(4)} USD/mês`
