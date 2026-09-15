@@ -17,7 +17,7 @@ from psycopg.types.json import Jsonb
 from agents_runtime.app import run
 from agents_runtime.clock import SystemClock
 from agents_runtime.config import QueueingConfig
-from agents_runtime.queueing import DOMAIN_EVENTS, EVALS, INBOUND, SCHEDULED
+from agents_runtime.queueing import DOMAIN_EVENTS, EVALS, INBOUND
 from agents_runtime.queueing.engine_loop import Ack, EngineLoop
 from agents_runtime.queueing.polling import _schedule
 from agents_runtime.repository.queue import PgmqQueue
@@ -214,13 +214,13 @@ async def test_scenario_8_the_loop_consumes_in_the_policy_order(
 ) -> None:
     """One window of mixed work, consumed in the schedule's exact sequence.
 
-    All four queues pre-filled to their weight, one loop, beliefs true
+    All three queues pre-filled to their weight, one loop, beliefs true
     throughout — so the consumption order IS the smooth schedule of the unit
-    policy, element by element. Not "roughly 8:4:2:1": the same list.
+    policy, element by element. Not "roughly 8:4:1": the same list.
     """
     stop = asyncio.Event()
     consumed: list[str] = []
-    fills = {INBOUND: 8, DOMAIN_EVENTS: 4, SCHEDULED: 2, EVALS: 1}
+    fills = {INBOUND: 8, DOMAIN_EVENTS: 4, EVALS: 1}
 
     async with await psycopg.AsyncConnection.connect(dsn, autocommit=True) as conn:
         await conn.execute("set role worker_role")

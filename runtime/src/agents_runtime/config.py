@@ -13,19 +13,19 @@ dez segundos de verdade, sem que a regra saiba que está sendo testada.
 from dataclasses import dataclass, field
 from datetime import timedelta
 
-from agents_runtime.queueing import DOMAIN_EVENTS, EVALS, INBOUND, SCHEDULED
+from agents_runtime.queueing import DOMAIN_EVENTS, EVALS, INBOUND
 
 _PG_INT_MAX = 2_147_483_647
 
 
 def _weights() -> dict[str, int]:
-    """8 : 4 : 2 : 1 — a proporção do weighted polling (arquitetura §ADR-5)."""
-    return {INBOUND: 8, DOMAIN_EVENTS: 4, SCHEDULED: 2, EVALS: 1}
+    """8 : 4 : 1 — sem slots para a fila scheduled reservada (Wave 4)."""
+    return {INBOUND: 8, DOMAIN_EVENTS: 4, EVALS: 1}
 
 
 def _retry_limits() -> dict[str, int]:
     """Quantas vezes cada fila insiste antes da DLQ."""
-    return {INBOUND: 5, DOMAIN_EVENTS: 5, SCHEDULED: 3, EVALS: 2}
+    return {INBOUND: 5, DOMAIN_EVENTS: 5, EVALS: 2}
 
 
 @dataclass(frozen=True)
@@ -69,7 +69,6 @@ class QueueingConfig:
 
     # Promoção por idade: o custo de um evento atrasado cresce com o atraso.
     promote_domain_after: timedelta = timedelta(minutes=2)
-    promote_scheduled_after: timedelta = timedelta(minutes=10)
 
     # Válido SÓ enquanto o runtime for um processo asyncio único (ADR-2). Ir a
     # multi-processo exige migrar isto para uma lease distribuída antes.

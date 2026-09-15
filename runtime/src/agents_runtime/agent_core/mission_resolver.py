@@ -138,9 +138,7 @@ def arbitrate(
     """Uma missão vence o turno; as outras viram estado, nunca segundo objetivo.
 
     v1: a dona da conversa (owner_mission_version_id, posta pelo despacho do
-    toque) vence; sem dona resolvível, a descoberta assume. O desempate por
-    prioridade de evento (pending_defaults.EVENT_PRIORITY) entra quando dois
-    toques disputarem a MESMA janela — chega com o despacho de missão.
+    toque) vence; sem dona resolvível, a descoberta assume.
     Sem missão nenhuma: o turno morre alto (quem chama grava o alerta).
     """
     if owner is not None:

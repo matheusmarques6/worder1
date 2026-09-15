@@ -14,7 +14,7 @@ expiry, a sustained inbound burst would starve a queue once marked quiet for
 the burst's whole duration (an order_paid waiting an hour to cancel a funnel —
 the exact case ADR-5 exists to prevent). The cost of the expiry is at most one
 empty read per queue per window; the guarantee is that no served queue goes
-unprobed for longer than one window, which is the 8:4:2:1 promise kept under
+unprobed for longer than one window, which is the 8:4:1 promise kept under
 load, not only at rest.
 """
 

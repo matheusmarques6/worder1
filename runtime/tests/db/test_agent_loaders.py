@@ -91,7 +91,9 @@ class TestTheTenantPolicy:
 
         assert policy.primary_language == "pt-BR"
         assert policy.never_say_ai is True
-        assert policy.shadow_until is None
+        assert policy == agent_repo.TenantSettings(
+            policy=agent_repo.TenantPolicy(primary_language="pt-BR", never_say_ai=True)
+        )
 
 
 class TestTheConversation:

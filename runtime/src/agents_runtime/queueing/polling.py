@@ -1,4 +1,4 @@
-"""Weighted polling 8:4:2:1 e promoção por idade.
+"""Weighted polling 8:4:1 e promoção por idade.
 
 Prioridade estrita é proibida, e o motivo é concreto: um `order_paid` atrás de
 uma fila de entrada movimentada chega tarde demais para cancelar o funil, e o
@@ -13,7 +13,7 @@ rajada inteira passar.
 from datetime import timedelta
 
 from agents_runtime.config import QueueingConfig
-from agents_runtime.queueing import DOMAIN_EVENTS, EVALS, INBOUND, SCHEDULED
+from agents_runtime.queueing import DOMAIN_EVENTS, EVALS, INBOUND
 
 
 def _schedule(weights: dict[str, int]) -> tuple[str, ...]:
@@ -66,15 +66,13 @@ def next_queue(
 # Um nível acima, na ordem da proporção. `q_evals` não sobe: avaliação é melhor
 # esforço por definição, e promovê-la seria deixá-la competir com a conversa de
 # um cliente.
-_ONE_LEVEL_UP = {SCHEDULED: DOMAIN_EVENTS, DOMAIN_EVENTS: INBOUND}
+_ONE_LEVEL_UP = {DOMAIN_EVENTS: INBOUND}
 
 
 def effective_queue(queue: str, age: timedelta, *, config: QueueingConfig) -> str:
     """A classe com que a mensagem deve ser tratada, dada a idade dela."""
     if queue == DOMAIN_EVENTS and age > config.promote_domain_after:
         return _ONE_LEVEL_UP[DOMAIN_EVENTS]
-    if queue == SCHEDULED and age > config.promote_scheduled_after:
-        return _ONE_LEVEL_UP[SCHEDULED]
     if queue == EVALS:
         return EVALS
     return queue

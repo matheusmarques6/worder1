@@ -92,10 +92,9 @@ class ActiveVersion:
 
 @dataclass(frozen=True, slots=True)
 class TenantSettings:
-    """A política do tenant mais o que decide o modo shadow (S9b)."""
+    """A política do tenant usada pelos produtores de prompt."""
 
     policy: TenantPolicy
-    shadow_until: datetime | None
 
     @property
     def primary_language(self) -> str:
@@ -192,11 +191,11 @@ async def load_tenant_policy(
     conn: psycopg.AsyncConnection, *, organization_id: UUID
 ) -> TenantSettings:
     # FORK: Worder has no `tenants` table; the org-level policy knobs the motor
-    # kept there (primary_language, never_say_ai, shadow_until) do not exist on
+    # kept there (primary_language, never_say_ai) do not exist on
     # `organizations`, so the motor defaults are pinned here. Etapa 3 replaces
     # this loader with per-agent config from ai_agents (see FORK.md).
     cursor = await conn.execute(
-        "select 'pt-BR'::text, true, null::timestamptz from public.organizations where id = %s",
+        "select 'pt-BR'::text, true from public.organizations where id = %s",
         (organization_id,),
     )
     row = await cursor.fetchone()
@@ -205,7 +204,6 @@ async def load_tenant_policy(
 
     return TenantSettings(
         policy=TenantPolicy(primary_language=row[0], never_say_ai=row[1]),
-        shadow_until=row[2],
     )
 
 

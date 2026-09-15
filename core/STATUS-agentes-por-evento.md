@@ -113,7 +113,7 @@ ajustados nos testes.
 |---|---|---|
 | PENDENTE-1 (default de chave LLM) | resolvido: BYO-only | degrau plataforma atrás de `AGENTS_PLATFORM_LLM_ENABLED` (off) |
 | PENDENTE-2 (copy final dos seeds) | aberto | seeds v0 draft `origin='worder_default'`; aprovar com Bruno |
-| PENDENTE-3 (números de caps/arbitragem) | aberto | constantes em `pending_defaults.py` |
+| PENDENTE-3 (números de caps/arbitragem) | depende de consumidor/plano aprovados | reserva sem uso retirada na Wave 4; q_scheduled/DLQ preservadas sem consumidor |
 | Emissão de `whatsapp.received` no EventBus | adiado | missão descoberta é engajada pelo coalescer |
 | Humanização do sender (typing, ≤4 bolhas) + send-guard tiers | roadmap | divergência v1 registrada (Adendo §A.4.2) |
 | Canais instagram/email como adapters | roadmap | `channel_identities.channel` já os prevê |
@@ -466,7 +466,7 @@ Auditoria completa e fila de 63 correções: `docs/AUDITORIA-IA-2026-08-28-CHECK
 ### Pendências conhecidas (fora do plano de 30)
 
 - PENDENTE-2: copy final dos seeds com Bruno (drafts já no banco por org via função).
-- PENDENTE-3: números de caps/arbitragem em `pending_defaults.py`.
+- PENDENTE-3: novos números de caps/arbitragem dependem de consumidor e plano aprovados, sem reserva de código.
 - Loop de tool escolhida pelo modelo (E3): create_coupon já existe e é chamado
   pelo toucher; o responder conversacional ganha o loop depois.
 - Consumo de grant (uses++/consumed) via webhook de pedido correlacionando coupon_code.

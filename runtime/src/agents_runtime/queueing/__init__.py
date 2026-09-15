@@ -9,13 +9,14 @@ limbo.
 # never spells one out at a call site: a typo there reads as "empty queue"
 # forever.
 #
-# The weights of arquitetura §2 hang off this order — 8 : 4 : 2 : 1 — and the
-# weighted polling that uses them arrives with its own tests.
+# Polling policy is 8 : 4 : 1 (inbound, domain events, evals). Scheduled has
+# no consumer; its name and DLQ remain for compatibility and manual inspection.
 INBOUND = "q_inbound"
 DOMAIN_EVENTS = "q_domain_events"
 SCHEDULED = "q_scheduled"
 EVALS = "q_evals"
 
+# Physical inventory, not the queues served by an EngineLoop.
 WORK_QUEUES = (INBOUND, DOMAIN_EVENTS, SCHEDULED, EVALS)
 
 # Every read ends in archive, set_vt with backoff, or here. One dead letter

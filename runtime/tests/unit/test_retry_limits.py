@@ -1,6 +1,6 @@
 """Unidade 4 — limites por fila e a saída para a DLQ.
 
-A tabela é 5 · 5 · 3 · 2 (`CLAUDE.md`), e ela é dirigida por dados de
+A tabela é 5 · 5 · 2, e ela é dirigida por dados de
 propósito: um `if fila == ...` espalhado pelo consumidor é como uma quinta fila
 nasce sem limite nenhum.
 
@@ -13,7 +13,14 @@ from datetime import timedelta
 import pytest
 
 from agents_runtime.config import QueueingConfig
-from agents_runtime.queueing import DOMAIN_EVENTS, EVALS, INBOUND, SCHEDULED
+from agents_runtime.queueing import (
+    ALL_QUEUES,
+    DEAD_LETTER,
+    DOMAIN_EVENTS,
+    EVALS,
+    INBOUND,
+    SCHEDULED,
+)
 from agents_runtime.queueing.failures import Failure
 from agents_runtime.queueing.retries import DeadLetter, Retry, decide
 from tests.support.randomness import FixedRandomness
@@ -28,7 +35,7 @@ def outcome(queue: str, attempt: int, failure: Failure = Failure.TRANSIENT):
 
 @pytest.mark.parametrize(
     ("queue", "limit"),
-    [(INBOUND, 5), (DOMAIN_EVENTS, 5), (SCHEDULED, 3), (EVALS, 2)],
+    [(INBOUND, 5), (DOMAIN_EVENTS, 5), (EVALS, 2)],
 )
 def test_each_queue_retries_up_to_its_own_limit(queue: str, limit: int) -> None:
     assert isinstance(outcome(queue, limit), Retry)
@@ -40,7 +47,6 @@ def test_each_queue_retries_up_to_its_own_limit(queue: str, limit: int) -> None:
     [
         (INBOUND, "q_inbound_dlq"),
         (DOMAIN_EVENTS, "q_domain_events_dlq"),
-        (SCHEDULED, "q_scheduled_dlq"),
         (EVALS, "q_evals_dlq"),
     ],
 )
@@ -77,8 +83,16 @@ def test_the_retry_carries_the_backoff_of_its_attempt() -> None:
     assert result.delay == timedelta(minutes=2)
 
 
-def test_an_unknown_queue_is_a_programming_error() -> None:
+@pytest.mark.parametrize("queue", ["q_inventada", SCHEDULED])
+def test_a_queue_without_retry_policy_is_a_programming_error(queue: str) -> None:
     # Fila nova sem limite na tabela falha alto aqui, em vez de silenciosamente
     # herdar o limite de outra.
     with pytest.raises(KeyError):
-        outcome("q_inventada", 1)
+        outcome(queue, 1)
+
+
+def test_scheduled_remains_in_the_physical_queue_and_dlq_inventory() -> None:
+    assert SCHEDULED == "q_scheduled"
+    assert SCHEDULED in ALL_QUEUES
+    assert "q_scheduled_dlq" in DEAD_LETTER
+    assert "q_scheduled_dlq" in ALL_QUEUES
