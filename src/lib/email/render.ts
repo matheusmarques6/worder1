@@ -686,6 +686,11 @@ export async function resolveProductBlocks(
     const cfg = parseProductBlockMarker(match[1])
     if (!cfg) continue
     const { feedType, maxProducts, cols } = cfg
+    // O id do feed salvo. É o que leva os filtros, os produtos
+    // excluídos, a reserva e a janela de tempo configurados pelo
+    // lojista até a resolução — sem ele, nada disso era aplicado no
+    // envio real.
+    const feedId = (cfg as any).feedId || undefined
 
     let products: any[] = []
     try {
@@ -694,7 +699,7 @@ export async function resolveProductBlocks(
       // 50-200ms/call adds up across a batch.
       const { resolveProductFeed } = await import('@/lib/email/product-feeds')
       products = await resolveProductFeed({
-        orgId, storeId, feedType, contactId, maxProducts, eventData,
+        orgId, storeId, feedType, feedId, contactId, maxProducts, eventData,
       })
     } catch {
       // No products available
@@ -702,8 +707,10 @@ export async function resolveProductBlocks(
 
     if (products.length === 0 && feedType.startsWith('trigger_')) {
       try {
+        // O feed segue junto mesmo na reserva: um produto que o lojista
+        // excluiu não deve reaparecer só porque a estratégia mudou.
         const { resolveProductFeed } = await import('@/lib/email/product-feeds')
-        products = await resolveProductFeed({ orgId, storeId, feedType: 'bestsellers', maxProducts, contactId, eventData })
+        products = await resolveProductFeed({ orgId, storeId, feedType: 'bestsellers', feedId, maxProducts, contactId, eventData })
       } catch {}
     }
 

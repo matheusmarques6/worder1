@@ -102,6 +102,8 @@ export interface ProductGridConfig {
   showSeparator?: boolean
   separatorColor?: string
   buttonAlign?: string
+  /** O nome do produto vira link para a página dele. */
+  nameLinkEnabled?: boolean
   showName?: boolean
   showPrice?: boolean
   showComparePrice?: boolean
@@ -221,9 +223,17 @@ export function buildProductGrid(
           ? `<img src="${attr(fitted)}" alt="${attr(title)}" width="${cellW}" style="display:block;width:${isList ? `${LIST_IMG}px` : '100%'};height:${maxImgH}px;max-height:${maxImgH}px;object-fit:cover;border-radius:${imgRadius};border:0;" />`
           : `<div style="${isList ? `width:${LIST_IMG}px;` : ''}height:${maxImgH}px;background:#f3f4f6;"></div>`
 
+        // "Nome do produto leva ao produto": a opção existia no painel e
+        // não saía no envio — o nome vinha como texto morto ao lado de
+        // um botão que linkava. Quem liga, ganha o link; a cor e o peso
+        // continuam sendo os configurados, sem sublinhado herdado.
+        const nomeTexto = text(title)
+        const nomeConteudo = cfg.nameLinkEnabled
+          ? `<a href="${attr(url)}" style="color:${cfg.nameColor || '#111827'};text-decoration:none;">${nomeTexto}</a>`
+          : nomeTexto
         const nameHtml =
           cfg.showName !== false
-            ? `<p style="margin:0;font-weight:${cfg.nameWeight || '600'};font-size:${cfg.nameFontSize || 14}px;color:${cfg.nameColor || '#111827'};font-family:${font};">${text(title)}</p>`
+            ? `<p style="margin:0;font-weight:${cfg.nameWeight || '600'};font-size:${cfg.nameFontSize || 14}px;color:${cfg.nameColor || '#111827'};font-family:${font};">${nomeConteudo}</p>`
             : ''
 
         const compare = prod.compare_at_price ?? prod.compare_price
