@@ -14,6 +14,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError } from '@/lib/api-utils';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+// A quebra campanha/automação mora num módulo próprio porque os
+// cartões e o gráfico têm de usar a MESMA conta — eram duas, e a tela
+// se contradizia.
+import { resumirAtribuicao, ehCampanha, ehAutomacao } from '@/lib/analytics/atribuicao';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -147,7 +151,22 @@ export async function GET(request: NextRequest) {
     const auth = await getAuthClient();
     if (!auth) return authError();
     const orgId = auth.user.organization_id;
-    const storeId = request.nextUrl.searchParams.get('storeId');
+    const storeIdBruto = request.nextUrl.searchParams.get('storeId');
+    // Só UUID passa. O valor vem da querystring e entra em filtros
+    // `.or(...)`, onde texto livre viraria sintaxe de filtro. A cerca da
+    // organização continua em toda consulta — este recorte é por cima
+    // dela, nunca no lugar dela.
+    const storeId =
+      storeIdBruto && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(storeIdBruto)
+        ? storeIdBruto
+        : null;
+    /**
+     * Recorta pela loja escolhida mantendo o que vale para a
+     * organização inteira (`store_id` nulo) — um fluxo que atende todas
+     * as lojas não some da lista quando você escolhe uma delas.
+     */
+    const porLoja = <T extends { or: (f: string) => T }>(q: T): T =>
+      storeId ? q.or(`store_id.eq.${storeId},store_id.is.null`) : q;
 
     // Compute the [sinceDate, untilDate) window in start-of-day
     // semantics so the count matches Shopify Admin's "Últimos N dias"
@@ -195,22 +214,22 @@ export async function GET(request: NextRequest) {
     const buckets = buildBuckets(days, granularity);
 
     // ── All queries in parallel (defensive) ──
+    // Todas recortadas pela loja escolhida, não só pela organização. Sem
+    // isso, escolher uma loja no filtro ainda trazia as campanhas, os
+    // fluxos e a receita das outras lojas da mesma conta para as listas
+    // e para o gráfico.
     const [
       campaigns,
-      prevCampaigns,
       automations,
       whatsappCampaigns,
       smsCampaigns,
-      emailSends,
       orders,
       stores,
     ] = await Promise.all([
-      safeQuery(() => supabaseAdmin.from('email_campaigns').select('*').eq('organization_id', orgId).gte('created_at', since).order('created_at', { ascending: false })),
-      safeQuery(() => supabaseAdmin.from('email_campaigns').select('*').eq('organization_id', orgId).gte('created_at', prevSince).lt('created_at', since)),
-      safeQuery(() => supabaseAdmin.from('automations').select('*').eq('organization_id', orgId)),
-      safeQuery(() => supabaseAdmin.from('whatsapp_campaigns').select('*').eq('organization_id', orgId).gte('created_at', since)),
-      safeQuery(() => supabaseAdmin.from('sms_campaigns').select('*').eq('organization_id', orgId).gte('created_at', since)),
-      safeQuery(() => supabaseAdmin.from('email_sends').select('created_at, campaign_id').eq('organization_id', orgId).gte('created_at', since)),
+      safeQuery(() => porLoja(supabaseAdmin.from('email_campaigns').select('*').eq('organization_id', orgId).gte('created_at', since)).order('created_at', { ascending: false })),
+      safeQuery(() => porLoja(supabaseAdmin.from('automations').select('*').eq('organization_id', orgId))),
+      safeQuery(() => porLoja(supabaseAdmin.from('whatsapp_campaigns').select('*').eq('organization_id', orgId).gte('created_at', since))),
+      safeQuery(() => porLoja(supabaseAdmin.from('sms_campaigns').select('*').eq('organization_id', orgId).gte('created_at', since))),
       // Orders sit in shopify_orders (joined via store). Date bounds
       // are [since, until) — both sides explicit so 'today', 'ontem',
       // 'mês passado', and custom ranges only pull the right window.
@@ -263,6 +282,22 @@ export async function GET(request: NextRequest) {
       return q;
     });
 
+    // O mesmo razão na janela ANTERIOR, para a variação. Antes ela vinha
+    // dos contadores vitalícios das campanhas criadas no período — uma
+    // base que não tem relação com o que converteu na janela.
+    const prevAttrRows = await safeQuery(() => {
+      let q = supabaseAdmin
+        .from('order_attribution')
+        .select('net_revenue, classification')
+        .eq('organization_id', orgId)
+        .is('revoked_at', null)
+        .gte('order_at', prevSince)
+        .lt('order_at', since)
+        .limit(50000);
+      if (storeId) q = q.eq('store_id', storeId);
+      return q;
+    });
+
     const byChannel = (canal: string) =>
       attrRows.filter((r: any) => r.channel === canal && r.classification === 'attributed');
     const sumNet = (rows: any[]) => rows.reduce((s: number, r: any) => s + (Number(r.net_revenue) || 0), 0);
@@ -276,18 +311,30 @@ export async function GET(request: NextRequest) {
     const popupAttr = byChannel('popup');
     const allAttr = attrRows.filter((r: any) => r.classification === 'attributed');
 
-    const campaignsRevenue = sumNet(emailAttr);
-    const campaignsOrders = emailAttr.length;
+    // ── Campanha x automação ──────────────────────────────────────────
+    //
+    // Estes dois cartões mostravam o contrário do que acontecia. A conta
+    // era `campanhas = TODA a receita de e-mail` e `automações = 0`
+    // cravado — então três pedidos vindos de "Checkout Abandonado",
+    // "Pedido confirmado" e "Upsell" apareciam como receita de campanha
+    // numa conta que nunca enviou campanha nenhuma. E o gráfico, que
+    // usava outra fonte, mostrava os mesmos pedidos como automação: o
+    // cartão e a dica do gráfico se contradiziam na mesma tela.
+    //
+    // O razão sempre soube a diferença: cada linha traz `campaign_id` ou
+    // `automation_id`. É dele que a separação passa a sair — a mesma
+    // fonte do cartão e do gráfico, então não há como divergirem.
+    const resumo = resumirAtribuicao(attrRows as any[]);
+
+    const campaignsRevenue = resumo.campanhasReceita;
+    const campaignsOrders = resumo.campanhasPedidos;
     const whatsappRevenue = sumNet(whatsappAttr);
     const whatsappOrders = whatsappAttr.length;
     const smsRevenue = sumNet(smsAttr);
     const smsOrders = smsAttr.length;
     const popupRevenue = sumNet(popupAttr);
-    // Automações e campanhas dividem o mesmo canal (e-mail); o razão
-    // separa por automation_id/campaign_id, então aqui a quebra por
-    // canal já é exaustiva e não há como somar o mesmo pedido duas vezes.
-    const automationsRevenue = 0;
-    const automationsOrders = 0;
+    const automationsRevenue = resumo.automacoesReceita;
+    const automationsOrders = resumo.automacoesPedidos;
 
     const worderRevenue = sumNet(allAttr);
     const worderOrders = allAttr.length;
@@ -325,52 +372,62 @@ export async function GET(request: NextRequest) {
 
     const worderShare = storeRevenue > 0 ? (worderRevenue / storeRevenue) * 100 : 0;
 
-    // ── Delta vs previous period (campaigns portion is cheapest + representative) ──
-    const prevCampaignsRevenue = prevCampaigns.reduce((s: number, c: any) => s + pickNum(c, 'attributed_revenue', 'revenue'), 0);
-    const worderDelta = prevCampaignsRevenue > 0
-      ? Math.round(((campaignsRevenue - prevCampaignsRevenue) / prevCampaignsRevenue) * 100)
+    // ── Variação contra o período anterior ──
+    //
+    // Era a soma dos contadores VITALÍCIOS das campanhas CRIADAS na
+    // janela anterior, comparada com a receita atribuída de agora: duas
+    // grandezas diferentes. Numa conta sem campanha nenhuma dava sempre
+    // zero, e numa com campanha antiga dava um número sem sentido.
+    // Agora são as duas pontas do mesmo razão, na mesma cerca de
+    // organização e loja.
+    const prevWorderRevenue = (prevAttrRows as any[])
+      .filter((r: any) => r.classification === 'attributed')
+      .reduce((s: number, r: any) => s + (Number(r.net_revenue) || 0), 0);
+    const worderDelta = prevWorderRevenue > 0
+      ? Math.round(((worderRevenue - prevWorderRevenue) / prevWorderRevenue) * 100)
       : 0;
 
     // ── Channels ──
     const channels = {
-      email: campaignsRevenue,
+      // "Receita por canal" é o CANAL inteiro: campanha e automação de
+      // e-mail somadas. Usava `campaignsRevenue`, que antes por acaso
+      // era o total do canal; agora que ele é só a parte de campanha, o
+      // cartão passaria a mostrar zero numa conta só de automações.
+      email: resumo.emailReceita,
       whatsapp: whatsappRevenue,
       sms: smsRevenue,
       popup: popupRevenue,
     };
 
     // ── Time series (stacked bars) ──
-    const sb = buckets.map(() => ({ campanhas: 0, automacoes: 0, fora: 0 }));
-
-    // Campaign revenue → distribute evenly across sends in the period
-    // (proxy when email_sends doesn't track per-send revenue).
-    const sendsByCampaign = new Map<string, number>();
-    for (const s of emailSends) {
-      const row = s as any;
-      if (row.campaign_id) {
-        sendsByCampaign.set(row.campaign_id, (sendsByCampaign.get(row.campaign_id) || 0) + 1);
-      }
-    }
-    for (const s of emailSends) {
-      const row = s as any;
-      const bi = findBucket(buckets, row.created_at);
+    //
+    // As barras saem do MESMO razão dos cartões, na data em que o pedido
+    // aconteceu. Antes eram duas outras contas, e as duas erravam:
+    //
+    //   Campanhas: espalhava o contador vitalício de cada campanha pelos
+    //   envios com `campaign_id`. Como o envio de automação não grava
+    //   esse campo, dava sempre zero.
+    //
+    //   Automações: pegava o contador VITALÍCIO de cada automação e
+    //   dividia igualmente por TODOS os períodos do gráfico. A receita
+    //   aparecia espalhada por semanas em que não houve pedido nenhum —
+    //   era daí que vinha o "US$ 33,00" numa semana vazia.
+    //
+    //   E as duas liam tabelas cercadas só pela organização: numa conta
+    //   com mais de uma loja, escolher uma loja no filtro ainda mostrava
+    //   a receita das outras no gráfico. O razão é cercado por
+    //   organização E loja, então isso se resolve junto.
+    const sb = buckets.map(() => ({ campanhas: 0, automacoes: 0, worder: 0, fora: 0 }));
+    for (const r of allAttr) {
+      const bi = findBucket(buckets, (r as any).order_at);
       if (bi < 0) continue;
-      if (row.campaign_id) {
-        const c = campaigns.find((x: any) => x.id === row.campaign_id);
-        const cRev = c ? pickNum(c, 'attributed_revenue', 'revenue') : 0;
-        const total = sendsByCampaign.get(row.campaign_id) || 1;
-        sb[bi].campanhas += cRev / total;
-      }
-    }
-    // Automations: distribute each automation's revenue evenly across
-    // the buckets (we don't have per-run timestamps at this layer).
-    const activeAutomations = automations.filter((a: any) => {
-      const rev = pickNum(a, 'attributed_revenue', 'total_revenue', 'revenue');
-      return rev > 0;
-    });
-    if (activeAutomations.length && buckets.length) {
-      const perBucket = activeAutomations.reduce((s: number, a: any) => s + pickNum(a, 'attributed_revenue', 'total_revenue', 'revenue'), 0) / buckets.length;
-      for (let i = 0; i < sb.length; i++) sb[i].automacoes += perBucket;
+      const v = Number((r as any).net_revenue) || 0;
+      // Todo crédito da Worder entra no total do período — é ele que sai
+      // da fatia "fora", para a pilha nunca passar da receita da loja.
+      sb[bi].worder += v;
+      if ((r as any).channel !== 'email') continue;
+      if (ehCampanha(r)) sb[bi].campanhas += v;
+      else if (ehAutomacao(r)) sb[bi].automacoes += v;
     }
     // Fora da Worder = (store order in bucket) - worder-in-bucket
     for (const o of validOrders) {
@@ -386,8 +443,9 @@ export async function GET(request: NextRequest) {
       sb[bi].fora += num(row.total_price) - num(row.total_refunded);
     }
     for (let i = 0; i < sb.length; i++) {
-      const worderBucket = sb[i].campanhas + sb[i].automacoes;
-      sb[i].fora = Math.max(0, sb[i].fora - worderBucket);
+      // Sai TODO o crédito da Worder no período, não só o de e-mail:
+      // subtrair menos faria a pilha somar mais que a receita da loja.
+      sb[i].fora = Math.max(0, sb[i].fora - sb[i].worder);
     }
 
     const series = buckets.map((b, i) => ({
