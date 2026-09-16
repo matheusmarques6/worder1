@@ -7,7 +7,7 @@
 // Importação em background para grandes volumes
 // =============================================
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import {
   Download,
@@ -83,7 +83,10 @@ export function ImportTab({
   
   // Job ativo
   const [activeJob, setActiveJob] = useState<ImportJob | null>(null)
-  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null)
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const loadInitialDataRef = useRef<() => Promise<void>>()
+  const onSuccessRef = useRef(onSuccess)
+  onSuccessRef.current = onSuccess
   
   // Filtros
   const [availableTags, setAvailableTags] = useState<{ tag: string; count: number }[]>([])
@@ -102,9 +105,12 @@ export function ImportTab({
   // =============================================
   
   useEffect(() => {
-    loadInitialData()
+    loadInitialDataRef.current?.()
     return () => {
-      if (pollingInterval) clearInterval(pollingInterval)
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current)
+        pollingIntervalRef.current = null
+      }
     }
   }, [store.id])
 
@@ -158,12 +164,14 @@ export function ImportTab({
     }
   }
 
+  loadInitialDataRef.current = loadInitialData
+
   // =============================================
   // Polling para atualizar status do job
   // =============================================
 
-  const startPolling = useCallback((jobId: string) => {
-    if (pollingInterval) clearInterval(pollingInterval)
+  const startPolling = (jobId: string) => {
+    if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current)
     
     const interval = setInterval(async () => {
       try {
@@ -175,9 +183,9 @@ export function ImportTab({
           // Se job completou ou falhou, parar polling
           if (['completed', 'failed', 'cancelled'].includes(data.job.status)) {
             clearInterval(interval)
-            setPollingInterval(null)
+            if (pollingIntervalRef.current === interval) pollingIntervalRef.current = null
             if (data.job.status === 'completed') {
-              onSuccess?.()
+              onSuccessRef.current?.()
             }
           }
         }
@@ -186,8 +194,8 @@ export function ImportTab({
       }
     }, 2000) // Poll a cada 2 segundos
     
-    setPollingInterval(interval)
-  }, [pollingInterval, onSuccess])
+    pollingIntervalRef.current = interval
+  }
 
   // =============================================
   // Iniciar importação
@@ -249,9 +257,9 @@ export function ImportTab({
         method: 'DELETE',
       })
       
-      if (pollingInterval) {
-        clearInterval(pollingInterval)
-        setPollingInterval(null)
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current)
+        pollingIntervalRef.current = null
       }
       
       setActiveJob(null)

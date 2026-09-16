@@ -24,18 +24,21 @@ export function useNotifications(options: UseNotificationsOptions) {
   const [preferences, setPreferences] = useState<NotificationPreferences | null>(null)
   
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const offsetRef = useRef(0)
+  const unreadCountRef = useRef(0)
+  unreadCountRef.current = unreadCount
   
   const fetchNotifications = useCallback(async (reset: boolean = true) => {
     if (!organizationId || !userId) return
     setIsLoading(true)
     setError(null)
     try {
-      const currentOffset = reset ? 0 : offset
+      const currentOffset = reset ? 0 : offsetRef.current
       const response = await fetch(`/api/notifications?organization_id=${organizationId}&user_id=${userId}&limit=${limit}&offset=${currentOffset}`)
       if (!response.ok) throw new Error('Erro ao buscar notificações')
       const data: NotificationsResponse = await response.json()
-      if (reset) { setNotifications(data.notifications); setOffset(limit) }
-      else { setNotifications(prev => [...prev, ...data.notifications]); setOffset(prev => prev + limit) }
+      if (reset) { setNotifications(data.notifications); offsetRef.current = limit; setOffset(limit) }
+      else { setNotifications(prev => [...prev, ...data.notifications]); offsetRef.current += limit; setOffset(offsetRef.current) }
       setUnreadCount(data.unread_count)
       setTotal(data.total)
     } catch (err) {
@@ -43,7 +46,7 @@ export function useNotifications(options: UseNotificationsOptions) {
     } finally {
       setIsLoading(false)
     }
-  }, [organizationId, userId, limit, offset])
+  }, [organizationId, userId, limit])
   
   const loadMore = useCallback(async () => {
     if (isLoading || notifications.length >= total) return
@@ -100,18 +103,18 @@ export function useNotifications(options: UseNotificationsOptions) {
     if (response.ok) { const data = await response.json(); setPreferences(data.preferences) }
   }, [organizationId, userId])
   
-  useEffect(() => { if (autoFetch && organizationId && userId) fetchNotifications(true) }, [autoFetch, organizationId, userId])
+  useEffect(() => { if (autoFetch && organizationId && userId) fetchNotifications(true) }, [autoFetch, organizationId, userId, fetchNotifications])
   
   useEffect(() => {
     if (!organizationId || !userId || pollInterval <= 0) return
     pollIntervalRef.current = setInterval(() => {
       fetch(`/api/notifications?organization_id=${organizationId}&user_id=${userId}&limit=1`)
         .then(res => res.json())
-        .then(data => { if (data.unread_count !== unreadCount) { setUnreadCount(data.unread_count); if (data.unread_count > unreadCount) fetchNotifications(true) } })
+        .then(data => { if (data.unread_count !== unreadCountRef.current) { setUnreadCount(data.unread_count); if (data.unread_count > unreadCountRef.current) fetchNotifications(true) } })
         .catch(console.error)
     }, pollInterval)
     return () => { if (pollIntervalRef.current) clearInterval(pollIntervalRef.current) }
-  }, [organizationId, userId, pollInterval, unreadCount])
+  }, [organizationId, userId, pollInterval, fetchNotifications])
   
   useEffect(() => {
     if (!organizationId) return
@@ -120,7 +123,7 @@ export function useNotifications(options: UseNotificationsOptions) {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `organization_id=eq.${organizationId}` }, () => fetchNotifications(true))
       .subscribe()
     return () => { supabaseClient.removeChannel(channel) }
-  }, [organizationId])
+  }, [organizationId, fetchNotifications])
   
   return { notifications, unreadCount, total, isLoading, error, hasMore: notifications.length < total, preferences, fetchNotifications, loadMore, markAsRead, markAllAsRead, dismiss, refresh, fetchPreferences, updatePreferences }
 }

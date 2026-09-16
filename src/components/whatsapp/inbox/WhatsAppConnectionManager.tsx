@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { authedFetch } from '@/lib/api/authed-fetch'
 import {
@@ -52,12 +52,16 @@ export default function WhatsAppConnectionManager({
   const [isOpen, setIsOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const selectedInstanceRef = useRef(selectedInstance)
+  const onSelectInstanceRef = useRef(onSelectInstance)
+  selectedInstanceRef.current = selectedInstance
+  onSelectInstanceRef.current = onSelectInstance
 
   // =============================================
   // FETCH INSTANCES - COM STORE_ID
   // =============================================
 
-  const fetchInstances = async () => {
+  const fetchInstances = useCallback(async () => {
     // ✅ CRÍTICO: Não buscar sem storeId
     if (!storeId) {
       setInstances([])
@@ -75,20 +79,20 @@ export default function WhatsAppConnectionManager({
         setInstances(mapped)
 
         // Auto-select first connected instance if none selected
-        if (!selectedInstance && mapped.length > 0) {
+        if (!selectedInstanceRef.current && mapped.length > 0) {
           const activeInstance = mapped.find(
             (i: WhatsAppInstance) => i.status === 'ACTIVE' || i.status === 'connected'
           )
           if (activeInstance) {
-            onSelectInstance(activeInstance)
+            onSelectInstanceRef.current(activeInstance)
           }
         }
 
         // Se a instância selecionada mudou de status, atualizar
-        if (selectedInstance) {
-          const updated = mapped.find((i: WhatsAppInstance) => i.id === selectedInstance.id)
-          if (updated && updated.status !== selectedInstance.status) {
-            onSelectInstance(updated)
+        if (selectedInstanceRef.current) {
+          const updated = mapped.find((i: WhatsAppInstance) => i.id === selectedInstanceRef.current!.id)
+          if (updated && updated.status !== selectedInstanceRef.current.status) {
+            onSelectInstanceRef.current(updated)
           }
         }
       }
@@ -97,17 +101,17 @@ export default function WhatsAppConnectionManager({
     } finally {
       setLoading(false)
     }
-  }
+  }, [organizationId, storeId])
 
   // ✅ CORREÇÃO: Refetch quando storeId mudar
   useEffect(() => {
     if (organizationId) {
       console.log('[ConnectionManager] Store changed to:', storeId)
       setInstances([])
-      onSelectInstance(null)
+      onSelectInstanceRef.current(null)
       fetchInstances()
     }
-  }, [organizationId, storeId])
+  }, [organizationId, storeId, fetchInstances])
   
   // Auto-refresh
   useEffect(() => {
@@ -115,7 +119,7 @@ export default function WhatsAppConnectionManager({
     
     const interval = setInterval(fetchInstances, 5000)
     return () => clearInterval(interval)
-  }, [organizationId, storeId])
+  }, [organizationId, storeId, fetchInstances])
 
   // =============================================
   // ACTIONS

@@ -50,6 +50,8 @@ export default function NumberSelector({
   const [numbers, setNumbers] = useState<WhatsAppNumber[]>([])
   const [loading, setLoading] = useState(true)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const onNumberChangeRef = useRef(onNumberChange)
+  onNumberChangeRef.current = onNumberChange
 
   // ✅ FASE 1: Fetch com storeId obrigatório e refetch ao trocar loja
   useEffect(() => {
@@ -58,7 +60,7 @@ export default function NumberSelector({
     setLoading(true)
     
     // ✅ FASE 1: Resetar seleção ao trocar de loja
-    onNumberChange(null)
+    onNumberChangeRef.current(null)
 
     const fetchNumbers = async () => {
       // Validar parâmetros obrigatórios

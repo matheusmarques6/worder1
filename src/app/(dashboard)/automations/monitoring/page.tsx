@@ -5,7 +5,7 @@
 // /automations/monitoring
 // =============================================
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
   Activity,
@@ -56,27 +56,28 @@ interface Monitoring {
 
 export default function AutomationMonitoringPage() {
   const { currentStore } = useStoreStore()
+  const storeId = currentStore?.id
   const [data, setData] = useState<Monitoring | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
 
-  const load = async () => {
-    if (!currentStore?.id) return
+  const load = useCallback(async () => {
+    if (!storeId) return
     setRefreshing(true)
     try {
-      const res = await fetch(`/api/automations/monitoring?storeId=${currentStore.id}`, { cache: 'no-store' })
+      const res = await fetch(`/api/automations/monitoring?storeId=${storeId}`, { cache: 'no-store' })
       if (res.ok) setData(await res.json())
     } finally {
       setLoading(false)
       setRefreshing(false)
     }
-  }
+  }, [storeId])
 
   useEffect(() => {
     load()
     const i = setInterval(load, 30000) // auto-refresh a cada 30s
     return () => clearInterval(i)
-  }, [currentStore?.id])
+  }, [load])
 
   if (loading) {
     return (
