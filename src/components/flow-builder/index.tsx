@@ -80,6 +80,7 @@ export function FlowBuilder({
   // Fetch analytics when toggle is on
   useEffect(() => {
     if (!showAnalytics || !savedAutomationId || savedAutomationId === 'new') return;
+    let current = true;
 
     const fetchAnalytics = async () => {
       try {
@@ -88,7 +89,7 @@ export function FlowBuilder({
         );
         if (res.ok) {
           const data = await res.json();
-          if (data.nodeStats) {
+          if (current && data.nodeStats) {
             setAnalyticsData(data.nodeStats);
           }
         }
@@ -98,6 +99,7 @@ export function FlowBuilder({
     };
 
     fetchAnalytics();
+    return () => { current = false; };
   }, [showAnalytics, savedAutomationId, analyticsTimeframe, setAnalyticsData]);
 
   // Convert legacy nodes to new format

@@ -139,3 +139,20 @@ it('keeps useDeals refetch stable through a local rerender', async () => {
   await act(async () => { (container.querySelector('button') as HTMLButtonElement).click() })
   expect(refs).toHaveLength(1)
 })
+
+it('does not let flow A analytics repopulate state after switching to B', async () => {
+  const requests: Array<ReturnType<typeof deferred<any>>> = []
+  vi.stubGlobal('fetch', vi.fn(() => {
+    const request = deferred<any>()
+    requests.push(request)
+    return request.promise
+  }))
+  const node = (id: string) => [{ id, type: 'trigger_order', position: { x: 0, y: 0 }, data: {} }]
+  const props = { initialEdges: [], onSave: vi.fn(async () => undefined), onBack: vi.fn() }
+  await act(async () => { root.render(<FlowBuilder automationId="flow-a" initialNodes={node('a')} {...props} />) })
+  await act(async () => { useFlowStore.setState({ showAnalytics: true }) })
+  await vi.waitFor(() => expect(requests).toHaveLength(1))
+  await act(async () => { root.render(<FlowBuilder automationId="flow-b" initialNodes={node('b')} {...props} />) })
+  await act(async () => { requests[0].resolve(response({ nodeStats: { stale: { sent: 1 } } })) })
+  await vi.waitFor(() => expect(useFlowStore.getState().analyticsData).toEqual({}))
+})
