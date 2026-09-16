@@ -560,6 +560,101 @@ export async function resolveProductFeed(opts: ResolveFeedOptions): Promise<any[
           description: props.Description || props.description || raw.description || null,
         }]
       }
+      // Gatilho que só manda o id. `trigger_order_paid` é o caso: o
+      // despacho carrega `order_id`, `order_number`, `total_price` e
+      // `currency` — e nenhum produto. Um fluxo de "Pedido Pago" com o
+      // bloco "Produtos do Gatilho" saía sem produto nenhum, que é
+      // justamente o conteúdo do e-mail de confirmação.
+      //
+      // O pedido está no banco, com os itens completos. Buscar por id é
+      // barato e acontece só quando o evento não trouxe nada. O
+      // enriquecimento logo acima é que completa imagem e link, porque
+      // `line_items` da Shopify não traz foto.
+      if (products.length === 0) {
+        const orderId =
+          event_data?.order_id || event_data?.OrderID || event_data?.orderId ||
+          event_data?.properties?.order_id || event_data?.properties?.OrderID
+        const checkoutId =
+          event_data?.checkout_id || event_data?.CheckoutID || event_data?.CheckoutId ||
+          event_data?.properties?.checkout_id || event_data?.properties?.CheckoutID
+
+        const fonte: Array<{ tabela: 'shopify_orders' | 'shopify_checkouts'; coluna: string; valor: string }> = []
+        if (orderId) fonte.push({ tabela: 'shopify_orders', coluna: 'shopify_order_id', valor: String(orderId) })
+        if (checkoutId) fonte.push({ tabela: 'shopify_checkouts', coluna: 'shopify_checkout_id', valor: String(checkoutId) })
+
+        for (const f of fonte) {
+          if (products.length > 0) break
+          try {
+            let q = supabaseAdmin
+              .from(f.tabela)
+              .select('line_items')
+              .eq('organization_id', orgId)
+              .eq(f.coluna, f.valor)
+              .limit(1)
+            if (store.id) q = q.eq('store_id', store.id)
+            const { data: rows } = await q
+            const li = rows?.[0]?.line_items
+            if (Array.isArray(li) && li.length > 0) {
+              products = li.slice(0, eventLimit).map((it: any, idx: number) => ({
+                ...mapTriggerItem(it),
+                _variant_id: String(it.variant_id || it.VariantID || '') || null,
+                _idx: idx,
+              }))
+            }
+          } catch { /* o e-mail sai sem produto, não quebra */ }
+        }
+
+        // Os itens do banco vêm sem foto: o mesmo enriquecimento que a
+        // lista do evento usa completa imagem, link e título.
+        const faltando = products.filter((p: any) => p.product_id && (!p.image_url || !p.url || p.url === '#'))
+        if (faltando.length > 0) {
+          try {
+            const ids = Array.from(new Set(faltando.map((p: any) => String(p.product_id))))
+            let eq = supabaseAdmin
+              .from('shopify_products')
+              .select('shopify_product_id, title, handle, images, variants, price')
+              .eq('organization_id', orgId)
+              .in('shopify_product_id', ids)
+            if (store.id) eq = eq.eq('store_id', store.id)
+            const { data: dbProducts } = await eq
+            const byId = new Map<string, any>()
+            for (const dp of dbProducts || []) {
+              if (dp.shopify_product_id) byId.set(String(dp.shopify_product_id), dp)
+            }
+            for (const p of products) {
+              const dp = p.product_id ? byId.get(String(p.product_id)) : null
+              if (!dp) continue
+              if (!p.image_url) {
+                const vId = (p as any)._variant_id
+                const variants: any[] = Array.isArray(dp.variants) ? dp.variants : []
+                const mv = vId ? variants.find((v: any) => String(v.id) === String(vId)) : null
+                let img: string | null = null
+                if (mv?.image_id && Array.isArray(dp.images)) {
+                  const vi = dp.images.find((i: any) => String(i?.id) === String(mv.image_id))
+                  img = vi?.src || vi?.url || null
+                }
+                if (!img && Array.isArray(dp.images) && dp.images.length > 0) {
+                  img = dp.images[0]?.url || dp.images[0]?.src || null
+                }
+                if (img) p.image_url = img
+              }
+              if ((!p.url || p.url === '#') && shopDomain && dp.handle) {
+                const vId = (p as any)._variant_id
+                p.url = vId
+                  ? `https://${shopDomain}/products/${dp.handle}?variant=${vId}`
+                  : `https://${shopDomain}/products/${dp.handle}`
+              }
+              if (!p.title || p.title === 'Product') p.title = dp.title || p.title
+              if ((!p.price || p.price === 0) && dp.price) p.price = parseFloat(String(dp.price))
+            }
+          } catch { /* não bloqueia */ }
+        }
+        for (const p of products) {
+          delete (p as any)._variant_id
+          delete (p as any)._idx
+        }
+      }
+
       if (products.length === 0 && contact_id) {
         try {
           const { data: recovery } = await supabaseAdmin.from('recovery_carts')
