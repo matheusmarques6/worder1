@@ -17,10 +17,10 @@ vi.mock('@/components/store/AddStoreModal', () => ({ AddStoreModal: () => null }
 vi.mock('@/components/integrations/shopify/PixelHealthBanner', () => ({ PixelHealthBanner: () => null }))
 vi.mock('@/components/flow-builder/Canvas', () => ({ Canvas: () => null }))
 vi.mock('@/components/flow-builder/Sidebar', () => ({ Sidebar: () => null }))
-vi.mock('@/components/flow-builder/Toolbar', () => ({ Toolbar: () => null }))
-vi.mock('@/components/flow-builder/panels/PropertiesPanel', () => ({ PropertiesPanel: () => null }))
-vi.mock('@/components/flow-builder/panels/ExecutionPanel', () => ({ ExecutionPanel: () => null }))
-vi.mock('@/components/flow-builder/panels/HistoryPanel', () => ({ HistoryPanel: () => null }))
+vi.mock('@/components/flow-builder/Toolbar', () => ({ Toolbar: ({ currentAutomationId }: { currentAutomationId?: string }) => <span>toolbar:{currentAutomationId}</span> }))
+vi.mock('@/components/flow-builder/panels/PropertiesPanel', () => ({ PropertiesPanel: ({ automationId }: { automationId?: string }) => <span>properties:{automationId}</span> }))
+vi.mock('@/components/flow-builder/panels/ExecutionPanel', () => ({ ExecutionPanel: ({ automationId }: { automationId?: string }) => <span>execution:{automationId}</span> }))
+vi.mock('@/components/flow-builder/panels/HistoryPanel', () => ({ HistoryPanel: ({ automationId }: { automationId?: string }) => <span>history:{automationId}</span> }))
 vi.mock('@xyflow/react', () => ({ ReactFlowProvider: ({ children }: { children: React.ReactNode }) => <>{children}</> }))
 vi.mock('@/components/shopify/RFMSection', () => ({ RFMSection: ({ data }: { data: { totalCustomers: number } }) => <div>customers:{data.totalCustomers}</div> }))
 vi.mock('@/components/shopify/CohortSection', () => ({ CohortSection: () => null }))
@@ -37,7 +37,8 @@ const store = (id: string) => ({ id, name: `Store ${id}`, domain: `${id}.myshopi
 const response = (data: unknown) => ({ ok: true, json: async () => data })
 const deferred = <T,>() => {
   let resolve!: (value: T) => void
-  return { promise: new Promise<T>((done) => { resolve = done }), resolve }
+  let reject!: (reason?: unknown) => void
+  return { promise: new Promise<T>((done, fail) => { resolve = done; reject = fail }), resolve, reject }
 }
 
 function DealsProbe({ onIdentity }: { onIdentity: (refetch: unknown) => void }) {
@@ -92,7 +93,7 @@ it('preserves edits on equivalent flow input, keeps one listener, and reloads on
   const first = [{ id: 'node-a', type: 'trigger_order', position: { x: 0, y: 0 }, data: {} }]
   const replacement = [{ ...first[0], data: {} }]
   const second = [{ id: 'node-b', type: 'trigger_order', position: { x: 0, y: 0 }, data: {} }]
-  const props = { initialNodes: first, initialEdges: [], onSave: vi.fn(async () => undefined), onBack: vi.fn() }
+  const props = { initialNodes: first, initialEdges: [], onSave: vi.fn(async () => undefined), onBack: vi.fn(), organizationId: 'org-1' }
 
   await act(async () => { root.render(<StrictMode><FlowBuilder automationId="flow-a" {...props} /></StrictMode>) })
   await vi.waitFor(() => expect(useFlowStore.getState().automationId).toBe('flow-a'))
@@ -105,6 +106,11 @@ it('preserves edits on equivalent flow input, keeps one listener, and reloads on
   await act(async () => { root.render(<StrictMode><FlowBuilder automationId="flow-b" {...props} initialNodes={second} initialEdges={[]} /></StrictMode>) })
   await vi.waitFor(() => expect(useFlowStore.getState().nodes.map((node) => node.id)).toEqual(['node-b']))
   expect(useFlowStore.getState()).toMatchObject({ automationId: 'flow-b', showTestModal: false, showHistoryPanel: false, showAnalytics: false, analyticsData: {} })
+  await act(async () => { useFlowStore.setState({ showPropertiesPanel: true, showTestModal: true, showHistoryPanel: true }) })
+  await vi.waitFor(() => expect(container.textContent).toContain('toolbar:flow-b'))
+  expect(container.textContent).toContain('properties:flow-b')
+  expect(container.textContent).toContain('execution:flow-b')
+  expect(container.textContent).toContain('history:flow-b')
   expect(addListener.mock.calls.filter(([name]) => name === 'keydown')).toHaveLength(4)
   await act(async () => root.unmount())
   expect(removeListener.mock.calls.filter(([name]) => name === 'keydown').length).toBeGreaterThan(0)
@@ -125,9 +131,10 @@ it('rejects the old store metrics response after a store switch', async () => {
   await vi.waitFor(() => expect(requests).toHaveLength(2))
   await act(async () => { root.render(<AdvancedMetricsSection storeId="store-a" />) })
   await vi.waitFor(() => expect(requests).toHaveLength(3))
-  await act(async () => { requests[1].result.resolve(response({ success: true, data: { rfm: { totalCustomers: 2, segments: {} }, cohort: { cohorts: [], summary: {} }, calculatedAt: 'b' } })) })
+  await act(async () => { requests[0].result.reject(new Error('old A1')) })
+  expect(container.textContent).toContain('Calculando métricas...')
+  expect(container.textContent).not.toContain('Erro de conexão')
   await act(async () => { requests[2].result.resolve(response({ success: true, data: { rfm: { totalCustomers: 3, segments: {} }, cohort: { cohorts: [], summary: {} }, calculatedAt: 'a2' } })) })
-  await act(async () => { requests[0].result.resolve(response({ success: true, data: { rfm: { totalCustomers: 1, segments: {} }, cohort: { cohorts: [], summary: {} }, calculatedAt: 'a1' } })) })
 
   await vi.waitFor(() => expect(container.textContent).toContain('customers:3'))
   expect(container.textContent).not.toContain('customers:1')
