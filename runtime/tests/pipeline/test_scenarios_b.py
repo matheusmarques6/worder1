@@ -23,6 +23,7 @@ from agents_runtime.config import QueueingConfig, config_from_env
 from agents_runtime.queueing.jobs import InboundJob
 from tests.db.factories import (
     create_channel_account,
+    create_message,
     create_tenant,
     create_thread,
     make_due,
@@ -30,6 +31,7 @@ from tests.db.factories import (
     unique_id,
     unique_phone,
 )
+from tests.support.constant_reply import draft_for
 from tests.support.fake_channel import FakeChannel
 from tests.support.holdable import (
     arm_gate,
@@ -327,6 +329,7 @@ async def test_scenario_9_a_full_tenant_postpones_its_own_jobs_and_nobody_elses(
     threads_a = [create_thread(sync_admin, tenant_a) for _ in range(4)]
     thread_b = create_thread(sync_admin, tenant_b)
     for thread in (*threads_a, thread_b):
+        create_message(sync_admin, tenant_b if thread is thread_b else tenant_a, thread)
         make_due(sync_admin, thread.conversation_id, last_inbound_seq=1)
 
     a_active = 0
@@ -343,7 +346,7 @@ async def test_scenario_9_a_full_tenant_postpones_its_own_jobs_and_nobody_elses(
             a_active -= 1
         else:
             b_done.set()
-        return {"text": "ok"}
+        return await draft_for(dsn, job, {"text": "ok"})
 
     stop = asyncio.Event()
     running = asyncio.create_task(

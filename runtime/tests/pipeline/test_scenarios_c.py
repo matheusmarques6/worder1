@@ -30,6 +30,7 @@ from tests.db.factories import (
     make_due,
     set_runtime_mode,
 )
+from tests.support.constant_reply import draft_for
 from tests.support.fake_channel import FakeChannel
 from tests.support.holdable import arm_gate, holders_started
 from tests.support.runtime_process import TINY_INTERVALS, RuntimeProcess, wait_until
@@ -183,7 +184,7 @@ async def test_scenario_4b_a_crash_between_conclusion_and_archive_converges(
     async def counting_responder(job: InboundJob):
         nonlocal responder_calls
         responder_calls += 1
-        return {"text": "segunda resposta que não deve existir"}
+        return await draft_for(dsn, job, {"text": "segunda resposta que não deve existir"})
 
     stop = asyncio.Event()
     running = asyncio.create_task(
@@ -364,13 +365,17 @@ async def test_a_timed_out_turn_releases_its_lease_and_retries(
     calls = 0
     first_started = asyncio.Event()
 
+    reply = await draft_for(
+        dsn, InboundJob(thread.conversation_id, 0, 1, organization_id), {"text": "retry concluiu"},
+    )
+
     async def slow_once(job: InboundJob):
         nonlocal calls
         calls += 1
         if calls == 1:
             first_started.set()
             await asyncio.Event().wait()
-        return {"text": "retry concluiu"}
+        return reply
 
     stop = asyncio.Event()
     running = asyncio.create_task(
@@ -466,6 +471,10 @@ async def test_a_timed_out_touch_releases_its_lease_and_retries(
     calls = 0
     first_started = asyncio.Event()
 
+    reply = await draft_for(
+        dsn, InboundJob(thread.conversation_id, 0, 0, organization_id), {"text": "retry concluiu"},
+    )
+
     async def slow_once(_job):
         nonlocal calls
         calls += 1
@@ -476,6 +485,7 @@ async def test_a_timed_out_touch_releases_its_lease_and_retries(
             content={"text": "retry concluiu"},
             moment_ids=(),
             mission_version_id=None,
+            trace=reply.trace,
         )
 
     stop = asyncio.Event()
@@ -681,6 +691,11 @@ async def test_failed_release_recovers_by_lease_and_visibility_expiry(
     release_failed = asyncio.Event()
     calls = 0
 
+    reply = await draft_for(
+        dsn, InboundJob(thread.conversation_id, 0, 1, organization_id),
+        {"text": "lease expiry recovered"},
+    )
+
     async def fail_first_release(*args, **kwargs):
         if not release_failed.is_set():
             release_failed.set()
@@ -692,7 +707,7 @@ async def test_failed_release_recovers_by_lease_and_visibility_expiry(
         calls += 1
         if calls == 1:
             await asyncio.Event().wait()
-        return {"text": "lease expiry recovered"}
+        return reply
 
     monkeypatch.setattr(worker_module.engine, "release_lease", fail_first_release)
     stop = asyncio.Event()

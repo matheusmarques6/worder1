@@ -164,7 +164,7 @@ async def test_an_empty_window_concludes_without_sending(
     create_agent_version(admin, tenant, status="active")
     thread = create_thread(admin, tenant)
 
-    assert await responder(dsn)(a_job(tenant, thread.conversation_id)) is None
+    assert (await responder(dsn)(a_job(tenant, thread.conversation_id))).content is None
 
 
 async def test_a_conversation_of_another_tenant_is_a_bug_not_an_answer(
@@ -191,7 +191,7 @@ async def test_an_inbound_without_any_active_mission_alerts_and_stays_silent(
     thread = create_thread(admin, tenant)
     create_message(admin, tenant, thread, direction="inbound", seq=1, text="oi")
 
-    assert await responder(dsn)(a_job(tenant, thread.conversation_id)) is None
+    assert (await responder(dsn)(a_job(tenant, thread.conversation_id))).content is None
 
     with admin.cursor() as cur:
         cur.execute(
@@ -215,7 +215,7 @@ async def test_with_an_active_discovery_mission_the_inbound_is_answered(
 
     draft = await responder(dsn)(a_job(tenant, thread.conversation_id))
 
-    assert draft is not None and draft.get("text")
+    assert draft.content is not None and draft.content.get("text")
 
 
 class TestTheBehaviorGuardsAreWired:
@@ -243,7 +243,7 @@ class TestTheBehaviorGuardsAreWired:
             (mirror.conversation_id,),
         )
 
-        assert await responder(dsn)(a_job(tenant, thread.conversation_id)) is None
+        assert (await responder(dsn)(a_job(tenant, thread.conversation_id))).content is None
 
         assert ("skipped", "Em cooldown depois de uma transferência para humano") in steps(
             admin, mirror
@@ -277,8 +277,8 @@ class TestTheBehaviorGuardsAreWired:
 
         draft = await responder(dsn)(a_job(tenant, thread.conversation_id))
 
-        assert draft is not None
-        assert draft["text"] == "Vou chamar um humano."
+        assert draft.content is not None
+        assert draft.content["text"] == "Vou chamar um humano."
         (enabled,) = admin.execute(
             "select ai_enabled from public.whatsapp_cloud_conversations where id = %s",
             (mirror.conversation_id,),
@@ -302,7 +302,7 @@ class TestTheBehaviorGuardsAreWired:
         create_message(admin, tenant, thread, direction="inbound", seq=1, text="quero um humano")
         llm = ScriptedLlm(reply="não deve gerar confirmação")
 
-        assert await responder(dsn, llm)(a_job(tenant, thread.conversation_id)) is None
+        assert (await responder(dsn, llm)(a_job(tenant, thread.conversation_id))).content is None
         assert llm.asked == []
         (enabled,) = admin.execute(
             "select ai_enabled from public.whatsapp_cloud_conversations where id = %s",
@@ -337,7 +337,7 @@ class TestTheBehaviorGuardsAreWired:
 
         draft = await responder(dsn)(a_job(tenant, thread.conversation_id))
 
-        assert draft is not None and draft.get("text")
+        assert draft.content is not None and draft.content.get("text")
 
 
 class TestATransferThatDoesNotStick:
@@ -376,8 +376,8 @@ class TestATransferThatDoesNotStick:
 
         # A confirmação continua saindo: o cliente pediu um humano e merece
         # ouvir que foi ouvido. O que não pode é o registro mentir.
-        assert draft is not None
-        assert draft["text"] == "Já vou chamar alguém do time!"
+        assert draft.content is not None
+        assert draft.content["text"] == "Já vou chamar alguém do time!"
         (severity, title, metadata) = admin.execute(
             "select severity, title, metadata from public.alerts"
             " where organization_id = %s and type = 'handoff'",
@@ -400,8 +400,8 @@ class TestATransferThatDoesNotStick:
         create_message(admin, tenant, thread, direction="inbound", seq=1, text="e aí")
         llm = ScriptedLlm(reply="Vou chamar um humano.")
 
-        assert await responder(dsn, llm)(a_job(tenant, thread.conversation_id)) is None
-        assert await responder(dsn, llm)(a_job(tenant, thread.conversation_id)) is None
+        assert (await responder(dsn, llm)(a_job(tenant, thread.conversation_id))).content is None
+        assert (await responder(dsn, llm)(a_job(tenant, thread.conversation_id))).content is None
 
         (alerts,) = admin.execute(
             "select count(*) from public.alerts"
@@ -650,8 +650,8 @@ class TestMediaWithoutAWordDegradesHonestly:
 
         draft = await responder(dsn, llm)(a_job(tenant, thread.conversation_id))
 
-        assert draft is not None
-        assert draft["text"] == (
+        assert draft.content is not None
+        assert draft.content["text"] == (
             "Desculpe, ainda não consigo ouvir áudios por aqui. "
             "Pode me escrever em texto, por favor?"
         )
@@ -677,8 +677,8 @@ class TestMediaWithoutAWordDegradesHonestly:
 
         draft = await responder(dsn, llm)(a_job(tenant, thread.conversation_id))
 
-        assert draft is not None
-        assert draft["text"] == (
+        assert draft.content is not None
+        assert draft.content["text"] == (
             "Desculpe, ainda não consigo ver imagens por aqui. "
             "Pode me escrever em texto, por favor?"
         )
@@ -700,7 +700,7 @@ class TestMediaWithoutAWordDegradesHonestly:
 
         draft = await responder(dsn)(a_job(tenant, thread.conversation_id))
 
-        assert draft is not None and draft["text"] == "Me manda por escrito? 🧡"
+        assert draft.content is not None and draft.content["text"] == "Me manda por escrito? 🧡"
 
     async def test_a_caption_is_the_customer_speaking_and_the_turn_is_normal(
         self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
@@ -724,8 +724,8 @@ class TestMediaWithoutAWordDegradesHonestly:
 
         draft = await responder(dsn, llm)(a_job(tenant, thread.conversation_id))
 
-        assert draft is not None
-        assert draft["text"] == "Tem sim! Me diz qual é que eu confiro o estoque."
+        assert draft.content is not None
+        assert draft.content["text"] == "Tem sim! Me diz qual é que eu confiro o estoque."
         prompts = [message.content for request in llm.asked for message in request.messages]
         assert any("[Cliente enviou uma imagem: esse ainda tem?]" in text for text in prompts)
 
@@ -746,7 +746,7 @@ class TestMediaWithoutAWordDegradesHonestly:
 
         draft = await responder(dsn, llm)(a_job(tenant, thread.conversation_id, target_seq=2))
 
-        assert draft is not None and draft["text"] == "Vi sim!"
+        assert draft.content is not None and draft.content["text"] == "Vi sim!"
 
     async def test_a_guard_that_silences_still_wins_over_the_honest_line(
         self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
@@ -768,7 +768,7 @@ class TestMediaWithoutAWordDegradesHonestly:
             (mirror.conversation_id,),
         )
 
-        assert await responder(dsn)(a_job(tenant, thread.conversation_id)) is None
+        assert (await responder(dsn)(a_job(tenant, thread.conversation_id))).content is None
 
     async def test_the_handoff_mode_transfers_instead_of_asking_for_text(
         self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
@@ -794,7 +794,7 @@ class TestMediaWithoutAWordDegradesHonestly:
 
         draft = await responder(dsn, llm)(a_job(tenant, thread.conversation_id))
 
-        assert draft is None
+        assert draft.content is None
         assert llm.asked == []
         (enabled,) = admin.execute(
             "select ai_enabled from public.whatsapp_cloud_conversations where id = %s",
@@ -827,7 +827,7 @@ class TestMediaWithoutAWordDegradesHonestly:
 
         draft = await responder(dsn)(a_job(tenant, thread.conversation_id))
 
-        assert draft is not None and draft["text"] == "me escreve, por favor"
+        assert draft.content is not None and draft.content["text"] == "me escreve, por favor"
         (enabled,) = admin.execute(
             "select ai_enabled from public.whatsapp_cloud_conversations where id = %s",
             (mirror.conversation_id,),

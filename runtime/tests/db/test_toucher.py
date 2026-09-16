@@ -104,9 +104,10 @@ def custom_catalog(admin, org, monkeypatch):
 
     monkeypatch.setattr(
         toucher_module, "CustomHttpTool",
-        lambda row, *, base_secret: CustomHttpTool(
+        lambda row, *, base_secret, on_known_secrets=None: CustomHttpTool(
             row, base_secret=base_secret, transport=httpx.MockTransport(stock_response),
             resolver=resolve_public,
+            on_known_secrets=on_known_secrets,
         ),
         raising=False,
     )
@@ -352,7 +353,7 @@ class TestKnowledgeContext:
             InboundJob(thread.conversation_id, 1, 3, org),
         )
 
-        assert result is not None
+        assert result.content is not None
         llm.embed.assert_awaited_once_with(["frete do carrinho"], model=EMBEDDING_MODEL)
         assert llm.asked[0].messages[0].content.count("- Frete em 3 dias") == 1
 

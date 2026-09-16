@@ -51,7 +51,7 @@ async def _system_prompt(dsn: str, admin: psycopg.Connection, tenant: uuid.UUID)
             organization_id=tenant,
         )
     )
-    assert result is not None
+    assert result.content is not None
     return llm.asked[0].messages[0].content
 
 
@@ -138,7 +138,9 @@ async def test_byo_without_org_keys_stays_silent_and_alerts(
         target_seq=1,
     )
 
-    assert await respond(job) is None
+    draft = await respond(job)
+    assert draft.content is None
+    assert draft.trace is None
     assert llm.asked == []
     row = admin.execute(
         "select count(*) from public.alerts where organization_id=%s and type=%s",

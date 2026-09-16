@@ -29,6 +29,7 @@ from tests.db.factories import (
     unique_id,
     unique_phone,
 )
+from tests.support.constant_reply import draft_for
 from tests.support.fake_channel import FakeChannel
 from tests.support.randomness import FixedRandomness
 
@@ -167,7 +168,7 @@ async def test_scenario_3_a_redelivered_job_is_archived_without_a_second_generat
     async def counting_responder(job):
         nonlocal responder_calls
         responder_calls += 1
-        return {"text": "não deveria acontecer"}
+        return await draft_for(dsn, job, {"text": "não deveria acontecer"})
 
     stop = asyncio.Event()
     running = asyncio.create_task(

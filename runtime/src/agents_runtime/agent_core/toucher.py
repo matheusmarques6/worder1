@@ -22,6 +22,7 @@ import logging
 import os
 from dataclasses import dataclass, replace
 from datetime import timedelta
+from functools import partial
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -63,6 +64,7 @@ from agents_runtime.agent_core.responder import (
     transfer_to_human,
 )
 from agents_runtime.agent_core.tool_loop import generate_with_tools
+from agents_runtime.agent_core.trace import AcceptedTracePayload, AttemptTraceCapture
 from agents_runtime.clock import Clock, SystemClock
 from agents_runtime.commerce.moments import apply_moment_restrictions, resolve_moments
 from agents_runtime.config import QueueingConfig, config_from_env
@@ -93,7 +95,7 @@ from agents_runtime.repository.scope import (
 )
 from agents_runtime.tools.base import ToolContext, run_tool
 from agents_runtime.tools.coupon import CreateCoupon
-from agents_runtime.tools.custom_http import CustomHttpTool, tool_spec_for
+from agents_runtime.tools.custom_http import CustomHttpTool, CustomToolRow, tool_spec_for
 from agents_runtime.tools.knowledge import DEFAULT_LIMIT
 
 logger = logging.getLogger(__name__)
@@ -110,11 +112,15 @@ class TouchDraft:
     content: dict | None
     moment_ids: tuple[UUID, ...]
     mission_version_id: UUID | None
+    trace: AcceptedTracePayload | None = None
 
 
-def fixed_toucher(text: str = FIXED_TOUCH):
+def fixed_toucher(text: str = FIXED_TOUCH, *, agent_id: UUID | None = None):
     async def touch(job: MissionTouchJob) -> TouchDraft:
-        return TouchDraft(content={"text": text}, moment_ids=(), mission_version_id=None)
+        trace = (AttemptTraceCapture().build(agent_id=agent_id, input_text="", output_text=text,
+                                            selected_attempt=None) if agent_id else None)
+        return TouchDraft(content={"text": text}, moment_ids=(), mission_version_id=None,
+                          trace=trace)
 
     return touch
 
@@ -390,35 +396,41 @@ def build_toucher(
                     clock, DEFAULT_LIMIT,
                 )
 
-                turn_tools: dict[str, CustomHttpTool] = {}
+                capture = AttemptTraceCapture()
+                turn_tools: dict[str, CustomToolRow] = {}
                 tool_specs: tuple[ToolSpec, ...] = ()
                 for row in custom_rows:
                     if row.name == "create_coupon":
                         continue
-                    turn_tools[row.name] = CustomHttpTool(row, base_secret=base_secret)
+                    turn_tools[row.name] = row
                     tool_specs = (*tool_specs, tool_spec_for(row))
 
-                async def run_turn_tool(call: ToolCall) -> str:
+                async def run_turn_tool(attempt: int, call: ToolCall) -> str:
                     tool = turn_tools.get(call.name)
-                    if tool is None:
-                        payload = {"error": f"tool desconhecida: {call.name}"}
-                    else:
-                        result = await run_tool(
-                            conn,
-                            tool,
-                            ToolContext(
-                                organization_id=job.organization_id,
-                                conversation_id=job.conversation_id,
-                            ),
-                            dict(call.arguments),
-                            clock=clock,
+                    secrets: list[str] = []
+                    try:
+                        if isinstance(tool, CustomToolRow):
+                            tool = CustomHttpTool(
+                                tool, base_secret=base_secret, on_known_secrets=secrets.extend,
+                            )
+                        if tool is None:
+                            payload = {"error": f"tool desconhecida: {call.name}"}
+                        else:
+                            result = await run_tool(
+                                conn, tool,
+                                ToolContext(organization_id=job.organization_id,
+                                            conversation_id=job.conversation_id),
+                                dict(call.arguments), clock=clock,
+                            )
+                            payload = (dict(result.output or {}) if result.success
+                                       else {"error": result.error})
+                        capture.record_tool(
+                            attempt, {"name": call.name, "arguments": dict(call.arguments),
+                                      "result": payload}, known_secrets=secrets,
                         )
-                        payload = (
-                            dict(result.output or {})
-                            if result.success
-                            else {"error": result.error}
-                        )
-                    return json.dumps(payload, ensure_ascii=False)
+                        return json.dumps(payload, ensure_ascii=False)
+                    finally:
+                        secrets.clear()
 
                 agent = agent_block(version, settings)
                 window_open = (
@@ -452,10 +464,6 @@ def build_toucher(
                     knowledge=knowledge,
                 )
 
-                chat = _metered(
-                    conn, job, agent_llm, clock, "agent_reply", version.agent_id,
-                    budget=turn_budget,
-                )
                 judge = PreSendJudge(
                     _metered(
                         conn, job, llm, clock, "judge_pre", version.agent_id,
@@ -474,6 +482,10 @@ def build_toucher(
                 conversation = _as_chat(transcript)
 
                 async def generate(attempt: int, feedback: tuple[str, ...]) -> str:
+                    chat = _metered(
+                        conn, job, agent_llm, clock, "agent_reply", version.agent_id,
+                        budget=turn_budget, capture=partial(capture.record_call, attempt),
+                    )
                     messages = [Message(role="system", content=compiled.text), *conversation]
                     if feedback:
                         messages.append(
@@ -490,7 +502,7 @@ def build_toucher(
                         model=version.config.model,
                         messages=tuple(messages),
                         tools=tool_specs,
-                        execute=run_turn_tool,
+                        execute=partial(run_turn_tool, attempt),
                         think=False,
                     )
 
@@ -578,6 +590,11 @@ def build_toucher(
                     content={"text": outcome.draft, "humanize": {"split": split, "rhythm": rhythm}},
                     moment_ids=moment_view.moment_ids,
                     mission_version_id=mission_version_id,
+                    trace=capture.build(
+                        agent_id=version.agent_id,
+                        input_text="\n".join(f"{m.role}: {m.content}" for m in conversation),
+                        output_text=outcome.draft, selected_attempt=outcome.selected_attempt,
+                    ),
                 )
 
     return touch

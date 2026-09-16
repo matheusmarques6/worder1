@@ -14,13 +14,46 @@ scenarios, same behaviour, one fewer way for production to reach the constant.
 `...:fixed_responder` would make every scenario answer with the database URL.
 """
 
-from agents_runtime.agent_core.responder import Responder, fixed_responder
-from agents_runtime.agent_core.toucher import fixed_toucher
+import psycopg
+
+from agents_runtime.agent_core.responder import FIXED_REPLY, Responder
+from agents_runtime.agent_core.toucher import FIXED_TOUCH, TouchDraft
+from agents_runtime.agent_core.trace import AttemptTraceCapture, ReplyDraft
+
+
+async def draft_for(dsn: str, job, content: dict | None) -> ReplyDraft:
+    """Test-only identity setup; canonical writes still enforce tenant ownership."""
+    if content is None:
+        return ReplyDraft(None, None)
+    async with await psycopg.AsyncConnection.connect(dsn, autocommit=True) as conn:
+        async with conn.transaction():
+            await conn.execute("select id from public.organizations where id=%s for update",
+                               (job.organization_id,))
+            cursor = await conn.execute(
+                "select id from public.ai_agents where organization_id=%s order by id limit 1",
+                (job.organization_id,),
+            )
+            row = await cursor.fetchone()
+            if row is None:
+                cursor = await conn.execute(
+                    "insert into public.ai_agents (organization_id,name,system_prompt)"
+                    " values (%s,'test constant','Test fixture') returning id",
+                    (job.organization_id,),
+                )
+                row = await cursor.fetchone()
+    return ReplyDraft(content, AttemptTraceCapture().build(
+        agent_id=row[0], input_text="", output_text=content["text"], selected_attempt=None,
+    ))
 
 
 def create_responder(dsn: str) -> Responder:
-    return fixed_responder()
+    async def respond(job):
+        return await draft_for(dsn, job, {"text": FIXED_REPLY})
+    return respond
 
 
 def create_toucher(dsn: str):
-    return fixed_toucher()
+    async def touch(job):
+        draft = await draft_for(dsn, job, {"text": FIXED_TOUCH})
+        return TouchDraft(draft.content, (), None, draft.trace)
+    return touch

@@ -98,9 +98,10 @@ def test_trace_catalog_has_canonical_columns_constraints_and_indexes(admin):
     assert valid
     for name in (
         "organization_id", "conversation_id", "agent_id", "outbox_id",
-        "channel_account_id", "generation", "target_seq", "output",
+        "generation", "target_seq", "output",
     ):
         assert f"{name} IS NOT NULL" in complete
+    assert "channel_account_id IS NOT NULL" not in complete
 
     indexes = dict(admin.execute(
         "select indexname,indexdef from pg_indexes "

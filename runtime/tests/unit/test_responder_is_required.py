@@ -41,6 +41,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from agents_runtime.__main__ import RESPONDER_VARIABLE, _factory_from_env, _serve
+from agents_runtime.agent_core.trace import ReplyDraft
 
 UNUSED_DSN = "postgresql://nobody@127.0.0.1:1/none"
 
@@ -120,7 +121,7 @@ def test_process_requires_toucher_but_not_channel(
 
 
 async def _sentinel_responder(job):
-    return None
+    return ReplyDraft(None, None)
 
 
 def _a_responder_factory(dsn: str):

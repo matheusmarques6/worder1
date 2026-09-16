@@ -7,6 +7,7 @@ from uuid import UUID
 import pytest
 
 from agents_runtime.agent_core.toucher import TouchDraft
+from agents_runtime.agent_core.trace import ReplyDraft
 from agents_runtime.clock import SystemClock
 from agents_runtime.config import QueueingConfig
 from agents_runtime.queueing import worker
@@ -73,7 +74,8 @@ async def test_account_is_resolved_before_producer_and_carried_to_cas(monkeypatc
         assert events == ['resolved']
         assert job.channel_account_id == ACCOUNT
         events.append('produced')
-        return {'text': 'A'} if kind == 'inbound' else TouchDraft({'text': 'A'}, (), None)
+        return (ReplyDraft({'text': 'A'}, None) if kind == 'inbound'
+                else TouchDraft({'text': 'A'}, (), None))
 
     raw = payload(kind)
     if identity in {'explicit', 'foreign'}:

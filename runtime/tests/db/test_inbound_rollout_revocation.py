@@ -12,6 +12,7 @@ from agents_runtime.queueing.jobs import InboundJob
 from agents_runtime.queueing.worker import TurnResult, run_turn
 from tests.db.conftest import TwoTenants
 from tests.db.factories import create_thread, make_due, set_runtime_mode
+from tests.support.constant_reply import draft_for
 from tests.support.database import as_runtime_worker
 
 
@@ -71,10 +72,10 @@ class TestInboundRolloutRevocation:
         set_runtime_mode(admin, organization_id, "legacy")
         calls = 0
 
-        async def responder(_: InboundJob) -> dict[str, str]:
+        async def responder(_: InboundJob):
             nonlocal calls
             calls += 1
-            return {"text": "rascunho revogado"}
+            return await draft_for(dsn, _, {"text": "rascunho revogado"})
 
         result = await run_coalesced_turn(dsn, job, responder)
 
@@ -92,11 +93,11 @@ class TestInboundRolloutRevocation:
         job = coalesce_job(admin, organization_id)
         calls = 0
 
-        async def responder(_: InboundJob) -> dict[str, str]:
+        async def responder(_: InboundJob):
             nonlocal calls
             calls += 1
             set_runtime_mode(admin, organization_id, "legacy")
-            return {"text": "rascunho que nao pode concluir"}
+            return await draft_for(dsn, _, {"text": "rascunho que nao pode concluir"})
 
         result = await run_coalesced_turn(dsn, job, responder)
 
@@ -114,10 +115,10 @@ class TestInboundRolloutRevocation:
         job = coalesce_job(admin, organization_id)
         calls = 0
 
-        async def responder(_: InboundJob) -> dict[str, str]:
+        async def responder(_: InboundJob):
             nonlocal calls
             calls += 1
-            return {"text": "controle runtime"}
+            return await draft_for(dsn, _, {"text": "controle runtime"})
 
         result = await run_coalesced_turn(dsn, job, responder)
 

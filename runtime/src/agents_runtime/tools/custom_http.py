@@ -23,7 +23,7 @@ destino, reabrindo o mesmo buraco que o guard fecha.
 
 import json
 import logging
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -112,12 +112,14 @@ class CustomHttpTool:
         base_secret: str | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
         resolver: Resolver | None = None,
+        on_known_secrets: Callable[[tuple[str, ...]], None] | None = None,
     ) -> None:
         self.name = row.name
         self._row = row
         self._base_secret = base_secret
         self._transport = transport
         self._resolver = resolver
+        self._on_known_secrets = on_known_secrets
 
     def _validate(self, arguments: Mapping[str, Any]) -> str | None:
         known = {str(p["name"]) for p in self._row.params}
@@ -160,6 +162,8 @@ class CustomHttpTool:
             headers[self._row.auth_header_name] = decode_stored_key(
                 self._row.auth_header_value, base_secret=self._base_secret
             )
+            if self._on_known_secrets is not None:
+                self._on_known_secrets(tuple(headers.values()))
 
         timeout = httpx.Timeout(self._row.timeout_ms / 1000)
         try:

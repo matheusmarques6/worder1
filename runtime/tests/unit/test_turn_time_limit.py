@@ -9,6 +9,7 @@ import pytest
 from psycopg.pq import ConnStatus, TransactionStatus
 
 from agents_runtime.agent_core.toucher import TouchDraft
+from agents_runtime.agent_core.trace import ReplyDraft
 from agents_runtime.clock import SystemClock
 from agents_runtime.config import QueueingConfig, config_from_env
 from agents_runtime.queueing import worker
@@ -148,7 +149,7 @@ def _keepalives() -> set[asyncio.Task]:
 
 def _successful_result(kind: str):
     if kind == "turn":
-        return {"text": "ok"}
+        return ReplyDraft({"text": "ok"}, None)
     return TouchDraft(content={"text": "ok"}, moment_ids=(), mission_version_id=None)
 
 
@@ -250,7 +251,7 @@ async def test_a_producer_that_finishes_before_the_deadline_concludes(
 ) -> None:
     async def quick(_):
         if kind == "turn":
-            return {"text": "ok"}
+            return ReplyDraft({"text": "ok"}, None)
         return TouchDraft(content={"text": "ok"}, moment_ids=(), mission_version_id=None)
 
     assert await _run(kind, quick, config=QueueingConfig()) is TurnResult.DONE

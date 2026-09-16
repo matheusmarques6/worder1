@@ -7,6 +7,7 @@ import httpx
 import psycopg
 import pytest
 
+from agents_runtime.agent_core.trace import ReplyDraft
 from agents_runtime.channels import cloud_api
 from agents_runtime.clock import SystemClock
 from agents_runtime.config import QueueingConfig
@@ -24,6 +25,7 @@ from tests.db.factories import (
     set_runtime_mode,
 )
 from tests.db.test_ai_run_steps import link_identity
+from tests.support.constant_reply import draft_for
 
 pytestmark = pytest.mark.db
 
@@ -181,7 +183,7 @@ async def test_old_jobs_resolve_real_account_before_generation(
 
     async def produce(resolved):
         generated.append(resolved.channel_account_id)
-        return None if kind == "inbound" else TouchDraft(None, (), None)
+        return ReplyDraft(None, None) if kind == "inbound" else TouchDraft(None, (), None)
 
     async with await psycopg.AsyncConnection.connect(dsn, autocommit=True) as worker:
         await worker.execute("set role worker_role")
@@ -232,7 +234,7 @@ async def test_non_whatsapp_channel_never_discards_explicit_account(
 
     async def produce(resolved):
         generated.append(resolved.channel_account_id)
-        return None
+        return ReplyDraft(None, None)
 
     async with await psycopg.AsyncConnection.connect(dsn, autocommit=True) as worker:
         await worker.execute("set role worker_role")
@@ -331,7 +333,9 @@ async def test_new_account_supersedes_a_draft_but_never_reroutes_a_committed_sen
         assert job.channel_account_id == thread.channel_account_id
         if during_generation:
             job_b = inbound(account_b.id, wamid_b)
-        return {"text": "reply A", "humanize": {"split": False, "rhythm": False}}
+        return await draft_for(
+            dsn, job, {"text": "reply A", "humanize": {"split": False, "rhythm": False}},
+        )
 
     async with await psycopg.AsyncConnection.connect(dsn, autocommit=True) as worker:
         await worker.execute("set role worker_role")
@@ -348,7 +352,7 @@ async def test_new_account_supersedes_a_draft_but_never_reroutes_a_committed_sen
 
             async def produce_b(job):
                 assert job.channel_account_id == account_b.id
-                return {"text": "reply B"}
+                return await draft_for(dsn, job, {"text": "reply B"})
 
             assert await run_turn(
                 worker, job_b, produce_b, config=QueueingConfig(), clock=SystemClock(),

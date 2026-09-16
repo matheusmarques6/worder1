@@ -25,7 +25,7 @@ from agents_runtime.config import QueueingConfig
 from agents_runtime.obs import carrier
 from agents_runtime.obs.telemetry import annotate, span
 from agents_runtime.queueing.jobs import InboundJob, MissionTouchJob
-from agents_runtime.repository import engine, whatsapp_accounts
+from agents_runtime.repository import agent_traces, engine, whatsapp_accounts
 from agents_runtime.repository.queue import PgmqQueue
 from agents_runtime.repository.scope import abort_connection
 
@@ -290,7 +290,7 @@ async def _turn(
     producer = asyncio.create_task(respond(job))
     try:
         async with asyncio.timeout(config.turn_timeout.total_seconds()):
-            content = await asyncio.shield(producer)
+            draft = await asyncio.shield(producer)
     except BaseException as error:
         await _cleanup_phase_two(
             conn,
@@ -328,7 +328,7 @@ async def _turn(
             expected_version=claimed.version,
             generation=job.generation,
             target_seq=job.target_seq,
-            content=content,
+            content=draft.content,
             idempotency_key=f"reply-{job.conversation_id}-{job.generation}",
             # O carrier do TURNO (span corrente); sem tracer, o do passe do
             # coalescer segue viagem — o sender retoma o que houver.
@@ -336,6 +336,14 @@ async def _turn(
             require_runtime=True,
             channel_account_id=job.channel_account_id,
         )
+        if outcome.committed and outcome.outbox_id is not None:
+            if draft.trace is None:
+                raise RuntimeError("accepted outbound is missing trace metadata")
+            await agent_traces.record_accepted_trace(
+                conn, organization_id=job.organization_id, outbox_id=outcome.outbox_id,
+                conversation_id=job.conversation_id, channel_account_id=job.channel_account_id,
+                generation=job.generation, target_seq=job.target_seq, trace=draft.trace,
+            )
 
     if outcome.committed:
         return TurnResult.DONE
@@ -477,6 +485,14 @@ async def _touch(
             # transação do conclude, para nunca haver toque órfão de dona.
             await engine.set_conversation_owner(
                 conn, job.conversation_id, draft.mission_version_id
+            )
+        if outcome.committed and outcome.outbox_id is not None:
+            if draft.trace is None:
+                raise RuntimeError("accepted outbound is missing trace metadata")
+            await agent_traces.record_accepted_trace(
+                conn, organization_id=job.organization_id, outbox_id=outcome.outbox_id,
+                conversation_id=job.conversation_id, channel_account_id=job.channel_account_id,
+                generation=generation, target_seq=target_seq, trace=draft.trace,
             )
 
     if outcome.committed:

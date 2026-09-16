@@ -84,6 +84,7 @@ from agents_runtime.agent_core.providers import NoOrgLlmKey, resolve_agent_llm, 
 from agents_runtime.agent_core.think_gate import PendingMessage, should_think
 from agents_runtime.agent_core.tool_loop import MAX_TOOL_ROUNDS as MAX_TOOL_ROUNDS
 from agents_runtime.agent_core.tool_loop import generate_with_tools
+from agents_runtime.agent_core.trace import AttemptTraceCapture, ReplyDraft
 from agents_runtime.clock import Clock, SystemClock
 from agents_runtime.commerce.moments import apply_moment_restrictions, resolve_moments
 from agents_runtime.config import QueueingConfig, config_from_env
@@ -116,7 +117,7 @@ from agents_runtime.repository.scope import (
 )
 from agents_runtime.tools.base import ToolContext, run_tool
 from agents_runtime.tools.coupon import BENEFIT_KINDS, OBJECT_KINDS, CreateCoupon
-from agents_runtime.tools.custom_http import CustomHttpTool, tool_spec_for
+from agents_runtime.tools.custom_http import CustomHttpTool, CustomToolRow, tool_spec_for
 from agents_runtime.tools.knowledge import SearchKnowledge
 
 logger = logging.getLogger(__name__)
@@ -135,9 +136,9 @@ def delivery_flags(settings: Mapping | None) -> tuple[bool, bool]:
     )
 
 
-#: A costura do motor, intocada desde o E1: o worker chama isto e nada mais.
-#: `None` significa "conclua o turno e não envie nada" (S8).
-Responder = Callable[[InboundJob], Awaitable[dict[str, Any] | None]]
+#: O worker aceita conteúdo e metadados juntos, na mesma transação do CAS.
+#: Conteúdo/trace nulos significam "conclua o turno e não envie nada" (S8).
+Responder = Callable[[InboundJob], Awaitable[ReplyDraft]]
 
 FIXED_REPLY = "Recebemos sua mensagem! Já estamos cuidando do seu pedido. 🧡"
 
@@ -194,13 +195,15 @@ def _money_lines(grants: Sequence[incentives_repo.Grant]) -> tuple[str, ...]:
     )
 
 
-def fixed_responder(text: str = FIXED_REPLY):
+def fixed_responder(text: str = FIXED_REPLY, *, agent_id: UUID | None = None):
     """A resposta constante do E1. Continua existindo porque os cenários do
     motor a usam: enquanto a resposta é fixa, toda diferença observada é do
     motor."""
 
-    async def respond(job: InboundJob) -> dict[str, Any]:
-        return {"text": text}
+    async def respond(job: InboundJob) -> ReplyDraft:
+        trace = (AttemptTraceCapture().build(agent_id=agent_id, input_text="", output_text=text,
+                                            selected_attempt=None) if agent_id else None)
+        return ReplyDraft({"text": text}, trace)
 
     return respond
 
@@ -281,7 +284,7 @@ def build_responder(
         turn_llm_call_limit if turn_llm_call_limit is not None else default_turn_llm_call_limit()
     )
 
-    async def respond(job: InboundJob) -> dict[str, Any] | None:
+    async def respond(job: InboundJob) -> ReplyDraft:
         async with await psycopg.AsyncConnection.connect(
             dsn,
             autocommit=True,
@@ -376,10 +379,20 @@ def build_responder(
             if version is None:
                 raise NoActiveVersion(f"tenant {job.organization_id} has no active agent version")
 
+            capture = AttemptTraceCapture()
+            conversation = _as_chat(transcript + pending)
+            input_text = "\n".join(f"{message.role}: {message.content}" for message in conversation)
+
+            def accepted(content: dict, attempt: int | None = None) -> ReplyDraft:
+                return ReplyDraft(content, capture.build(
+                    agent_id=version.agent_id, input_text=input_text,
+                    output_text=content["text"], selected_attempt=attempt,
+                ))
+
             if not pending:
                 # Janela vazia: não há o que responder, e a conversa precisa
                 # avançar mesmo assim — senão o coalescer a recria para sempre.
-                return None
+                return ReplyDraft(None, None)
 
             # Item 41: UM teto por turno, compartilhado pelas três finalidades
             # (agent_reply, judge_pre, embedding) que `metered(...)` constrói
@@ -420,7 +433,7 @@ def build_responder(
             )
             if silence is not None:
                 await note_step("skipped", silence.detail)
-                return None
+                return ReplyDraft(None, None)
 
             # --- handoff por keyword (item 30): o cliente pediu um humano.
             # Depois dos guards e ANTES da cascata de chave BYO — um pedido de
@@ -444,15 +457,15 @@ def build_responder(
                     + ("" if marked else UNMIRRORED_DETAIL),
                 )
                 if not handoff.confirmation:
-                    return None
+                    return ReplyDraft(None, None)
                 # A confirmação sai pelo caminho normal de envio. Falha na
                 # entrega não desfaz a transferência: quem já foi passado para
                 # um humano continua passado.
                 split, rhythm = delivery_flags(version.settings)
-                return {
+                return accepted({
                     "text": handoff.confirmation,
                     "humanize": {"split": split, "rhythm": rhythm},
-                }
+                })
 
             # --- horário de atendimento (item 30). DEPOIS do handoff, como
             # no TS: lá o horário é checado dentro do engine (engine.ts:85-88),
@@ -461,7 +474,7 @@ def build_responder(
             outside = schedule_silence(version.settings, now=clock.now())
             if outside is not None:
                 await note_step("skipped", outside.detail)
-                return None
+                return ReplyDraft(None, None)
 
             # --- mídia sem uma palavra (item 31). O runtime não transcreve
             # áudio nem enxerga imagem, e os dois NÃO são `unsupported` para o
@@ -498,13 +511,13 @@ def build_responder(
                         media_step_detail(speechless, handoff=True)
                         + ("" if marked else UNMIRRORED_DETAIL),
                     )
-                    return None
+                    return ReplyDraft(None, None)
                 await note_step("started", media_step_detail(speechless))
                 split, rhythm = delivery_flags(version.settings)
-                return {
+                return accepted({
                     "text": media_apology(speechless, version.settings),
                     "humanize": {"split": split, "rhythm": rhythm},
-                }
+                })
 
             # --- arbitragem: uma missão vence o turno; sem nenhuma, alerta e
             # silêncio deliberado (a conversa avança; §3.4 inv. 8).
@@ -522,7 +535,7 @@ def build_responder(
                         payload={"conversation_id": str(job.conversation_id)},
                     )
                 await note_step("skipped", "Sem missão ativa para este evento — nada respondido")
-                return None
+                return ReplyDraft(None, None)
 
             resolved = merge_mission(
                 winner, None, agent_tools=version.config.enabled_tools
@@ -569,7 +582,7 @@ def build_responder(
                             },
                         )
                     await note_step("skipped", "Sem chave de LLM da loja — agente não respondeu")
-                    return None
+                    return ReplyDraft(None, None)
 
             async with scoped_agent_llm(agent_llm, owns=owns_agent_llm):
                 query = " ".join(message.text for message in pending if message.author == "contact")
@@ -624,14 +637,7 @@ def build_responder(
                 )
 
                 system = compiled.text
-                # Item 39: `transcript` já exclui a janela pendente (query em
-                # `repository/agent.py::load_recent_transcript`), então concatenar
-                # é seguro — nenhuma mensagem aparece duas vezes.
-                conversation = _as_chat(transcript + pending)
 
-                chat = _metered(
-                    conn, job, agent_llm, clock, "agent_reply", version.agent_id, budget=turn_budget
-                )
                 # Juízes do lojista (radial → Juízes) entram como rubrica extra,
                 # sempre standard — o veto de silêncio segue só da plataforma.
                 judge = PreSendJudge(
@@ -670,32 +676,41 @@ def build_responder(
                 for row in custom_rows:
                     if row.name in turn_tools:
                         continue
-                    turn_tools[row.name] = CustomHttpTool(row, base_secret=base_secret)
+                    turn_tools[row.name] = row
                     tool_specs = (*tool_specs, tool_spec_for(row))
 
-                async def run_turn_tool(call: ToolCall) -> str:
+                async def run_turn_tool(attempt: int, call: ToolCall) -> str:
                     tool = turn_tools.get(call.name)
-                    if tool is None:
-                        payload: dict[str, Any] = {"error": f"tool desconhecida: {call.name}"}
-                    else:
-                        result = await run_tool(
-                            conn,
-                            tool,
-                            ToolContext(
-                                organization_id=job.organization_id,
-                                conversation_id=job.conversation_id,
-                            ),
-                            dict(call.arguments),
-                            clock=clock,
+                    secrets: list[str] = []
+                    try:
+                        if isinstance(tool, CustomToolRow):
+                            tool = CustomHttpTool(
+                                tool, base_secret=base_secret, on_known_secrets=secrets.extend,
+                            )
+                        if tool is None:
+                            payload = {"error": f"tool desconhecida: {call.name}"}
+                        else:
+                            result = await run_tool(
+                                conn, tool,
+                                ToolContext(organization_id=job.organization_id,
+                                            conversation_id=job.conversation_id),
+                                dict(call.arguments), clock=clock,
+                            )
+                            payload = (dict(result.output or {}) if result.success
+                                       else {"error": result.error})
+                        capture.record_tool(
+                            attempt, {"name": call.name, "arguments": dict(call.arguments),
+                                      "result": payload}, known_secrets=secrets,
                         )
-                        payload = (
-                            dict(result.output or {})
-                            if result.success
-                            else {"error": result.error}
-                        )
-                    return json.dumps(payload, ensure_ascii=False)
+                        return json.dumps(payload, ensure_ascii=False)
+                    finally:
+                        secrets.clear()
 
                 async def generate(attempt: int, feedback: tuple[str, ...]) -> str:
+                    chat = _metered(
+                        conn, job, agent_llm, clock, "agent_reply", version.agent_id,
+                        budget=turn_budget, capture=partial(capture.record_call, attempt),
+                    )
                     messages = [Message(role="system", content=system), *conversation]
                     if feedback:
                         # Regenerar sem dizer o que estava errado é repetir.
@@ -713,7 +728,7 @@ def build_responder(
                         model=version.config.model,
                         messages=tuple(messages),
                         tools=tool_specs,
-                        execute=run_turn_tool,
+                        execute=partial(run_turn_tool, attempt),
                         think=gate.think,
                     )
 
@@ -792,7 +807,7 @@ def build_responder(
                         else "Resposta retida pela verificação de qualidade"
                     )
                     await note_step("skipped", skip_reason + preview)
-                    return None
+                    return ReplyDraft(None, None)
 
                 # --- blocked_topics (item 30): a última coisa antes do envio.
                 # Os outros guards decidem sobre o que CHEGOU; este decide sobre o
@@ -818,12 +833,15 @@ def build_responder(
                         f"Assunto proibido na resposta (“{topic}”)"
                         + ("" if marked else UNMIRRORED_DETAIL),
                     )
-                    return None
+                    return ReplyDraft(None, None)
 
                 # As flags de entrega viajam COM o envio (payload da outbox): o
                 # sender obedece por linha, sem env global (Pacote B 17/08).
                 split, rhythm = delivery_flags(version.settings)
-                return {"text": outcome.draft, "humanize": {"split": split, "rhythm": rhythm}}
+                return accepted(
+                    {"text": outcome.draft, "humanize": {"split": split, "rhythm": rhythm}},
+                    outcome.selected_attempt,
+                )
 
     return respond
 
@@ -922,6 +940,7 @@ def _metered(
     agent_id: UUID | None = None,
     *,
     budget: TurnBudget | None = None,
+    capture: Callable[[CallRecord], None] | None = None,
 ) -> MeteredLlm:
     """Um medidor por finalidade: o custo do agente e o custo do portão são
     linhas diferentes da mesma conta.
@@ -935,10 +954,17 @@ def _metered(
     aqui uma vez por finalidade (agent_reply, judge_pre, embedding), para que
     as três dividam o mesmo teto em vez de cada uma ter o seu.
     """
+    record = _recorder(conn, job.organization_id, job.conversation_id, agent_id)
+
+    async def captured(call: CallRecord) -> None:
+        if capture is not None:
+            capture(call)
+        await record(call)
+
     return MeteredLlm(
         llm,
         clock=clock,
-        record=_recorder(conn, job.organization_id, job.conversation_id, agent_id),
+        record=captured,
         purpose=purpose,
         budget=budget,
     )

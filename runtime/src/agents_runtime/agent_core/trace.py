@@ -91,7 +91,9 @@ class AttemptTraceCapture:
         if record.purpose == "agent_reply":
             self._calls.setdefault(attempt, []).append(record)
 
-    def record_tool(self, attempt: int, payload: dict[str, Any]) -> None:
+    def record_tool(
+        self, attempt: int, payload: dict[str, Any], *, known_secrets: Iterable[str] = (),
+    ) -> None:
         """Copy and sanitize at capture; neither caller can mutate the other's data.
 
         Limits count their markers; depth includes the outer tool_calls array.
@@ -99,6 +101,7 @@ class AttemptTraceCapture:
         (ASCII escaping and spaces), also bounding compact UTF-8 serialization.
         Once a prefix is cut, subsequent tools remain omitted explicitly.
         """
+        self._secrets += tuple(secret for secret in known_secrets if secret)
         calls = self._tools.setdefault(attempt, [])
         if attempt in self._truncated:
             return
@@ -132,6 +135,8 @@ class AttemptTraceCapture:
         calls = self._calls.get(selected_attempt, []) if selected_attempt is not None else []
         tools = self._tools.get(selected_attempt, []) if selected_attempt is not None else []
         usage = [token for call in calls for token in (call.input_tokens, call.output_tokens)]
+        snapshot = tuple(deepcopy(tools))
+        self._secrets = ()
         return AcceptedTracePayload(
             agent_id=agent_id,
             input_text=input_text,
@@ -139,7 +144,7 @@ class AttemptTraceCapture:
             selected_attempt=selected_attempt,
             provider=calls[-1].provider if calls else None,
             model=calls[-1].model if calls else None,
-            tool_calls=tuple(deepcopy(tools)),
+            tool_calls=snapshot,
             tokens=sum(usage) if usage and all(token is not None for token in usage) else None,
             latency_ms=sum(call.latency_ms for call in calls) if calls else None,
         )

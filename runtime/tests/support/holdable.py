@@ -10,11 +10,11 @@ Holds are counted, not boolean, on purpose: cenário 5 needs the FIRST worker
 held while the SECOND sails through the same conversation.
 """
 
-from typing import Any
-
 import psycopg
 
+from agents_runtime.agent_core.trace import ReplyDraft
 from agents_runtime.queueing.jobs import InboundJob
+from tests.support.constant_reply import draft_for
 
 GATE_SQL = """
 create table if not exists testing.responder_gate (
@@ -29,7 +29,7 @@ REPLY = {"text": "resposta segurada"}
 
 
 def holdable_responder(dsn: str):
-    async def respond(job: InboundJob) -> dict[str, Any]:
+    async def respond(job: InboundJob) -> ReplyDraft:
         async with await psycopg.AsyncConnection.connect(dsn, autocommit=True) as conn:
             # One atomic decrement decides: holder or pass-through. Two workers
             # racing here get different answers, which is the whole point.
@@ -57,7 +57,7 @@ def holdable_responder(dsn: str):
 
                 await asyncio.sleep(0.02)
 
-        return REPLY
+        return await draft_for(dsn, job, REPLY)
 
     return respond
 
