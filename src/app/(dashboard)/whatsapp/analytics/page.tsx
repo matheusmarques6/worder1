@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import {
   TrendingUp,
@@ -26,7 +26,7 @@ import {
   Shield,
 } from 'lucide-react'
 import { QualityDashboard } from '@/components/whatsapp/quality'
-import { useAuthStore, useStoreStore } from '@/stores'
+import { useAuthStore } from '@/stores'
 import {
   XAxis,
   YAxis,
@@ -312,7 +312,6 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 
 export default function WhatsAppAnalyticsPage() {
   const { user } = useAuthStore()
-  const { currentStore } = useStoreStore()
   const organizationId = user?.organization_id || ''
   const [activeTab, setActiveTab] = useState<'campaigns' | 'ai' | 'quality'>('campaigns')
   const [dateRange, setDateRange] = useState('7d')
@@ -329,7 +328,7 @@ export default function WhatsAppAnalyticsPage() {
   const [providerData, setProviderData] = useState<any[]>([])
 
   // Fetch campaign analytics
-  const fetchCampaignAnalytics = async () => {
+  const fetchCampaignAnalytics = useCallback(async () => {
     if (!organizationId) return
 
     try {
@@ -385,10 +384,10 @@ export default function WhatsAppAnalyticsPage() {
     } catch (err: any) {
       console.error('Error fetching campaign analytics:', err)
     }
-  }
+  }, [organizationId, dateRange])
 
   // Fetch AI analytics
-  const fetchAIAnalytics = async () => {
+  const fetchAIAnalytics = useCallback(async () => {
     if (!organizationId) return
 
     try {
@@ -448,7 +447,7 @@ export default function WhatsAppAnalyticsPage() {
     } catch (err: any) {
       console.error('Error fetching AI analytics:', err)
     }
-  }
+  }, [organizationId, dateRange])
 
   // Initial data fetch
   useEffect(() => {
@@ -474,7 +473,7 @@ export default function WhatsAppAnalyticsPage() {
     }
 
     fetchData()
-  }, [organizationId, dateRange, currentStore?.id])
+  }, [organizationId, fetchCampaignAnalytics, fetchAIAnalytics])
 
   const handleRefresh = async () => {
     setLoading(true)

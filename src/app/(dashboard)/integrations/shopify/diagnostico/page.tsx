@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useAuthStore } from '@/stores'
 import {
   CheckCircle,
@@ -76,6 +76,7 @@ interface DiagnosticData {
 
 export default function ShopifyDiagnosticoPage() {
   const { user } = useAuthStore()
+  const organizationId = user?.organization_id
   const [loading, setLoading] = useState(true)
   const [fixing, setFixing] = useState(false)
   const [data, setData] = useState<DiagnosticData | null>(null)
@@ -83,17 +84,11 @@ export default function ShopifyDiagnosticoPage() {
   const [copied, setCopied] = useState(false)
   const [fixResult, setFixResult] = useState<any>(null)
 
-  useEffect(() => {
-    if (user?.organization_id) {
-      loadDiagnostic()
-    }
-  }, [user?.organization_id])
-
-  const loadDiagnostic = async () => {
+  const loadDiagnostic = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/shopify/debug?organizationId=${user?.organization_id}`)
+      const res = await fetch(`/api/shopify/debug?organizationId=${organizationId}`)
       const result = await res.json()
       setData(result)
     } catch (e: any) {
@@ -101,7 +96,13 @@ export default function ShopifyDiagnosticoPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [organizationId])
+
+  useEffect(() => {
+    if (organizationId) {
+      loadDiagnostic()
+    }
+  }, [organizationId, loadDiagnostic])
 
   const fixWebhooks = async () => {
     setFixing(true)
