@@ -182,13 +182,12 @@ export function ContactPanel({
   // Bot toggle
   const [isBotActive, setIsBotActive] = useState(conversation?.is_bot_active ?? true)
   const [isTogglingBot, setIsTogglingBot] = useState(false)
+  const conversationBotActive = conversation?.is_bot_active
 
   // Atualizar estado do bot quando conversation mudar
   useEffect(() => {
-    if (conversation) {
-      setIsBotActive(conversation.is_bot_active)
-    }
-  }, [conversation?.is_bot_active])
+    if (conversationBotActive !== undefined) setIsBotActive(conversationBotActive)
+  }, [conversationBotActive])
 
   if (isLoading) {
     return (

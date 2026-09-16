@@ -107,7 +107,7 @@ export default function FormAnalyticsPage() {
       .catch((e) => { if (!cancelled) setError(e.message) })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [formId, days])
+  }, [formId, days, tz])
 
   if (loading && !data) {
     return <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>

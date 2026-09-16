@@ -852,7 +852,7 @@ export default function AnalyticsPage() {
     } finally {
       setLoading(false)
     }
-  }, [organizationId, storeId, period, selectedPipelineIds, currentStore?.id]) // ✅ MODIFICADO
+  }, [organizationId, storeId, period, selectedPipelineIds]) // ✅ MODIFICADO
 
   const hasHydrated = useStoreStore((s) => s._hasHydrated)
   useEffect(() => {

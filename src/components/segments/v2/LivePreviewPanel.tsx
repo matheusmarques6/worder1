@@ -36,10 +36,12 @@ export function LivePreviewPanel({ rule, organizationId, storeId, totalContacts 
   const [sample, setSample] = useState<Contact[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const ruleSnapshot = JSON.stringify(rule)
 
   useEffect(() => {
     if (!organizationId) return
-    if (rule.root.children.length === 0) {
+    const snapshotRule = JSON.parse(ruleSnapshot) as SegmentRule
+    if (snapshotRule.root.children.length === 0) {
       setCount(null); setSample([]); setError(null)
       return
     }
@@ -51,7 +53,7 @@ export function LivePreviewPanel({ rule, organizationId, storeId, totalContacts 
         const res = await fetch('/api/segments/preview-v2', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ rule, organization_id: organizationId, store_id: storeId ?? null }),
+          body: JSON.stringify({ rule: snapshotRule, organization_id: organizationId, store_id: storeId ?? null }),
         })
         if (cancelled) return
         const data = await res.json()
@@ -75,7 +77,7 @@ export function LivePreviewPanel({ rule, organizationId, storeId, totalContacts 
     }, 500)
 
     return () => { cancelled = true; clearTimeout(handle) }
-  }, [JSON.stringify(rule), organizationId, storeId])
+  }, [ruleSnapshot, organizationId, storeId])
 
   const percentage = (count !== null && totalContacts && totalContacts > 0)
     ? (count / totalContacts) * 100

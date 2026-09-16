@@ -1301,7 +1301,7 @@ const WorderEmailEditor = forwardRef<WorderEmailEditorHandle, WorderEmailEditorP
     html = html.replace(/\{\{view_in_browser_url\}\}/g, '#')
     setPreviewHtml(html)
     setShowPreview(true)
-  }, [doc])
+  }, [doc, flowContext, onSave])
 
   // ── Keyboard shortcuts ──
   useEffect(() => {

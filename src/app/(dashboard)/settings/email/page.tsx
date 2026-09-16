@@ -32,8 +32,7 @@ export default function DomainsSettingsPage() {
   // lojista adiciona, verifica ou remove. Ele fica fora da lista: o que
   // aparece aqui são os domínios DELE. Onde o endereço temporário importa
   // (enquanto não há domínio verificado) a tela diz isso em palavras.
-  const allDomains = dom.data?.domains || []
-  const domains = useMemo(() => allDomains.filter((d) => !d.is_system), [allDomains])
+  const domains = useMemo(() => (dom.data?.domains || []).filter((d) => !d.is_system), [dom.data?.domains])
   const sharedDomain = se.data?.shared_domain || 'worder.email'
 
   // DMARC por domínio (consulta DNS ao vivo; cacheada aqui).
