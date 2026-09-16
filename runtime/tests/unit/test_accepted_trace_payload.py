@@ -164,6 +164,39 @@ def test_known_secret_values_are_redacted_before_truncating_and_never_mutate_sou
     assert original["arguments"]["ordinary"] == "private-value"
 
 
+@pytest.mark.parametrize(("value", "secret"), [
+    (123456, "123456"),
+    (91234567, "123456"),
+    (123456.75, "123456"),
+    (1.23456e20, "1.23456e+20"),
+])
+def test_numeric_secret_occurrences_are_redacted_in_all_tool_fields(value, secret):
+    original = {
+        "arguments": {"ordinary": value}, "result": [value], "error": value,
+    }
+    snapshot = deepcopy(original)
+    (safe,) = tools([original], known_secrets=(secret,))
+    assert safe == {
+        "arguments": {"ordinary": "[REDACTED]"},
+        "result": ["[REDACTED]"], "error": "[REDACTED]",
+    }
+    assert secret not in json.dumps(safe)
+    assert original == snapshot
+
+
+def test_numeric_secret_matching_preserves_safe_numbers_booleans_and_none():
+    (safe,) = tools(
+        [{"result": [42, 2.5, True, False, None]}],
+        known_secrets=("123456", "true", "false", "null", "1", "0"),
+    )
+    assert safe["result"] == [42, 2.5, True, False, None]
+    assert type(safe["result"][0]) is int
+    assert type(safe["result"][1]) is float
+    assert safe["result"][2] is True
+    assert safe["result"][3] is False
+    assert safe["result"][4] is None
+
+
 def test_strings_keep_the_limit_including_an_explicit_marker():
     (safe,) = tools([{"arguments": "x" * 4096, "result": "y" * 4097}])
     assert safe["arguments"] == "x" * 4096

@@ -38,10 +38,11 @@ def _sanitize(value: Any, secrets: tuple[str, ...], depth: int = 2) -> Any:
             return "[REDACTED]"
         marker = "[TRUNCATED]"
         return value if len(value) <= 4096 else value[:4096 - len(marker)] + marker
-    if value is None or isinstance(value, (bool, int)):
+    if value is None or isinstance(value, bool):
         return value
-    if isinstance(value, float) and math.isfinite(value):
-        return value
+    if isinstance(value, int) or (isinstance(value, float) and math.isfinite(value)):
+        serialized = json.dumps(value)
+        return "[REDACTED]" if any(secret in serialized for secret in secrets) else value
     if depth >= 6:
         return {"_truncated": "depth"}
     if isinstance(value, Mapping):
