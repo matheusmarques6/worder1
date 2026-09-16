@@ -955,16 +955,20 @@ export async function resolveCartBlocks(
         height: imgH,
         padColor: cfg.backgroundColor,
       })
+      // Título, URL da foto e link do produto vêm da loja e entram em
+      // atributo HTML. Um nome como `Shampoo "Premium" & Co` fechava a
+      // aspa do `alt` e corrompia a tag inteira. A grade já escapava;
+      // esta linha tinha ficado de fora.
       const imgCell = cfg.showImage ? `<td width="${isVert ? '100%' : imgW}" style="vertical-align:middle;${isVert ? 'padding:0 0 12px 0;' : 'padding:0;'}">
-        <a href="${prodUrl}" style="display:block;text-decoration:none;">${imgUrl
-          ? `<img src="${fitted}" alt="${title}" style="${fitProductImageStyle({ width: boxW, height: imgH })}border-radius:${imgR}px;border:0;outline:none;" />`
+        <a href="${escapeHtml(prodUrl)}" style="display:block;text-decoration:none;">${imgUrl
+          ? `<img src="${escapeHtml(fitted)}" alt="${escapeHtml(title)}" style="${fitProductImageStyle({ width: boxW, height: imgH })}border-radius:${imgR}px;border:0;outline:none;" />`
           : `<div style="width:${imgSize};height:${imgH}px;background:#F3F4F6;border-radius:${imgR}px;display:flex;align-items:center;justify-content:center;color:#9CA3AF;font-size:11px;">imagem</div>`
         }</a>
       </td>` : ''
 
       const detailParts: string[] = []
-      if (cfg.showName) detailParts.push(`<p style="margin:0 0 6px;font-size:${cfg.nameFontSize}px;font-weight:${cfg.nameWeight};color:${cfg.nameColor};line-height:1.35;">${title}</p>`)
-      if (cfg.showDescription && desc) detailParts.push(`<p style="margin:0 0 6px;font-size:${cfg.descFontSize}px;color:${cfg.descColor};line-height:1.4;">${desc}</p>`)
+      if (cfg.showName) detailParts.push(`<p style="margin:0 0 6px;font-size:${cfg.nameFontSize}px;font-weight:${cfg.nameWeight};color:${cfg.nameColor};line-height:1.35;">${escapeHtml(title)}</p>`)
+      if (cfg.showDescription && desc) detailParts.push(`<p style="margin:0 0 6px;font-size:${cfg.descFontSize}px;color:${cfg.descColor};line-height:1.4;">${escapeHtml(desc)}</p>`)
       if (cfg.showPrice) {
         let priceHtml = `<span style="font-size:${cfg.priceFontSize}px;font-weight:${cfg.priceWeight};color:${cfg.priceColor};">${price}</span>`
         if (cfg.showOldPrice && oldPrice) {
@@ -973,7 +977,7 @@ export async function resolveCartBlocks(
         detailParts.push(`<p style="margin:0 0 ${cfg.showButton ? 12 : 0}px;line-height:1.3;">${priceHtml}</p>`)
       }
       if (cfg.showButton) {
-        detailParts.push(`<p style="margin:0;text-align:${btnAlign === 'full' ? 'center' : btnAlign};line-height:1;"><a href="${checkoutUrl}" style="${btnDisplay}padding:${cfg.buttonPaddingV}px ${cfg.buttonPaddingH}px;background:${cfg.buttonColor};color:${cfg.buttonTextColor};border-radius:${cfg.buttonRadius}px;font-size:${cfg.buttonFontSize}px;font-weight:600;text-decoration:none;box-sizing:border-box;mso-padding-alt:0;">${cfg.buttonText}</a></p>`)
+        detailParts.push(`<p style="margin:0;text-align:${btnAlign === 'full' ? 'center' : btnAlign};line-height:1;"><a href="${escapeHtml(checkoutUrl)}" style="${btnDisplay}padding:${cfg.buttonPaddingV}px ${cfg.buttonPaddingH}px;background:${cfg.buttonColor};color:${cfg.buttonTextColor};border-radius:${cfg.buttonRadius}px;font-size:${cfg.buttonFontSize}px;font-weight:600;text-decoration:none;box-sizing:border-box;mso-padding-alt:0;">${escapeHtml(cfg.buttonText)}</a></p>`)
       }
       // vertical-align:middle on the details cell — the user explicitly
       // asked for vertically-centered text alongside the image.
