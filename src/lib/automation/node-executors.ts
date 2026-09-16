@@ -1145,6 +1145,12 @@ const actionExecutors: Record<string, NodeExecutor> = {
           templateHtml: html,
           templateText: plainText,
           subject,
+          // O texto de prévia do nó. Ele existia no painel, era gravado
+          // em 124 dos 141 nós e nunca saía daqui: nem esta chamada nem
+          // o envio o levavam ao HTML, e nenhum template compensava com
+          // o seu próprio. Quem escreveu "10% OFF is still active" para
+          // aparecer na caixa de entrada via o começo do corpo no lugar.
+          preheader: config.preheader || '',
           fromEmail: senderEmail,
           senderName,
           // Node-level reply-to when configured; otherwise undefined so

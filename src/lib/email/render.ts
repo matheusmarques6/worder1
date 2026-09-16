@@ -579,6 +579,39 @@ export function parseProductBlockMarker(
 }
 
 /**
+ * Põe o texto de prévia no topo do corpo do e-mail.
+ *
+ * É a segunda linha da caixa de entrada, logo depois do assunto. O
+ * bloco tem duas partes, e as duas importam:
+ *
+ *   A div escondida com o texto — `display:none` não basta sozinho em
+ *   todo cliente, daí a combinação de altura zero, `overflow:hidden`,
+ *   opacidade zero e `mso-hide` para o Outlook.
+ *
+ *   E o enchimento de caracteres invisíveis depois dela. Sem ele, o
+ *   cliente completa a prévia com o começo do corpo — tipicamente o
+ *   "Ver no navegador" ou o alt do logo —, e o texto escrito com
+ *   cuidado aparece grudado num pedaço de lixo. Gmail, Outlook e Apple
+ *   Mail fazem isso; empurrá-los com espaço de largura zero é o que
+ *   Omnisend e Klaviyo também mandam.
+ */
+export function injectPreheader(html: string, texto: string): string {
+  const limpo = String(texto || '').trim()
+  if (!limpo) return html
+  // Já existe um? O documento pode trazer o seu por `settings.preheaderText`.
+  if (/mso-hide\s*:\s*all/i.test(html) && /display\s*:\s*none/i.test(html)) return html
+  const enchimento = '&#847;&zwnj;&nbsp;'.repeat(60)
+  const bloco =
+    `<div style="display:none;font-size:1px;color:#ffffff;line-height:1px;` +
+    `max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;">` +
+    `${escapeHtml(limpo)}${enchimento}</div>`
+  if (/<body[^>]*>/i.test(html)) {
+    return html.replace(/(<body[^>]*>)/i, `$1${bloco}`)
+  }
+  return bloco + html
+}
+
+/**
  * Apaga um bloco dinâmico que não tem o que mostrar — e a linha que o
  * continha.
  *
