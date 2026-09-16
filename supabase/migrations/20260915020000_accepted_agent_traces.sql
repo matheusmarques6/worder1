@@ -108,12 +108,16 @@ begin
   ) then
     alter table public.agent_trace_annotations
       add constraint agent_trace_annotations_fix_requires_correction
-      check (rating <> 'fix' or nullif(btrim(correction_text), '') is not null)
+      check (
+        rating <> 'fix'
+        or (correction_text is not null and correction_text ~ '[^[:space:]]')
+      )
       not valid;
   end if;
   if not exists (
     select 1 from public.agent_trace_annotations
-     where rating = 'fix' and nullif(btrim(correction_text), '') is null
+     where rating = 'fix'
+       and (correction_text is null or correction_text !~ '[^[:space:]]')
   ) then
     alter table public.agent_trace_annotations
       validate constraint agent_trace_annotations_fix_requires_correction;
@@ -200,58 +204,62 @@ begin
   if p_selected_attempt is not null and p_selected_attempt < 0 then
     raise exception 'accepted trace selected attempt is negative' using errcode = '22023';
   end if;
-  if not exists (
-    select 1 from public.conversations c
-     where c.id = p_conversation_id
-       and c.organization_id = p_organization_id
-       and c.processing_generation = p_generation
-       and c.last_processed_seq = p_target_seq
-  ) then
-    raise exception 'accepted trace conversation does not match' using errcode = '22023';
-  end if;
-  if not exists (
-    select 1 from public.ai_agents a
-     where a.id = p_agent_id and a.organization_id = p_organization_id
-  ) then
-    raise exception 'accepted trace agent does not match' using errcode = '22023';
-  end if;
-  if not exists (
-    select 1 from public.whatsapp_business_accounts a
-     where a.id = p_channel_account_id and a.organization_id = p_organization_id
-  ) then
-    raise exception 'accepted trace channel account does not match' using errcode = '22023';
-  end if;
-  if not exists (
-    select 1 from internal.message_outbox o
-     where o.id = p_outbox_id
-       and o.organization_id = p_organization_id
-       and o.conversation_id = p_conversation_id
-       and o.channel_account_id = p_channel_account_id
-       and o.payload ->> 'text' is not distinct from p_output
-  ) then
-    raise exception 'accepted trace outbox or output does not match' using errcode = '22023';
-  end if;
-
-  insert into public.agent_traces (
-    organization_id, conversation_id, agent_id, provider, model, input, output,
-    tool_calls, tokens, latency_ms, trace_source, outbox_id, channel_account_id,
-    generation, target_seq, selected_attempt
-  )
-  values (
-    p_organization_id, p_conversation_id, p_agent_id, p_provider, p_model,
-    p_input, p_output, p_tool_calls, p_tokens, p_latency_ms, 'runtime_accepted',
-    p_outbox_id, p_channel_account_id, p_generation, p_target_seq,
-    p_selected_attempt
-  )
-  on conflict (outbox_id) where outbox_id is not null do nothing
-  returning id into v_id;
-
-  if v_id is not null then
-    return v_id;
-  end if;
-
-  select * into strict v_existing
+  select * into v_existing
     from public.agent_traces where outbox_id = p_outbox_id;
+  if not found then
+    if not exists (
+      select 1 from public.conversations c
+       where c.id = p_conversation_id
+         and c.organization_id = p_organization_id
+         and c.processing_generation = p_generation
+         and c.last_processed_seq = p_target_seq
+    ) then
+      raise exception 'accepted trace conversation does not match' using errcode = '22023';
+    end if;
+    if not exists (
+      select 1 from public.ai_agents a
+       where a.id = p_agent_id and a.organization_id = p_organization_id
+    ) then
+      raise exception 'accepted trace agent does not match' using errcode = '22023';
+    end if;
+    if not exists (
+      select 1 from public.whatsapp_business_accounts a
+       where a.id = p_channel_account_id and a.organization_id = p_organization_id
+    ) then
+      raise exception 'accepted trace channel account does not match' using errcode = '22023';
+    end if;
+    if not exists (
+      select 1 from internal.message_outbox o
+       where o.id = p_outbox_id
+         and o.organization_id = p_organization_id
+         and o.conversation_id = p_conversation_id
+         and o.channel_account_id = p_channel_account_id
+         and o.payload ->> 'text' is not distinct from p_output
+    ) then
+      raise exception 'accepted trace outbox or output does not match' using errcode = '22023';
+    end if;
+
+    insert into public.agent_traces (
+      organization_id, conversation_id, agent_id, provider, model, input, output,
+      tool_calls, tokens, latency_ms, trace_source, outbox_id, channel_account_id,
+      generation, target_seq, selected_attempt
+    )
+    values (
+      p_organization_id, p_conversation_id, p_agent_id, p_provider, p_model,
+      p_input, p_output, p_tool_calls, p_tokens, p_latency_ms, 'runtime_accepted',
+      p_outbox_id, p_channel_account_id, p_generation, p_target_seq,
+      p_selected_attempt
+    )
+    on conflict (outbox_id) where outbox_id is not null do nothing
+    returning id into v_id;
+
+    if v_id is not null then
+      return v_id;
+    end if;
+    select * into strict v_existing
+      from public.agent_traces where outbox_id = p_outbox_id;
+  end if;
+
   if not (
     v_existing.trace_source is not distinct from 'runtime_accepted'
     and v_existing.organization_id is not distinct from p_organization_id

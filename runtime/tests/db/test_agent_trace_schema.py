@@ -145,7 +145,10 @@ def test_trace_constraints_reject_invalid_new_rows(admin, two_tenants, source, a
         )
 
 
-def test_annotations_preserve_shape_and_fix_requires_text(admin, two_tenants):
+@pytest.mark.parametrize("correction", (None, "", "   ", "\t", "\n", " \t\n "))
+def test_annotations_preserve_shape_and_fix_requires_text(
+    admin, two_tenants, correction
+):
     columns = [row[0] for row in admin.execute(
         """select attname from pg_attribute
             where attrelid='public.agent_trace_annotations'::regclass
@@ -172,8 +175,8 @@ def test_annotations_preserve_shape_and_fix_requires_text(admin, two_tenants):
                 admin.execute(
                     """insert into public.agent_trace_annotations
                          (organization_id,agent_id,trace_id,rating,correction_text)
-                       values (%s,%s,%s,'fix','   ')""",
-                    (two_tenants.a.id, uuid.uuid4(), trace_id),
+                       values (%s,%s,%s,'fix',%s)""",
+                    (two_tenants.a.id, uuid.uuid4(), trace_id, correction),
                 )
 
 
@@ -203,11 +206,15 @@ def test_rls_and_grants_are_explicit_and_tenant_scoped(admin, dsn, two_tenants):
         assert admin.execute(
             "select has_table_privilege('authenticated',%s,'SELECT')", (f"public.{table}",)
         ).fetchone() == (True,)
-    assert admin.execute(
-        """select has_table_privilege('service_role','public.agent_traces','SELECT,INSERT'),
-                  has_table_privilege('service_role','public.agent_trace_annotations',
-                                      'SELECT,INSERT,UPDATE,DELETE')"""
-    ).fetchone() == (True, True)
+    for table, privileges in {
+        "agent_traces": ("SELECT", "INSERT"),
+        "agent_trace_annotations": ("SELECT", "INSERT", "UPDATE", "DELETE"),
+    }.items():
+        for privilege in privileges:
+            assert admin.execute(
+                "select has_table_privilege('service_role',%s,%s)",
+                (f"public.{table}", privilege),
+            ).fetchone() == (True,)
 
     own = admin.execute(
         "insert into public.agent_traces (organization_id) values (%s) returning id",
@@ -248,8 +255,14 @@ def test_record_rpc_is_idempotent_and_rejects_divergence(admin, dsn, two_tenants
     values = accepted_fixture(admin, two_tenants.a.id)
     with as_app_role(dsn, "worker_role", two_tenants.a.id) as worker:
         first = record(worker, values)
+        admin.execute(
+            """update public.conversations
+                  set processing_generation=4, last_processed_seq=8
+                where id=%s""",
+            (values["p_conversation_id"],),
+        )
         assert record(worker, values) == first
-        with pytest.raises(psycopg.errors.RaiseException):
+        with pytest.raises(psycopg.errors.RaiseException, match="retry diverged"):
             with worker.transaction():
                 record(worker, values | {"p_input": "different input"})
     assert admin.execute(
@@ -329,7 +342,7 @@ def test_archived_shape_and_rows_survive_forward_migration(admin, two_tenants):
         admin.execute(
             """insert into public.agent_trace_annotations
                  (id,organization_id,agent_id,trace_id,rating,correction_text)
-               values (%s,%s,%s,%s,'fix',null)""",
+               values (%s,%s,%s,%s,'fix',E'\\t\\n')""",
             (annotation_id, two_tenants.a.id, uuid.uuid4(), trace_id),
         )
         admin.execute(migration_body())
@@ -339,7 +352,7 @@ def test_archived_shape_and_rows_survive_forward_migration(admin, two_tenants):
         assert admin.execute(
             "select rating,correction_text from public.agent_trace_annotations where id=%s",
             (annotation_id,),
-        ).fetchone() == ("fix", None)
+        ).fetchone() == ("fix", "\t\n")
         assert admin.execute(
             """select convalidated from pg_constraint
                 where conrelid='public.agent_trace_annotations'::regclass
