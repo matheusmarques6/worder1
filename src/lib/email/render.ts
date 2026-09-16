@@ -1199,7 +1199,13 @@ export function resolveOrderBlocks(
       const isEnLocale = currency === 'USD' || currency === 'EUR'
       const imgCell = cfg.showImage
         ? `<td width="${imgW}" valign="middle" style="vertical-align:middle;padding:0 16px 0 0;width:${imgW}px;">${imgUrl
-            ? `<img src="${imgUrl}" alt="${title.replace(/"/g, '&quot;')}" width="${imgW}" height="${imgW}" style="display:block;width:${imgW}px;height:${imgW}px;object-fit:cover;border-radius:${imgR}px;border:0;" />`
+            // A miniatura é quadrada, e o quadrado vem da CDN. Os
+            // atributos `width`/`height` sozinhos mandam no Outlook, que
+            // ignora `object-fit`: uma foto alta de frasco era espremida
+            // para caber em 80×80 e saía deformada. Pedindo o recorte na
+            // origem, o arquivo já chega quadrado e os atributos passam
+            // a descrever a verdade.
+            ? `<img src="${fitProductImage(imgUrl, { width: imgW, height: imgW, crop: true })}" alt="${title.replace(/"/g, '&quot;')}" width="${imgW}" height="${imgW}" style="display:block;width:${imgW}px;height:${imgW}px;object-fit:cover;border-radius:${imgR}px;border:0;" />`
             : `<div style="width:${imgW}px;height:${imgW}px;background:#F3F4F6;border-radius:${imgR}px;"></div>`
           }</td>`
         : ''
