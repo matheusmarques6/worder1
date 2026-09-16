@@ -10,7 +10,12 @@ import { useDeals } from '@/hooks/useDeals'
 vi.mock('next/navigation', () => ({ usePathname: () => '/dashboard', useRouter: () => ({ push: vi.fn() }) }))
 vi.mock('next/link', () => ({ default: ({ children }: { children: React.ReactNode }) => <>{children}</> }))
 vi.mock('next/image', () => ({ default: () => null }))
-vi.mock('framer-motion', () => ({ AnimatePresence: ({ children }: { children?: React.ReactNode }) => <>{children}</>, motion: new Proxy({}, { get: (_, name) => ({ children, whileHover, whileTap, ...props }: React.HTMLAttributes<HTMLElement> & { whileHover?: unknown, whileTap?: unknown }) => React.createElement(name === 'button' ? 'button' : 'div', props, children) }) }))
+vi.mock('framer-motion', () => ({
+  AnimatePresence: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+  motion: Object.fromEntries(['div', 'button'].map((name) => [name,
+    ({ children, whileHover, whileTap, ...props }: React.HTMLAttributes<HTMLElement> & { whileHover?: unknown, whileTap?: unknown }) => React.createElement(name, props, children),
+  ])),
+}))
 vi.mock('@/components/ui/Toast', () => ({ ToastProvider: ({ children }: { children: React.ReactNode }) => <>{children}</> }))
 vi.mock('@/components/ui/ConfirmDialog', () => ({ ConfirmProvider: ({ children }: { children: React.ReactNode }) => <>{children}</> }))
 vi.mock('@/components/store/AddStoreModal', () => ({ AddStoreModal: () => null }))
@@ -69,6 +74,7 @@ afterEach(async () => {
   container.remove()
   vi.unstubAllGlobals()
   vi.clearAllMocks()
+  vi.restoreAllMocks()
 })
 
 it('keeps store B when the store A loader completes after a user switch', async () => {
@@ -87,9 +93,18 @@ it('keeps store B when the store A loader completes after a user switch', async 
   await vi.waitFor(() => expect(useStoreStore.getState().currentStore?.id).toBe('store-b'))
 })
 
-it('preserves edits on equivalent flow input, keeps one listener, and reloads once for a new automation', async () => {
-  const addListener = vi.spyOn(window, 'addEventListener')
-  const removeListener = vi.spyOn(window, 'removeEventListener')
+it('preserves edits on equivalent flow input, owns two keyboard listeners, and reloads once for a new automation', async () => {
+  const activeKeydownListeners = new Set<EventListenerOrEventListenerObject>()
+  const addEventListener = window.addEventListener.bind(window)
+  const removeEventListener = window.removeEventListener.bind(window)
+  vi.spyOn(window, 'addEventListener').mockImplementation((type, listener, options) => {
+    if (type === 'keydown') activeKeydownListeners.add(listener)
+    addEventListener(type, listener, options)
+  })
+  vi.spyOn(window, 'removeEventListener').mockImplementation((type, listener, options) => {
+    if (type === 'keydown') activeKeydownListeners.delete(listener)
+    removeEventListener(type, listener, options)
+  })
   const first = [{ id: 'node-a', type: 'trigger_order', position: { x: 0, y: 0 }, data: {} }]
   const replacement = [{ ...first[0], data: {} }]
   const second = [{ id: 'node-b', type: 'trigger_order', position: { x: 0, y: 0 }, data: {} }]
@@ -97,10 +112,11 @@ it('preserves edits on equivalent flow input, keeps one listener, and reloads on
 
   await act(async () => { root.render(<StrictMode><FlowBuilder automationId="flow-a" {...props} /></StrictMode>) })
   await vi.waitFor(() => expect(useFlowStore.getState().automationId).toBe('flow-a'))
+  expect(activeKeydownListeners.size).toBe(2)
   await act(async () => { useFlowStore.getState().updateNode('node-a', { label: 'edited' }) })
   await act(async () => { root.render(<StrictMode><FlowBuilder automationId="flow-a" {...props} initialNodes={replacement} initialEdges={[]} /></StrictMode>) })
   expect(useFlowStore.getState().nodes[0].data.label).toBe('edited')
-  expect(addListener.mock.calls.filter(([name]) => name === 'keydown')).toHaveLength(4)
+  expect(activeKeydownListeners.size).toBe(2)
 
   await act(async () => { useFlowStore.setState({ showTestModal: true, showHistoryPanel: true, showAnalytics: true, analyticsData: { old: { sent: 1, opened: 1, clicked: 1, revenue: 1 } } }) })
   await act(async () => { root.render(<StrictMode><FlowBuilder automationId="flow-b" {...props} initialNodes={second} initialEdges={[]} /></StrictMode>) })
@@ -111,12 +127,12 @@ it('preserves edits on equivalent flow input, keeps one listener, and reloads on
   expect(container.textContent).toContain('properties:flow-b')
   expect(container.textContent).toContain('execution:flow-b')
   expect(container.textContent).toContain('history:flow-b')
-  expect(addListener.mock.calls.filter(([name]) => name === 'keydown')).toHaveLength(4)
+  expect(activeKeydownListeners.size).toBe(2)
   await act(async () => root.unmount())
-  expect(removeListener.mock.calls.filter(([name]) => name === 'keydown').length).toBeGreaterThan(0)
+  expect(activeKeydownListeners.size).toBe(0)
 })
 
-it('rejects the old store metrics response after a store switch', async () => {
+it('ignores stale A1 metrics errors while A2 loads and after A2 succeeds', async () => {
   const requests: Array<{ url: string, result: ReturnType<typeof deferred<any>> }> = []
   vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
     const result = deferred<any>()
@@ -137,6 +153,29 @@ it('rejects the old store metrics response after a store switch', async () => {
   await act(async () => { requests[2].result.resolve(response({ success: true, data: { rfm: { totalCustomers: 3, segments: {} }, cohort: { cohorts: [], summary: {} }, calculatedAt: 'a2' } })) })
 
   await vi.waitFor(() => expect(container.textContent).toContain('customers:3'))
+  expect(container.textContent).not.toContain('Erro de conexão')
+})
+
+it('keeps A2 metrics when stale A1 succeeds after switching A to B to A', async () => {
+  const requests: Array<ReturnType<typeof deferred<any>>> = []
+  vi.stubGlobal('fetch', vi.fn(() => {
+    const result = deferred<any>()
+    requests.push(result)
+    return result.promise
+  }))
+
+  await act(async () => { root.render(<AdvancedMetricsSection storeId="store-a" />) })
+  await act(async () => { (container.querySelector('button') as HTMLButtonElement).click() })
+  await vi.waitFor(() => expect(requests).toHaveLength(1))
+  await act(async () => { root.render(<AdvancedMetricsSection storeId="store-b" />) })
+  await vi.waitFor(() => expect(requests).toHaveLength(2))
+  await act(async () => { root.render(<AdvancedMetricsSection storeId="store-a" />) })
+  await vi.waitFor(() => expect(requests).toHaveLength(3))
+  await act(async () => { requests[2].resolve(response({ success: true, data: { rfm: { totalCustomers: 3, segments: {} }, cohort: { cohorts: [], summary: {} }, calculatedAt: 'a2' } })) })
+  await vi.waitFor(() => expect(container.textContent).toContain('customers:3'))
+
+  await act(async () => { requests[0].resolve(response({ success: true, data: { rfm: { totalCustomers: 1, segments: {} }, cohort: { cohorts: [], summary: {} }, calculatedAt: 'a1' } })) })
+  expect(container.textContent).toContain('customers:3')
   expect(container.textContent).not.toContain('customers:1')
 })
 
@@ -186,6 +225,13 @@ it('renders enriched contact deals whether pipelines or deals arrive first', asy
   await act(async () => { root.render(<ContactDrawer key="deals-first" {...props} pipelines={[]} />) })
   await act(async () => { dealsFirst.resolve(response({ deals: [{ id: 'deal-2', title: 'Deal primeiro', value: 10, pipeline_id: 'pipeline-1', stage_id: 'stage-1' }] })) })
   await vi.waitFor(() => expect(container.textContent).toContain('Deal primeiro'))
-  await act(async () => { root.render(<ContactDrawer {...props} pipelines={[pipeline] as any} />) })
-  await vi.waitFor(() => expect(container.textContent).toContain('Pipeline real'))
+  const dealCard = [...container.querySelectorAll('p')].find((element) => element.textContent === 'Deal primeiro')?.parentElement?.parentElement
+  expect(dealCard).toBeTruthy()
+  await act(async () => { root.render(<ContactDrawer key="deals-first" {...props} pipelines={[pipeline] as any} />) })
+  await vi.waitFor(() => {
+    expect(container.contains(dealCard!)).toBe(true)
+    expect(dealCard?.textContent).toContain('Deal primeiro')
+    expect(dealCard?.textContent).toContain('Pipeline real')
+    expect(dealCard?.textContent).toContain('Qualificado')
+  })
 })
