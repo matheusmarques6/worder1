@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import {
   Users,
@@ -86,7 +86,7 @@ export function CohortMatrix({ storeId }: CohortMatrixProps) {
   const [maxMonths, setMaxMonths] = useState(12)
 
   // Fetch cohort data
-  const fetchCohortData = async () => {
+  const fetchCohortData = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
@@ -108,7 +108,7 @@ export function CohortMatrix({ storeId }: CohortMatrixProps) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [storeId, maxMonths])
 
   // Calculate cohort
   const calculateCohort = async () => {
@@ -141,7 +141,7 @@ export function CohortMatrix({ storeId }: CohortMatrixProps) {
     if (storeId) {
       fetchCohortData()
     }
-  }, [storeId, maxMonths])
+  }, [storeId, fetchCohortData])
 
   // Prepare retention curve data
   const retentionCurveData = matrixData?.periods.map(period => {

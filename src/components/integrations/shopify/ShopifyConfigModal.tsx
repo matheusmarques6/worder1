@@ -9,7 +9,7 @@
 // Automações de deals são configuradas em CRM > Automações
 // =============================================
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   X,
@@ -75,6 +75,7 @@ export function ShopifyConfigModal({
   const [copied, setCopied] = useState(false)
   const [saving, setSaving] = useState(false)
   const [checkingHealth, setCheckingHealth] = useState(false)
+  const storeId = store?.id
 
   // Webhook URL
   const webhookUrl = store
@@ -85,19 +86,12 @@ export function ShopifyConfigModal({
   // EFFECTS
   // =============================================
 
-  useEffect(() => {
-    if (isOpen && store) {
-      // Load store settings
-      loadSettings()
-    }
-  }, [isOpen, store])
-
-  const loadSettings = async () => {
-    if (!store) return
+  const loadSettings = useCallback(async () => {
+    if (!storeId) return
 
     try {
       const res = await fetch(
-        `/api/integrations/shopify/${store.id}/settings?organizationId=${organizationId}`
+        `/api/integrations/shopify/${storeId}/settings?organizationId=${organizationId}`
       )
       const data = await res.json()
       if (data.tags) {
@@ -106,7 +100,14 @@ export function ShopifyConfigModal({
     } catch (error) {
       console.error('Error loading settings:', error)
     }
-  }
+  }, [storeId, organizationId])
+
+  useEffect(() => {
+    if (isOpen && storeId) {
+      // Load store settings
+      loadSettings()
+    }
+  }, [isOpen, storeId, loadSettings])
 
   // =============================================
   // HANDLERS

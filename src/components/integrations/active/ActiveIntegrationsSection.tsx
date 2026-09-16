@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -81,11 +81,7 @@ export default function ActiveIntegrationsSection({
   const [configModalOpen, setConfigModalOpen] = useState(false)
   const [selectedIntegration, setSelectedIntegration] = useState<'shopify' | 'whatsapp' | null>(null)
 
-  useEffect(() => {
-    fetchActiveIntegrations()
-  }, [organizationId, storeId]) // ✅ CORRIGIDO: Adicionar storeId como dependência
-
-  const fetchActiveIntegrations = async () => {
+  const fetchActiveIntegrations = useCallback(async () => {
     setLoading(true)
     try {
       // Buscar Shopify - ✅ CORRIGIDO: Usar storeId se disponível
@@ -123,7 +119,11 @@ export default function ActiveIntegrationsSection({
     } finally {
       setLoading(false)
     }
-  }
+  }, [organizationId, storeId])
+
+  useEffect(() => {
+    fetchActiveIntegrations()
+  }, [fetchActiveIntegrations]) // ✅ CORRIGIDO: Adicionar storeId como dependência
 
   const handleOpenConfig = (type: 'shopify' | 'whatsapp') => {
     setSelectedIntegration(type)
