@@ -575,6 +575,20 @@ describe('cloud-runner — bloqueio do send guard e terminal (sem retry)', () =>
     expect(r.failure).toBeUndefined()
   })
 
+  it('writer legado omite trace_source e preserva o default do banco', async () => {
+    mockSendHumanizedReply.mockResolvedValue({ sent: true, messageId: 'wamid.1' })
+
+    await maybeRunAgentForCloudConversation({
+      account,
+      conversation: conv(),
+      text: 'qual o preco do produto?',
+    })
+
+    const insert = calls.find((call) => call.table === 'agent_traces' && call.method === 'insert')
+    expect(insert).toBeDefined()
+    expect(insert!.args[0]).not.toHaveProperty('trace_source')
+  })
+
   it('flip para runtime durante o LLM impede o envio legado', async () => {
     let engineStarted!: () => void
     let finishEngine!: (value: { response: string }) => void
