@@ -50,7 +50,10 @@ export function PropertiesPanel({ organizationId, automationId, storeId }: { org
   const fetchPipelines = useCallback(async () => {
     const requestId = ++pipelinesRequestRef.current;
     setPipelines([]);
-    if (!organizationId) return;
+    if (!organizationId) {
+      setLoadingPipelines(false);
+      return;
+    }
     setLoadingPipelines(true);
     try {
       const res = await fetch(`/api/deals?type=pipelines&organizationId=${organizationId}`);
@@ -2145,7 +2148,11 @@ function OrderTriggerConfig({ config, onUpdate, organizationId, label }: OrderTr
   const fetchStores = useCallback(async () => {
     const requestId = ++storesRequestRef.current;
     setStores([]);
-    if (!organizationId) return;
+    if (!organizationId) {
+      setLoadingStores(false);
+      setStoreError(false);
+      return;
+    }
     setLoadingStores(true);
     setStoreError(false);
     try {
@@ -2277,7 +2284,10 @@ function NotifyActionConfig({ config, onUpdate, organizationId }: NotifyActionCo
   const fetchUsers = useCallback(async () => {
     const requestId = ++usersRequestRef.current;
     setUsers([]);
-    if (!organizationId) return;
+    if (!organizationId) {
+      setLoadingUsers(false);
+      return;
+    }
     setLoadingUsers(true);
     try {
       // /api/organization/members nunca existiu — a lista vinha sempre

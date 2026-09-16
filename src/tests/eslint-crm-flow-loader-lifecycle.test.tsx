@@ -132,6 +132,36 @@ it('keeps organization B pipelines when organization A resolves last', async () 
   await vi.waitFor(() => expect(container.textContent).not.toContain('Pipeline A'))
 })
 
+it('clears pipeline loading when organization becomes unavailable', async () => {
+  const pending = deferred<any>()
+  vi.stubGlobal('fetch', vi.fn(() => pending.promise))
+  const node = { id: 'pipeline', type: 'trigger_deal_stage', data: { nodeType: 'trigger_deal_stage', category: 'trigger', config: {}, label: 'Pipeline' } }
+  await act(async () => { useFlowStore.setState({ nodes: [node] as any, selectedNodeId: 'pipeline', showPropertiesPanel: true }) })
+  await act(async () => { root.render(<PropertiesPanel organizationId="org-a" />) })
+  await vi.waitFor(() => expect((container.querySelector('select') as HTMLSelectElement).disabled).toBe(true))
+  await act(async () => { root.render(<PropertiesPanel />) })
+  await vi.waitFor(() => expect((container.querySelector('select') as HTMLSelectElement).disabled).toBe(false))
+})
+
+it('keeps organization B stores when A resolves last', async () => {
+  const requests: Array<ReturnType<typeof deferred<any>>> = []
+  vi.stubGlobal('fetch', vi.fn(() => {
+    const result = deferred<any>()
+    requests.push(result)
+    return result.promise
+  }))
+  const node = { id: 'stores', type: 'trigger_order', data: { nodeType: 'trigger_order', category: 'trigger', config: {}, label: 'Order' } }
+  await act(async () => { useFlowStore.setState({ nodes: [node] as any, selectedNodeId: 'stores', showPropertiesPanel: true }) })
+  await act(async () => { root.render(<PropertiesPanel organizationId="org-a" />) })
+  await vi.waitFor(() => expect(requests).toHaveLength(1))
+  await act(async () => { root.render(<PropertiesPanel organizationId="org-b" />) })
+  await vi.waitFor(() => expect(requests).toHaveLength(2))
+  await act(async () => { requests[1].resolve(response({ stores: [{ id: 'b', name: 'Store B' }] })) })
+  await vi.waitFor(() => expect(container.textContent).toContain('Store B'))
+  await act(async () => { requests[0].resolve(response({ stores: [{ id: 'a', name: 'Store A' }] })) })
+  await vi.waitFor(() => expect(container.textContent).not.toContain('Store A'))
+})
+
 it('keeps organization A users when organization B resolves last', async () => {
   const requests: Array<ReturnType<typeof deferred<any>>> = []
   vi.stubGlobal('fetch', vi.fn(() => {
