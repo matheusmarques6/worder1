@@ -38,8 +38,9 @@ const response = (data: unknown) => ({ ok: true, json: async () => data })
 const job = (id: string, status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' = 'running') => ({ id, status, total_customers: 1, processed_count: 0, created_count: 0, updated_count: 0, skipped_count: 0, error_count: 0, deals_created_count: 0, current_page: 0, last_error: null, started_at: null, completed_at: null })
 function deferred<T>() {
   let resolve!: (value: T) => void
-  const promise = new Promise<T>((done) => { resolve = done })
-  return { promise, resolve }
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((done, fail) => { resolve = done; reject = fail })
+  return { promise, resolve, reject }
 }
 
 beforeEach(async () => {
@@ -140,6 +141,70 @@ it('does not let DELETE for job A clear job B polling', async () => {
   expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('jobId=job-b'))).toHaveLength(1)
 })
 
+it('calls onSuccess once and stops a completed current job', async () => {
+  const onSuccess = vi.fn()
+  const fetchMock = vi.fn((input: RequestInfo | URL) => {
+    const url = String(input)
+    if (url.includes('import-customers')) return Promise.resolve(response({ count: 1, existingInCRM: 0, availableTags: [] }))
+    if (url.includes('storeId=store-a')) return Promise.resolve(response({ jobs: [job('job-a')] }))
+    return Promise.resolve(response({ job: job('job-a', 'completed') }))
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  await act(async () => { root.render(<ImportTab store={{ id: 'store-a', shop_name: null, shop_domain: 'a.test' }} organizationId="org-1" pipelines={[]} onSuccess={onSuccess} />) }); await act(async () => { await vi.runAllTicks(); await vi.advanceTimersByTimeAsync(2000); await vi.advanceTimersByTimeAsync(2000) })
+  expect(onSuccess).toHaveBeenCalledTimes(1)
+  expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('jobId=job-a'))).toHaveLength(1)
+})
+
+it('stops ticks after the current cancel succeeds', async () => {
+  const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input)
+    if (init?.method === 'DELETE') return Promise.resolve(response({}))
+    if (url.includes('import-customers')) return Promise.resolve(response({ count: 1, existingInCRM: 0, availableTags: [] }))
+    if (url.includes('storeId=store-a')) return Promise.resolve(response({ jobs: [job('job-a')] }))
+    return Promise.resolve(response({ job: job('job-a') }))
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  await act(async () => { root.render(<ImportTab store={{ id: 'store-a', shop_name: null, shop_domain: 'a.test' }} organizationId="org-1" pipelines={[]} />) }); await act(async () => { await vi.runAllTicks() })
+  const cancel = [...container.querySelectorAll('button')].find((button) => button.title === 'Cancelar importação')!
+  await act(async () => { cancel.dispatchEvent(new MouseEvent('click', { bubbles: true })); await vi.runAllTicks(); await vi.advanceTimersByTimeAsync(2000) })
+  expect(fetchMock.mock.calls.filter(([url, init]) => String(url).includes('jobId=job-a') && !init?.method)).toHaveLength(0)
+})
+
+it('restarts current job polling when its DELETE rejects', async () => {
+  const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input)
+    if (init?.method === 'DELETE') return Promise.reject(new Error('delete failed'))
+    if (url.includes('import-customers')) return Promise.resolve(response({ count: 1, existingInCRM: 0, availableTags: [] }))
+    if (url.includes('storeId=store-a')) return Promise.resolve(response({ jobs: [job('job-a')] }))
+    return Promise.resolve(response({ job: job('job-a') }))
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  await act(async () => { root.render(<ImportTab store={{ id: 'store-a', shop_name: null, shop_domain: 'a.test' }} organizationId="org-1" pipelines={[]} />) }); await act(async () => { await vi.runAllTicks() })
+  const cancel = [...container.querySelectorAll('button')].find((button) => button.title === 'Cancelar importação')!
+  await act(async () => { cancel.dispatchEvent(new MouseEvent('click', { bubbles: true })); await vi.runAllTicks(); await vi.advanceTimersByTimeAsync(2000) })
+  expect(fetchMock.mock.calls.filter(([url, init]) => String(url).includes('jobId=job-a') && !init?.method)).toHaveLength(1)
+})
+
+it('keeps pending store tags valid while a job starts and cancels', async () => {
+  const tags = deferred<ReturnType<typeof response>>()
+  const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input)
+    if (init?.method === 'POST') return Promise.resolve(response({ job: job('job-a') }))
+    if (init?.method === 'DELETE') return Promise.resolve(response({}))
+    if (url.includes('includeTags=true')) return tags.promise
+    if (url.includes('import-customers')) return Promise.resolve(response({ count: 1, existingInCRM: 0 }))
+    if (url.includes('import-jobs')) return Promise.resolve(response({ jobs: [] }))
+    return Promise.resolve(response({ job: job('job-a') }))
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  await act(async () => { root.render(<ImportTab store={{ id: 'store-a', shop_name: null, shop_domain: 'a.test' }} organizationId="org-1" pipelines={[]} />) }); await act(async () => { await vi.runAllTicks() })
+  const start = [...container.querySelectorAll('button')].find((button) => button.textContent?.includes('Iniciar Importação'))!
+  await act(async () => { start.dispatchEvent(new MouseEvent('click', { bubbles: true })); await vi.runAllTicks() })
+  const cancel = [...container.querySelectorAll('button')].find((button) => button.title === 'Cancelar importação')!
+  await act(async () => { cancel.dispatchEvent(new MouseEvent('click', { bubbles: true })); await vi.runAllTicks(); tags.resolve(response({ availableTags: [{ tag: 'vip', count: 1 }] })); await vi.runAllTicks() })
+  expect(container.textContent).toContain('Filtrar por Tags da Shopify')
+})
+
 it('fetches the Inbox list once and keeps one conversation poll', async () => {
   await act(async () => { root.render(<InboxContent />) }); expect(external.fetchConversations).toHaveBeenCalledTimes(1)
   await act(async () => { await vi.advanceTimersByTimeAsync(5000) }); expect(external.refreshConversations).toHaveBeenCalledTimes(1)
@@ -180,7 +245,9 @@ it('keeps one notifications timer and channel while loading the next offset', as
   expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('limit=1'))).toHaveLength(1)
   await act(async () => { await external.channel.on.mock.calls[0][2]() })
   expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('limit=20&offset=0'))).toHaveLength(3)
-  expect(setIntervalSpy).toHaveBeenCalledTimes(1); expect(external.channel.on).toHaveBeenCalledTimes(1)
+  expect(setIntervalSpy).toHaveBeenCalledTimes(1); expect(external.channel.on).toHaveBeenCalledTimes(1); expect(external.channel.subscribe).toHaveBeenCalledTimes(1)
   await act(async () => root.unmount())
-  expect(external.removeChannel).toHaveBeenCalledWith(external.channel)
+  expect(external.removeChannel).toHaveBeenCalledTimes(1); expect(external.removeChannel).toHaveBeenCalledWith(external.channel)
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+  expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('limit=1'))).toHaveLength(1)
 })
