@@ -163,7 +163,13 @@ class CustomHttpTool:
                 self._row.auth_header_value, base_secret=self._base_secret
             )
             if self._on_known_secrets is not None:
-                self._on_known_secrets(tuple(headers.values()))
+                value = headers[self._row.auth_header_name]
+                secrets = (value,)
+                parts = value.split()
+                if (self._row.auth_header_name.lower() == "authorization"
+                        and len(parts) == 2 and parts[0].lower() == "bearer"):
+                    secrets += (parts[1],)
+                self._on_known_secrets(secrets)
 
         timeout = httpx.Timeout(self._row.timeout_ms / 1000)
         try:

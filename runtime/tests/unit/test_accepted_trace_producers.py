@@ -260,7 +260,14 @@ async def test_custom_auth_is_invocation_local_and_cleared(producer_env, failure
     assert secret not in repr(env.metered)
 
 
-async def test_discovered_credential_is_redacted_from_later_tool_call(producer_env):
+@pytest.mark.parametrize(("header_name", "header_value"), [
+    ("Authorization", "credential-A"),
+    ("Authorization", "Bearer credential-A"),
+    ("aUtHoRiZaTiOn", " \tbEaReR \t credential-A \t "),
+], ids=["raw", "bearer", "bearer-whitespace"])
+async def test_discovered_credential_is_redacted_from_later_tool_call(
+    producer_env, header_name, header_value,
+):
     import httpx
 
     from agents_runtime.tools import base
@@ -271,7 +278,7 @@ async def test_discovered_credential_is_redacted_from_later_tool_call(producer_e
     secret = "credential-A"
     rows = (
         CustomToolRow("a", "A", "Read", "First", "https://localhost/a", "GET",
-                      "Authorization", secret, (), 1000),
+                      header_name, header_value, (), 1000),
         CustomToolRow("b", "B", "Read", "Next", "https://localhost/b", "GET",
                       "Authorization", None, ({"name": "query", "type": "string"},), 1000),
     )
@@ -284,10 +291,10 @@ async def test_discovered_credential_is_redacted_from_later_tool_call(producer_e
 
     def response(request):
         if request.url.path == "/a":
-            assert request.headers["authorization"] == secret
-            return httpx.Response(200, json={"value": secret})
+            assert request.headers["authorization"] == header_value
+            return httpx.Response(200, json={"value": secret, "header_echo": header_value})
         received.append(request.url.params["query"])
-        return httpx.Response(200, json={"answer": "safe"})
+        return httpx.Response(200, json={"answer": request.url.params["query"]})
 
     def tool_factory(row, *, base_secret, on_known_secrets):
         return CustomHttpTool(row, base_secret=base_secret, on_known_secrets=on_known_secrets,
@@ -308,7 +315,9 @@ async def test_discovered_credential_is_redacted_from_later_tool_call(producer_e
                for message in request.messages if message.role == "tool")
     assert len(draft.trace.tool_calls) == 2
     assert draft.trace.tool_calls[0]["result"]["body"]["value"] == "[REDACTED]"
+    assert draft.trace.tool_calls[0]["result"]["body"]["header_echo"] == "[REDACTED]"
     assert draft.trace.tool_calls[1]["arguments"]["query"] == "[REDACTED]"
+    assert draft.trace.tool_calls[1]["result"]["body"]["answer"] == "[REDACTED]"
     assert secret not in repr(draft.trace)
 
 
