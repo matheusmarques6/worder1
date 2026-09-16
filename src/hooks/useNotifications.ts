@@ -20,7 +20,6 @@ export function useNotifications(options: UseNotificationsOptions) {
   const [total, setTotal] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [offset, setOffset] = useState(0)
   const [preferences, setPreferences] = useState<NotificationPreferences | null>(null)
   
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null)
@@ -37,8 +36,8 @@ export function useNotifications(options: UseNotificationsOptions) {
       const response = await fetch(`/api/notifications?organization_id=${organizationId}&user_id=${userId}&limit=${limit}&offset=${currentOffset}`)
       if (!response.ok) throw new Error('Erro ao buscar notificações')
       const data: NotificationsResponse = await response.json()
-      if (reset) { setNotifications(data.notifications); offsetRef.current = limit; setOffset(limit) }
-      else { setNotifications(prev => [...prev, ...data.notifications]); offsetRef.current += limit; setOffset(offsetRef.current) }
+      if (reset) { setNotifications(data.notifications); offsetRef.current = limit }
+      else { setNotifications(prev => [...prev, ...data.notifications]); offsetRef.current += limit }
       setUnreadCount(data.unread_count)
       setTotal(data.total)
     } catch (err) {

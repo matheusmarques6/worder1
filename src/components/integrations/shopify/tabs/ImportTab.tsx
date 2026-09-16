@@ -58,6 +58,11 @@ interface ImportJob {
   estimatedTimeRemaining?: string
 }
 
+interface PollingHandle {
+  jobId: string
+  interval: NodeJS.Timeout
+}
+
 interface ImportTabProps {
   store: { id: string; shop_name: string | null; shop_domain: string }
   organizationId: string
@@ -83,10 +88,20 @@ export function ImportTab({
   
   // Job ativo
   const [activeJob, setActiveJob] = useState<ImportJob | null>(null)
-  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
-  const loadInitialDataRef = useRef<() => Promise<void>>()
+  const pollingIntervalRef = useRef<PollingHandle | null>(null)
+  const generationRef = useRef(0)
+  const nextGenerationRef = useRef(0)
+  const loadInitialDataRef = useRef<(generation: number) => Promise<void>>()
   const onSuccessRef = useRef(onSuccess)
   onSuccessRef.current = onSuccess
+
+  const isCurrent = (generation: number) => generationRef.current === generation
+  const clearPolling = (jobId?: string, interval?: NodeJS.Timeout) => {
+    const current = pollingIntervalRef.current
+    if (!current || (jobId && current.jobId !== jobId) || (interval && current.interval !== interval)) return
+    clearInterval(current.interval)
+    pollingIntervalRef.current = null
+  }
   
   // Filtros
   const [availableTags, setAvailableTags] = useState<{ tag: string; count: number }[]>([])
@@ -105,22 +120,23 @@ export function ImportTab({
   // =============================================
   
   useEffect(() => {
-    loadInitialDataRef.current?.()
+    const generation = ++nextGenerationRef.current
+    generationRef.current = generation
+    loadInitialDataRef.current?.(generation)
     return () => {
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current)
-        pollingIntervalRef.current = null
-      }
+      generationRef.current = -1
+      clearPolling()
     }
   }, [store.id])
 
-  const loadInitialData = async () => {
+  const loadInitialData = async (generation: number) => {
     setLoading(true)
     try {
       // Carregar contagem de clientes
       const res = await fetch(`/api/shopify/import-customers?storeId=${store.id}`)
       if (res.ok) {
         const data = await res.json()
+        if (!isCurrent(generation)) return
         setCustomerCount(data.count || 0)
         setExistingCount(data.existingInCRM || 0)
       }
@@ -129,38 +145,39 @@ export function ImportTab({
       const jobsRes = await fetch(`/api/shopify/import-jobs?storeId=${store.id}`)
       if (jobsRes.ok) {
         const jobsData = await jobsRes.json()
+        if (!isCurrent(generation)) return
         const runningJob = jobsData.jobs?.find((j: ImportJob) => 
           ['pending', 'running', 'paused'].includes(j.status)
         )
         if (runningJob) {
           setActiveJob(runningJob)
-          startPolling(runningJob.id)
+          startPolling(runningJob.id, generation)
         }
       }
     } catch (err) {
       console.error('Error loading data:', err)
-      setError('Erro ao carregar dados')
+      if (isCurrent(generation)) setError('Erro ao carregar dados')
     } finally {
-      setLoading(false)
+      if (isCurrent(generation)) setLoading(false)
     }
     
-    loadTags()
+    if (isCurrent(generation)) loadTags(generation)
   }
 
-  const loadTags = async () => {
+  const loadTags = async (generation: number) => {
     setLoadingTags(true)
     try {
       const res = await fetch(`/api/shopify/import-customers?storeId=${store.id}&includeTags=true`)
       if (res.ok) {
         const data = await res.json()
-        if (data.availableTags) {
+        if (isCurrent(generation) && data.availableTags) {
           setAvailableTags(data.availableTags)
         }
       }
     } catch (err) {
       console.error('Error loading tags:', err)
     } finally {
-      setLoadingTags(false)
+      if (isCurrent(generation)) setLoadingTags(false)
     }
   }
 
@@ -170,20 +187,21 @@ export function ImportTab({
   // Polling para atualizar status do job
   // =============================================
 
-  const startPolling = (jobId: string) => {
-    if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current)
+  const startPolling = (jobId: string, generation: number) => {
+    if (!isCurrent(generation)) return
+    clearPolling()
     
     const interval = setInterval(async () => {
       try {
         const res = await fetch(`/api/shopify/import-jobs?jobId=${jobId}`)
         if (res.ok) {
           const data = await res.json()
+          if (!isCurrent(generation) || pollingIntervalRef.current?.jobId !== jobId || pollingIntervalRef.current.interval !== interval) return
           setActiveJob(data.job)
           
           // Se job completou ou falhou, parar polling
           if (['completed', 'failed', 'cancelled'].includes(data.job.status)) {
-            clearInterval(interval)
-            if (pollingIntervalRef.current === interval) pollingIntervalRef.current = null
+            clearPolling(jobId, interval)
             if (data.job.status === 'completed') {
               onSuccessRef.current?.()
             }
@@ -194,7 +212,7 @@ export function ImportTab({
       }
     }, 2000) // Poll a cada 2 segundos
     
-    pollingIntervalRef.current = interval
+    pollingIntervalRef.current = { jobId, interval }
   }
 
   // =============================================
@@ -202,6 +220,9 @@ export function ImportTab({
   // =============================================
   
   const handleStartImport = async () => {
+    const generation = ++nextGenerationRef.current
+    generationRef.current = generation
+    clearPolling()
     setError('')
     
     try {
@@ -218,8 +239,10 @@ export function ImportTab({
           filterTags: selectedTags.length > 0 ? selectedTags : null,
         }),
       })
+      if (!isCurrent(generation)) return
       
       const data = await res.json()
+      if (!isCurrent(generation)) return
       
       if (res.ok && data.job) {
         setActiveJob({
@@ -236,12 +259,12 @@ export function ImportTab({
           completed_at: null,
           progress: 0,
         })
-        startPolling(data.job.id)
+        startPolling(data.job.id, generation)
       } else {
         setError(data.error || 'Erro ao iniciar importação')
       }
     } catch (err: any) {
-      setError(err.message || 'Erro ao iniciar importação')
+      if (isCurrent(generation)) setError(err.message || 'Erro ao iniciar importação')
     }
   }
 
@@ -251,17 +274,16 @@ export function ImportTab({
 
   const handleCancelImport = async () => {
     if (!activeJob) return
+    const jobId = activeJob.id
+    const generation = ++nextGenerationRef.current
+    generationRef.current = generation
+    clearPolling(jobId)
     
     try {
-      await fetch(`/api/shopify/import-jobs?jobId=${activeJob.id}`, {
+      await fetch(`/api/shopify/import-jobs?jobId=${jobId}`, {
         method: 'DELETE',
       })
-      
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current)
-        pollingIntervalRef.current = null
-      }
-      
+      if (!isCurrent(generation)) return
       setActiveJob(null)
     } catch (err) {
       console.error('Error cancelling job:', err)
@@ -469,7 +491,12 @@ export function ImportTab({
             </div>
           </div>
           <button
-            onClick={loadInitialData}
+            onClick={() => {
+              const generation = ++nextGenerationRef.current
+              generationRef.current = generation
+              clearPolling()
+              loadInitialData(generation)
+            }}
             className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-white transition-colors"
           >
             <RefreshCw className="w-5 h-5" />
