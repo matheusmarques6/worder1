@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 
-import React, { act } from 'react'
+import React, { act, StrictMode, useEffect, useState } from 'react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createRoot, type Root } from 'react-dom/client'
 import { useAuthStore, useStoreStore, useUIStore } from '@/stores'
 import { useFlowStore } from '@/stores/flowStore'
+import { useDeals } from '@/hooks/useDeals'
 
 vi.mock('next/navigation', () => ({ usePathname: () => '/dashboard', useRouter: () => ({ push: vi.fn() }) }))
 vi.mock('next/link', () => ({ default: ({ children }: { children: React.ReactNode }) => <>{children}</> }))
@@ -23,6 +24,7 @@ vi.mock('@/components/flow-builder/panels/HistoryPanel', () => ({ HistoryPanel: 
 vi.mock('@xyflow/react', () => ({ ReactFlowProvider: ({ children }: { children: React.ReactNode }) => <>{children}</> }))
 vi.mock('@/components/shopify/RFMSection', () => ({ RFMSection: ({ data }: { data: { totalCustomers: number } }) => <div>customers:{data.totalCustomers}</div> }))
 vi.mock('@/components/shopify/CohortSection', () => ({ CohortSection: () => null }))
+vi.mock('@/lib/supabase-client', () => ({ supabaseClient: { channel: () => { const channel = { on: () => channel, subscribe: () => channel, unsubscribe: vi.fn() }; return channel }, removeChannel: vi.fn() } }))
 
 let root: Root
 let container: HTMLDivElement
@@ -35,6 +37,13 @@ const response = (data: unknown) => ({ ok: true, json: async () => data })
 const deferred = <T,>() => {
   let resolve!: (value: T) => void
   return { promise: new Promise<T>((done) => { resolve = done }), resolve }
+}
+
+function DealsProbe({ onIdentity }: { onIdentity: (refetch: unknown) => void }) {
+  const { refetch } = useDeals()
+  const [, setTick] = useState(0)
+  useEffect(() => onIdentity(refetch), [refetch, onIdentity])
+  return <button onClick={() => setTick((tick) => tick + 1)}>rerender</button>
 }
 
 beforeEach(async () => {
@@ -77,20 +86,26 @@ it('keeps store B when the store A loader completes after a user switch', async 
 
 it('preserves edits on equivalent flow input, keeps one listener, and reloads once for a new automation', async () => {
   const addListener = vi.spyOn(window, 'addEventListener')
+  const removeListener = vi.spyOn(window, 'removeEventListener')
   const first = [{ id: 'node-a', type: 'trigger_order', position: { x: 0, y: 0 }, data: {} }]
   const replacement = [{ ...first[0], data: {} }]
   const second = [{ id: 'node-b', type: 'trigger_order', position: { x: 0, y: 0 }, data: {} }]
   const props = { initialNodes: first, initialEdges: [], onSave: vi.fn(async () => undefined), onBack: vi.fn() }
 
-  await act(async () => { root.render(<FlowBuilder automationId="flow-a" {...props} />) })
+  await act(async () => { root.render(<StrictMode><FlowBuilder automationId="flow-a" {...props} /></StrictMode>) })
+  await vi.waitFor(() => expect(useFlowStore.getState().automationId).toBe('flow-a'))
   await act(async () => { useFlowStore.getState().updateNode('node-a', { label: 'edited' }) })
-  await act(async () => { root.render(<FlowBuilder automationId="flow-a" {...props} initialNodes={replacement} initialEdges={[]} />) })
+  await act(async () => { root.render(<StrictMode><FlowBuilder automationId="flow-a" {...props} initialNodes={replacement} initialEdges={[]} /></StrictMode>) })
   expect(useFlowStore.getState().nodes[0].data.label).toBe('edited')
-  expect(addListener.mock.calls.filter(([name]) => name === 'keydown')).toHaveLength(2)
+  expect(addListener.mock.calls.filter(([name]) => name === 'keydown')).toHaveLength(4)
 
-  await act(async () => { root.render(<FlowBuilder automationId="flow-b" {...props} initialNodes={second} initialEdges={[]} />) })
+  await act(async () => { useFlowStore.setState({ showTestModal: true, showHistoryPanel: true, showAnalytics: true, analyticsData: { old: { sent: 1, opened: 1, clicked: 1, revenue: 1 } } }) })
+  await act(async () => { root.render(<StrictMode><FlowBuilder automationId="flow-b" {...props} initialNodes={second} initialEdges={[]} /></StrictMode>) })
   await vi.waitFor(() => expect(useFlowStore.getState().nodes.map((node) => node.id)).toEqual(['node-b']))
-  expect(addListener.mock.calls.filter(([name]) => name === 'keydown')).toHaveLength(2)
+  expect(useFlowStore.getState()).toMatchObject({ automationId: 'flow-b', showTestModal: false, showHistoryPanel: false, showAnalytics: false, analyticsData: {} })
+  expect(addListener.mock.calls.filter(([name]) => name === 'keydown')).toHaveLength(4)
+  await act(async () => root.unmount())
+  expect(removeListener.mock.calls.filter(([name]) => name === 'keydown').length).toBeGreaterThan(0)
 })
 
 it('rejects the old store metrics response after a store switch', async () => {
@@ -106,9 +121,21 @@ it('rejects the old store metrics response after a store switch', async () => {
   await vi.waitFor(() => expect(requests).toHaveLength(1))
   await act(async () => { root.render(<AdvancedMetricsSection storeId="store-b" />) })
   await vi.waitFor(() => expect(requests).toHaveLength(2))
+  await act(async () => { root.render(<AdvancedMetricsSection storeId="store-a" />) })
+  await vi.waitFor(() => expect(requests).toHaveLength(3))
   await act(async () => { requests[1].result.resolve(response({ success: true, data: { rfm: { totalCustomers: 2, segments: {} }, cohort: { cohorts: [], summary: {} }, calculatedAt: 'b' } })) })
-  await act(async () => { requests[0].result.resolve(response({ success: true, data: { rfm: { totalCustomers: 1, segments: {} }, cohort: { cohorts: [], summary: {} }, calculatedAt: 'a' } })) })
+  await act(async () => { requests[2].result.resolve(response({ success: true, data: { rfm: { totalCustomers: 3, segments: {} }, cohort: { cohorts: [], summary: {} }, calculatedAt: 'a2' } })) })
+  await act(async () => { requests[0].result.resolve(response({ success: true, data: { rfm: { totalCustomers: 1, segments: {} }, cohort: { cohorts: [], summary: {} }, calculatedAt: 'a1' } })) })
 
-  await vi.waitFor(() => expect(container.textContent).toContain('customers:2'))
+  await vi.waitFor(() => expect(container.textContent).toContain('customers:3'))
   expect(container.textContent).not.toContain('customers:1')
+})
+
+it('keeps useDeals refetch stable through a local rerender', async () => {
+  const refs: unknown[] = []
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => response(String(input).includes('pipelines') ? { pipelines: [] } : { deals: [] })))
+  await act(async () => { root.render(<DealsProbe onIdentity={(refetch) => { refs.push(refetch) }} />) })
+  await vi.waitFor(() => expect(refs).toHaveLength(1))
+  await act(async () => { (container.querySelector('button') as HTMLButtonElement).click() })
+  expect(refs).toHaveLength(1)
 })
