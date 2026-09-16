@@ -39,6 +39,26 @@ export const ehCampanha = (r: LinhaAtribuicao): boolean => !!r.campaign_id
  */
 export const ehAutomacao = (r: LinhaAtribuicao): boolean => !r.campaign_id && !!r.automation_id
 
+/**
+ * As colunas que `resumirAtribuicao` precisa ler.
+ *
+ * Existe para ser usada NO `select` da consulta, e não só conferida
+ * depois: o resumo já mostrou zero nos dois cartões porque o `select`
+ * trazia `channel` e `net_revenue` mas esquecia `campaign_id` e
+ * `automation_id`. Sem os ids, toda linha vira "sem origem" — e o razão
+ * estava cheio. Quem monta a consulta pede estas colunas, ponto.
+ */
+export const COLUNAS_ATRIBUICAO =
+  'channel, classification, net_revenue, order_at, store_id, campaign_id, automation_id'
+
+/**
+ * O recorte mínimo para quem só precisa do TOTAL do período — a
+ * comparação com a janela anterior, por exemplo. Nomeado para que não
+ * sobre nenhum `select` do razão escrito à mão: é escrevendo à mão que
+ * se esquece uma coluna.
+ */
+export const COLUNAS_ATRIBUICAO_TOTAL = 'net_revenue, classification'
+
 export interface ResumoAtribuicao {
   /** Só o que veio de campanha de e-mail. */
   campanhasReceita: number

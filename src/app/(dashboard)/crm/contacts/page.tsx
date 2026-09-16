@@ -34,6 +34,7 @@ import { ContactDrawer, MergeContactsModal, ImportContactsModal } from '@/compon
 import { BulkDeleteModal } from '@/components/crm/BulkDeleteModal'
 import { BulkActionsToolbar } from '@/components/crm/BulkActionsToolbar'
 import type { Contact } from '@/types'
+import { moedaDaLoja } from '@/lib/format/money';
 
 // ==========================================
 // CONTACT MODAL (Create/Edit)
@@ -347,7 +348,7 @@ function ContactRow({ contact, onEdit, onDelete, onClick, isSelected, onToggleSe
         <div className="text-center">
           <p className="text-gray-400 text-xs">Valor</p>
           <p className="text-success-400 font-medium">
-            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 0 }).format(
+            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: moedaDaLoja(), minimumFractionDigits: 0 }).format(
               contact.total_spent || 0
             )}
           </p>
@@ -958,7 +959,7 @@ export default function ContactsPage() {
             <div>
               <p className="text-sm text-gray-500">Valor Total</p>
               <p className="text-xl font-bold text-success-400">
-                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 0 }).format(totalValue)}
+                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: moedaDaLoja(), minimumFractionDigits: 0 }).format(totalValue)}
               </p>
             </div>
           </div>

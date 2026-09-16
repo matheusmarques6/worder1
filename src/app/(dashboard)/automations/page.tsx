@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore, useStoreStore } from '@/stores';
+import { formatarDinheiro, formatarDinheiroCurto } from '@/lib/format/money';
 import { FlowBuilder, getFlowDataForSave } from '@/components/flow-builder';
 import { CloneToStoreModal } from '@/components/ui/CloneToStoreModal';
 import { MoveToStoreModal } from '@/components/ui/MoveToStoreModal';
@@ -78,10 +79,11 @@ function formatNumber(num: number): string {
   return num.toString();
 }
 
-function formatCurrency(value: number): string {
-  if (value >= 1000000) return `R$ ${(value / 1000000).toFixed(1)}M`;
-  if (value >= 1000) return `R$ ${(value / 1000).toFixed(0)}k`;
-  return `R$ ${value.toFixed(0)}`;
+// A moeda vem da loja escolhida, não cravada. Numa loja em dólar esta
+// tela anunciava "R$ 111,81" para uma venda de US$ 111,81 — ao lado de
+// um painel que já mostrava a moeda certa.
+function formatCurrency(value: number, moeda = 'BRL'): string {
+  return formatarDinheiroCurto(value, moeda);
 }
 
 // ============================================
@@ -108,6 +110,8 @@ function getTemplateIcon(templateId: string) {
 export default function AutomationsPage() {
   const { user } = useAuthStore();
   const { currentStore } = useStoreStore();
+  // A moeda da loja escolhida vale para toda cifra desta tela.
+  const moedaDaLoja = (currentStore?.currency || 'BRL').toUpperCase();
   const [view, setView] = useState<'list' | 'grid'>('list');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'paused' | 'draft'>('all');
@@ -692,7 +696,7 @@ export default function AutomationsPage() {
                 <div className="h-6 w-12 bg-gray-100 rounded animate-pulse" />
               ) : (
                 <p className="text-xl font-bold text-gray-900">
-                  {formatCurrency(dashboardStats?.revenue30d || 0)}
+                  {formatCurrency(dashboardStats?.revenue30d || 0, moedaDaLoja)}
                 </p>
               )}
               <p className="text-xs text-gray-500">Receita (30d)</p>
@@ -948,9 +952,7 @@ export default function AutomationsPage() {
                   {(() => {
                     const m = listStats[automation.id];
                     const rev = m?.revenue || 0;
-                    return rev > 0
-                      ? rev.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-                      : 'R$ 0,00';
+                    return formatarDinheiro(rev, moedaDaLoja);
                   })()}
                 </div>
 

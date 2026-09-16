@@ -44,6 +44,7 @@ import { useDeals, usePipelines } from '@/hooks'
 import { useCRMStore, useAuthStore, useStoreStore } from '@/stores'
 import { CreateDealModal, DealDrawer, PipelineModal, EditStageModal } from '@/components/crm'
 import type { Deal, Pipeline, PipelineStage, CreateDealData } from '@/types'
+import { moedaDaLoja } from '@/lib/format/money';
 
 // ==========================================
 // UTILITY FUNCTIONS
@@ -52,7 +53,7 @@ import type { Deal, Pipeline, PipelineStage, CreateDealData } from '@/types'
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
-    currency: 'BRL',
+    currency: moedaDaLoja(),
     minimumFractionDigits: 0,
   }).format(value)
 }

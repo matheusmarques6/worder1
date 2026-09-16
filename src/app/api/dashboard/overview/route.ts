@@ -17,7 +17,10 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 // A quebra campanha/automação mora num módulo próprio porque os
 // cartões e o gráfico têm de usar a MESMA conta — eram duas, e a tela
 // se contradizia.
-import { resumirAtribuicao, ehCampanha, ehAutomacao } from '@/lib/analytics/atribuicao';
+import {
+  resumirAtribuicao, ehCampanha, ehAutomacao,
+  COLUNAS_ATRIBUICAO, COLUNAS_ATRIBUICAO_TOTAL,
+} from '@/lib/analytics/atribuicao';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -272,7 +275,12 @@ export async function GET(request: NextRequest) {
     const attrRows = await safeQuery(() => {
       let q = supabaseAdmin
         .from('order_attribution')
-        .select('channel, classification, net_revenue, order_at, store_id')
+        // A lista de colunas mora junto do resumo que as consome: sem
+        // `campaign_id` e `automation_id` no select, toda linha vira
+        // "sem origem" e os dois cartões mostram zero — mesmo com o
+        // razão cheio. Foi o que aconteceu: o rótulo deixou de estar
+        // trocado e passou a estar vazio.
+        .select(COLUNAS_ATRIBUICAO)
         .eq('organization_id', orgId)
         .is('revoked_at', null)
         .gte('order_at', since)
@@ -288,7 +296,7 @@ export async function GET(request: NextRequest) {
     const prevAttrRows = await safeQuery(() => {
       let q = supabaseAdmin
         .from('order_attribution')
-        .select('net_revenue, classification')
+        .select(COLUNAS_ATRIBUICAO_TOTAL)
         .eq('organization_id', orgId)
         .is('revoked_at', null)
         .gte('order_at', prevSince)

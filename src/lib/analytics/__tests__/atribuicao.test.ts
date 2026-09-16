@@ -144,3 +144,49 @@ describe('casos de borda', () => {
     expect(r.worderReceita).toBe(0)
   })
 })
+
+// ── O erro que este arquivo NÃO pegou da primeira vez ──────────────
+//
+// Os testes acima passavam com os cartões mostrando zero. Eles montam
+// as linhas à mão, com `campaign_id` e `automation_id` presentes — e o
+// `select` da consulta não pedia essas duas colunas. Toda linha chegava
+// "sem origem", os dois cartões davam zero, e nenhum teste reclamou.
+//
+// A lista de colunas passou a morar junto do resumo, e é ela que a
+// consulta usa. Estes testes prendem as duas pontas.
+
+import fs from 'node:fs'
+import path from 'node:path'
+import { COLUNAS_ATRIBUICAO } from '../atribuicao'
+
+describe('a consulta pede as colunas que o resumo lê', () => {
+  it('a lista de colunas inclui as duas que fazem a separação', () => {
+    expect(COLUNAS_ATRIBUICAO).toContain('campaign_id')
+    expect(COLUNAS_ATRIBUICAO).toContain('automation_id')
+    expect(COLUNAS_ATRIBUICAO).toContain('classification')
+    expect(COLUNAS_ATRIBUICAO).toContain('channel')
+    expect(COLUNAS_ATRIBUICAO).toContain('net_revenue')
+    expect(COLUNAS_ATRIBUICAO).toContain('order_at')
+  })
+
+  it('o painel usa a lista, em vez de escrever as colunas de novo', () => {
+    const rota = fs.readFileSync(
+      path.join(process.cwd(), 'src/app/api/dashboard/overview/route.ts'),
+      'utf8'
+    )
+    expect(rota).toContain('COLUNAS_ATRIBUICAO')
+    // Nenhum `select` do razão escrito à mão: é assim que as duas
+    // pontas voltam a divergir.
+    expect(rota).not.toMatch(/\.select\(\s*['"][^'"]*net_revenue[^'"]*['"]\s*\)/)
+  })
+
+  it('uma linha sem os ids — que é o que o select quebrado produzia — não vira receita de lado nenhum', () => {
+    const semColunas = [{ channel: 'email', classification: 'attributed', net_revenue: '111.81' }]
+    const r = resumirAtribuicao(semColunas)
+    expect(r.campanhasReceita).toBe(0)
+    expect(r.automacoesReceita).toBe(0)
+    // E o total continua contando — é o sintoma exato do print:
+    // "Receita via Worder 162,72" com os dois cartões em zero.
+    expect(r.worderReceita).toBeCloseTo(111.81, 2)
+  })
+})
