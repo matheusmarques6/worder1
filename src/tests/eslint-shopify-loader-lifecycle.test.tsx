@@ -58,6 +58,11 @@ it('loads and recalculates RFM for store B without another store A request after
   await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
   await act(async () => { root.render(<RFMDashboard storeId="store-b" />) })
   await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4))
+  const postSwitchGetUrls = fetchMock.mock.calls.slice(2).map(([url]) => String(url))
+  expect(postSwitchGetUrls).toEqual([
+    '/api/shopify/analytics/rfm?storeId=store-b&view=summary',
+    '/api/shopify/analytics/rfm?storeId=store-b&view=scores',
+  ])
 
   const button = [...container.querySelectorAll('button')].find((element) => element.textContent === 'Recalcular')!
   await act(async () => { button.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
@@ -65,5 +70,4 @@ it('loads and recalculates RFM for store B without another store A request after
   const post = fetchMock.mock.calls[4]
   expect(post[0]).toBe('/api/shopify/analytics/rfm')
   expect(JSON.parse((post[1] as RequestInit).body as string)).toEqual({ storeId: 'store-b' })
-  expect(fetchMock.mock.calls.slice(2).map(([url]) => String(url))).not.toContain('/api/shopify/analytics/rfm?storeId=store-a&view=summary')
 })
