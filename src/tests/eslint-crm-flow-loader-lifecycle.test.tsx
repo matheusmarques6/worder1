@@ -14,6 +14,10 @@ let EmailPreviewMode: typeof import('@/components/flow-builder/panels/EmailPrevi
 let PropertiesPanel: typeof import('@/components/flow-builder/panels/PropertiesPanel').PropertiesPanel
 
 const response = (data: unknown, ok = true) => ({ ok, json: async () => data })
+const deferred = <T,>() => {
+  let resolve!: (value: T) => void
+  return { promise: new Promise<T>((done) => { resolve = done }), resolve }
+}
 
 beforeEach(async () => {
   vi.stubGlobal('React', React)
@@ -34,22 +38,22 @@ afterEach(async () => {
   vi.clearAllMocks()
 })
 
-it('resets logs once when a filter changes', async () => {
-  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-    const page = String(input).includes('page=2') ? '2' : '1'
-    const logs = Array.from({ length: 50 }, (_, index) => ({
-      id: `${page}-${index}`, status: 'success', source_type: 'shopify', event_type: 'placed_order', message: 'ok', created_at: '2026-01-01',
-    }))
-    return response({ logs })
+it('ignores a stale log page after a filter reset', async () => {
+  const requests: Array<{ url: string; result: ReturnType<typeof deferred<any>> }> = []
+  const fetchMock = vi.fn((input: RequestInfo | URL) => {
+    const result = deferred<any>()
+    requests.push({ url: String(input), result })
+    return result.promise
   })
   vi.stubGlobal('fetch', fetchMock)
 
   await act(async () => { root.render(<AutomationLogsModal isOpen onClose={vi.fn()} />) })
-  await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+  await vi.waitFor(() => expect(requests).toHaveLength(1))
+  await act(async () => { requests[0].result.resolve(response({ logs: Array.from({ length: 50 }, (_, index) => ({ id: `initial-${index}`, status: 'success', source_type: 'shopify', event_type: 'placed_order', message: 'initial', created_at: '2026-01-01' })) })) })
 
   const loadMore = [...container.querySelectorAll('button')].find((button) => button.textContent === 'Carregar mais')!
   await act(async () => { loadMore.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
-  await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+  await vi.waitFor(() => expect(requests).toHaveLength(2))
 
   const status = container.querySelector('select') as HTMLSelectElement
   await act(async () => {
@@ -57,9 +61,12 @@ it('resets logs once when a filter changes', async () => {
     status.dispatchEvent(new Event('change', { bubbles: true }))
   })
 
-  await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3))
-  expect(String(fetchMock.mock.calls[2][0])).toContain('page=1')
-  expect(String(fetchMock.mock.calls[2][0])).toContain('status=success')
+  await vi.waitFor(() => expect(requests).toHaveLength(3))
+  expect(requests[2].url).toContain('page=1')
+  await act(async () => { requests[2].result.resolve(response({ logs: [{ id: 'current', status: 'success', source_type: 'shopify', event_type: 'placed_order', message: 'current filter', created_at: '2026-01-01' }] })) })
+  await vi.waitFor(() => expect(container.textContent).toContain('current filter'))
+  await act(async () => { requests[1].result.resolve(response({ logs: [{ id: 'stale', status: 'success', source_type: 'shopify', event_type: 'placed_order', message: 'stale page', created_at: '2026-01-01' }] })) })
+  await vi.waitFor(() => expect(container.textContent).not.toContain('stale page'))
 })
 
 it('loads one event list and renders its latest preview payload', async () => {
@@ -80,31 +87,67 @@ it('loads one event list and renders its latest preview payload', async () => {
   expect(JSON.parse((fetchMock.mock.calls[1][1] as RequestInit).body as string).contactId).toBe('contact-2')
 })
 
-it('reloads store, user, and pipeline data after organization A changes to B', async () => {
-  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-    const url = String(input)
-    if (url.startsWith('/api/stores')) return response({ stores: [] })
-    if (url === '/api/settings/users') return response({ members: [] })
-    if (url.startsWith('/api/deals')) return response({ pipelines: [{ id: 'pipeline-1', name: 'Pipeline', stages: [] }] })
-    return response({})
+it('keeps the newer preview when the older preview resolves last', async () => {
+  const requests: Array<{ body: any; result: ReturnType<typeof deferred<any>> }> = []
+  const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+    const result = deferred<any>()
+    requests.push({ body: JSON.parse(init?.body as string), result })
+    return result.promise
+  })
+  vi.stubGlobal('fetch', fetchMock)
+
+  await act(async () => { root.render(<EmailPreviewMode templateId="template-a" triggerType="trigger_order" organizationId="org-a" onClose={vi.fn()} />) })
+  await vi.waitFor(() => expect(requests).toHaveLength(1))
+  await act(async () => { requests[0].result.resolve(response({ events: [{ id: 'event-a', contact_id: 'contact-a', event_type: 'placed_order', properties: {}, occurred_at: '2026-01-01' }] })) })
+  await vi.waitFor(() => expect(requests).toHaveLength(2))
+
+  await act(async () => { root.render(<EmailPreviewMode templateId="template-b" triggerType="trigger_order" organizationId="org-b" onClose={vi.fn()} />) })
+  await vi.waitFor(() => expect(requests).toHaveLength(3))
+  await act(async () => { requests[2].result.resolve(response({ events: [{ id: 'event-b', contact_id: 'contact-b', event_type: 'placed_order', properties: {}, occurred_at: '2026-01-02' }] })) })
+  await vi.waitFor(() => expect(requests).toHaveLength(4))
+  await act(async () => { requests[3].result.resolve(response({ html: '<p>preview b</p>', contact: { id: 'contact-b' } })) })
+  await vi.waitFor(() => expect((document.querySelector('iframe') as HTMLIFrameElement).srcdoc).toContain('preview b'))
+  await act(async () => { requests[1].result.resolve(response({ html: '<p>preview a</p>', contact: { id: 'contact-a' } })) })
+  await vi.waitFor(() => expect((document.querySelector('iframe') as HTMLIFrameElement).srcdoc).toContain('preview b'))
+})
+
+it('keeps organization B pipelines when organization A resolves last', async () => {
+  const requests: Array<{ url: string; result: ReturnType<typeof deferred<any>> }> = []
+  const fetchMock = vi.fn((input: RequestInfo | URL) => {
+    const result = deferred<any>()
+    requests.push({ url: String(input), result })
+    return result.promise
   })
   vi.stubGlobal('fetch', fetchMock)
 
   const node = (id: string, nodeType: string) => ({ id, type: nodeType, data: { nodeType, category: nodeType.startsWith('trigger') ? 'trigger' : 'action', config: {}, label: nodeType } })
-  await act(async () => { useFlowStore.setState({ nodes: [node('store', 'trigger_order')] as any, selectedNodeId: 'store', showPropertiesPanel: true }) })
+  await act(async () => { useFlowStore.setState({ nodes: [node('pipeline', 'trigger_deal_stage')] as any, selectedNodeId: 'pipeline', showPropertiesPanel: true }) })
   await act(async () => { root.render(<PropertiesPanel organizationId="org-a" />) })
-  await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/stores?organizationId=org-a'))
+  await vi.waitFor(() => expect(requests).toHaveLength(1))
   await act(async () => { root.render(<PropertiesPanel organizationId="org-b" />) })
-  await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/stores?organizationId=org-b'))
+  await vi.waitFor(() => expect(requests).toHaveLength(2))
+  await act(async () => { requests[1].result.resolve(response({ pipelines: [{ id: 'b', name: 'Pipeline B', stages: [] }] })) })
+  await vi.waitFor(() => expect(container.textContent).toContain('Pipeline B'))
+  await act(async () => { requests[0].result.resolve(response({ pipelines: [{ id: 'a', name: 'Pipeline A', stages: [] }] })) })
+  await vi.waitFor(() => expect(container.textContent).not.toContain('Pipeline A'))
+})
 
-  await act(async () => { useFlowStore.setState({ nodes: [node('users', 'action_notify')] as any, selectedNodeId: 'users' }) })
-  await vi.waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => url === '/api/settings/users')).toHaveLength(1))
-  await act(async () => { root.render(<PropertiesPanel organizationId="org-a" />) })
-  await vi.waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => url === '/api/settings/users')).toHaveLength(2))
+it('keeps organization A users when organization B resolves last', async () => {
+  const requests: Array<ReturnType<typeof deferred<any>>> = []
+  vi.stubGlobal('fetch', vi.fn(() => {
+    const result = deferred<any>()
+    requests.push(result)
+    return result.promise
+  }))
 
-  await act(async () => { useFlowStore.setState({ nodes: [node('pipeline', 'trigger_deal_stage')] as any, selectedNodeId: 'pipeline' }) })
-  await act(async () => { root.render(<PropertiesPanel organizationId="org-a" />) })
-  await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/deals?type=pipelines&organizationId=org-a'))
+  const node = { id: 'users', type: 'action_notify', data: { nodeType: 'action_notify', category: 'action', config: {}, label: 'Notify' } }
+  await act(async () => { useFlowStore.setState({ nodes: [node] as any, selectedNodeId: 'users', showPropertiesPanel: true }) })
   await act(async () => { root.render(<PropertiesPanel organizationId="org-b" />) })
-  await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/deals?type=pipelines&organizationId=org-b'))
+  await vi.waitFor(() => expect(requests).toHaveLength(1))
+  await act(async () => { root.render(<PropertiesPanel organizationId="org-a" />) })
+  await vi.waitFor(() => expect(requests).toHaveLength(2))
+  await act(async () => { requests[1].resolve(response({ members: [{ user_id: 'a', profiles: { email: 'a@example.com' } }] })) })
+  await vi.waitFor(() => expect(container.textContent).toContain('a@example.com'))
+  await act(async () => { requests[0].resolve(response({ members: [{ user_id: 'b', profiles: { email: 'b@example.com' } }] })) })
+  await vi.waitFor(() => expect(container.textContent).not.toContain('b@example.com'))
 })

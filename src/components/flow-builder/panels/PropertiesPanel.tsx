@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Trash2, Copy, Settings, ChevronDown, Sparkles, MessageCircle, ExternalLink, Mail } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -39,6 +39,7 @@ export function PropertiesPanel({ organizationId, automationId, storeId }: { org
 
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [loadingPipelines, setLoadingPipelines] = useState(false);
+  const pipelinesRequestRef = useRef(0);
 
   // Get trigger type from flow nodes
   const triggerType = useMemo(() => {
@@ -47,19 +48,26 @@ export function PropertiesPanel({ organizationId, automationId, storeId }: { org
   }, [nodes]);
 
   const fetchPipelines = useCallback(async () => {
+    const requestId = ++pipelinesRequestRef.current;
+    setPipelines([]);
     if (!organizationId) return;
     setLoadingPipelines(true);
     try {
       const res = await fetch(`/api/deals?type=pipelines&organizationId=${organizationId}`);
       if (res.ok) {
         const data = await res.json();
-        setPipelines(data.pipelines || []);
+        if (requestId === pipelinesRequestRef.current) setPipelines(data.pipelines || []);
       }
     } catch (e) {
       console.error('Error fetching pipelines:', e);
     } finally {
-      setLoadingPipelines(false);
+      if (requestId === pipelinesRequestRef.current) setLoadingPipelines(false);
     }
+  }, [organizationId]);
+
+  useEffect(() => {
+    pipelinesRequestRef.current++;
+    setPipelines([]);
   }, [organizationId]);
 
   // Fetch pipelines when needed
@@ -2130,10 +2138,13 @@ interface OrderTriggerConfigProps {
 function OrderTriggerConfig({ config, onUpdate, organizationId, label }: OrderTriggerConfigProps) {
   const [stores, setStores] = useState<{ id: string; name: string }[]>([]);
   const [loadingStores, setLoadingStores] = useState(false);
+  const storesRequestRef = useRef(0);
 
   const [storeError, setStoreError] = useState(false);
 
   const fetchStores = useCallback(async () => {
+    const requestId = ++storesRequestRef.current;
+    setStores([]);
     if (!organizationId) return;
     setLoadingStores(true);
     setStoreError(false);
@@ -2141,14 +2152,14 @@ function OrderTriggerConfig({ config, onUpdate, organizationId, label }: OrderTr
       const res = await fetch(`/api/stores?organizationId=${organizationId}`);
       if (res.ok) {
         const data = await res.json();
-        setStores(data.stores || []);
+        if (requestId === storesRequestRef.current) setStores(data.stores || []);
       } else {
-        setStoreError(true);
+        if (requestId === storesRequestRef.current) setStoreError(true);
       }
     } catch {
-      setStoreError(true);
+      if (requestId === storesRequestRef.current) setStoreError(true);
     } finally {
-      setLoadingStores(false);
+      if (requestId === storesRequestRef.current) setLoadingStores(false);
     }
   }, [organizationId]);
 
@@ -2261,8 +2272,11 @@ interface NotifyActionConfigProps {
 function NotifyActionConfig({ config, onUpdate, organizationId }: NotifyActionConfigProps) {
   const [users, setUsers] = useState<{ id: string; email: string; name?: string }[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
+  const usersRequestRef = useRef(0);
 
   const fetchUsers = useCallback(async () => {
+    const requestId = ++usersRequestRef.current;
+    setUsers([]);
     if (!organizationId) return;
     setLoadingUsers(true);
     try {
@@ -2278,12 +2292,12 @@ function NotifyActionConfig({ config, onUpdate, organizationId }: NotifyActionCo
           email: m.profiles?.email || m.email || '',
           name: m.profiles?.full_name || m.profiles?.name || undefined,
         })).filter((u: any) => u.id);
-        setUsers(members);
+        if (requestId === usersRequestRef.current) setUsers(members);
       }
     } catch (e) {
       console.error('Error fetching users:', e);
     } finally {
-      setLoadingUsers(false);
+      if (requestId === usersRequestRef.current) setLoadingUsers(false);
     }
   }, [organizationId]);
 

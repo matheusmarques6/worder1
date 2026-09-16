@@ -96,9 +96,10 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, stor
   // com a identidade da loja certa.
   const [sentFrom, setSentFrom] = useState<string>('');
   const [sendMessage, setSendMessage] = useState<string>('');
+  const previewGeneration = React.useRef(0);
 
   // 1. Render preview for a specific contact
-  const renderPreview = useCallback(async (contactId?: string) => {
+  const renderPreview = useCallback(async (contactId?: string, generation = previewGeneration.current) => {
     try {
       const res = await fetch('/api/automations/email-preview', {
         method: 'POST',
@@ -113,13 +114,14 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, stor
       });
       if (res.ok) {
         const data = await res.json();
+        if (generation !== previewGeneration.current) return;
         setHtml(data.html || '');
         setContact(data.contact || null);
       }
     } catch {}
   }, [templateId, triggerType, organizationId, storeId]);
 
-  const fetchEvents = useCallback(async () => {
+  const fetchEvents = useCallback(async (generation: number) => {
     setLoading(true);
     try {
       const res = await fetch('/api/automations/email-preview', {
@@ -128,24 +130,26 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, stor
         body: JSON.stringify({ templateId, triggerType, organizationId, storeId: storeId || undefined, action: 'list_events' }),
       });
       const data = await res.json();
+      if (generation !== previewGeneration.current) return;
       const eventList: EventItem[] = data.events || [];
       setEvents(eventList);
       // Always render preview — API handles missing contactId gracefully
       if (eventList.length > 0) {
-        await renderPreview(eventList[0].contact_id || '');
+        await renderPreview(eventList[0].contact_id || '', generation);
       } else {
         // No events — still render template without merge tags
-        await renderPreview('');
+        await renderPreview('', generation);
       }
     } catch {
       // silent
     }
-    setLoading(false);
+    if (generation === previewGeneration.current) setLoading(false);
   }, [templateId, triggerType, organizationId, storeId, renderPreview]);
 
   // 2. Load events on mount and when the preview identity changes
   useEffect(() => {
-    fetchEvents();
+    const generation = ++previewGeneration.current;
+    fetchEvents(generation);
   }, [fetchEvents]);
 
   const selectEvent = async (idx: number) => {

@@ -110,6 +110,7 @@ export function AutomationLogsModal({ isOpen, onClose }: AutomationLogsModalProp
   const [searchQuery, setSearchQuery] = useState('')
   const searchQueryRef = useRef(searchQuery)
   const [searchVersion, setSearchVersion] = useState(0)
+  const logsRequestRef = useRef(0)
   
   // Expanded log
   const [expandedLog, setExpandedLog] = useState<string | null>(null)
@@ -125,6 +126,7 @@ export function AutomationLogsModal({ isOpen, onClose }: AutomationLogsModalProp
     }
     if (!organizationId) return
     const orgId = organizationId
+    const requestId = ++logsRequestRef.current
 
     async function fetchLogs() {
       setLoading(true)
@@ -144,6 +146,7 @@ export function AutomationLogsModal({ isOpen, onClose }: AutomationLogsModalProp
         const res = await fetch(`/api/automations/logs?${params}`)
         const data = await res.json()
 
+        if (requestId !== logsRequestRef.current) return
         if (data.logs) {
           if (page === 1) {
             setLogs(data.logs)
@@ -155,7 +158,7 @@ export function AutomationLogsModal({ isOpen, onClose }: AutomationLogsModalProp
       } catch (error) {
         console.error('Error fetching logs:', error)
       } finally {
-        setLoading(false)
+        if (requestId === logsRequestRef.current) setLoading(false)
       }
     }
 
