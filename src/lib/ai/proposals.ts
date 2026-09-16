@@ -302,48 +302,45 @@ export async function generateProposals(
   orgId: string,
   _userId: string | null
 ): Promise<void> {
-  // (a) anotações negativas (bad/fix) com a trace correspondente.
-  const { data: annRows } = await supabase
+  // (a) anotações negativas, filtradas pela provenance da trace no servidor
+  // antes do cap. O FK UNIQUE torna a relação annotation um objeto único.
+  const { data: acceptedAnnotations, error: annotationTraceError } = await supabase
     .from('agent_trace_annotations')
-    .select('trace_id, rating, correction_text')
+    .select(
+      'trace_id, rating, correction_text, created_at, trace:agent_traces!inner(id, input, output)'
+    )
     .eq('agent_id', agent.id)
     .eq('organization_id', orgId)
     .in('rating', ['bad', 'fix'])
+    .eq('trace.agent_id', agent.id)
+    .eq('trace.organization_id', orgId)
+    .eq('trace.trace_source', 'runtime_accepted')
     .order('created_at', { ascending: false })
     .limit(MAX_SOURCE_TRACES)
-  const anns = annRows ?? []
-
-  const traceIds = anns.map((a) => a.trace_id as string)
-  const tracesById = new Map<string, { input: string; output: string }>()
-  if (traceIds.length > 0) {
-    const { data: traces } = await supabase
-      .from('agent_traces')
-      .select('id, input, output')
-      .eq('agent_id', agent.id)
-      .eq('organization_id', orgId)
-      .in('id', traceIds)
-    for (const t of traces ?? []) {
-      tracesById.set(t.id as string, {
-        input: (t.input as string | null) ?? '',
-        output: (t.output as string | null) ?? '',
-      })
-    }
-  }
+  if (annotationTraceError) throw annotationTraceError
 
   // (b) resultados de avaliação com nota mais baixa.
-  const { data: lowResults } = await supabase
-    .from('ai_eval_results')
-    .select('score, judged_output')
-    .eq('agent_id', agent.id)
-    .eq('organization_id', orgId)
-    .order('score', { ascending: true })
-    .limit(MAX_SOURCE_TRACES)
+  const { data: lowResults, error: lowResultsError } = await supabase.rpc(
+    'list_eligible_low_eval_results',
+    {
+      p_organization_id: orgId,
+      p_agent_id: agent.id,
+      p_limit: MAX_SOURCE_TRACES,
+    }
+  )
+  if (lowResultsError) throw lowResultsError
+
+  const lowRows = (lowResults ?? []) as Array<{
+    case_id: string | null
+    score: number | null
+    judged_output: string | null
+  }>
 
   // Monta os sinais (cap total em MAX_SOURCE_TRACES).
   const signals: string[] = []
   const sourceTraceIds: string[] = []
-  for (const a of anns) {
-    const t = tracesById.get(a.trace_id as string)
+  for (const a of acceptedAnnotations ?? []) {
+    const t = Array.isArray(a.trace) ? a.trace[0] : a.trace
     if (!t) continue
     sourceTraceIds.push(a.trace_id as string)
     const correction =
@@ -351,13 +348,21 @@ export async function generateProposals(
         ? ` | correção humana: ${a.correction_text}`
         : ''
     signals.push(
-      `[anotação ${a.rating}] cliente: ${t.input.slice(0, 280)} | agente: ${t.output.slice(0, 280)}${correction}`
+      `[anotação ${a.rating}] cliente: ${String(t.input ?? '').slice(0, 280)} | agente: ${String(t.output ?? '').slice(0, 280)}${correction}`
     )
     if (signals.length >= MAX_SOURCE_TRACES) break
   }
-  for (const r of lowResults ?? []) {
+  const eligibleLowResults = lowRows
+    .filter(
+      (result) =>
+        typeof result.score === 'number' &&
+        result.score < 60 &&
+        result.case_id
+    )
+    .slice(0, MAX_SOURCE_TRACES)
+  for (const r of eligibleLowResults) {
     if (signals.length >= MAX_SOURCE_TRACES) break
-    if (typeof r.score === 'number' && r.score < 60) {
+    if (typeof r.score === 'number') {
       signals.push(
         `[avaliação nota ${r.score}] resposta: ${String(r.judged_output ?? '').slice(0, 280)}`
       )

@@ -231,17 +231,23 @@
 ],
 "agent_traces": [
 "agent_id",
+"channel_account_id",
 "conversation_id",
 "created_at",
+"generation",
 "id",
 "input",
 "latency_ms",
 "model",
 "organization_id",
+"outbox_id",
 "output",
 "provider",
+"selected_attempt",
+"target_seq",
 "tokens",
-"tool_calls"
+"tool_calls",
+"trace_source"
 ],
 "agents": [
 "ai_config",

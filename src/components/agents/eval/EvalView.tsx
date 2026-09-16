@@ -59,11 +59,28 @@ interface EvalCase {
   tags: string[]
 }
 
+interface TraceAnnotation {
+  id: string
+  rating: 'good' | 'bad' | 'fix'
+  correction_text: string | null
+  updated_at: string
+}
+
+interface EvalTrace {
+  id: string
+  input: string | null
+  output: string | null
+  created_at: string
+  annotation?: TraceAnnotation | null
+}
+
 interface EvalPayload {
   versions: Version[]
   criteria: Criterion[]
   kappa: KappaRow[]
   cases: EvalCase[]
+  acceptedTraces: EvalTrace[]
+  legacyTraces: EvalTrace[]
 }
 
 function kappaTone(v: number): 'green' | 'amber' | 'red' {
@@ -82,6 +99,10 @@ export default function EvalView({ organizationId }: EvalViewProps) {
   const [loading, setLoading] = useState(false)
   const [running, setRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [annotationPending, setAnnotationPending] = useState<string | null>(null)
+  const [annotationError, setAnnotationError] = useState<string | null>(null)
+  const [correctionTraceId, setCorrectionTraceId] = useState<string | null>(null)
+  const [correctionText, setCorrectionText] = useState('')
 
   const [selectedVersion, setSelectedVersion] = useState<string | null>(null)
   const [activeTags, setActiveTags] = useState<string[]>([])
@@ -141,6 +162,53 @@ export default function EvalView({ organizationId }: EvalViewProps) {
     }
   }
 
+  const annotateTrace = async (
+    traceId: string,
+    rating: TraceAnnotation['rating'],
+    correction?: string
+  ) => {
+    if (!agentId || annotationPending) return
+    const normalizedCorrection = correction?.trim() ?? ''
+    if (rating === 'fix' && !normalizedCorrection) {
+      setAnnotationError('Informe a correção antes de salvar.')
+      return
+    }
+
+    setAnnotationPending(traceId)
+    setAnnotationError(null)
+    try {
+      const res = await fetch(
+        `/api/ai/agents/${agentId}/traces/${traceId}/annotation`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            rating,
+            ...(rating === 'fix' ? { correctionText: normalizedCorrection } : {}),
+          }),
+        }
+      )
+      const body = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(body?.error || 'Erro ao salvar anotação')
+      setData((current) =>
+        current
+          ? {
+              ...current,
+              acceptedTraces: current.acceptedTraces.map((trace) =>
+                trace.id === traceId ? { ...trace, annotation: body.annotation } : trace
+              ),
+            }
+          : current
+      )
+      setCorrectionTraceId(null)
+      setCorrectionText('')
+    } catch (e: any) {
+      setAnnotationError(e.message || 'Erro ao salvar anotação')
+    } finally {
+      setAnnotationPending(null)
+    }
+  }
+
   const toggleTag = (tag: string) =>
     setActiveTags((prev) => (prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]))
 
@@ -148,13 +216,16 @@ export default function EvalView({ organizationId }: EvalViewProps) {
   const criteria = data?.criteria ?? []
   const kappa = data?.kappa ?? []
   const cases = data?.cases ?? []
+  const acceptedTraces = data?.acceptedTraces ?? []
+  const legacyTraces = data?.legacyTraces ?? []
 
   const allTags = Array.from(new Set(cases.flatMap((c) => c.tags)))
   const filteredCases =
     activeTags.length === 0 ? cases : cases.filter((c) => activeTags.some((t) => c.tags.includes(t)))
 
   const current = versions.find((v) => v.id === selectedVersion)
-  const hasResults = cases.length > 0 || criteria.length > 0
+  const hasResults =
+    cases.length > 0 || criteria.length > 0 || acceptedTraces.length > 0 || legacyTraces.length > 0
 
   if (showTestRun && agentId) {
     return (
@@ -359,6 +430,144 @@ export default function EvalView({ organizationId }: EvalViewProps) {
                         </div>
                       )
                     })
+                  )}
+                </Card>
+
+                {/* accepted traces: annotatable */}
+                <Card style={{ padding: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                    <Check style={{ width: 16, height: 16, color: 'var(--green)' }} />
+                    <span style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--text)' }}>
+                      Respostas aceitas
+                    </span>
+                    <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-3)' }}>
+                      {acceptedTraces.length}
+                    </span>
+                  </div>
+                  {annotationError && (
+                    <p role="alert" style={{ color: 'var(--red)', fontSize: 12.5 }}>
+                      {annotationError}
+                    </p>
+                  )}
+                  {acceptedTraces.length === 0 ? (
+                    <p style={{ fontSize: 12.5, color: 'var(--text-3)' }}>
+                      Nenhuma resposta aceita disponível para revisão.
+                    </p>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {acceptedTraces.map((trace) => (
+                        <div key={trace.id} className="case-card">
+                          <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                            Cliente: {trace.input || 'Sem texto de entrada'}
+                          </div>
+                          <div style={{ marginTop: 4, fontSize: 13, color: 'var(--text)' }}>
+                            {trace.output || 'Sem texto de resposta'}
+                          </div>
+                          {trace.annotation && (
+                            <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-2)' }}>
+                              Revisão atual: {trace.annotation.rating}
+                            </div>
+                          )}
+                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              aria-label="Marcar resposta como boa"
+                              disabled={annotationPending !== null}
+                              onClick={() => annotateTrace(trace.id, 'good')}
+                            >
+                              Bom
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              aria-label="Marcar resposta como ruim"
+                              disabled={annotationPending !== null}
+                              onClick={() => annotateTrace(trace.id, 'bad')}
+                            >
+                              Ruim
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              aria-label="Corrigir resposta"
+                              disabled={annotationPending !== null}
+                              onClick={() => {
+                                setAnnotationError(null)
+                                setCorrectionTraceId(trace.id)
+                                setCorrectionText(
+                                  trace.annotation?.rating === 'fix'
+                                    ? trace.annotation.correction_text ?? ''
+                                    : ''
+                                )
+                              }}
+                            >
+                              Corrigir
+                            </Button>
+                            {annotationPending === trace.id && (
+                              <Loader2 aria-label="Salvando anotação" className="animate-spin" />
+                            )}
+                          </div>
+                          {correctionTraceId === trace.id && (
+                            <div style={{ marginTop: 10 }}>
+                              <label
+                                htmlFor={`trace-correction-${trace.id}`}
+                                style={{ display: 'block', marginBottom: 6, fontSize: 12.5, fontWeight: 700 }}
+                              >
+                                Correção obrigatória
+                              </label>
+                              <textarea
+                                id={`trace-correction-${trace.id}`}
+                                aria-label="Texto corrigido da resposta"
+                                value={correctionText}
+                                onChange={(event) => setCorrectionText(event.target.value)}
+                                rows={3}
+                                style={{ width: '100%', resize: 'vertical' }}
+                              />
+                              <Button
+                                type="button"
+                                variant="primary"
+                                aria-label="Salvar resposta corrigida"
+                                disabled={annotationPending !== null}
+                                onClick={() => annotateTrace(trace.id, 'fix', correctionText)}
+                                style={{ marginTop: 8 }}
+                              >
+                                Salvar correção
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Card>
+
+                {/* legacy traces: explicitly read-only */}
+                <Card style={{ padding: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                    <AlertTriangle style={{ width: 16, height: 16, color: 'var(--amber)' }} />
+                    <span style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--text)' }}>
+                      Histórico legado
+                    </span>
+                    <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-3)' }}>
+                      gerado não confirmado
+                    </span>
+                  </div>
+                  {legacyTraces.length === 0 ? (
+                    <p style={{ fontSize: 12.5, color: 'var(--text-3)' }}>Sem histórico legado.</p>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {legacyTraces.map((trace) => (
+                        <div key={trace.id} className="case-card">
+                          <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                            Cliente: {trace.input || 'Sem texto de entrada'}
+                          </div>
+                          <div style={{ marginTop: 4, fontSize: 13, color: 'var(--text)' }}>
+                            {trace.output || 'Sem texto de resposta'}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </Card>
 

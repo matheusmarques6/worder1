@@ -397,17 +397,47 @@ describe('evals account before each following judge request', () => {
     { label: 'factual zero', usage: { cost: 0 }, cost: 0, status: 200, fail: false },
   ])('rechecks after $label', async ({ usage, cost, status, fail }) => {
     const baseFrom = (supabaseAdmin as any).from.getMockImplementation()
+    const baseRpc = (supabaseAdmin as any).rpc.getMockImplementation()
     const resultInsert = vi.fn().mockResolvedValue({ error: null })
+    const evalTraceQuery = () => {
+      let selected = ''
+      const chain: any = {
+        select: vi.fn((fields: string) => {
+          selected = fields
+          return chain
+        }),
+        eq: vi.fn(() => chain),
+        in: vi.fn(() => chain),
+        maybeSingle: async () => ({ data: { output: 'stored answer' }, error: null }),
+        then: (resolve: (result: unknown) => unknown) =>
+          Promise.resolve({
+            data: selected === 'id' ? [{ id: 'trace-1' }, { id: 'trace-2' }] : [],
+            error: null,
+          }).then(resolve),
+      }
+      return chain
+    }
     ;(supabaseAdmin as any).from = vi.fn((table: string) => {
       if (table === 'ai_eval_criteria') return query([{ id: 'criterion', label: 'Relevant' }], 1)
       if (table === 'agent_trace_annotations' || table === 'ai_test_scenarios') return query([])
-      if (table === 'ai_eval_cases') return query([1, 2].map(id => ({
-        id: `case-${id}`, input: 'question', source: 'annotation', source_id: `trace-${id}`,
-      })))
-      if (table === 'agent_traces') return query({ output: 'stored answer' })
+      if (table === 'agent_traces') return evalTraceQuery()
       if (table === 'ai_agent_versions') return query(null)
       if (table === 'ai_eval_results') return { insert: resultInsert }
       return baseFrom(table)
+    })
+    ;(supabaseAdmin as any).rpc = vi.fn((name: string, args: unknown) => {
+      if (name === 'list_eligible_eval_cases') {
+        return Promise.resolve({
+          data: [1, 2].map(id => ({
+            id: `case-${id}`,
+            input: 'question',
+            source: 'annotation',
+            source_id: `trace-${id}`,
+          })),
+          error: null,
+        })
+      }
+      return baseRpc(name, args)
     })
     const fetchMock = vi.fn(async () => {
       if (fail) throw new Error('provider unavailable')
