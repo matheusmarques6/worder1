@@ -1010,6 +1010,90 @@ export async function resolveCartBlocks(
 }
 
 /**
+ * Preenche os itens do pedido quando o gatilho só mandou o id.
+ *
+ * O e-mail de "Pedido Aprovado" sai do gatilho `trigger_order_paid`, e o
+ * despacho do webhook manda só `order_id`, `order_number`, `total_price`
+ * e `currency` — nenhum item. O bloco de detalhes do pedido, ao não
+ * achar item nenhum, se apaga do HTML em silêncio: o e-mail chega com um
+ * buraco no lugar do resumo da compra, que é o conteúdo dele.
+ *
+ * Isto roda ANTES de `enrichOrderItemImages`, e é uma divisão de
+ * trabalho: aqui os itens aparecem; lá as fotos deles são buscadas.
+ * `enrichOrderItemImages` sozinho não resolvia porque ele desiste
+ * quando a lista está vazia — ele completa item que existe, não cria.
+ *
+ * Só toca no que falta: evento que já trouxe os itens sai daqui
+ * intocado.
+ */
+export async function hydrateOrderEventData(
+  eventData: Record<string, any>,
+  supabase: any,
+  storeId?: string,
+  organizationId?: string,
+): Promise<void> {
+  if (!eventData || typeof eventData !== 'object') return
+
+  const temItens = (v: any) => Array.isArray(v) && v.length > 0
+  if (
+    temItens(eventData.Items) ||
+    temItens(eventData.items) ||
+    temItens(eventData.line_items) ||
+    temItens(eventData.extra?.line_items)
+  ) return
+
+  const orderId =
+    eventData.order_id || eventData.OrderID || eventData.OrderId || eventData.orderId
+  const checkoutId =
+    eventData.checkout_id || eventData.CheckoutID || eventData.CheckoutId || eventData.checkoutId
+
+  // O pedido primeiro: num e-mail de pedido aprovado ele é a fonte certa,
+  // mesmo que o evento também carregue um id de checkout antigo.
+  const fontes: Array<{ tabela: string; coluna: string; valor: string }> = []
+  if (orderId) fontes.push({ tabela: 'shopify_orders', coluna: 'shopify_order_id', valor: String(orderId) })
+  if (checkoutId) fontes.push({ tabela: 'shopify_checkouts', coluna: 'shopify_checkout_id', valor: String(checkoutId) })
+  if (fontes.length === 0) return
+
+  for (const f of fontes) {
+    try {
+      const colunas = f.tabela === 'shopify_orders'
+        ? 'line_items, currency, order_number, subtotal_price, total_price, total_tax, total_discounts, created_at'
+        : 'line_items, currency'
+      let q = supabase.from(f.tabela).select(colunas).eq(f.coluna, f.valor).limit(1)
+      if (storeId) q = q.eq('store_id', storeId)
+      else if (organizationId) q = q.eq('organization_id', organizationId)
+
+      const { data } = await q
+      const linha = Array.isArray(data) ? data[0] : data
+      if (!linha || !Array.isArray(linha.line_items) || linha.line_items.length === 0) continue
+
+      // O bloco lê `Items` primeiro e entende tanto a forma da Shopify
+      // quanto a canônica, então a lista crua serve como está. As fotos
+      // vêm logo depois, no enriquecimento.
+      eventData.Items = linha.line_items
+
+      // Só completa o que o gatilho não trouxe — o que veio do evento
+      // manda, porque é o retrato do momento em que ele disparou.
+      const completar: Array<[string, any]> = [
+        ['currency', linha.currency],
+        ['order_number', linha.order_number],
+        ['subtotal_price', linha.subtotal_price],
+        ['total_price', linha.total_price],
+        ['total_tax', linha.total_tax],
+        ['total_discounts', linha.total_discounts],
+        ['created_at', linha.created_at],
+      ]
+      for (const [chave, valor] of completar) {
+        if (valor != null && eventData[chave] == null) eventData[chave] = valor
+      }
+      return
+    } catch {
+      // Sem os itens o bloco some, como antes: nunca derruba o envio.
+    }
+  }
+}
+
+/**
  * Enriches Items[] (Klaviyo PascalCase) and/or line_items[] (raw Shopify) in
  * eventData with product images from shopify_products when image URL is missing.
  * Handles both webhook-bridge formats transparently. Mutates arrays in place.
@@ -1221,13 +1305,23 @@ export function resolveOrderBlocks(
       // Build the detail block (right of image) as its own table so name/variant
       // rows align their right-edge values with each other (Omnisend look).
       const detailRows: string[] = []
-      if (cfg.showName) {
-        const nameText = `${title}${cfg.showQuantity ? ` &times; ${qty}` : ''}`
-        const priceText = cfg.showPrice ? fmtPrice(rowTotal) : ''
+      // Nome, preço e quantidade decidem se a linha do item tem conteúdo
+      // algum. O editor os grava sempre ligados, e o resto do bloco já
+      // usa `!== false` (veja `showOrderNumber`): faltando a chave, o
+      // certo é mostrar. Com verdade simples, uma configuração sem essas
+      // chaves renderizava a linha vazia — o mesmo buraco por outro
+      // caminho. Quem desligou de propósito grava `false` e continua
+      // desligado.
+      const showName = cfg.showName !== false
+      const showPrice = cfg.showPrice !== false
+      const showQuantity = cfg.showQuantity !== false
+      if (showName) {
+        const nameText = `${title}${showQuantity ? ` &times; ${qty}` : ''}`
+        const priceText = showPrice ? fmtPrice(rowTotal) : ''
         detailRows.push(
           `<tr>
             <td style="font-size:14px;font-weight:600;color:${primColor};line-height:1.45;padding:0;">${nameText}</td>
-            ${cfg.showPrice ? `<td style="font-size:14px;font-weight:600;color:${priceColor};line-height:1.45;padding:0 0 0 12px;text-align:right;white-space:nowrap;">${priceText}</td>` : ''}
+            ${showPrice ? `<td style="font-size:14px;font-weight:600;color:${priceColor};line-height:1.45;padding:0 0 0 12px;text-align:right;white-space:nowrap;">${priceText}</td>` : ''}
           </tr>`
         )
       }

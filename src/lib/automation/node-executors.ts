@@ -969,7 +969,10 @@ const actionExecutors: Record<string, NodeExecutor> = {
         // (webhooks don't always include images inline)
         const eventData = context.trigger?.data || {};
         try {
-          const { enrichOrderItemImages } = await import('@/lib/email/render');
+          const { hydrateOrderEventData, enrichOrderItemImages } = await import('@/lib/email/render');
+          // Primeiro os itens: gatilho de pedido pago manda só o id, e
+          // sem esta linha o bloco de detalhes do pedido se apaga.
+          await hydrateOrderEventData(eventData, supabase, runStoreId || undefined, organizationId);
           // Com a loja do fluxo, a imagem vem do catálogo DELA; sem loja
           // (fluxo da organização inteira) fica a cerca da organização.
           await enrichOrderItemImages(eventData, supabase, runStoreId || undefined, organizationId);
