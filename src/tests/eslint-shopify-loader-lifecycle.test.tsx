@@ -35,7 +35,7 @@ afterEach(async () => {
 })
 
 it('loads Shopify config for store B without another store A request after switching', async () => {
-  const fetchMock = vi.fn(async () => response({ tags: [] }))
+  const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => response({ tags: [] }))
   vi.stubGlobal('fetch', fetchMock)
 
   await act(async () => { root.render(<ShopifyConfigModal isOpen onClose={vi.fn()} store={store('store-a')} organizationId="org-1" />) })
@@ -51,7 +51,7 @@ it('loads Shopify config for store B without another store A request after switc
 })
 
 it('loads and recalculates RFM for store B without another store A request after switching', async () => {
-  const fetchMock = vi.fn(async () => response({ success: true, data: { segments: [], lastCalculated: null } }))
+  const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => response({ success: true, data: { segments: [], lastCalculated: null } }))
   vi.stubGlobal('fetch', fetchMock)
 
   await act(async () => { root.render(<RFMDashboard storeId="store-a" />) })
