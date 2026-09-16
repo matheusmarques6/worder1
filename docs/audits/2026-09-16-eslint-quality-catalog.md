@@ -141,7 +141,7 @@ to dependencies is forbidden because it refetches on every render.
 | crm/integrations/page.tsx:273,616,861 | 3 | org/store; modal loaders by org |
 | integrations/[slug]/page.tsx:62 | 1 | slug + organization ID |
 | integrations/shopify/diagnostico/page.tsx:90 | 1 | organization |
-| whatsapp/analytics/page.tsx:477 | 2 | organization + period; deliberately org-scoped |
+| whatsapp/analytics/page.tsx:477 | 1 | organization + period; two loaders in one diagnostic; deliberately org-scoped |
 | whatsapp/campaigns/[id]/page.tsx:92 | 1 | campaign ID |
 | whatsapp/flows/page.tsx:35 | 1 | stable owner-hook callback |
 | whatsapp/phonebooks/page.tsx:23,24 | 2 | stable callbacks + selected phonebook ID |
