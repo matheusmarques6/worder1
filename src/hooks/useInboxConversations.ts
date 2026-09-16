@@ -133,13 +133,26 @@ export function useInboxConversations(organizationId: string | null, storeId?: s
     }
   }, [organizationId, storeId, filters])
 
+  const markAsRead = useCallback(async (id: string) => {
+    try {
+      await authedFetch(`/api/whatsapp/inbox/conversations/${id}/read`, {
+        method: 'POST'
+      })
+      setConversations(prev =>
+        prev.map(c => c.id === id ? { ...c, unread_count: 0 } : c)
+      )
+    } catch (err) {
+      console.error('Error marking as read:', err)
+    }
+  }, [])
+
   const selectConversation = useCallback((conversation: InboxConversation | null) => {
     setSelectedConversation(conversation)
     
     if (conversation && conversation.unread_count > 0) {
       markAsRead(conversation.id)
     }
-  }, [])
+  }, [markAsRead])
 
   const updateConversation = useCallback(async (id: string, updates: Partial<InboxConversation>) => {
     try {
@@ -203,20 +216,6 @@ export function useInboxConversations(organizationId: string | null, storeId?: s
       throw err
     }
   }, [selectedConversation])
-
-  const markAsRead = useCallback(async (id: string) => {
-    try {
-      await authedFetch(`/api/whatsapp/inbox/conversations/${id}/read`, {
-        method: 'POST'
-      })
-      
-      setConversations(prev => 
-        prev.map(c => c.id === id ? { ...c, unread_count: 0 } : c)
-      )
-    } catch (err) {
-      console.error('Error marking as read:', err)
-    }
-  }, [])
 
   const refresh = useCallback(async () => {
     await fetchConversations(filters)

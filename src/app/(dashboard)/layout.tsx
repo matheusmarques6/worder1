@@ -462,8 +462,9 @@ export default function DashboardLayout({
           // domínio antigos (ex.: pyz3m9 depois da troca pra ufnij1-ex)
           // ficavam congelados no rodapé até o usuário trocar de loja.
           // Mesmo id → setCurrentStore não limpa caches de CRM/inbox.
-          const fresh = currentStore
-            ? formattedStores.find((s: any) => s.id === currentStore.id)
+          const selectedStore = useStoreStore.getState().currentStore
+          const fresh = selectedStore
+            ? formattedStores.find((s: any) => s.id === selectedStore.id)
             : null
           setCurrentStore(fresh || formattedStores[0])
         }
@@ -472,7 +473,7 @@ export default function DashboardLayout({
       }
     }
     loadStores()
-  }, [_hasHydrated])
+  }, [_hasHydrated, setCurrentStore, setStores])
 
   useEffect(() => {
     const handleOpenAddStoreModal = () => setAddStoreModalOpen(true)

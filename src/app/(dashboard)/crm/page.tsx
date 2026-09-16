@@ -413,7 +413,7 @@ export default function CRMPage() {
       refetch()
       refetchPipelines()
     }
-  }, [currentStore?.id, hasHydrated])
+  }, [currentStore?.id, hasHydrated, refetch, refetchPipelines])
 
   // Set active pipeline when pipelines load
   useEffect(() => {

@@ -99,6 +99,20 @@ export function useInboxContact(): UseInboxContactReturn {
     setComments([])
   }, [])
 
+  const fetchOrders = useCallback(async (contactId: string) => {
+    try {
+      const response = await authedFetch(`/api/whatsapp/inbox/contacts/${contactId}/orders`)
+      const data = await response.json()
+
+      if (response.ok && currentContactIdRef.current === contactId) {
+        setOrders(data.orders || [])
+        setCart(data.cart || null)
+      }
+    } catch (err) {
+      console.error('Error fetching orders:', err)
+    }
+  }, [])
+
   const fetchContact = useCallback(async (contactId: string, conversationId?: string) => {
     // CORREÇÃO: Salvar o ID atual para verificar depois
     currentContactIdRef.current = contactId
@@ -155,7 +169,7 @@ export function useInboxContact(): UseInboxContactReturn {
         setIsLoading(false)
       }
     }
-  }, [clearAllData])
+  }, [clearAllData, fetchOrders])
 
   const refreshContact = useCallback(async (contactId: string, conversationId?: string) => {
     // CORREÇÃO: Verificar se é o mesmo contato atual
@@ -332,20 +346,6 @@ export function useInboxContact(): UseInboxContactReturn {
     if (!response.ok) throw new Error('Failed to toggle bot')
 
     setConversation(prev => prev ? { ...prev, is_bot_active: active } : null)
-  }, [])
-
-  const fetchOrders = useCallback(async (contactId: string) => {
-    try {
-      const response = await authedFetch(`/api/whatsapp/inbox/contacts/${contactId}/orders`)
-      const data = await response.json()
-
-      if (response.ok && currentContactIdRef.current === contactId) {
-        setOrders(data.orders || [])
-        setCart(data.cart || null)
-      }
-    } catch (err) {
-      console.error('Error fetching orders:', err)
-    }
   }, [])
 
   const fetchDeals = useCallback(async (contactId: string) => {

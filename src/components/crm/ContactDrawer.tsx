@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   X,
@@ -246,34 +246,24 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
   const [showOrderHistory, setShowOrderHistory] = useState(false)
   const [showBrowsingHistory, setShowBrowsingHistory] = useState(false)
 
-  // Fetch activities when contact changes
-  useEffect(() => {
-    if (contact && (user?.organization_id || contact.organization_id)) {
-      fetchActivities()
-      fetchContactDeals()
-    }
-  }, [contact?.id, user?.organization_id, contact?.organization_id])
-
   // Update deal info when pipelines load
   useEffect(() => {
-    if (pipelines.length > 0 && contactDeals.length > 0) {
-      const updatedDeals = contactDeals.map((deal) => {
+    if (pipelines.length > 0) {
+      setContactDeals((currentDeals) => {
+        let changed = false
+        const updatedDeals = currentDeals.map((deal) => {
         const pipeline = pipelines.find(p => p.id === deal.pipeline_id)
         const stage = pipeline?.stages?.find(s => s.id === deal.stage_id)
-        return {
+        const updated = {
           ...deal,
           pipeline: pipeline ? { name: pipeline.name, color: pipeline.color } : deal.pipeline,
           stage: stage ? { name: stage.name, color: stage.color } : deal.stage,
         }
+        changed ||= updated.pipeline?.name !== deal.pipeline?.name || updated.stage?.name !== deal.stage?.name
+        return updated
+        })
+        return changed ? updatedDeals : currentDeals
       })
-      // Only update if there are actual changes
-      const hasChanges = updatedDeals.some((d, i) => 
-        d.pipeline?.name !== contactDeals[i]?.pipeline?.name ||
-        d.stage?.name !== contactDeals[i]?.stage?.name
-      )
-      if (hasChanges) {
-        setContactDeals(updatedDeals)
-      }
     }
   }, [pipelines])
 
@@ -285,37 +275,22 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
     }
   }, [contact])
 
-  const fetchContactDeals = async () => {
-    if (!contact) return
-    
-    const orgId = user?.organization_id || contact.organization_id
-    if (!orgId) return
-    
+  const fetchContactDeals = useCallback(async (contactId: string, organizationId: string) => {
     setLoadingDeals(true)
     try {
       const response = await fetch(
-        `/api/deals?organizationId=${orgId}&contactId=${contact.id}`
+        `/api/deals?organizationId=${organizationId}&contactId=${contactId}`
       )
       if (response.ok) {
         const data = await response.json()
-        // Map deals with pipeline info
-        const dealsWithInfo = (data.deals || []).map((deal: any) => {
-          const pipeline = pipelines.find(p => p.id === deal.pipeline_id)
-          const stage = pipeline?.stages?.find(s => s.id === deal.stage_id)
-          return {
-            ...deal,
-            pipeline: pipeline ? { name: pipeline.name, color: pipeline.color } : null,
-            stage: stage ? { name: stage.name, color: stage.color } : null,
-          }
-        })
-        setContactDeals(dealsWithInfo)
+        setContactDeals(data.deals || [])
       }
     } catch (error) {
       console.error('Error fetching contact deals:', error)
     } finally {
       setLoadingDeals(false)
     }
-  }
+  }, [])
 
   // Open delete confirmation modal
   const openDeleteConfirm = (dealId: string) => {
@@ -363,19 +338,14 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
     }
   }
 
-  const fetchActivities = async () => {
-    if (!contact) return
-    
-    const orgId = user?.organization_id || contact.organization_id
-    if (!orgId) return
-    
+  const fetchActivities = useCallback(async (contactId: string, organizationId: string) => {
     setLoadingActivities(true)
     setLoadingEnriched(true)
     
     try {
       // Tentar buscar da nova API de timeline (inclui dados enriquecidos)
       const timelineResponse = await fetch(
-        `/api/contacts/${contact.id}/timeline?limit=30`
+        `/api/contacts/${contactId}/timeline?limit=30`
       )
       
       if (timelineResponse.ok) {
@@ -414,7 +384,7 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
       } else {
         // Fallback para API antiga
         const response = await fetch(
-          `/api/contact-activities?contactId=${contact.id}&organizationId=${orgId}`
+          `/api/contact-activities?contactId=${contactId}&organizationId=${organizationId}`
         )
         if (response.ok) {
           const data = await response.json()
@@ -426,7 +396,7 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
       // Fallback
       try {
         const response = await fetch(
-          `/api/contact-activities?contactId=${contact.id}&organizationId=${orgId}`
+          `/api/contact-activities?contactId=${contactId}&organizationId=${organizationId}`
         )
         if (response.ok) {
           const data = await response.json()
@@ -439,7 +409,15 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
       setLoadingActivities(false)
       setLoadingEnriched(false)
     }
-  }
+  }, [])
+
+  const contactId = contact?.id
+  const organizationId = user?.organization_id || contact?.organization_id
+  useEffect(() => {
+    if (!contactId || !organizationId) return
+    fetchActivities(contactId, organizationId)
+    fetchContactDeals(contactId, organizationId)
+  }, [contactId, organizationId, fetchActivities, fetchContactDeals])
 
   const handleAddActivity = async () => {
     if (!contact || !newActivityTitle.trim()) return
@@ -549,7 +527,7 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
       setDealValue('')
       
       // Refresh the contact deals list
-      await fetchContactDeals()
+      if (organizationId) await fetchContactDeals(contact.id, organizationId)
       
       // Refresh main deals list if callback provided
       if (onRefreshDeals) {

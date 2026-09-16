@@ -75,6 +75,7 @@ export function FlowBuilder({
 
   // Local state for saved automation ID
   const [savedAutomationId, setSavedAutomationId] = useState<string | undefined>(automationId);
+  const initializedFlowId = useRef<string | null>(null);
 
   // Fetch analytics when toggle is on
   useEffect(() => {
@@ -146,13 +147,16 @@ export function FlowBuilder({
     }));
   }, []);
 
-  // Load initial data
+  // Load once per automation identity; prop arrays may be recreated after edits.
   useEffect(() => {
+    const id = automationId || 'new';
+    if (initializedFlowId.current === id) return;
+    initializedFlowId.current = id;
     const convertedNodes = convertLegacyNodes(initialNodes);
     const convertedEdges = convertLegacyEdges(initialEdges);
 
     loadAutomation({
-      id: automationId || 'new',
+      id,
       name: automationName,
       status: automationStatus,
       nodes: convertedNodes,
@@ -160,6 +164,9 @@ export function FlowBuilder({
       config: automationStoreId ? { storeId: automationStoreId } : undefined,
     });
 
+  }, [automationId, automationName, automationStatus, automationStoreId, initialNodes, initialEdges, convertLegacyNodes, convertLegacyEdges, loadAutomation]);
+
+  useEffect(() => {
     // Keyboard shortcuts
     const handleKeyDown = (e: KeyboardEvent) => {
       // Don't trigger in input/textarea
@@ -181,12 +188,10 @@ export function FlowBuilder({
     };
     window.addEventListener('keydown', handleKeyDown);
 
-    // Cleanup on unmount
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      resetStore();
-    };
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
+
+  useEffect(() => () => resetStore(), [resetStore]);
 
   // Handle save with conversion back to legacy format
   const handleSave = useCallback(async () => {

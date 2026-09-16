@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ChevronDown,
@@ -72,35 +72,45 @@ export function AdvancedMetricsSection({ storeId }: AdvancedMetricsSectionProps)
   const [data, setData] = useState<AdvancedMetricsData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'rfm' | 'cohort'>('rfm')
+  const activeStoreId = useRef(storeId)
 
-  const fetchData = async () => {
-    if (!storeId) return
+  const fetchData = useCallback(async (requestedStoreId = storeId) => {
+    if (!requestedStoreId) return
     
     setIsLoading(true)
     setError(null)
 
     try {
-      const response = await fetch(`/api/shopify/analytics/advanced?storeId=${storeId}`)
+      const response = await fetch(`/api/shopify/analytics/advanced?storeId=${requestedStoreId}`)
       const result = await response.json()
 
+      if (activeStoreId.current !== requestedStoreId) return
       if (result.success) {
         setData(result.data)
       } else {
         setError(result.error || 'Erro ao carregar dados')
       }
     } catch (err) {
-      setError('Erro de conexão')
-      console.error(err)
+      if (activeStoreId.current === requestedStoreId) {
+        setError('Erro de conexão')
+        console.error(err)
+      }
     } finally {
-      setIsLoading(false)
+      if (activeStoreId.current === requestedStoreId) setIsLoading(false)
     }
-  }
+  }, [storeId])
 
   useEffect(() => {
-    if (isExpanded && !data && storeId) {
-      fetchData()
+    activeStoreId.current = storeId
+    setData(null)
+    setError(null)
+  }, [storeId])
+
+  useEffect(() => {
+    if (isExpanded && storeId) {
+      fetchData(storeId)
     }
-  }, [isExpanded, storeId])
+  }, [isExpanded, storeId, fetchData])
 
   const handleToggle = () => {
     setIsExpanded(!isExpanded)
