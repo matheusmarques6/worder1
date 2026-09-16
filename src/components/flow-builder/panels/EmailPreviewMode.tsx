@@ -97,10 +97,27 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, stor
   const [sentFrom, setSentFrom] = useState<string>('');
   const [sendMessage, setSendMessage] = useState<string>('');
 
-  // 1. Load events on mount
-  useEffect(() => {
-    fetchEvents();
-  }, []);
+  // 1. Render preview for a specific contact
+  const renderPreview = useCallback(async (contactId?: string) => {
+    try {
+      const res = await fetch('/api/automations/email-preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          templateId,
+          ...(contactId ? { contactId } : {}),
+          triggerType,
+          organizationId,
+          storeId: storeId || undefined,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setHtml(data.html || '');
+        setContact(data.contact || null);
+      }
+    } catch {}
+  }, [templateId, triggerType, organizationId, storeId]);
 
   const fetchEvents = useCallback(async () => {
     setLoading(true);
@@ -124,29 +141,12 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, stor
       // silent
     }
     setLoading(false);
-  }, [templateId, triggerType, organizationId, storeId]);
+  }, [templateId, triggerType, organizationId, storeId, renderPreview]);
 
-  // 2. Render preview for a specific contact
-  const renderPreview = async (contactId?: string) => {
-    try {
-      const res = await fetch('/api/automations/email-preview', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          templateId,
-          ...(contactId ? { contactId } : {}),
-          triggerType,
-          organizationId,
-          storeId: storeId || undefined,
-        }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setHtml(data.html || '');
-        setContact(data.contact || null);
-      }
-    } catch {}
-  };
+  // 2. Load events on mount and when the preview identity changes
+  useEffect(() => {
+    fetchEvents();
+  }, [fetchEvents]);
 
   const selectEvent = async (idx: number) => {
     setSelectedIdx(idx);

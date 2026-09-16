@@ -89,22 +89,21 @@ export function DealTimeline({ dealId, className = '' }: DealTimelineProps) {
   } | null>(null)
   
   useEffect(() => {
+    async function fetchHistory() {
+      setLoading(true)
+      try {
+        const res = await fetch(`/api/deals/${dealId}/history`)
+        const data = await res.json()
+        setHistory(data.history || [])
+        setMetrics(data.metrics || null)
+      } catch (error) {
+        console.error('Error fetching deal history:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
     fetchHistory()
   }, [dealId])
-  
-  const fetchHistory = async () => {
-    setLoading(true)
-    try {
-      const res = await fetch(`/api/deals/${dealId}/history`)
-      const data = await res.json()
-      setHistory(data.history || [])
-      setMetrics(data.metrics || null)
-    } catch (error) {
-      console.error('Error fetching deal history:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
   
   if (loading) {
     return (

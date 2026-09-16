@@ -46,19 +46,7 @@ export function PropertiesPanel({ organizationId, automationId, storeId }: { org
     return triggerNode?.data?.nodeType || triggerNode?.type || 'trigger_abandon';
   }, [nodes]);
 
-  // Fetch pipelines when needed
-  useEffect(() => {
-    if (!organizationId) return;
-    
-    const needsPipelines = selectedNode?.data.nodeType?.includes('deal') || 
-                          selectedNode?.data.nodeType?.includes('stage');
-    
-    if (needsPipelines && pipelines.length === 0) {
-      fetchPipelines();
-    }
-  }, [selectedNode?.data.nodeType, organizationId, pipelines.length]);
-
-  const fetchPipelines = async () => {
+  const fetchPipelines = useCallback(async () => {
     if (!organizationId) return;
     setLoadingPipelines(true);
     try {
@@ -72,7 +60,14 @@ export function PropertiesPanel({ organizationId, automationId, storeId }: { org
     } finally {
       setLoadingPipelines(false);
     }
-  };
+  }, [organizationId]);
+
+  // Fetch pipelines when needed
+  useEffect(() => {
+    const needsPipelines = selectedNode?.data.nodeType?.includes('deal') ||
+                          selectedNode?.data.nodeType?.includes('stage');
+    if (needsPipelines) fetchPipelines();
+  }, [selectedNode?.data.nodeType, fetchPipelines]);
 
   if (!selectedNode || !showPanel) return null;
 
@@ -2136,15 +2131,9 @@ function OrderTriggerConfig({ config, onUpdate, organizationId, label }: OrderTr
   const [stores, setStores] = useState<{ id: string; name: string }[]>([]);
   const [loadingStores, setLoadingStores] = useState(false);
 
-  useEffect(() => {
-    if (organizationId) {
-      fetchStores();
-    }
-  }, [organizationId]);
-
   const [storeError, setStoreError] = useState(false);
 
-  const fetchStores = async () => {
+  const fetchStores = useCallback(async () => {
     if (!organizationId) return;
     setLoadingStores(true);
     setStoreError(false);
@@ -2161,7 +2150,11 @@ function OrderTriggerConfig({ config, onUpdate, organizationId, label }: OrderTr
     } finally {
       setLoadingStores(false);
     }
-  };
+  }, [organizationId]);
+
+  useEffect(() => {
+    fetchStores();
+  }, [fetchStores]);
 
   return (
     <div className="space-y-4">
@@ -2269,13 +2262,7 @@ function NotifyActionConfig({ config, onUpdate, organizationId }: NotifyActionCo
   const [users, setUsers] = useState<{ id: string; email: string; name?: string }[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
 
-  useEffect(() => {
-    if (organizationId) {
-      fetchUsers();
-    }
-  }, [organizationId]);
-
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     if (!organizationId) return;
     setLoadingUsers(true);
     try {
@@ -2298,7 +2285,11 @@ function NotifyActionConfig({ config, onUpdate, organizationId }: NotifyActionCo
     } finally {
       setLoadingUsers(false);
     }
-  };
+  }, [organizationId]);
+
+  useEffect(() => {
+    fetchUsers();
+  }, [fetchUsers]);
 
   const selectedUserIds = config.userIds || [];
 

@@ -5,7 +5,7 @@
 // src/components/crm/automations/AutomationLogsModal.tsx
 // =============================================
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   X,
@@ -108,6 +108,8 @@ export function AutomationLogsModal({ isOpen, onClose }: AutomationLogsModalProp
   const [sourceFilter, setSourceFilter] = useState<string>('all')
   const [periodFilter, setPeriodFilter] = useState<string>('7')
   const [searchQuery, setSearchQuery] = useState('')
+  const searchQueryRef = useRef(searchQuery)
+  const [searchVersion, setSearchVersion] = useState(0)
   
   // Expanded log
   const [expandedLog, setExpandedLog] = useState<string | null>(null)
@@ -116,59 +118,62 @@ export function AutomationLogsModal({ isOpen, onClose }: AutomationLogsModalProp
   // DATA FETCHING
   // =============================================
 
-  const fetchLogs = useCallback(async (reset = false) => {
-    if (!organizationId) return
-
-    const currentPage = reset ? 1 : page
-    if (reset) {
-      setPage(1)
-      setLogs([])
-    }
-
-    setLoading(true)
-    try {
-      const params = new URLSearchParams({
-        organizationId,
-        page: currentPage.toString(),
-        limit: '50',
-      })
-
-      if (statusFilter !== 'all') params.append('status', statusFilter)
-      if (sourceFilter !== 'all') params.append('source', sourceFilter)
-      if (periodFilter !== 'all') params.append('days', periodFilter)
-      if (searchQuery) params.append('search', searchQuery)
-
-      const res = await fetch(`/api/automations/logs?${params}`)
-      const data = await res.json()
-
-      if (data.logs) {
-        if (reset) {
-          setLogs(data.logs)
-        } else {
-          setLogs(prev => [...prev, ...data.logs])
-        }
-        setHasMore(data.logs.length === 50)
-      }
-    } catch (error) {
-      console.error('Error fetching logs:', error)
-    } finally {
-      setLoading(false)
-    }
-  }, [organizationId, page, statusFilter, sourceFilter, periodFilter, searchQuery])
-
   useEffect(() => {
-    if (isOpen) {
-      fetchLogs(true)
+    if (!isOpen) {
+      setPage(1)
+      return
     }
-  }, [isOpen, statusFilter, sourceFilter, periodFilter])
+    if (!organizationId) return
+    const orgId = organizationId
+
+    async function fetchLogs() {
+      setLoading(true)
+      if (page === 1) setLogs([])
+      try {
+        const params = new URLSearchParams({
+          organizationId: orgId,
+          page: page.toString(),
+          limit: '50',
+        })
+
+        if (statusFilter !== 'all') params.append('status', statusFilter)
+        if (sourceFilter !== 'all') params.append('source', sourceFilter)
+        if (periodFilter !== 'all') params.append('days', periodFilter)
+        if (searchQueryRef.current) params.append('search', searchQueryRef.current)
+
+        const res = await fetch(`/api/automations/logs?${params}`)
+        const data = await res.json()
+
+        if (data.logs) {
+          if (page === 1) {
+            setLogs(data.logs)
+          } else {
+            setLogs(prev => [...prev, ...data.logs])
+          }
+          setHasMore(data.logs.length === 50)
+        }
+      } catch (error) {
+        console.error('Error fetching logs:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchLogs()
+  }, [isOpen, organizationId, page, statusFilter, sourceFilter, periodFilter, searchVersion])
 
   const handleSearch = () => {
-    fetchLogs(true)
+    setPage(1)
+    setSearchVersion(version => version + 1)
+  }
+
+  const handleRefresh = () => {
+    setPage(1)
+    setSearchVersion(version => version + 1)
   }
 
   const loadMore = () => {
     setPage(prev => prev + 1)
-    fetchLogs()
   }
 
   // =============================================
@@ -214,7 +219,10 @@ export function AutomationLogsModal({ isOpen, onClose }: AutomationLogsModalProp
               <input
                 type="text"
                 value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
+                onChange={e => {
+                  searchQueryRef.current = e.target.value
+                  setSearchQuery(e.target.value)
+                }}
                 onKeyDown={e => e.key === 'Enter' && handleSearch()}
                 placeholder="Buscar..."
                 className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-white placeholder-dark-500 focus:outline-none focus:border-primary-500 transition-colors"
@@ -225,7 +233,10 @@ export function AutomationLogsModal({ isOpen, onClose }: AutomationLogsModalProp
             <div className="relative">
               <select
                 value={statusFilter}
-                onChange={e => setStatusFilter(e.target.value)}
+                onChange={e => {
+                  setPage(1)
+                  setStatusFilter(e.target.value)
+                }}
                 className="px-4 py-2 pr-10 bg-white border border-gray-200 rounded-lg text-white appearance-none focus:outline-none focus:border-primary-500 transition-colors"
               >
                 <option value="all">Todos status</option>
@@ -240,7 +251,10 @@ export function AutomationLogsModal({ isOpen, onClose }: AutomationLogsModalProp
             <div className="relative">
               <select
                 value={sourceFilter}
-                onChange={e => setSourceFilter(e.target.value)}
+                onChange={e => {
+                  setPage(1)
+                  setSourceFilter(e.target.value)
+                }}
                 className="px-4 py-2 pr-10 bg-white border border-gray-200 rounded-lg text-white appearance-none focus:outline-none focus:border-primary-500 transition-colors"
               >
                 <option value="all">Todas fontes</option>
@@ -255,7 +269,10 @@ export function AutomationLogsModal({ isOpen, onClose }: AutomationLogsModalProp
             <div className="relative">
               <select
                 value={periodFilter}
-                onChange={e => setPeriodFilter(e.target.value)}
+                onChange={e => {
+                  setPage(1)
+                  setPeriodFilter(e.target.value)
+                }}
                 className="px-4 py-2 pr-10 bg-white border border-gray-200 rounded-lg text-white appearance-none focus:outline-none focus:border-primary-500 transition-colors"
               >
                 <option value="1">Último dia</option>
@@ -268,7 +285,7 @@ export function AutomationLogsModal({ isOpen, onClose }: AutomationLogsModalProp
 
             {/* Refresh */}
             <button
-              onClick={() => fetchLogs(true)}
+              onClick={handleRefresh}
               className="p-2 text-gray-500 hover:text-white hover:bg-gray-100 rounded-lg transition-colors"
               title="Atualizar"
             >

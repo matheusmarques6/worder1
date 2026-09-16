@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X,
@@ -113,7 +113,7 @@ export function TestModal({ automationId, organizationId, onClose }: TestModalPr
   // GENERATE SAMPLE DATA BASED ON TRIGGER
   // ============================================
 
-  const getSampleDataForTrigger = () => {
+  const getSampleDataForTrigger = useCallback(() => {
     const triggerType = triggerNode?.data?.nodeType || triggerNode?.type || '';
 
     switch (triggerType) {
@@ -184,7 +184,7 @@ export function TestModal({ automationId, organizationId, onClose }: TestModalPr
           timestamp: new Date().toISOString(),
         }, null, 2);
     }
-  };
+  }, [triggerNode]);
 
   // ============================================
   // SET SAMPLE DATA
@@ -194,7 +194,7 @@ export function TestModal({ automationId, organizationId, onClose }: TestModalPr
     if (useSampleData) {
       setTriggerData(getSampleDataForTrigger());
     }
-  }, [useSampleData, triggerNode]);
+  }, [useSampleData, getSampleDataForTrigger]);
 
   // ============================================
   // RUN TEST
