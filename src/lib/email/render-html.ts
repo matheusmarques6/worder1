@@ -1,5 +1,5 @@
 import type { EmailBlock, EmailSection, EmailDocument, Padding } from '@/components/email-builder/config/types'
-import { buildProductGrid } from './product-grid'
+import { buildProductGrid, productGridTitle } from './product-grid'
 import { migrateV1toV2 } from '@/components/email-builder/config/types'
 
 // Escape a value for safe use inside an HTML attribute (src/alt/href/title).
@@ -10,6 +10,23 @@ function attr(value: unknown): string {
   return String(value)
     .replace(/&/g, '&amp;')
     .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+}
+
+// Texto que vai para o CORPO do HTML.
+//
+// O editor desenha esses campos como texto puro (nó de texto do React),
+// então um nome de empresa "Groot & Co" ou um cupom "<PROMO>" aparecem
+// literais na tela. No HTML enviado eles iam crus: o `&` virava entidade
+// malformada e o `<...>` era engolido como tag. Três campos ficam de
+// fora de propósito, porque neles o HTML é o conteúdo: o texto rico
+// (`contentHtml`), o bloco HTML (`code`) e o texto do bloco dividido
+// (`textHtml`).
+function text(value: unknown): string {
+  if (value == null) return ''
+  return String(value)
+    .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
 }
@@ -112,7 +129,7 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
     }
 
     case 'button':
-      return `<tr><td style="padding:${blockPad};text-align:${p.align || 'center'};${p.backgroundColor ? `background-color:${p.backgroundColor};` : ''}"><table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:${p.align === 'left' ? '0' : p.align === 'right' ? '0 0 0 auto' : '0 auto'};${p.fullWidth ? 'width:100%;' : ''}"><tr><td style="background-color:${p.bgColor || '#18181B'};border-radius:${p.borderRadius || 8}px;padding:${p.paddingV || 14}px ${p.paddingH || 32}px;text-align:center;"><a href="${p.href || '#'}" style="color:${p.textColor || '#fff'};font-size:${p.fontSize || 16}px;font-weight:${p.fontWeight || 'bold'};text-decoration:none;display:block;font-family:${font};">${p.text || ''}</a></td></tr></table></td></tr>`
+      return `<tr><td style="padding:${blockPad};text-align:${p.align || 'center'};${p.backgroundColor ? `background-color:${p.backgroundColor};` : ''}"><table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:${p.align === 'left' ? '0' : p.align === 'right' ? '0 0 0 auto' : '0 auto'};${p.fullWidth ? 'width:100%;' : ''}"><tr><td style="background-color:${p.bgColor || '#18181B'};border-radius:${p.borderRadius || 8}px;padding:${p.paddingV || 14}px ${p.paddingH || 32}px;text-align:center;"><a href="${attr(p.href || '#')}" style="color:${p.textColor || '#fff'};font-size:${p.fontSize || 16}px;font-weight:${p.fontWeight || 'bold'};text-decoration:none;display:block;font-family:${font};">${text(p.text)}</a></td></tr></table></td></tr>`
 
     case 'divider': {
       const dw = p.width ?? 100
@@ -128,7 +145,7 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
       return `<tr><td style="padding:${blockPad};">${p.code || ''}</td></tr>`
 
     case 'video':
-      return `<tr><td style="padding:${blockPad};text-align:center;line-height:0;font-size:0;"><a href="${p.videoUrl || '#'}" target="_blank" style="display:block;line-height:0;"><img src="${p.thumbnailUrl || ''}" alt="Video" width="600" style="max-width:100%;height:auto;display:block;margin:0 auto;border-radius:8px;vertical-align:bottom;" /></a></td></tr>`
+      return `<tr><td style="padding:${blockPad};text-align:center;line-height:0;font-size:0;"><a href="${attr(p.videoUrl || '#')}" target="_blank" style="display:block;line-height:0;"><img src="${attr(p.thumbnailUrl)}" alt="Video" width="600" style="max-width:100%;height:auto;display:block;margin:0 auto;border-radius:8px;vertical-align:bottom;" /></a></td></tr>`
 
     case 'social': {
       const iconUrls: Record<string, string> = {
@@ -163,11 +180,11 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
     }
 
     case 'header':
-      return `<tr><td style="padding:${blockPad};background-color:${p.backgroundColor || '#fff'};text-align:center;line-height:0;">${p.logoHref ? `<a href="${p.logoHref}" style="text-decoration:none;display:inline-block;line-height:0;">` : ''}<img src="${p.logoSrc || ''}" alt="Logo" width="${p.logoWidth || 160}" style="display:block;margin:0 auto;max-width:100%;height:auto;vertical-align:bottom;" />${p.logoHref ? '</a>' : ''}${p.showLinks && p.links?.length ? `<p style="margin:12px 0 0;font-size:${p.linkFontSize || 13}px;font-family:${font};line-height:1.4;">${p.links.map((l: any) => `<a href="${l.url}" style="color:${p.linkColor || '#6B7280'};text-decoration:none;margin:0 8px;">${l.text}</a>`).join('')}</p>` : ''}</td></tr>`
+      return `<tr><td style="padding:${blockPad};background-color:${p.backgroundColor || '#fff'};text-align:center;line-height:0;">${p.logoHref ? `<a href="${attr(p.logoHref)}" style="text-decoration:none;display:inline-block;line-height:0;">` : ''}<img src="${attr(p.logoSrc)}" alt="Logo" width="${p.logoWidth || 160}" style="display:block;margin:0 auto;max-width:100%;height:auto;vertical-align:bottom;" />${p.logoHref ? '</a>' : ''}${p.showLinks && p.links?.length ? `<p style="margin:12px 0 0;font-size:${p.linkFontSize || 13}px;font-family:${font};line-height:1.4;">${p.links.map((l: any) => `<a href="${attr(l.url)}" style="color:${p.linkColor || '#6B7280'};text-decoration:none;margin:0 8px;">${text(l.text)}</a>`).join('')}</p>` : ''}</td></tr>`
 
     case 'footer': {
       const flc = p.linkColor || p.textColor || '#9CA3AF'
-      return `<tr><td style="padding:${blockPad};background-color:${p.backgroundColor || '#F9FAFB'};text-align:${p.align || 'center'};font-size:${p.fontSize || 11}px;color:${p.textColor || '#9CA3AF'};font-family:${font};line-height:1.5;"><p style="margin:0;">${p.companyName || ''}</p>${p.address ? `<p style="margin:4px 0 0;">${p.address}</p>` : ''}<p style="margin:8px 0 0;">${p.showUnsubscribe ? `<a href="{{unsubscribe_url}}" style="color:${flc};text-decoration:underline;">Descadastrar-se</a>` : ''}${p.showUnsubscribe && p.showViewInBrowser ? ' · ' : ''}${p.showViewInBrowser ? `<a href="{{view_in_browser_url}}" style="color:${flc};text-decoration:underline;">Ver no navegador</a>` : ''}</p></td></tr>`
+      return `<tr><td style="padding:${blockPad};background-color:${p.backgroundColor || '#F9FAFB'};text-align:${p.align || 'center'};font-size:${p.fontSize || 11}px;color:${p.textColor || '#9CA3AF'};font-family:${font};line-height:1.5;"><p style="margin:0;">${text(p.companyName)}</p>${p.address ? `<p style="margin:4px 0 0;">${text(p.address)}</p>` : ''}<p style="margin:8px 0 0;">${p.showUnsubscribe ? `<a href="{{unsubscribe_url}}" style="color:${flc};text-decoration:underline;">Descadastrar-se</a>` : ''}${p.showUnsubscribe && p.showViewInBrowser ? ' · ' : ''}${p.showViewInBrowser ? `<a href="{{view_in_browser_url}}" style="color:${flc};text-decoration:underline;">Ver no navegador</a>` : ''}</p></td></tr>`
     }
 
     case 'product-grid': {
@@ -184,6 +201,19 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
       const gridCfg = {
         cols,
         font,
+        // O título e o layout também: o envio cravava
+        // `18px bold #111827 center` e sempre a grade de colunas, então
+        // quem punha título branco em e-mail de fundo preto recebia um
+        // cabeçalho invisível, e quem escolhia "Lista" recebia colunas.
+        title: p.title || '',
+        titleFontSize: p.titleFontSize || 18,
+        titleWeight: p.titleWeight || 'bold',
+        titleColor: p.titleColor || '#111827',
+        titleAlign: p.titleAlign || 'center',
+        layout: p.layout === 'list' ? ('list' as const) : ('grid' as const),
+        showSeparator: !!p.showSeparator,
+        separatorColor: p.separatorColor || '#E5E7EB',
+        buttonAlign: p.buttonAlign || '',
         showName: p.showName !== false,
         showPrice: p.showPrice !== false,
         showComparePrice: p.showComparePrice !== false,
@@ -212,15 +242,20 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
 
       let productsHtml = ''
       if (hasStaticProducts) {
-        productsHtml = buildProductGrid(staticProds.slice(0, total), gridCfg)
+        // Produtos já conhecidos: título e grade saem juntos aqui mesmo.
+        productsHtml = productGridTitle(gridCfg) + buildProductGrid(staticProds.slice(0, total), gridCfg)
       } else {
         // Produtos dinâmicos: o marcador leva a configuração inteira para
-        // ser resolvida no envio. O feed e o limite vão junto.
+        // ser resolvida no envio. O feed e o limite vão junto — e o
+        // TÍTULO também, de propósito. Ele ficava fora do marcador, então
+        // quando o feed não devolvia produto a grade sumia e o título
+        // continuava lá: um "Recomendados Para Você" sozinho, com o vazio
+        // embaixo. Dentro do marcador, os dois somem juntos.
         const dyn = { ...gridCfg, feedType: p.feedType || 'bestsellers', maxProducts: total }
         productsHtml = `<!-- WORDER_PRODUCT_BLOCK:${encodeURIComponent(JSON.stringify(dyn))} -->`
       }
 
-      return `<tr><td style="padding:${blockPad};${p.backgroundColor ? `background-color:${p.backgroundColor};` : ''}">${p.title ? `<p style="margin:0 0 16px;font-size:18px;font-weight:bold;color:#111827;text-align:center;font-family:${font};">${p.title}</p>` : ''}${productsHtml}</td></tr>`
+      return `<tr><td style="padding:${blockPad};${p.backgroundColor ? `background-color:${p.backgroundColor};` : ''}">${productsHtml}</td></tr>`
     }
 
     case 'abandoned-cart': {
@@ -238,7 +273,8 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
         showOldPrice: p.showOldPrice !== false,
         showButton: p.showButton !== false,
         nameFontSize: p.nameFontSize || 14, nameColor: p.nameColor || '#111827', nameWeight: p.nameWeight || '600',
-        descFontSize: p.descFontSize || 13, descColor: p.descColor || '#6B7280',
+        nameFontFamily: p.nameFontFamily || 'inherit',
+        descFontSize: p.descFontSize || 13, descColor: p.descColor || '#6B7280', descWeight: p.descWeight || '400',
         priceFontSize: p.priceFontSize || 14, priceColor: p.priceColor || '#111827', priceWeight: p.priceWeight || '600',
         oldPriceColor: p.oldPriceColor || '#9CA3AF',
         buttonText: p.buttonText || 'Comprar agora', buttonHref: p.buttonHref || '{{checkout_url}}',
@@ -317,7 +353,7 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
     case 'coupon': {
       const cpv = p.codePaddingV ?? 10
       const cph = p.codePaddingH ?? 28
-      return `<tr><td style="padding:${blockPad};background-color:${p.backgroundColor || '#FFF7ED'};text-align:${p.headerAlign || 'center'};font-family:${font};">${p.headerText ? `<p style="margin:0 0 10px;font-size:${p.headerFontSize || 14}px;color:${p.headerColor || '#9A3412'};font-weight:${p.headerFontWeight || '500'};text-align:${p.headerAlign || 'center'};">${p.headerText}</p>` : ''}<p style="margin:0;font-size:${p.codeFontSize || 32}px;font-weight:${p.codeFontWeight || 'bold'};color:${p.codeColor || '#18181B'};letter-spacing:${p.codeLetterSpacing ?? 4}px;${p.borderStyle !== 'none' ? `border:${p.borderWidth ?? 2}px ${p.borderStyle || 'dashed'} ${p.borderColor || '#18181B'};` : ''}border-radius:${p.borderRadius || 12}px;display:inline-block;padding:${cpv}px ${cph}px;max-width:100%;box-sizing:border-box;word-break:break-all;${p.codeBgColor ? `background-color:${p.codeBgColor};` : ''}" class="worder-coupon-code">${p.code || ''}</p>${p.footerText ? `<p style="margin:10px 0 0;font-size:${p.footerFontSize || 12}px;color:${p.footerColor || '#9CA3AF'};font-weight:${p.footerFontWeight || 'normal'};">${p.footerText}</p>` : ''}</td></tr>`
+      return `<tr><td style="padding:${blockPad};background-color:${p.backgroundColor || '#FFF7ED'};text-align:${p.headerAlign || 'center'};font-family:${font};">${p.headerText ? `<p style="margin:0 0 10px;font-size:${p.headerFontSize || 14}px;color:${p.headerColor || '#9A3412'};font-weight:${p.headerFontWeight || '500'};text-align:${p.headerAlign || 'center'};">${text(p.headerText)}</p>` : ''}<p style="margin:0;font-size:${p.codeFontSize || 32}px;font-weight:${p.codeFontWeight || 'bold'};color:${p.codeColor || '#18181B'};letter-spacing:${p.codeLetterSpacing ?? 4}px;${p.borderStyle !== 'none' ? `border:${p.borderWidth ?? 2}px ${p.borderStyle || 'dashed'} ${p.borderColor || '#18181B'};` : ''}border-radius:${p.borderRadius || 12}px;display:inline-block;padding:${cpv}px ${cph}px;max-width:100%;box-sizing:border-box;word-break:break-all;${p.codeBgColor ? `background-color:${p.codeBgColor};` : ''}" class="worder-coupon-code">${text(p.code)}</p>${p.footerText ? `<p style="margin:10px 0 0;font-size:${p.footerFontSize || 12}px;color:${p.footerColor || '#9CA3AF'};font-weight:${p.footerFontWeight || 'normal'};">${text(p.footerText)}</p>` : ''}</td></tr>`
     }
 
     case 'columns':
@@ -330,13 +366,13 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
     case 'split': {
       const isImgLeft = p.layout !== 'image-right'
       const ratios = (p.splitRatio || '50-50').split('-').map(Number)
-      const imgCell = `<td width="${ratios[isImgLeft ? 0 : 1]}%" valign="top" style="vertical-align:top;line-height:0;font-size:0;"><img src="${p.imageSrc || ''}" alt="${p.imageAlt || ''}" width="${p.imageWidth || 300}" style="max-width:100%;height:auto;display:block;vertical-align:bottom;" /></td>`
-      const textCell = `<td width="${ratios[isImgLeft ? 1 : 0]}%" valign="middle" style="vertical-align:middle;padding:16px 20px;font-family:${font};">${p.textHtml || ''}${p.showButton !== false ? `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:16px;"><tr><td style="background-color:${p.buttonColor || '#18181B'};border-radius:8px;padding:12px 24px;"><a href="${p.buttonHref || '#'}" style="color:${p.buttonTextColor || '#fff'};font-size:15px;font-weight:bold;text-decoration:none;display:block;font-family:${font};">${p.buttonText || 'Saiba Mais'}</a></td></tr></table>` : ''}</td>`
+      const imgCell = `<td width="${ratios[isImgLeft ? 0 : 1]}%" valign="top" style="vertical-align:top;line-height:0;font-size:0;"><img src="${attr(p.imageSrc)}" alt="${attr(p.imageAlt)}" width="${p.imageWidth || 300}" style="max-width:100%;height:auto;display:block;vertical-align:bottom;" /></td>`
+      const textCell = `<td width="${ratios[isImgLeft ? 1 : 0]}%" valign="middle" style="vertical-align:middle;padding:16px 20px;font-family:${font};">${p.textHtml || ''}${p.showButton !== false ? `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:16px;"><tr><td style="background-color:${p.buttonColor || '#18181B'};border-radius:8px;padding:12px 24px;"><a href="${attr(p.buttonHref || '#')}" style="color:${p.buttonTextColor || '#fff'};font-size:15px;font-weight:bold;text-decoration:none;display:block;font-family:${font};">${text(p.buttonText || 'Saiba Mais')}</a></td></tr></table>` : ''}</td>`
       return `<tr><td style="padding:${blockPad};${p.backgroundColor ? `background-color:${p.backgroundColor};` : ''}"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" class="worder-section-stack"><tr>${isImgLeft ? imgCell + textCell : textCell + imgCell}</tr></table></td></tr>`
     }
 
     case 'header-bar':
-      return `<tr><td style="padding:${blockPad};background-color:${p.backgroundColor || '#fff'};text-align:${p.align || 'center'};font-family:${font};font-size:${p.fontSize || 13}px;">${(p.links || []).map((l: any, i: number) => `${i > 0 ? `<span style="color:${p.separatorColor || '#D1D5DB'};margin:0 8px;">${p.separator || '|'}</span>` : ''}<a href="${l.url || '#'}" style="color:${p.textColor || '#374151'};text-decoration:none;">${l.text}</a>`).join('')}</td></tr>`
+      return `<tr><td style="padding:${blockPad};background-color:${p.backgroundColor || '#fff'};text-align:${p.align || 'center'};font-family:${font};font-size:${p.fontSize || 13}px;">${(p.links || []).map((l: any, i: number) => `${i > 0 ? `<span style="color:${p.separatorColor || '#D1D5DB'};margin:0 8px;">${text(p.separator || '|')}</span>` : ''}<a href="${attr(l.url || '#')}" style="color:${p.textColor || '#374151'};text-decoration:none;">${text(l.text)}</a>`).join('')}</td></tr>`
 
     case 'drop-shadow': {
       const opacity = p.shadowType === 'darker' ? 0.2 : p.shadowType === 'dark' ? 0.12 : 0.05
@@ -359,7 +395,7 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
           const fw = isHeader ? (p.headerFontWeight || '600') : 'normal'
           const fs = isHeader ? hfs : (p.cellFontSize || 14)
           const borderStyle = bw > 0 ? `border-bottom:${bw}px solid ${p.borderColor || '#E5E7EB'};${ci < row.length - 1 ? `border-right:${bw}px solid ${p.borderColor || '#E5E7EB'};` : ''}` : ''
-          return `<td style="padding:${cp}px ${cp + 4}px;${borderStyle}font-size:${fs}px;color:${txtCol};font-weight:${fw};background-color:${bgCol};text-align:${ta};font-family:${font};">${cell}</td>`
+          return `<td style="padding:${cp}px ${cp + 4}px;${borderStyle}font-size:${fs}px;color:${txtCol};font-weight:${fw};background-color:${bgCol};text-align:${ta};font-family:${font};">${text(cell)}</td>`
         }).join('')
         return `<tr>${cells}</tr>`
       }).join('')
@@ -369,7 +405,7 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
 
     case 'review-quote': {
       const stars = p.showStars !== false ? `<div style="margin-bottom:12px;font-size:20px;color:${p.starColor || '#FBBF24'};">${'★'.repeat(p.rating || 5)}${'☆'.repeat(5 - (p.rating || 5))}</div>` : ''
-      return `<tr><td style="padding:${blockPad};background-color:${p.backgroundColor || '#F9FAFB'};text-align:${p.quoteAlign || 'center'};font-family:${font};">${stars}<p style="margin:0;font-size:${p.quoteFontSize || 16}px;color:${p.quoteColor || '#374151'};font-style:${p.quoteStyle || 'italic'};line-height:1.6;">"${p.quote || ''}"</p><p style="margin:12px 0 0;font-size:${p.authorFontSize || 14}px;color:${p.authorColor || '#6B7280'};font-weight:500;">— ${p.author || ''}</p></td></tr>`
+      return `<tr><td style="padding:${blockPad};background-color:${p.backgroundColor || '#F9FAFB'};text-align:${p.quoteAlign || 'center'};font-family:${font};">${stars}<p style="margin:0;font-size:${p.quoteFontSize || 16}px;color:${p.quoteColor || '#374151'};font-style:${p.quoteStyle || 'italic'};line-height:1.6;">"${text(p.quote)}"</p><p style="margin:12px 0 0;font-size:${p.authorFontSize || 14}px;color:${p.authorColor || '#6B7280'};font-weight:500;">— ${text(p.author)}</p></td></tr>`
     }
 
     case 'countdown': {

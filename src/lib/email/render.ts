@@ -9,7 +9,7 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { rewriteImagesForEmail } from './image-rewrite'
 import { fitProductImage, fitProductImageStyle } from './product-image'
-import { buildProductGrid, type ProductGridConfig } from './product-grid'
+import { buildProductGrid, productGridTitle, type ProductGridConfig } from './product-grid'
 import { getAppBaseUrl } from '@/lib/app-url'
 import { stampHtmlLinks, type LinkParamsResolver } from '@/lib/tracking/link-params'
 
@@ -568,6 +568,30 @@ export function parseProductBlockMarker(
 }
 
 /**
+ * Apaga um bloco dinâmico que não tem o que mostrar — e a linha que o
+ * continha.
+ *
+ * Trocar só o marcador por vazio deixava para trás
+ * `<tr><td style="padding:24px"></td></tr>`: uma faixa de espaço em
+ * branco no meio do e-mail, do tamanho do respiro configurado. É o
+ * buraco que se vê quando o bloco "some". Quando o marcador é o único
+ * conteúdo da célula, a linha inteira vai junto; a tabela vazia que
+ * sobra não ocupa altura nenhuma.
+ *
+ * Se o marcador divide a célula com outra coisa, só ele sai — nada é
+ * removido por engano.
+ */
+function removeBlockRow(html: string, marker: string): string {
+  const escapado = marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const linha = new RegExp(`<tr[^>]*>\\s*<td[^>]*>\\s*${escapado}\\s*</td>\\s*</tr>`, 'g')
+  // `replace` primeiro e comparação depois: um `test` com regex global
+  // moveria o `lastIndex` e o `replace` seguinte começaria do meio.
+  const semLinha = html.replace(linha, '')
+  if (semLinha !== html) return semLinha
+  return html.replace(marker, '')
+}
+
+/**
  * Resolve dynamic product blocks in email HTML.
  * Replaces <!-- WORDER_PRODUCT_BLOCK:... --> comments with real product HTML.
  */
@@ -634,7 +658,7 @@ export async function resolveProductBlocks(
     }
 
     if (products.length === 0) {
-      result = result.replace(fullMatch, '')
+      result = removeBlockRow(result, fullMatch)
       continue
     }
 
@@ -644,9 +668,10 @@ export async function resolveProductBlocks(
       eventData?.Currency || eventData?.currency ||
       eventData?.extra?.currency || eventData?.raw?.currency || 'BRL'
 
+    const comMoeda = { ...cfg, currency }
     result = result.replace(
       fullMatch,
-      buildProductGrid(products, { ...cfg, currency })
+      productGridTitle(comMoeda) + buildProductGrid(products, comMoeda)
     )
   }
 
@@ -861,7 +886,7 @@ export async function resolveCartBlocks(
         })
       }
       if (products.length === 0) {
-        result = result.replace(match[0], '')
+        result = removeBlockRow(result, match[0])
         continue
       }
     }
@@ -967,8 +992,11 @@ export async function resolveCartBlocks(
       </td>` : ''
 
       const detailParts: string[] = []
-      if (cfg.showName) detailParts.push(`<p style="margin:0 0 6px;font-size:${cfg.nameFontSize}px;font-weight:${cfg.nameWeight};color:${cfg.nameColor};line-height:1.35;">${escapeHtml(title)}</p>`)
-      if (cfg.showDescription && desc) detailParts.push(`<p style="margin:0 0 6px;font-size:${cfg.descFontSize}px;color:${cfg.descColor};line-height:1.4;">${escapeHtml(desc)}</p>`)
+      // A fonte do nome e o peso da descrição existem no editor e não
+      // chegavam ao envio: quem os mudava via na tela e não no e-mail.
+      const nomeFonte = cfg.nameFontFamily && cfg.nameFontFamily !== 'inherit' ? `font-family:${cfg.nameFontFamily};` : ''
+      if (cfg.showName) detailParts.push(`<p style="margin:0 0 6px;font-size:${cfg.nameFontSize}px;font-weight:${cfg.nameWeight};color:${cfg.nameColor};${nomeFonte}line-height:1.35;">${escapeHtml(title)}</p>`)
+      if (cfg.showDescription && desc) detailParts.push(`<p style="margin:0 0 6px;font-size:${cfg.descFontSize}px;font-weight:${cfg.descWeight || '400'};color:${cfg.descColor};line-height:1.4;">${escapeHtml(desc)}</p>`)
       if (cfg.showPrice) {
         let priceHtml = `<span style="font-size:${cfg.priceFontSize}px;font-weight:${cfg.priceWeight};color:${cfg.priceColor};">${price}</span>`
         if (cfg.showOldPrice && oldPrice) {
@@ -1213,7 +1241,7 @@ export function resolveOrderBlocks(
     const sepColor = cfg.separatorColor || divColor
 
     if (items.length === 0) {
-      result = result.replace(match[0], '')
+      result = removeBlockRow(result, match[0])
       continue
     }
 

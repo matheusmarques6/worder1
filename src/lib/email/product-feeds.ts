@@ -308,15 +308,29 @@ export function isExcluded(p: any, excluded: Set<string>): boolean {
 // and if that still yields zero we fall back to ANY product of the store so
 // a recommendation block never renders empty when the catalog IS synced.
 async function fetchNewestCatalog(orgId: string, storeId: string, limit: number, excluded?: Set<string>): Promise<any[]> {
+  // Busca com folga para poder descartar quem não tem foto sem devolver
+  // menos produto do que o bloco pediu.
+  const fetchSize = Math.min(Math.max(limit * 4, limit + 8), 100)
   const base = () => catalogQuery(orgId, storeId, excluded)
     .order('created_at', { ascending: false })
-    .limit(limit)
+    .limit(fetchSize)
   let { data } = await base().or('status.ilike.active,status.is.null')
   if (!data || data.length === 0) {
     const retry = await base()
     data = retry.data || []
   }
-  return data || []
+  const todos = data || []
+
+  // Cartão de recomendação sem foto vira um retângulo cinza no e-mail.
+  // Medido no catálogo real: os dois produtos mais recentes de uma das
+  // lojas são "Test Product" sem imagem, e como a ordem é do mais novo
+  // para o mais antigo eles ocupavam as duas primeiras vagas de toda
+  // grade daquela loja. Quem tem foto vem primeiro; os sem foto só
+  // entram para completar, e ainda assim é melhor do que grade vazia.
+  const temFoto = (p: any) => Array.isArray(p?.images) && p.images.length > 0
+  const comFoto = todos.filter(temFoto)
+  const semFoto = todos.filter((p: any) => !temFoto(p))
+  return [...comFoto, ...semFoto].slice(0, limit)
 }
 
 export async function resolveProductFeed(opts: ResolveFeedOptions): Promise<any[]> {

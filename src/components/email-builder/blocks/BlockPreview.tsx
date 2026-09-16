@@ -594,7 +594,11 @@ export function BlockPreview({
                     )}
                     {p.showPrice !== false && (
                       <div onClick={subClick('price')} className={subRing('price')} style={{ marginTop: 4, padding: '2px 0' }}>
-                        {p.showComparePrice && (
+                        {/* `!== false` e não verdade simples: é o que o envio
+                            faz, e o padrão do bloco é ligado. Com verdade
+                            simples, uma configuração sem a chave escondia o
+                            preço riscado aqui e mostrava no e-mail. */}
+                        {p.showComparePrice !== false && (
                           <span
                             style={{
                               fontSize: (p.priceFontSize || 16) - 3,
