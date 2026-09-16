@@ -656,7 +656,7 @@ export default function DashboardPage() {
                     />
                     <Tooltip
                       cursor={{ fill: '#F4F4F5' }}
-                      content={<RichTooltip isRevenue={tab === 'revenue'} />}
+                      content={<RichTooltip isRevenue={tab === 'revenue'} currency={currency} />}
                       wrapperStyle={{ outline: 'none' }}
                     />
                     <Bar dataKey="campanhas" stackId="a" fill="#F26B2A" barSize={34} />
@@ -774,9 +774,10 @@ function Sparkline({ values }: { values: number[] }) {
 // Rich tooltip used by the stacked bar chart — shows a breakdown by
 // category with color dots, tabular-nums values, and a separator above
 // the total so it reads like the Klaviyo / Linear tooltip style.
-function RichTooltip({ active, payload, label, isRevenue }: any) {
+function RichTooltip({
+  active, payload, label, isRevenue, currency,
+}: { active?: boolean; payload?: any[]; label?: string; isRevenue: boolean; currency: string }) {
   if (!active || !payload || !payload.length) return null
-  const currency = (useStoreStore((s) => s.currentStore?.currency) || "BRL").toUpperCase()
   const rows: Array<{ name: string; value: number; color: string }> = []
   const keyMap: Record<string, { name: string; color: string }> = {
     campanhas: { name: 'Campanhas', color: '#F26B2A' },

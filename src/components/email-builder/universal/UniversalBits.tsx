@@ -319,17 +319,6 @@ export function UniversalThumb({ content, kind, height = 64, width = 600 }: {
     ? (content?.styles?.contentBackgroundColor || content?.styles?.backgroundColor || '#ffffff')
     : '#ffffff'
 
-  if (blocks.length === 0) {
-    return (
-      <div
-        className="flex items-center justify-center bg-gray-50 border-b border-gray-100"
-        style={{ height }}
-      >
-        <Globe className="w-4 h-4 text-gray-300" />
-      </div>
-    )
-  }
-
   // O conteúdo é renderizado na largura real do e-mail e só então
   // encolhido: reduzir a largura reflui o texto e a miniatura deixaria
   // de parecer com o e-mail. A escala sai da largura disponível, medida
@@ -352,6 +341,17 @@ export function UniversalThumb({ content, kind, height = 64, width = 600 }: {
     observer.current = new ResizeObserver(apply)
     observer.current.observe(node)
   }, [width])
+
+  if (blocks.length === 0) {
+    return (
+      <div
+        className="flex items-center justify-center bg-gray-50 border-b border-gray-100"
+        style={{ height }}
+      >
+        <Globe className="w-4 h-4 text-gray-300" />
+      </div>
+    )
+  }
 
   return (
     <div
