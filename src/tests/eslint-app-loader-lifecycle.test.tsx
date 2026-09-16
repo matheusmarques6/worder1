@@ -23,8 +23,8 @@ let IntegrationsPage: typeof import('@/app/(dashboard)/crm/integrations/page').d
 const store = (id: string) => ({ id, currency: 'BRL' } as any)
 const response = (data: unknown, ok = true) => ({ ok, json: async () => data })
 
-const lastRequest = (fetchMock: ReturnType<typeof vi.fn>, prefix: string) => {
-  const urls = fetchMock.mock.calls.map(([url]) => String(url)).filter((url) => url.startsWith(prefix))
+const lastRequest = <Args extends readonly unknown[]>(fetchMock: { mock: { calls: readonly Args[] } }, prefix: string) => {
+  const urls = fetchMock.mock.calls.map((args) => String(args[0])).filter((url) => url.startsWith(prefix))
   return urls.at(-1)
 }
 
