@@ -31,6 +31,7 @@ let container: HTMLDivElement
 let DashboardLayout: typeof import('@/app/(dashboard)/layout').default
 let FlowBuilder: typeof import('@/components/flow-builder').FlowBuilder
 let AdvancedMetricsSection: typeof import('@/components/shopify/AdvancedMetricsSection').AdvancedMetricsSection
+let ContactDrawer: typeof import('@/components/crm/ContactDrawer').ContactDrawer
 
 const store = (id: string) => ({ id, name: `Store ${id}`, domain: `${id}.myshopify.com`, isActive: true })
 const response = (data: unknown) => ({ ok: true, json: async () => data })
@@ -56,6 +57,7 @@ beforeEach(async () => {
   ;({ default: DashboardLayout } = await import('@/app/(dashboard)/layout'))
   ;({ FlowBuilder } = await import('@/components/flow-builder'))
   ;({ AdvancedMetricsSection } = await import('@/components/shopify/AdvancedMetricsSection'))
+  ;({ ContactDrawer } = await import('@/components/crm/ContactDrawer'))
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
@@ -155,4 +157,28 @@ it('does not let flow A analytics repopulate state after switching to B', async 
   await act(async () => { root.render(<FlowBuilder automationId="flow-b" initialNodes={node('b')} {...props} />) })
   await act(async () => { requests[0].resolve(response({ nodeStats: { stale: { sent: 1 } } })) })
   await vi.waitFor(() => expect(useFlowStore.getState().analyticsData).toEqual({}))
+})
+
+it('renders enriched contact deals whether pipelines or deals arrive first', async () => {
+  const deals = deferred<any>()
+  const pipeline = { id: 'pipeline-1', name: 'Pipeline real', color: '#123', stages: [{ id: 'stage-1', name: 'Qualificado', color: '#456' }] }
+  vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+    const url = String(input)
+    if (url.includes('/api/deals?')) return deals.promise
+    return Promise.resolve(response({ activities: [], contact: {} }))
+  }))
+  const contact = { id: 'contact-1', organization_id: 'org-1', first_name: 'Ana', last_name: 'Silva', email: 'ana@example.com', tags: [] } as any
+  const props = { contact, onClose: vi.fn(), onUpdateTags: vi.fn(async () => undefined) }
+  await act(async () => { root.render(<ContactDrawer {...props} pipelines={[pipeline] as any} />) })
+  await act(async () => { deals.resolve(response({ deals: [{ id: 'deal-1', title: 'Deal tardio', value: 10, pipeline_id: 'pipeline-1', stage_id: 'stage-1' }] })) })
+  await vi.waitFor(() => expect(container.textContent).toContain('Pipeline real'))
+  expect(container.textContent).not.toContain('Deal tardioPipeline•')
+
+  const dealsFirst = deferred<any>()
+  vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => String(input).includes('/api/deals?') ? dealsFirst.promise : Promise.resolve(response({ activities: [], contact: {} }))))
+  await act(async () => { root.render(<ContactDrawer key="deals-first" {...props} pipelines={[]} />) })
+  await act(async () => { dealsFirst.resolve(response({ deals: [{ id: 'deal-2', title: 'Deal primeiro', value: 10, pipeline_id: 'pipeline-1', stage_id: 'stage-1' }] })) })
+  await vi.waitFor(() => expect(container.textContent).toContain('Deal primeiro'))
+  await act(async () => { root.render(<ContactDrawer {...props} pipelines={[pipeline] as any} />) })
+  await vi.waitFor(() => expect(container.textContent).toContain('Pipeline real'))
 })
