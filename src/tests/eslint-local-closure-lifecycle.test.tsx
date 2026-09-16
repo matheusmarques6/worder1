@@ -55,16 +55,22 @@ it('loads pipeline automations once while assigning its fallback stage', async (
 
 it('keeps one debounce for an equivalent rule rerender and sends the latest snapshot', async () => {
   vi.useFakeTimers()
-  const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ count: 1, truncated: false, sample: [] }) }))
+  const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => ({ ok: true, json: async () => ({ count: 1, truncated: false, sample: [] }) }))
   vi.stubGlobal('fetch', fetchMock)
   const rule: SegmentRule = { version: 2, root: { type: 'group', logic: 'AND', children: [{ type: 'profile', field: 'email', operator: 'is_set' } as any] } }
-  const latestRule = JSON.parse(JSON.stringify(rule)) as SegmentRule
+  const equivalentRule = JSON.parse(JSON.stringify(rule)) as SegmentRule
+  const updatedRule: SegmentRule = { ...equivalentRule, root: { ...equivalentRule.root, logic: 'OR' } }
   await act(async () => { root.render(<LivePreviewPanel rule={rule} organizationId="org-1" storeId="store-1" />) })
   await act(async () => { vi.advanceTimersByTime(250) })
-  await act(async () => { root.render(<LivePreviewPanel rule={latestRule} organizationId="org-1" storeId="store-1" />) })
-  await act(async () => { vi.advanceTimersByTime(249) })
-  expect(fetchMock).not.toHaveBeenCalled()
-  await act(async () => { vi.advanceTimersByTime(1) })
+  await act(async () => { root.render(<LivePreviewPanel rule={equivalentRule} organizationId="org-1" storeId="store-1" />) })
+  await act(async () => { vi.advanceTimersByTime(250) })
   await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
-  expect(JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)).toEqual({ rule: latestRule, organization_id: 'org-1', store_id: 'store-1' })
+  expect(JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)).toEqual({ rule: equivalentRule, organization_id: 'org-1', store_id: 'store-1' })
+
+  await act(async () => { root.render(<LivePreviewPanel rule={updatedRule} organizationId="org-1" storeId="store-1" />) })
+  await act(async () => { vi.advanceTimersByTime(499) })
+  expect(fetchMock).toHaveBeenCalledTimes(1)
+  await act(async () => { vi.advanceTimersByTime(1) })
+  await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+  expect(JSON.parse((fetchMock.mock.calls[1][1] as RequestInit).body as string)).toEqual({ rule: updatedRule, organization_id: 'org-1', store_id: 'store-1' })
 })
