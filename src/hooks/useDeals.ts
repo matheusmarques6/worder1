@@ -80,6 +80,7 @@ export function useDeals(pipelineId?: string, storeIdOverride?: string) {
       setLoading(false);
     }
   }, [user?.organization_id, effectiveStoreId, pipelineId]);
+  const refetch = useCallback(() => fetchDeals(true), [fetchDeals]);
 
   useEffect(() => {
     if (!_hasHydrated) return;
@@ -253,7 +254,7 @@ export function useDeals(pipelineId?: string, storeIdOverride?: string) {
     pipelines,
     loading,
     error,
-    refetch: () => fetchDeals(true),
+    refetch,
     refetchPipelines: fetchPipelines,
     createDeal,
     updateDeal,

@@ -73,9 +73,11 @@ export function AdvancedMetricsSection({ storeId }: AdvancedMetricsSectionProps)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'rfm' | 'cohort'>('rfm')
   const activeStoreId = useRef(storeId)
+  const requestGeneration = useRef(0)
 
   const fetchData = useCallback(async (requestedStoreId = storeId) => {
     if (!requestedStoreId) return
+    const generation = ++requestGeneration.current
     
     setIsLoading(true)
     setError(null)
@@ -84,24 +86,25 @@ export function AdvancedMetricsSection({ storeId }: AdvancedMetricsSectionProps)
       const response = await fetch(`/api/shopify/analytics/advanced?storeId=${requestedStoreId}`)
       const result = await response.json()
 
-      if (activeStoreId.current !== requestedStoreId) return
+      if (generation !== requestGeneration.current || activeStoreId.current !== requestedStoreId) return
       if (result.success) {
         setData(result.data)
       } else {
         setError(result.error || 'Erro ao carregar dados')
       }
     } catch (err) {
-      if (activeStoreId.current === requestedStoreId) {
+      if (generation === requestGeneration.current && activeStoreId.current === requestedStoreId) {
         setError('Erro de conexão')
         console.error(err)
       }
     } finally {
-      if (activeStoreId.current === requestedStoreId) setIsLoading(false)
+      if (generation === requestGeneration.current && activeStoreId.current === requestedStoreId) setIsLoading(false)
     }
   }, [storeId])
 
   useEffect(() => {
     activeStoreId.current = storeId
+    requestGeneration.current++
     setData(null)
     setError(null)
   }, [storeId])

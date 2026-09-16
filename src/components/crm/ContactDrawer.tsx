@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   X,
@@ -245,6 +245,8 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
   const [browsingSessions, setBrowsingSessions] = useState<BrowsingSession[]>([])
   const [showOrderHistory, setShowOrderHistory] = useState(false)
   const [showBrowsingHistory, setShowBrowsingHistory] = useState(false)
+  const pipelinesRef = useRef(pipelines)
+  pipelinesRef.current = pipelines
 
   // Update deal info when pipelines load
   useEffect(() => {
@@ -283,7 +285,11 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
       )
       if (response.ok) {
         const data = await response.json()
-        setContactDeals(data.deals || [])
+        setContactDeals((data.deals || []).map((deal: ContactDeal) => {
+          const pipeline = pipelinesRef.current.find(p => p.id === deal.pipeline_id)
+          const stage = pipeline?.stages?.find(s => s.id === deal.stage_id)
+          return { ...deal, pipeline: pipeline ? { name: pipeline.name, color: pipeline.color } : deal.pipeline, stage: stage ? { name: stage.name, color: stage.color } : deal.stage }
+        }))
       }
     } catch (error) {
       console.error('Error fetching contact deals:', error)

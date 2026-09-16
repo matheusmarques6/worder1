@@ -152,6 +152,8 @@ export function FlowBuilder({
     const id = automationId || 'new';
     if (initializedFlowId.current === id) return;
     initializedFlowId.current = id;
+    setSavedAutomationId(automationId);
+    useFlowStore.setState({ showTestModal: false, showHistoryPanel: false, showAnalytics: false, analyticsData: {} });
     const convertedNodes = convertLegacyNodes(initialNodes);
     const convertedEdges = convertLegacyEdges(initialEdges);
 
@@ -191,7 +193,10 @@ export function FlowBuilder({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  useEffect(() => () => resetStore(), [resetStore]);
+  useEffect(() => () => {
+    initializedFlowId.current = null;
+    resetStore();
+  }, [resetStore]);
 
   // Handle save with conversion back to legacy format
   const handleSave = useCallback(async () => {
