@@ -498,7 +498,7 @@ export const AdsSummaryCards = ({ totalSpend, spendChange, cpa, roas, totalConve
 }
 
 // Export all components
-export default {
+const adsComponents = {
   PlatformBadge,
   AdsPlatformCard,
   AdsTrendChart,
@@ -509,3 +509,5 @@ export default {
   GoogleIcon,
   TiktokIcon,
 }
+
+export default adsComponents

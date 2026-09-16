@@ -1620,7 +1620,7 @@ function SmartOfferEditor({ p, up }: { p: any; up: (k: string, v: any) => void }
       <Toggle label="Oferta por intenção" hint="Quem está quase comprando não precisa do desconto inteiro; quem chegou frio precisa de mais. A intenção é medida na hora de mostrar (rolagem, permanência, páginas, carrinho)." checked={!!so.enabled} onChange={v => set({ enabled: v })} />
       {so.enabled && (
         <div className="space-y-2">
-          <p className="text-[11px] text-gray-500 leading-snug bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">Escreva <code className="px-1 bg-white border border-gray-200 rounded text-[10px]">{'{{offer}}'}</code> no texto ou no botão e a oferta escolhida aparece no lugar (ex.: "Ganhe {'{{offer}}'} agora"). Com "sem desconto", o bloco de cupom some.</p>
+          <p className="text-[11px] text-gray-500 leading-snug bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">Escreva <code className="px-1 bg-white border border-gray-200 rounded text-[10px]">{'{{offer}}'}</code> no texto ou no botão e a oferta escolhida aparece no lugar (ex.: &quot;Ganhe {'{{offer}}'} agora&quot;). Com &quot;sem desconto&quot;, o bloco de cupom some.</p>
           <OfferSelectField value={so.lowTier} onChange={v => set({ lowTier: v })} baseLabel={baseLabel} tiers={tiers} label={`Intenção baixa (score < ${so.lowMax})`} hint="Chegou frio: aqui cabe o empurrão maior." />
           <OfferSelectField value={so.midTier} onChange={v => set({ midTier: v })} baseLabel={baseLabel} tiers={tiers} label={`Intenção média (${so.lowMax}–${so.highMin - 1})`} hint="O padrão." />
           <OfferSelectField value={so.highTier} onChange={v => set({ highTier: v })} baseLabel={baseLabel} tiers={tiers} label={`Intenção alta (score ≥ ${so.highMin})`} hint="Já ia comprar: dá para segurar margem." />
@@ -1703,7 +1703,7 @@ function GameEditor({ type, p, up, hints, onOpenMedia }: { type: string; p: any;
           )
         })}
       </div>
-      <p className="text-[11px] text-gray-400 leading-snug">O peso define a chance de cada segmento (a porcentagem ao lado). Mantenha o rótulo coerente com o prêmio: quem lê "15% OFF" e recebe 10% não volta.</p>
+      <p className="text-[11px] text-gray-400 leading-snug">O peso define a chance de cada segmento (a porcentagem ao lado). Mantenha o rótulo coerente com o prêmio: quem lê &quot;15% OFF&quot; e recebe 10% não volta.</p>
     </div>
     <div className="pt-4 border-t border-gray-100 space-y-3">
       <SectionHeader title="Botão" icon={<MousePointerClick className="w-3 h-3" />} />
@@ -1713,7 +1713,7 @@ function GameEditor({ type, p, up, hints, onOpenMedia }: { type: string; p: any;
           no envio de qualquer maneira. */}
       <Toggle label="Botão junto do jogo" checked={p.showButton !== false} onChange={v => up('showButton', v)} />
       {p.showButton === false ? (
-        <p className="text-[11px] text-gray-400 leading-snug">Quem dispara é o botão da etapa. Confira se existe um bloco de botão com a ação "Enviar" abaixo do jogo.</p>
+        <p className="text-[11px] text-gray-400 leading-snug">Quem dispara é o botão da etapa. Confira se existe um bloco de botão com a ação &quot;Enviar&quot; abaixo do jogo.</p>
       ) : (
         <>
           <LabeledField label="Texto">
@@ -2159,7 +2159,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
             <Sparkles className="w-3.5 h-3.5 text-blue-500 flex-shrink-0 mt-0.5" />
             <p className="text-[11px] text-blue-900/80 leading-relaxed">
               Edite cores, borda e tipografia do campo na aba <span className="font-semibold">Fields</span>.
-              Use o botão <span className="font-semibold">"Aplicar a todos"</span> lá para replicar o estilo em todos os inputs.
+              Use o botão <span className="font-semibold">&quot;Aplicar a todos&quot;</span> lá para replicar o estilo em todos os inputs.
             </p>
           </div>
         )}
@@ -3140,7 +3140,7 @@ function AiTargetingBox({ formId, onApply }: { formId: string; onApply: (patch: 
   const hasPatch = !!result && Object.keys(result.patch).length > 0
   return (
     <div className="space-y-2">
-      <p className="text-[11px] text-gray-500 leading-snug">Escreva em português quem deve ver este popup. Ex.: "só no celular, para quem chegou de anúncio, na página de produto, depois de 10 segundos, e nunca para inscritos".</p>
+      <p className="text-[11px] text-gray-500 leading-snug">Escreva em português quem deve ver este popup. Ex.: &quot;só no celular, para quem chegou de anúncio, na página de produto, depois de 10 segundos, e nunca para inscritos&quot;.</p>
       <textarea className={inp + ' resize-none'} rows={3} value={prompt} onChange={e => setPrompt(e.target.value.slice(0, 600))} placeholder="Quem deve ver e quando…"
         onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') ask() }} />
       <div className="flex items-center justify-between gap-2">
@@ -3387,7 +3387,7 @@ function BehaviorPanel({ beh, onChange, formId, postSubmit, onPostSubmitChange, 
                     <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">Sem template escolhido a confirmação fica desligada: o consentimento marcado no popup vale na hora, sem pedido no WhatsApp.</p>
                   )}
                   {waTemplatesLoaded && wa.templateName && !waTemplate && (
-                    <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">O template salvo ("{wa.templateName}") não está mais aprovado ou foi removido. Escolha outro — até lá o pedido não sai.</p>
+                    <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">O template salvo (&quot;{wa.templateName}&quot;) não está mais aprovado ou foi removido. Escolha outro — até lá o pedido não sai.</p>
                   )}
                   {waTemplate && waTemplate.category !== 'UTILITY' && (
                     <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">Este template é de {waTemplate.category === 'MARKETING' ? 'Marketing' : waTemplate.category}. A Meta não permite marketing antes do opt-in, então o pedido não será enviado. Use um template de Utilidade.</p>

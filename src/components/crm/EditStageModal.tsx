@@ -285,7 +285,7 @@ export function EditStageModal({
                             Estágio de Ganho
                           </span>
                           <p className="text-xs text-gray-500 mt-0.5">
-                            Deals movidos para cá serão marcados como "Ganho" automaticamente
+                            Deals movidos para cá serão marcados como &quot;Ganho&quot; automaticamente
                           </p>
                         </div>
                       </label>
@@ -308,7 +308,7 @@ export function EditStageModal({
                             Estágio de Perda
                           </span>
                           <p className="text-xs text-gray-500 mt-0.5">
-                            Deals movidos para cá serão marcados como "Perdido" automaticamente
+                            Deals movidos para cá serão marcados como &quot;Perdido&quot; automaticamente
                           </p>
                         </div>
                       </label>

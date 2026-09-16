@@ -522,7 +522,7 @@ export default function ProductsPage() {
             <p className="text-sm text-gray-600">
               {totalProducts} produtos sincronizados
             </p>
-            <p className="text-xs text-gray-400">Preço, estoque e disponibilidade chegam pela Shopify em tempo real (webhooks). "Sync Produtos" força uma leitura completa.</p>
+            <p className="text-xs text-gray-400">Preço, estoque e disponibilidade chegam pela Shopify em tempo real (webhooks). &quot;Sync Produtos&quot; força uma leitura completa.</p>
           </div>
         </div>
         <div className="flex items-center gap-2">

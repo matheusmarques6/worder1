@@ -464,7 +464,7 @@ export function PropertiesPanel({ organizationId, automationId, storeId }: { org
                 
                 <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
                   <p className="text-[11px] text-blue-700">
-                    Exemplo: Dispara quando deal mover de "Qualificação" para "Proposta"
+                    Exemplo: Dispara quando deal mover de &quot;Qualificação&quot; para &quot;Proposta&quot;
                   </p>
                 </div>
               </>
@@ -1162,7 +1162,7 @@ export function PropertiesPanel({ organizationId, automationId, storeId }: { org
                 </div>
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
                   <p className="text-[11px] text-amber-700">
-                    Exemplo: "Maior que R$ 100" vai seguir o caminho "Sim" se o pedido for acima de R$ 100
+                    Exemplo: &quot;Maior que R$ 100&quot; vai seguir o caminho &quot;Sim&quot; se o pedido for acima de R$ 100
                   </p>
                 </div>
               </>
@@ -1205,7 +1205,7 @@ export function PropertiesPanel({ organizationId, automationId, storeId }: { org
                 </div>
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
                   <p className="text-[11px] text-amber-700">
-                    Exemplo: "Maior que R$ 5.000" vai seguir o caminho "Sim" se o deal for acima desse valor
+                    Exemplo: &quot;Maior que R$ 5.000&quot; vai seguir o caminho &quot;Sim&quot; se o deal for acima desse valor
                   </p>
                 </div>
               </>

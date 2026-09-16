@@ -116,7 +116,6 @@ vi.mock('@/lib/observability/whatsapp-logger', () => ({
 let helper: any = null
 let helperLoadError: any = null
 try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
   helper = await import('@/lib/whatsapp/recipient-claim')
 } catch (e) {
   helperLoadError = e

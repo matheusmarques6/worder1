@@ -990,7 +990,7 @@ function ResponsesModal({ isOpen, onClose, survey, responses }: ResponsesModalPr
 
                     {response.feedback && (
                       <p className="text-white text-sm mt-2 whitespace-pre-wrap">
-                        "{response.feedback}"
+                        &quot;{response.feedback}&quot;
                       </p>
                     )}
 

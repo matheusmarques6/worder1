@@ -292,7 +292,7 @@ export function CustomFieldsManager({
                   <div className="text-center py-8 text-gray-500">
                     <Settings className="w-12 h-12 mx-auto mb-4 opacity-50" />
                     <p>Nenhum campo personalizado criado</p>
-                    <p className="text-sm">Clique em "Adicionar Campo" para começar</p>
+                    <p className="text-sm">Clique em &quot;Adicionar Campo&quot; para começar</p>
                   </div>
                 )}
                 

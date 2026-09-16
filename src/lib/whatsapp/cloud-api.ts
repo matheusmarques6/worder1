@@ -786,7 +786,6 @@ export async function verifyWebhookSignature(
 
   // Node:crypto path (preferred — runs in API routes & workers)
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const nodeCrypto = require('crypto') as typeof import('crypto');
     const expected = nodeCrypto
       .createHmac('sha256', appSecret)

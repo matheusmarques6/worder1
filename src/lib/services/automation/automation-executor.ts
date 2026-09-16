@@ -454,8 +454,10 @@ export function mapShopifyEventToTrigger(topic: string): string | null {
 // EXPORT DEFAULT
 // =============================================
 
-export default {
+const automationExecutor = {
   getActiveRulesForEvent,
   executeAutomationRules,
   mapShopifyEventToTrigger,
 };
+
+export default automationExecutor

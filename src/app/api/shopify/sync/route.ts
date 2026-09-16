@@ -16,9 +16,7 @@ const SHOPIFY_API_VERSION = '2026-04';
 // FETCH HELPERS
 // =============================================
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function fetchAllOrders(shopDomain: string, accessToken: string): Promise<any[]> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const allOrders: any[] = [];
   let nextPageUrl: string | null = `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/orders.json?status=any&limit=250`;
   
@@ -62,7 +60,6 @@ async function fetchAllOrders(shopDomain: string, accessToken: string): Promise<
   return allOrders;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function fetchCustomers(shopDomain: string, accessToken: string): Promise<any[]> {
   const response: Response = await fetch(
     `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/customers.json?limit=250`,
@@ -83,7 +80,6 @@ async function fetchCustomers(shopDomain: string, accessToken: string): Promise<
 // METRICS CALCULATION
 // =============================================
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function calculateMetrics(orders: any[]) {
   const paidOrders = orders.filter(o => 
     ['paid', 'partially_paid', 'refunded', 'partially_refunded'].includes(o.financial_status)
@@ -99,9 +95,7 @@ function calculateMetrics(orders: any[]) {
     totalDescontos += parseFloat(order.total_discounts || '0');
     
     if (order.refunds?.length > 0) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       order.refunds.forEach((refund: any) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         refund.refund_line_items?.forEach((item: any) => {
           totalRefunds += parseFloat(item.subtotal || '0');
         });
@@ -206,7 +200,6 @@ export async function POST(request: NextRequest) {
       .eq('organization_id', storeOrganizationId);
 
     if (orders.length > 0) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ordersToInsert = orders.map((order: any) => ({
         store_id: store.id,
         organization_id: storeOrganizationId,

@@ -106,7 +106,6 @@ export async function POST(request: NextRequest) {
       syncLocations: options.syncLocations,
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let result: any;
     const useGraphQL = (options as any).useGraphQL === true;
 

@@ -60,7 +60,6 @@ function getDb(): SupabaseClient {
 }
 
 const supabase = new Proxy({} as SupabaseClient, {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   get(_, prop) { return (getDb() as any)[prop]; }
 });
 

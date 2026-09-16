@@ -574,7 +574,7 @@ export async function enqueueWebhookDelivery(
   return response.messageId;
 }
 
-export default {
+const queue = {
   isQStashConfigured,
   enqueueAutomationRun,
   enqueueAutomationStep,
@@ -586,3 +586,5 @@ export default {
   calculateDelaySeconds,
   scheduleAutomationRun,
 };
+
+export default queue

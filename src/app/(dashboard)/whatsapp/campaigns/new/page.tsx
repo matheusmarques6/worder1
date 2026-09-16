@@ -303,7 +303,7 @@ export default function NewCampaignPage() {
                     <div className="flex flex-col items-center justify-center h-48 text-gray-500 border border-dashed border-gray-200 rounded-xl">
                       <FileText className="w-12 h-12 mb-3 opacity-30" />
                       <p className="text-sm mb-2">Nenhum template encontrado</p>
-                      <p className="text-xs text-gray-400">Clique em "Sincronizar da Meta" para importar</p>
+                      <p className="text-xs text-gray-400">Clique em &quot;Sincronizar da Meta&quot; para importar</p>
                     </div>
                   ) : (
                   <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">

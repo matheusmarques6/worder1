@@ -245,7 +245,7 @@ export function VariablePicker({ triggerType, onSelect, onClose, eventData }: Va
         {/* Footer */}
         <div className="p-4 border-t border-gray-200 bg-gray-50">
           <p className="text-xs text-gray-500">
-            Clique em uma variável para inserir ou use o botão de copiar. Use <code className="text-blue-600 bg-gray-100 px-1 rounded">|default:'valor'</code> para valores padrão.
+            Clique em uma variável para inserir ou use o botão de copiar. Use <code className="text-blue-600 bg-gray-100 px-1 rounded">{"|default:'valor'"}</code> para valores padrão.
           </p>
         </div>
       </motion.div>

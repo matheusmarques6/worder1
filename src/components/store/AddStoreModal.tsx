@@ -477,12 +477,12 @@ export function AddStoreModal({ isOpen, onClose, onSuccess }: AddStoreModalProps
                       </li>
                       <li className="flex gap-2">
                         <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-bold flex-shrink-0 mt-0.5">2</span>
-                        <span>Clique <strong>"Criar um app"</strong> e nomeie como <strong>"Worder"</strong></span>
+                        <span>Clique <strong>&quot;Criar um app&quot;</strong> e nomeie como <strong>&quot;Worder&quot;</strong></span>
                       </li>
                       <li className="flex gap-2">
                         <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-bold flex-shrink-0 mt-0.5">3</span>
                         <div>
-                          <span>Clique <strong>"Configurar escopos da Admin API"</strong> e ative:</span>
+                          <span>Clique <strong>&quot;Configurar escopos da Admin API&quot;</strong> e ative:</span>
                           <div className="mt-1.5 flex flex-wrap gap-1">
                             {REQUIRED_SCOPES.map(s => (
                               <span key={s} className="px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded text-[10px] font-mono">{s}</span>
@@ -500,11 +500,11 @@ export function AddStoreModal({ isOpen, onClose, onSuccess }: AddStoreModalProps
                       </li>
                       <li className="flex gap-2">
                         <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-bold flex-shrink-0 mt-0.5">4</span>
-                        <span>Clique <strong>"Salvar"</strong> e depois <strong>"Instalar app"</strong></span>
+                        <span>Clique <strong>&quot;Salvar&quot;</strong> e depois <strong>&quot;Instalar app&quot;</strong></span>
                       </li>
                       <li className="flex gap-2">
                         <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-bold flex-shrink-0 mt-0.5">5</span>
-                        <span>Na aba <strong>"Credenciais da API"</strong>, copie o <strong>Client ID</strong> e o <strong>Client Secret</strong> e cole abaixo</span>
+                        <span>Na aba <strong>&quot;Credenciais da API&quot;</strong>, copie o <strong>Client ID</strong> e o <strong>Client Secret</strong> e cole abaixo</span>
                       </li>
                     </ol>
                   </div>
@@ -699,7 +699,7 @@ export function AddStoreModal({ isOpen, onClose, onSuccess }: AddStoreModalProps
                   </li>
                   <li className="flex gap-2">
                     <span className="text-gray-400 font-mono text-[11px] flex-shrink-0">b.</span>
-                    <span>Clique <strong>"Adicionar pixel personalizado"</strong></span>
+                    <span>Clique <strong>&quot;Adicionar pixel personalizado&quot;</strong></span>
                   </li>
                   <li className="flex gap-2">
                     <span className="text-gray-400 font-mono text-[11px] flex-shrink-0">c.</span>
@@ -711,11 +711,11 @@ export function AddStoreModal({ isOpen, onClose, onSuccess }: AddStoreModalProps
                   </li>
                   <li className="flex gap-2">
                     <span className="text-gray-400 font-mono text-[11px] flex-shrink-0">e.</span>
-                    <span>Privacidade do cliente: <strong>"Não obrigatório"</strong></span>
+                    <span>Privacidade do cliente: <strong>&quot;Não obrigatório&quot;</strong></span>
                   </li>
                   <li className="flex gap-2">
                     <span className="text-gray-400 font-mono text-[11px] flex-shrink-0">f.</span>
-                    <span>Clique <strong>"Salvar"</strong> e depois <strong>"Conectar"</strong></span>
+                    <span>Clique <strong>&quot;Salvar&quot;</strong> e depois <strong>&quot;Conectar&quot;</strong></span>
                   </li>
                 </ol>
               </div>

@@ -211,7 +211,7 @@ export function DealTimeline({ dealId, className = '' }: DealTimelineProps) {
                 {/* Notes */}
                 {item.notes && (
                   <p className="mt-2 text-sm text-gray-600 italic">
-                    "{item.notes}"
+                    &quot;{item.notes}&quot;
                   </p>
                 )}
               </div>
