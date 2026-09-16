@@ -254,6 +254,11 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
         imageBorderRadius: p.imageBorderRadius ?? 0,
         separator: p.separator !== false, separatorColor: p.separatorColor || '#E5E7EB',
         stackOnMobile: p.stackOnMobile !== false,
+        // O fundo do bloco vira a cor da barra de preenchimento da foto
+        // (quando ela é JPG e não tem transparência para resolver
+        // sozinha). Sem isto, um e-mail de fundo escuro ganha duas
+        // faixas brancas em volta do produto.
+        backgroundColor: p.backgroundColor || settings?.backgroundColor || null,
         font,
       }
       const configJson = encodeURIComponent(JSON.stringify(cartConfig))

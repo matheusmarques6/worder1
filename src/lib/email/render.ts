@@ -950,7 +950,11 @@ export async function resolveCartBlocks(
       // e segurada pelo CSS quando não dá.
       const imgSize = isVert ? '100%' : `${imgW}px`
       const boxW: number | '100%' = isVert ? '100%' : imgW
-      const fitted = fitProductImage(imgUrl, { width: imgW, height: imgH })
+      const fitted = fitProductImage(imgUrl, {
+        width: imgW,
+        height: imgH,
+        padColor: cfg.backgroundColor,
+      })
       const imgCell = cfg.showImage ? `<td width="${isVert ? '100%' : imgW}" style="vertical-align:middle;${isVert ? 'padding:0 0 12px 0;' : 'padding:0;'}">
         <a href="${prodUrl}" style="display:block;text-decoration:none;">${imgUrl
           ? `<img src="${fitted}" alt="${title}" style="${fitProductImageStyle({ width: boxW, height: imgH })}border-radius:${imgR}px;border:0;outline:none;" />`
