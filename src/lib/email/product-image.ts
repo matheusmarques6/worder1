@@ -45,7 +45,7 @@ const MAX_PX = 1600
  */
 export function fitProductImage(
   url: string | null | undefined,
-  box: { width: number; height: number }
+  box: { width: number; height: number; crop?: boolean }
 ): string {
   const src = String(url || '').trim()
   if (!src) return ''
@@ -64,9 +64,15 @@ export function fitProductImage(
   const h = Math.min(Math.round(box.height * DPR), MAX_PX)
   if (!(w > 0) || !(h > 0)) return src
 
-  // Sem `crop`: a Shopify encaixa dentro da caixa em vez de cortar.
   parsed.searchParams.set('width', String(w))
   parsed.searchParams.set('height', String(h))
+  // Sem `crop`, a Shopify encaixa dentro da caixa; com ele, preenche e
+  // corta o excedente. Numa linha só de produto vale encaixar — cortar
+  // decepa a tampa do frasco. Numa grade de cartões vale cortar, porque
+  // cartão de altura desigual fica torto. E cortar na CDN é o que faz o
+  // Outlook obedecer, já que ele ignora `object-fit`.
+  if (box.crop) parsed.searchParams.set('crop', 'center')
+  else parsed.searchParams.delete('crop')
   // O `v=` (versão do arquivo) fica onde está — é o que fura o cache
   // deles quando a foto muda.
   return parsed.toString()

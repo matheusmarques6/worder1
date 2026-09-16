@@ -141,3 +141,20 @@ describe('a caixa da imagem no bloco do gatilho', () => {
     expect(html).toContain('height:200px')
   })
 })
+
+describe('empilhar no celular', () => {
+  it('a linha leva a classe que empilha — a opção existia e não saía no HTML', async () => {
+    const html = await resolveCartBlocks(bloco(), 'org-1', undefined, evento)
+    expect(html).toContain('worder-cart-stack')
+  })
+
+  it('quem desliga a opção não recebe a classe', async () => {
+    const html = await resolveCartBlocks(
+      bloco({ stackOnMobile: false }),
+      'org-1',
+      undefined,
+      evento
+    )
+    expect(html).not.toContain('worder-cart-stack')
+  })
+})

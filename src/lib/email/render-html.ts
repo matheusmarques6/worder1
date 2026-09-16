@@ -1,4 +1,5 @@
 import type { EmailBlock, EmailSection, EmailDocument, Padding } from '@/components/email-builder/config/types'
+import { buildProductGrid } from './product-grid'
 import { migrateV1toV2 } from '@/components/email-builder/config/types'
 
 // Escape a value for safe use inside an HTML attribute (src/alt/href/title).
@@ -176,29 +177,47 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
       const staticProds = p.staticProducts || []
       const hasStaticProducts = staticProds.length > 0
 
+      // O estilo do cartão, num objeto só. Ele serve a grade estática
+      // (montada aqui) e viaja no marcador da dinâmica (resolvida no
+      // envio) — antes as duas eram códigos diferentes, e o e-mail que
+      // saía ignorava tudo o que a pessoa tinha configurado.
+      const gridCfg = {
+        cols,
+        font,
+        showName: p.showName !== false,
+        showPrice: p.showPrice !== false,
+        showComparePrice: p.showComparePrice !== false,
+        showButton: p.showButton !== false,
+        buttonText: p.buttonText || 'Comprar',
+        maxImageHeight: p.maxImageHeight || 300,
+        imageRatio: p.imageRatio || 'square',
+        productBorderRadius: p.productBorderRadius ?? 8,
+        productBorderColor: p.productBorderColor || '#E5E7EB',
+        productPadding: p.productPadding ?? 4,
+        nameFontSize: p.nameFontSize || 14,
+        nameWeight: p.nameWeight || '600',
+        nameColor: p.nameColor || '#111827',
+        priceFontSize: p.priceFontSize || 16,
+        priceWeight: p.priceWeight || '700',
+        priceColor: p.priceColor || '#18181B',
+        comparePriceColor: p.comparePriceColor || '#9CA3AF',
+        buttonColor: p.buttonColor || '#18181B',
+        buttonTextColor: p.buttonTextColor || '#FFFFFF',
+        buttonRadius: p.buttonRadius ?? 6,
+        buttonFontSize: p.buttonFontSize || 12,
+        buttonPaddingV: p.buttonPaddingV ?? 6,
+        buttonPaddingH: p.buttonPaddingH ?? 16,
+        buttonFullWidth: !!p.buttonFullWidth,
+      }
+
       let productsHtml = ''
       if (hasStaticProducts) {
-        // Render real static products as table grid
-        const prodsToRender = staticProds.slice(0, total)
-        const productRows: string[] = []
-        for (let r = 0; r < Math.ceil(prodsToRender.length / cols); r++) {
-          const rowProds = prodsToRender.slice(r * cols, r * cols + cols)
-          const cellWidth = Math.floor(100 / cols)
-          const cells = rowProds.map((prod: any) => {
-            const imgHtml = prod.image_url ? `<img src="${prod.image_url}" alt="${prod.title || ''}" width="100%" style="display:block;width:100%;height:auto;max-height:${p.maxImageHeight || 300}px;object-fit:cover;border-radius:${p.productBorderRadius ?? 0}px ${p.productBorderRadius ?? 0}px 0 0;" />` : `<div style="height:${p.maxImageHeight || 300}px;background:#f3f4f6;"></div>`
-            const nameHtml = p.showName !== false ? `<p style="margin:0;font-weight:${p.nameWeight || '600'};font-size:${p.nameFontSize || 14}px;color:${p.nameColor || '#111827'};font-family:${font};">${prod.title || ''}</p>` : ''
-            const priceHtml = p.showPrice !== false ? `<p style="margin:4px 0 0;">${p.showComparePrice && prod.compare_at_price ? `<span style="font-size:${(p.priceFontSize || 16) - 3}px;color:${p.comparePriceColor || '#9CA3AF'};text-decoration:line-through;margin-right:6px;">R$ ${Number(prod.compare_at_price).toFixed(2)}</span>` : ''}<span style="font-weight:${p.priceWeight || '700'};font-size:${p.priceFontSize || 16}px;color:${p.priceColor || '#18181B'};">R$ ${Number(prod.price || 0).toFixed(2)}</span></p>` : ''
-            const btnHtml = p.showButton !== false ? `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:8px ${p.buttonFullWidth ? '0' : 'auto'} 0;${p.buttonFullWidth ? 'width:100%;' : ''}"><tr><td style="background-color:${p.buttonColor || '#18181B'};border-radius:${p.buttonRadius ?? 6}px;padding:${p.buttonPaddingV ?? 6}px ${p.buttonPaddingH ?? 16}px;text-align:center;"><a href="${prod.url || '#'}" style="color:${p.buttonTextColor || '#FFFFFF'};font-size:${p.buttonFontSize || 12}px;font-weight:600;text-decoration:none;display:block;font-family:${font};">${p.buttonText || 'Comprar'}</a></td></tr></table>` : ''
-            return `<td width="${cellWidth}%" valign="top" style="vertical-align:top;padding:${p.productPadding ?? 4}px;"><div style="border:1px solid ${p.productBorderColor || '#E5E7EB'};border-radius:${p.productBorderRadius ?? 8}px;overflow:hidden;background:#fff;text-align:center;">${imgHtml}<div style="padding:${p.productPadding ?? 8}px;">${nameHtml}${priceHtml}${btnHtml}</div></div></td>`
-          }).join('')
-          // Pad with empty cells if row not full
-          const emptyCells = cols - rowProds.length > 0 ? `<td width="${Math.floor(100 / cols)}%" style="padding:${p.productPadding ?? 4}px;"></td>`.repeat(cols - rowProds.length) : ''
-          productRows.push(`<tr>${cells}${emptyCells}</tr>`)
-        }
-        productsHtml = `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" class="worder-product-grid">${productRows.join('')}</table>`
+        productsHtml = buildProductGrid(staticProds.slice(0, total), gridCfg)
       } else {
-        // Dynamic products: placeholder comment for server-side resolution at send time
-        productsHtml = `<!-- WORDER_PRODUCT_BLOCK:${p.feedType || 'bestsellers'}:${total}:${cols}:${p.showPrice !== false}:${p.showComparePrice !== false}:${p.showButton !== false}:${encodeURIComponent(p.buttonText || 'Comprar')} -->`
+        // Produtos dinâmicos: o marcador leva a configuração inteira para
+        // ser resolvida no envio. O feed e o limite vão junto.
+        const dyn = { ...gridCfg, feedType: p.feedType || 'bestsellers', maxProducts: total }
+        productsHtml = `<!-- WORDER_PRODUCT_BLOCK:${encodeURIComponent(JSON.stringify(dyn))} -->`
       }
 
       return `<tr><td style="padding:${blockPad};${p.backgroundColor ? `background-color:${p.backgroundColor};` : ''}">${p.title ? `<p style="margin:0 0 16px;font-size:18px;font-weight:bold;color:#111827;text-align:center;font-family:${font};">${p.title}</p>` : ''}${productsHtml}</td></tr>`
@@ -383,7 +402,11 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
 }
 
 function renderSection(section: EmailSection, font: string, contentWidth: number, contentBg: string, settings?: EmailDocument['settings'], isFirst = false, isLast = false): string {
-  const s = section.styles
+  // Seção sem `styles` não é impossível — documento antigo, importado
+  // ou montado por API chega assim. Antes disso aqui, a leitura de
+  // `.hidden` num undefined estourava e derrubava o render do e-mail
+  // inteiro, não só da seção.
+  const s = (section.styles || {}) as NonNullable<EmailSection['styles']>
   // Hidden from builder: skip section entirely
   if ((s as any).hidden === true) return ''
   // Device visibility: if both hidden, skip section entirely
@@ -474,6 +497,11 @@ a{color:${s.textStyles?.link?.color || '#18181B'};${s.textStyles?.link?.underlin
   .worder-coupon-code{font-size:22px!important;letter-spacing:2px!important;padding:8px 16px!important;word-break:break-all!important;max-width:100%!important;box-sizing:border-box!important}
   .worder-product-grid td{display:block!important;width:100%!important}
   .worder-product-grid .worder-product-cell{display:block!important;width:100%!important}
+  /* Bloco de produto do gatilho: foto em cima, texto embaixo. Lado a
+     lado numa tela estreita, a foto comia o espaço do nome e do preço.
+     O recuo lateral do texto sai junto, senão fica torto empilhado. */
+  .worder-cart-stack td{display:block!important;width:100%!important;padding-left:0!important;padding-right:0!important}
+  .worder-cart-stack td img{margin:0 auto 12px!important}
 }
 </style>
 </head>

@@ -9,6 +9,7 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { rewriteImagesForEmail } from './image-rewrite'
 import { fitProductImage, fitProductImageStyle } from './product-image'
+import { buildProductGrid, type ProductGridConfig } from './product-grid'
 import { getAppBaseUrl } from '@/lib/app-url'
 import { stampHtmlLinks, type LinkParamsResolver } from '@/lib/tracking/link-params'
 
@@ -513,6 +514,60 @@ export function addUnsubscribeLink(
 }
 
 /**
+ * Lê o conteúdo de um marcador de feed de produtos.
+ *
+ * O formato novo é a configuração inteira em JSON. O antigo era
+ * `feedType:max:cols:showPrice:showComparePrice:showButton:texto` e não
+ * levava estilo nenhum — por isso o e-mail enviado saía com a cor e a
+ * altura de imagem que o código cravava, e não com as que a pessoa
+ * escolheu. Ele continua sendo lido porque está gravado no HTML de
+ * templates antigos; o que falta de estilo cai nos padrões da grade.
+ */
+export function parseProductBlockMarker(
+  raw: string
+): (ProductGridConfig & { feedType: string; maxProducts: number; cols: number }) | null {
+  const decodeUmaVez = (v: string): string => {
+    try { return decodeURIComponent(v) } catch { return v }
+  }
+
+  // No formato novo o marcador inteiro vem codificado, então decodificar
+  // tudo é o certo.
+  const talvezJson = decodeUmaVez(raw)
+  if (talvezJson.trim().startsWith('{')) {
+    try {
+      const cfg = JSON.parse(talvezJson)
+      return {
+        ...cfg,
+        feedType: String(cfg.feedType || 'bestsellers'),
+        maxProducts: Number(cfg.maxProducts) || 4,
+        cols: Number(cfg.cols) || 2,
+      }
+    } catch {
+      return null
+    }
+  }
+
+  // No formato antigo só o texto do botão vem codificado, e por isso a
+  // separação tem de acontecer no marcador CRU. Decodificar o marcador
+  // inteiro antes de separar estraga justamente o texto do botão: um
+  // "Comprar já — 20% off" vira "…20% off" na primeira passada, e a
+  // segunda lê "% o" como escape malformado, estoura, e o botão sai com
+  // o texto padrão. Uma decodificação, no campo que precisa dela.
+  const parts = raw.split(':')
+  if (parts.length < 3) return null
+  const [feedType, maxStr, colsStr, showPrice, showComparePrice, showButton, buttonText] = parts
+  return {
+    feedType: feedType || 'bestsellers',
+    maxProducts: parseInt(maxStr) || 4,
+    cols: parseInt(colsStr) || 2,
+    showPrice: showPrice !== 'false',
+    showComparePrice: showComparePrice !== 'false',
+    showButton: showButton !== 'false',
+    buttonText: decodeUmaVez(buttonText || '').trim() || 'Comprar',
+  }
+}
+
+/**
  * Resolve dynamic product blocks in email HTML.
  * Replaces <!-- WORDER_PRODUCT_BLOCK:... --> comments with real product HTML.
  */
@@ -529,11 +584,21 @@ export async function resolveProductBlocks(
    */
   storeId?: string | null
 ): Promise<string> {
-  // O texto do botão viaja codificado (encodeURIComponent), então não tem
-  // espaço — mas TEM hífen quando o lojista escreve "Compre-agora", e o
-  // `[^-]` antigo fazia o marcador inteiro não casar: o bloco de produtos
-  // sumia do e-mail e sobrava um comentário HTML no lugar.
-  const regex = /<!-- WORDER_PRODUCT_BLOCK:(\w+):(\d+):(\d+):(true|false):(true|false):(true|false):(\S*) -->/g
+  // Dois formatos de marcador convivem. O novo leva a configuração
+  // inteira em JSON; o antigo, só sete campos separados por dois-pontos
+  // — e é o que está gravado no HTML de 111 dos 190 templates salvos,
+  // então continua sendo lido.
+  //
+  // O conteúdo casa por "tudo que não é espaço", e não por campo. O
+  // recorte por campo tinha um `[^-]` no texto do botão, e um lojista
+  // que escrevesse "Compre-agora" fazia o marcador inteiro não casar: o
+  // bloco de produtos sumia do e-mail e sobrava um comentário HTML no
+  // lugar. Casando o conteúdo inteiro, o texto do botão pode ter o que
+  // quiser — quem o interpreta é `parseProductBlockMarker`.
+  //
+  // Não-guloso de propósito: com dois marcadores na mesma linha, o
+  // guloso engoliria do primeiro até o último ` -->`.
+  const regex = /<!-- WORDER_PRODUCT_BLOCK:([^\s]*?) -->/g
   let result = html
   const matches: RegExpExecArray[] = []
   let m: RegExpExecArray | null
@@ -543,12 +608,10 @@ export async function resolveProductBlocks(
   }
 
   for (const match of matches) {
-    const [fullMatch, feedType, maxStr, colsStr, showPrice, showComparePrice, showButton, buttonTextRaw] = match
-    // Sem o decode, "Comprar agora" chegava no e-mail como "Comprar%20agora"
-    // — era o que o destinatário lia no botão.
-    const buttonText = escapeHtml(decodeUriSeguro(buttonTextRaw).trim() || 'Comprar')
-    const maxProducts = parseInt(maxStr) || 4
-    const cols = parseInt(colsStr) || 2
+    const fullMatch = match[0]
+    const cfg = parseProductBlockMarker(match[1])
+    if (!cfg) continue
+    const { feedType, maxProducts, cols } = cfg
 
     let products: any[] = []
     try {
@@ -575,42 +638,16 @@ export async function resolveProductBlocks(
       continue
     }
 
-    const rows = Math.ceil(products.length / cols)
-    let productHtml = '<table width="100%" cellpadding="0" cellspacing="0" border="0" style="padding:16px;">'
+    // A moeda vem do evento; antes a grade cravava `R$` e uma loja em
+    // dólar anunciava "R$ 23.51".
+    const currency =
+      eventData?.Currency || eventData?.currency ||
+      eventData?.extra?.currency || eventData?.raw?.currency || 'BRL'
 
-    for (let r = 0; r < rows; r++) {
-      productHtml += '<tr>'
-      for (let c = 0; c < cols; c++) {
-        const p = products[r * cols + c]
-        if (!p) { productHtml += `<td width="${100 / cols}%"></td>`; continue }
-
-        // Título e preço vêm da loja e entram em atributo HTML: uma aspa
-        // no nome do produto quebrava a tag inteira.
-        const title = escapeHtml(p.title || p.name || 'Produto')
-        const price = escapeHtml(p.price || '0')
-        const comparePrice = escapeHtml(p.compare_at_price || p.compare_price || '')
-        const imgUrl = escapeHtml(p.image_url || p.images?.[0]?.src || '')
-        // O feed já monta a URL com o domínio da loja do e-mail. Sem URL,
-        // melhor um link morto do que um domínio inventado.
-        const url = escapeHtml(p.url || '#')
-
-        productHtml += `<td width="${100 / cols}%" style="padding:8px;vertical-align:top;text-align:center;">
-          <a href="${url}" style="text-decoration:none;color:inherit;display:block;">
-            <div style="border:1px solid #E5E7EB;border-radius:8px;overflow:hidden;background:#fff;">
-              ${imgUrl ? `<img src="${imgUrl}" alt="${title}" style="width:100%;height:auto;display:block;" />` : '<div style="background:#F3F4F6;height:200px;"></div>'}
-              <div style="padding:12px;">
-                <p style="margin:0;font-size:14px;font-weight:600;color:#111827;">${title}</p>
-                ${showPrice === 'true' ? `${showComparePrice === 'true' && comparePrice ? `<p style="margin:4px 0 0;font-size:12px;color:#9CA3AF;text-decoration:line-through;">R$ ${comparePrice}</p>` : ''}<p style="margin:2px 0 0;font-size:16px;font-weight:700;color:#F97316;">R$ ${price}</p>` : ''}
-                ${showButton === 'true' ? `<a href="${url}" style="display:inline-block;margin-top:10px;padding:10px 24px;background:#F97316;color:white;border-radius:6px;font-size:13px;font-weight:600;text-decoration:none;">${buttonText}</a>` : ''}
-              </div>
-            </div>
-          </a>
-        </td>`
-      }
-      productHtml += '</tr>'
-    }
-    productHtml += '</table>'
-    result = result.replace(fullMatch, productHtml)
+    result = result.replace(
+      fullMatch,
+      buildProductGrid(products, { ...cfg, currency })
+    )
   }
 
   return result
@@ -942,10 +979,15 @@ export async function resolveCartBlocks(
       // vertical padding so multi-item carts breathe.
       const rowPadTop = i === 0 ? '0' : '16px'
       const rowPadBottom = i === products.length - 1 ? '0' : '16px'
+      // `stackOnMobile` existia na configuração e não saía no HTML: a
+      // classe nunca era emitida, então a opção não fazia nada. Numa
+      // tela de 320px a foto de 200px deixava uns 100px para o nome do
+      // produto e o preço.
+      const stackClass = cfg.stackOnMobile !== false ? ' class="worder-cart-stack"' : ''
       if (isVert) {
         cartHtml += `<tr><td style="padding:${rowPadTop} 0 ${rowPadBottom};"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>${imgCell}</tr><tr>${detailsCell}</tr></table></td></tr>`
       } else {
-        cartHtml += `<tr><td style="padding:${rowPadTop} 0 ${rowPadBottom};"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>${isRight ? detailsCell + imgCell : imgCell + detailsCell}</tr></table></td></tr>`
+        cartHtml += `<tr><td style="padding:${rowPadTop} 0 ${rowPadBottom};"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"${stackClass}><tr>${isRight ? detailsCell + imgCell : imgCell + detailsCell}</tr></table></td></tr>`
       }
 
       if (cfg.separator && i < products.length - 1) {
