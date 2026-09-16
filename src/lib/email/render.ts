@@ -12,6 +12,13 @@ import { fitProductImage, fitProductImageStyle } from './product-image'
 import { buildProductGrid, productGridTitle, type ProductGridConfig } from './product-grid'
 import { getAppBaseUrl } from '@/lib/app-url'
 import { stampHtmlLinks, type LinkParamsResolver } from '@/lib/tracking/link-params'
+// Importado no topo, não por `require` dentro da função. O `require`
+// não existe em contexto ESM: ele estourava, o `catch` engolia, e todo
+// link de descadastro caía calado na forma NÃO assinada — enquanto o
+// link de preferências, que não tem forma de reserva, virava nulo e
+// sumia. Nada disso aparecia em log nenhum. O módulo só importa
+// `crypto`, então não há ciclo a temer.
+import { signUnsubscribeToken } from '@/lib/email/unsubscribe-token'
 
 /**
  * Põe o conteúdo universal em dia dentro de um documento de e-mail.
@@ -409,7 +416,6 @@ export function buildUnsubscribeUrl(
 ): string {
   if (contactId && orgId) {
     try {
-      const { signUnsubscribeToken } = require('@/lib/email/unsubscribe-token');
       const token = signUnsubscribeToken({ contactId, orgId, campaignId, storeId });
       return `${baseUrl}/unsubscribe?token=${token}`;
     } catch {
@@ -432,7 +438,6 @@ export function buildPreferencesUrl(
 ): string | null {
   if (!contactId || !orgId) return null;
   try {
-    const { signUnsubscribeToken } = require('@/lib/email/unsubscribe-token');
     const token = signUnsubscribeToken({ contactId, orgId, campaignId, storeId });
     return `${baseUrl}/preferencias?token=${token}`;
   } catch {
@@ -476,7 +481,13 @@ export function addUnsubscribeLink(
   // footer block, custom CAN-SPAM section), avoid double-appending. Detect
   // by looking for any anchor pointing at /unsubscribe or /preferencias on
   // our domain — these are the standard footer destinations.
-  const hasUnsubAnchor = /href=["'][^"']*\/unsubscribe(\?|["'])/i.test(html);
+  // `/unsubscribe?token=…` é a forma assinada, mas sem o segredo de
+  // assinatura `buildUnsubscribeUrl` cai em `/api/unsubscribe/<id>` — e
+  // o detector não reconhecia essa, porque exigia `?` ou aspa logo
+  // depois de "unsubscribe". Resultado: o rodapé do template tinha um
+  // link de descadastro perfeitamente bom e um SEGUNDO rodapé era
+  // anexado embaixo assim mesmo.
+  const hasUnsubAnchor = /href=["'][^"']*\/(?:api\/)?unsubscribe(?:[/?]|["'])/i.test(html);
   const hasPrefsAnchor = /href=["'][^"']*\/preferencias(\?|["'])/i.test(html);
   if (hasUnsubAnchor && hasPrefsAnchor) {
     return html;
@@ -581,7 +592,13 @@ export function parseProductBlockMarker(
  * Se o marcador divide a célula com outra coisa, só ele sai — nada é
  * removido por engano.
  */
-function removeBlockRow(html: string, marker: string): string {
+function removeBlockRow(html: string, marker: string, motivo?: string): string {
+  // O bloco sumir é silencioso por natureza, e foi esse silêncio que
+  // deixou o problema viver: `automation_runs.node_results` está vazio
+  // nas 1.323 execuções, então não havia onde ver que o resumo do pedido
+  // tinha sido apagado. Uma linha de registro é o que separa "o e-mail
+  // saiu esquisito" de "o bloco X saiu sem dado Y".
+  if (motivo) console.warn(`[email] bloco removido por falta de dado: ${motivo}`)
   const escapado = marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const linha = new RegExp(`<tr[^>]*>\\s*<td[^>]*>\\s*${escapado}\\s*</td>\\s*</tr>`, 'g')
   // `replace` primeiro e comparação depois: um `test` com regex global
@@ -658,7 +675,10 @@ export async function resolveProductBlocks(
     }
 
     if (products.length === 0) {
-      result = removeBlockRow(result, fullMatch)
+      result = removeBlockRow(
+        result, fullMatch,
+        `grade de produtos (feed "${feedType}", loja ${storeId || '—'}, org ${orgId})`
+      )
       continue
     }
 
@@ -886,8 +906,51 @@ export async function resolveCartBlocks(
         })
       }
       if (products.length === 0) {
-        result = removeBlockRow(result, match[0])
+        result = removeBlockRow(
+          result, match[0],
+          `produtos do gatilho (gatilho "${triggerType || '—'}", loja ${storeId || '—'}, org ${orgId})`
+        )
         continue
+      }
+    }
+
+    // "Mostrar itens fora de estoque" era um interruptor que não fazia
+    // nada: o painel oferecia a opção e o envio ignorava. Desligado — que
+    // é o padrão —, o item que a loja marcou como indisponível sai do
+    // e-mail, em vez de o cliente clicar num produto que não pode comprar.
+    //
+    // Só sai o que o catálogo DESTA loja afirma indisponível. `available`
+    // nulo é "não sei" e fica, porque três das quatro lojas sincronizam
+    // sem esse campo e um palpite tiraria produto bom do e-mail.
+    //
+    // E nunca esvazia o bloco: se todos estiverem esgotados, todos ficam.
+    // Um e-mail de carrinho anunciando item esgotado ainda é melhor do
+    // que um e-mail de carrinho sem carrinho nenhum.
+    if (cfg.showOutOfStock !== true && products.length > 0) {
+      const ids = [...new Set(
+        products.map((p: any) => (p.product_id != null ? String(p.product_id) : '')).filter(Boolean)
+      )] as string[]
+      if (ids.length > 0) {
+        try {
+          let q = supabaseAdmin
+            .from('shopify_products')
+            .select('shopify_product_id, available')
+            .in('shopify_product_id', ids)
+          if (storeId) q = q.eq('store_id', storeId)
+          else if (orgId) q = q.eq('organization_id', orgId)
+          const { data: catalogo } = await q
+          const esgotados = new Set(
+            (catalogo || [])
+              .filter((p: any) => p.available === false)
+              .map((p: any) => String(p.shopify_product_id))
+          )
+          if (esgotados.size > 0) {
+            const sobram = products.filter(
+              (p: any) => !esgotados.has(String(p.product_id ?? ''))
+            )
+            if (sobram.length > 0) products = sobram
+          }
+        } catch { /* sem catálogo, mostra o que veio: nunca derruba o envio */ }
       }
     }
 
@@ -1241,7 +1304,10 @@ export function resolveOrderBlocks(
     const sepColor = cfg.separatorColor || divColor
 
     if (items.length === 0) {
-      result = removeBlockRow(result, match[0])
+      result = removeBlockRow(
+        result, match[0],
+        `resumo do pedido (pedido ${eventData?.order_id || eventData?.OrderID || eventData?.OrderId || '—'} sem itens)`
+      )
       continue
     }
 
@@ -1521,8 +1587,75 @@ export function prepareEmailHtml({
   // 0b. Replace countdown base URL placeholder
   result = result.replace(/\{\{countdown_base_url\}\}/g, baseUrl);
 
+  // 0c. Os links de sistema do rodapé.
+  //
+  // O bloco de rodapé emite `{{unsubscribe_url}}` e, quando ligado,
+  // `{{preferences_url}}`. Ninguém no caminho de envio preenchia essas
+  // chaves — só as rotas de teste e de pré-visualização, que mandam '#'.
+  // No envio de verdade elas caíam para string vazia e o "Descadastrar-se"
+  // do rodapé ia com `href=""`: um link de descadastro morto, que além de
+  // feio é problema de conformidade. E, como o detector de rodapé procura
+  // um anchor apontando para `/unsubscribe`, o link vazio não era
+  // reconhecido e um SEGUNDO rodapé era anexado embaixo.
+  //
+  // Os destinos existem e são assinados; o que faltava era ligá-los aqui,
+  // antes das variáveis, com os mesmos dados que o rodapé automático usa.
+  const mergeComSistema: Record<string, string> = { ...mergeData };
+  mergeComSistema.unsubscribe_url =
+    mergeComSistema.unsubscribe_url ||
+    buildUnsubscribeUrl(emailSendId, baseUrl, contactId, orgId, campaignId, storeId);
+  const urlPreferencias = buildPreferencesUrl(baseUrl, contactId, orgId, campaignId, storeId);
+  if (urlPreferencias) {
+    mergeComSistema.preferences_url = mergeComSistema.preferences_url || urlPreferencias;
+  }
+
+  // Link de sistema sem destino não vai morto para a caixa de entrada:
+  // o anchor inteiro sai, com o separador grudado nele, para não sobrar
+  // um "·" solto no rodapé.
+  //
+  //   view_in_browser_url — não existe página que sirva o e-mail
+  //   enviado. Não há destino honesto a dar.
+  //
+  //   preferences_url — o destino existe, mas depende do segredo de
+  //   assinatura. Sem ele, `buildPreferencesUrl` devolve nulo, e aí o
+  //   certo é omitir o link, não mandar um `href=""` (que a rede de
+  //   segurança logo abaixo ainda apontaria para a HOME DA LOJA — um
+  //   link escrito "Preferências" indo para a vitrine seria pior que
+  //   nenhum).
+  const semDestino = ['view_in_browser_url', 'preferences_url'].filter(
+    (tag) => !mergeComSistema[tag]
+  );
+  for (const tag of semDestino) {
+    result = result.replace(
+      new RegExp(
+        `(?:\\s*(?:&nbsp;|\\s)*(?:·|&middot;|\\|)(?:&nbsp;|\\s)*)?<a\\s[^>]*href=["']\\{\\{\\s*${tag}\\s*\\}\\}["'][^>]*>[\\s\\S]*?<\\/a>`,
+        'gi'
+      ),
+      ''
+    );
+  }
+
   // 1. Replace merge tags
-  result = renderMergeTags(result, mergeData);
+  result = renderMergeTags(result, mergeComSistema);
+
+  // 1a. Rede de segurança: variável que não resolve DENTRO de um `href`
+  // deixa `href=""`, e um link vazio não vai a lugar nenhum — o
+  // rastreador de clique nem o reescreve, porque o padrão dele exige ao
+  // menos um caractere no destino. Foi assim que o logo e o banner do
+  // topo pararam de levar à loja em 30 templates: a variável usada
+  // (`{{trigger.StoreURL}}`) não existia em carga nenhuma.
+  //
+  // A causa daquele caso está corrigida na origem. Isto é o que segura
+  // o PRÓXIMO: com a loja conhecida, o link volta para a home dela em
+  // vez de morrer. Sem loja conhecida, fica como está — inventar
+  // destino seria pior. Roda antes do rastreamento, então o link
+  // recuperado sai com UTM e contagem de clique como qualquer outro.
+  const lojaHome = String(mergeData.store_url || '').trim();
+  if (lojaHome) {
+    result = result.replace(/(<a\s[^>]*href=)(""|'')/gi, (_m, prefixo: string) =>
+      `${prefixo}"${escapeHtml(lojaHome)}"`
+    );
+  }
 
   // 1b. Rewrite Supabase Storage image URLs to the transform/CDN
   // endpoint. Same-host URLs but the /render/image/ path serves

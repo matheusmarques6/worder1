@@ -2008,11 +2008,28 @@ async function processCheckout(store: ShopifyStoreConfig, checkout: any) {
       let dispatchContactId: string | null = contactId || null;
       const checkoutKey = String(checkout.id || checkout.token);
       try {
-        const { data: existingCheckout } = await supabaseLocal
+        // A coluna chama `shopify_checkout_token`. Escrito `checkout_token`,
+        // o PostgREST devolvia 400 e o `catch` engolia calado: 100+ destes
+        // por dia nos registros. Quer dizer que este resgate de e-mail e
+        // contato NUNCA funcionou — e ele existe justamente para o
+        // checkout abandonado que chega sem identificação.
+        //
+        // A cerca da loja entra junto: sem ela a busca varria os
+        // checkouts de todas as organizações.
+        const chaves = [`shopify_checkout_id.eq.${checkoutKey}`];
+        if (checkout.token) chaves.push(`shopify_checkout_token.eq.${checkout.token}`);
+        const { data: existingCheckout, error: erroCheckout } = await supabaseLocal
           .from('shopify_checkouts')
           .select('email, contact_id')
-          .or(`shopify_checkout_id.eq.${checkoutKey},checkout_token.eq.${checkout.token || ''}`)
+          .eq('store_id', store.id)
+          .or(chaves.join(','))
+          .limit(1)
           .maybeSingle();
+        if (erroCheckout) {
+          console.warn('[shopify-webhook] busca de checkout falhou', {
+            storeId: store.id, checkoutKey, erro: erroCheckout.message,
+          });
+        }
         if (!dispatchEmail && existingCheckout?.email) dispatchEmail = existingCheckout.email;
         if (!dispatchContactId && existingCheckout?.contact_id) dispatchContactId = existingCheckout.contact_id;
       } catch { /* best-effort */ }

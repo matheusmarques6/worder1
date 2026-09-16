@@ -184,7 +184,17 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
 
     case 'footer': {
       const flc = p.linkColor || p.textColor || '#9CA3AF'
-      return `<tr><td style="padding:${blockPad};background-color:${p.backgroundColor || '#F9FAFB'};text-align:${p.align || 'center'};font-size:${p.fontSize || 11}px;color:${p.textColor || '#9CA3AF'};font-family:${font};line-height:1.5;"><p style="margin:0;">${text(p.companyName)}</p>${p.address ? `<p style="margin:4px 0 0;">${text(p.address)}</p>` : ''}<p style="margin:8px 0 0;">${p.showUnsubscribe ? `<a href="{{unsubscribe_url}}" style="color:${flc};text-decoration:underline;">Descadastrar-se</a>` : ''}${p.showUnsubscribe && p.showViewInBrowser ? ' · ' : ''}${p.showViewInBrowser ? `<a href="{{view_in_browser_url}}" style="color:${flc};text-decoration:underline;">Ver no navegador</a>` : ''}</p></td></tr>`
+      const estiloLink = `color:${flc};text-decoration:underline;`
+      // "Mostrar preferências" era um interruptor que não fazia nada: o
+      // editor desenhava o link e o HTML enviado não o emitia. A página
+      // de preferências existe e o link dela é assinado como o de
+      // descadastro — o que faltava era o rodapé pedir por ele.
+      const partes = [
+        p.showUnsubscribe ? `<a href="{{unsubscribe_url}}" style="${estiloLink}">Descadastrar-se</a>` : '',
+        p.showPreferences ? `<a href="{{preferences_url}}" style="${estiloLink}">Preferências</a>` : '',
+        p.showViewInBrowser ? `<a href="{{view_in_browser_url}}" style="${estiloLink}">Ver no navegador</a>` : '',
+      ].filter(Boolean)
+      return `<tr><td style="padding:${blockPad};background-color:${p.backgroundColor || '#F9FAFB'};text-align:${p.align || 'center'};font-size:${p.fontSize || 11}px;color:${p.textColor || '#9CA3AF'};font-family:${font};line-height:1.5;"><p style="margin:0;">${text(p.companyName)}</p>${p.address ? `<p style="margin:4px 0 0;">${text(p.address)}</p>` : ''}<p style="margin:8px 0 0;">${partes.join(' · ')}</p></td></tr>`
     }
 
     case 'product-grid': {
@@ -272,6 +282,9 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
         showPrice: p.showPrice !== false,
         showOldPrice: p.showOldPrice !== false,
         showButton: p.showButton !== false,
+        // Desligado por padrão, como o painel mostra: item que a loja
+        // marcou indisponível não entra no e-mail.
+        showOutOfStock: p.showOutOfStock === true,
         nameFontSize: p.nameFontSize || 14, nameColor: p.nameColor || '#111827', nameWeight: p.nameWeight || '600',
         nameFontFamily: p.nameFontFamily || 'inherit',
         descFontSize: p.descFontSize || 13, descColor: p.descColor || '#6B7280', descWeight: p.descWeight || '400',

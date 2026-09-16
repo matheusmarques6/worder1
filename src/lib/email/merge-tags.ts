@@ -334,6 +334,18 @@ export function resolveTriggerSmartTags(
     ? (v: string) => escapeHtmlValue(v)
     : (v: string) => v;
 
+  // Grafias antigas que escorregam entre os dedos: o catálogo chama
+  // `Tracking.Number`, e um template gravado diz `{{ trigger.Tracking }}`.
+  // Ela caía no resolvedor genérico de caminho, não achava `Tracking` na
+  // carga (que traz `TrackingNumber`) e virava vazio — o e-mail de
+  // rastreio saía com "Tracking number:" e nada depois. Reescrever aqui,
+  // antes de tudo, faz a variável passar pelo MESMO caminho da canônica:
+  // mapeamento da organização, tolerância de grafia e absolutização de URL.
+  html = html
+    .replace(/\{\{\s*(?:trigger\.)?Tracking\s*\}\}/g, '{{Tracking.Number}}')
+    .replace(/\{\{\s*(?:trigger\.)?TrackingNumber\s*\}\}/g, '{{Tracking.Number}}')
+    .replace(/\{\{\s*(?:trigger\.)?TrackingUrl\s*\}\}/gi, '{{Tracking.URL}}');
+
   const ev = eventData || {};
   const props = ev.properties || ev;
   const raw = props.raw || ev.raw || {};
@@ -359,6 +371,22 @@ export function resolveTriggerSmartTags(
   const total = computeSmartTagValue(eventData, 'trigger.total') ?? '';
   const itemsCount = computeSmartTagValue(eventData, 'trigger.items_count') ?? '0';
 
+  // `StoreURL` é a loja, não é dado do evento — e nenhuma carga real a
+  // traz. Ela caía no resolvedor genérico de caminho, não achava nada e
+  // virava string vazia. Como TODA ocorrência nos templates está dentro
+  // de um `href` (o logo e o banner do topo), o resultado era
+  // `href=""`: o cabeçalho do e-mail deixava de levar à loja. Medido:
+  // 48 ocorrências em 30 templates, 28 deles em fluxo ativo, entre eles
+  // os de pedido pago e de rastreio que saíram hoje.
+  //
+  // O valor certo já chega aqui pelo parâmetro `storeUrl`, resolvido de
+  // `shopify_stores.shop_domain` — é o mesmo que `{{store_url}}` usa. Se
+  // nem ele houver, cai no host achado no próprio evento.
+  const storeLink =
+    storeUrl ||
+    (shopHost ? `https://${shopHost}` : '') ||
+    (computeSmartTagValue(eventData, 'trigger.link') ?? '');
+
   // Smart-tag map — whitespace-tolerant regexes ({{trigger.link}},
   // {{ trigger.link }}, {{  trigger.link  }} all match) and FUNCTION
   // replacers so `$` sequences in values ($&, $1, prices like R$ 10)
@@ -370,6 +398,9 @@ export function resolveTriggerSmartTags(
     [/\{\{\s*trigger\.first_item_price\s*\}\}/g, firstPrice],
     [/\{\{\s*trigger\.total\s*\}\}/g, total],
     [/\{\{\s*trigger\.items_count\s*\}\}/g, itemsCount],
+    // As duas grafias, porque as duas estão gravadas nos templates.
+    [/\{\{\s*trigger\.StoreURL\s*\}\}/gi, String(storeLink)],
+    [/\{\{\s*StoreURL\s*\}\}/gi, String(storeLink)],
   ];
 
   let result = html;
