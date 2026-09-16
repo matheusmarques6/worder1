@@ -160,6 +160,7 @@ it('keeps organization B stores when A resolves last', async () => {
   await vi.waitFor(() => expect(container.textContent).toContain('Store B'))
   await act(async () => { requests[0].resolve(response({ stores: [{ id: 'a', name: 'Store A' }] })) })
   await vi.waitFor(() => expect(container.textContent).not.toContain('Store A'))
+  await vi.waitFor(() => expect(container.textContent).toContain('Store B'))
 })
 
 it('keeps organization A users when organization B resolves last', async () => {
