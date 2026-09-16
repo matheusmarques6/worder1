@@ -1,5 +1,6 @@
 """Focused checks for the sealed synthetic legacy-upgrade lane."""
 
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -267,6 +268,71 @@ def replay_dependency_preservation_rows(admin):
     }
 
 
+# Exact additions after 20260909230000: 20260910260000 (error_message),
+# 20260910280000 (store FK and two indexes), 20260910310000 (A/B and pause).
+# The historical compensation owns none of them; the final-schema suite does.
+LATER_CATALOG_ROWS = {
+    ("column", "email_campaigns", "error_message", "text", True, None),
+    ("column", "email_campaigns", "paused_at", "timestamp with time zone", True, None),
+    ("column", "email_campaigns", "ab_test_enabled", "boolean", True, "false"),
+    ("column", "email_campaigns", "ab_test_percent", "integer", True, "50"),
+    ("column", "email_campaigns", "ab_duration_hours", "integer", True, "4"),
+    ("column", "email_campaigns", "ab_variant_b", "jsonb", True, None),
+    ("column", "email_campaigns", "ab_winner_metric", "text", True, "'open_rate'::text"),
+    ("column", "email_campaigns", "ab_winner", "text", True, None),
+    ("column", "email_campaigns", "ab_resolved_at", "timestamp with time zone", True, None),
+    ("constraint", "whatsapp_campaigns",
+     "FOREIGN KEY (store_id) REFERENCES shopify_stores(id) ON DELETE SET NULL"),
+    ("index", "email_campaigns", ("sent_at",), False,
+     "((ab_test_enabled = true) AND (ab_resolved_at IS NULL))", "btree", True, True, False, 1),
+    ("index", "whatsapp_campaigns", ("organization_id", "created_at DESC"), False,
+     None, "btree", True, True, False, 2),
+    ("index", "whatsapp_campaigns", ("organization_id", "store_id"), False,
+     "(store_id IS NOT NULL)", "btree", True, True, False, 2),
+}
+
+
+@contextmanager
+def _historical_compensation_schema(admin):
+    """Project only named later additions; rollback restores the final schema."""
+    before = scoped_catalog(admin)
+    try:
+        with admin.transaction(force_rollback=True):
+            admin.execute("""
+                drop index public.idx_email_campaigns_ab_pendentes,
+                           public.idx_wa_campaigns_org_created,
+                           public.idx_wa_campaigns_org_store;
+                alter table public.whatsapp_campaigns
+                    drop constraint whatsapp_campaigns_store_id_fkey;
+                alter table public.email_campaigns
+                    drop column error_message,
+                    drop column paused_at,
+                    drop column ab_test_enabled,
+                    drop column ab_test_percent,
+                    drop column ab_duration_hours,
+                    drop column ab_variant_b,
+                    drop column ab_winner_metric,
+                    drop column ab_winner,
+                    drop column ab_resolved_at;
+            """)
+            yield
+    finally:
+        assert scoped_catalog(admin) == before
+
+
+@pytest.fixture
+def historical_catalog(admin):
+    final = expected_scoped_catalog()
+    assert LATER_CATALOG_ROWS <= set(final)
+    expected = tuple(row for row in final if row not in LATER_CATALOG_ROWS)
+    try:
+        with _historical_compensation_schema(admin):
+            assert scoped_catalog(admin) == expected
+            yield expected
+    finally:
+        assert scoped_catalog(admin) == final
+
+
 def _compensation_body():
     sql = COMPENSATION_PATH.read_text(encoding="utf-8").strip()
     assert sql.startswith("begin;") and sql.endswith("commit;")
@@ -290,7 +356,7 @@ def test_upgrade_preserves_fixture_primary_keys_and_values(admin):
     assert preservation_rows(admin) == load_expected_fixture_rows()
 
 
-def test_email_template_orphan_aborts_compensation_without_coercion(admin):
+def test_email_template_orphan_aborts_compensation_without_coercion(admin, historical_catalog):
     before = preservation_rows(admin)
     with admin.transaction(force_rollback=True):
         admin.execute(
@@ -327,7 +393,7 @@ def test_email_pending_row_survives_but_new_default_is_queued(admin):
     ).fetchone()[0] in ("'queued'::text", "'queued'::character varying")
 
 
-def test_incompatible_legacy_state_aborts_without_partial_changes(admin):
+def test_incompatible_legacy_state_aborts_without_partial_changes(admin, historical_catalog):
     before_rows = preservation_rows(admin)
     before_checks = constraint_definitions(admin, "email_sends")
     with pytest.raises(psycopg.errors.RaiseException, match=r"email_sends\.status"):
@@ -336,11 +402,11 @@ def test_incompatible_legacy_state_aborts_without_partial_changes(admin):
     assert constraint_definitions(admin, "email_sends") == before_checks
 
 
-def test_compensation_replay_accepts_canonical_policy_deparse(admin):
+def test_compensation_replay_accepts_canonical_policy_deparse(admin, historical_catalog):
     before = scoped_catalog(admin)
     with admin.transaction(force_rollback=True):
         admin.execute(_compensation_body())
-    assert scoped_catalog(admin) == before == expected_scoped_catalog()
+    assert scoped_catalog(admin) == before == historical_catalog
 
 
 @pytest.mark.parametrize(("ddl", "expected_acl"), (
@@ -357,7 +423,7 @@ def test_compensation_replay_accepts_canonical_policy_deparse(admin):
     ),
 ), ids=("table", "columns"))
 def test_unknown_authority_grant_aborts_compensation_without_mutation(
-    admin, ddl, expected_acl,
+    admin, historical_catalog, ddl, expected_acl,
 ):
     acl_query = """select c.relname, null::text,
                           case when x.grantee=0 then 'PUBLIC' else pg_get_userbyid(x.grantee) end,
@@ -391,18 +457,18 @@ def test_unknown_authority_grant_aborts_compensation_without_mutation(
 
         assert tuple(admin.execute(acl_query).fetchall()) == incompatible_acl
         assert scoped_catalog(admin) == before
-    assert scoped_catalog(admin) == before == expected_scoped_catalog()
+    assert scoped_catalog(admin) == before == historical_catalog
 
 
-def test_compensation_recreates_missing_reserved_identifier_index(admin):
+def test_compensation_recreates_missing_reserved_identifier_index(admin, historical_catalog):
     before = scoped_catalog(admin)
     with admin.transaction(force_rollback=True):
         admin.execute("drop index public.idx_pipeline_stages_pipeline_position")
         admin.execute(_compensation_body())
-        assert scoped_catalog(admin) == before == expected_scoped_catalog()
+        assert scoped_catalog(admin) == before == historical_catalog
 
 
-def test_email_status_without_default_is_rejected_and_rolled_back(admin):
+def test_email_status_without_default_is_rejected_and_rolled_back(admin, historical_catalog):
     query = (
         "select column_default from information_schema.columns "
         "where table_schema='public' and table_name='email_sends' and column_name='status'"
@@ -445,7 +511,7 @@ def test_email_status_without_default_is_rejected_and_rolled_back(admin):
         r"scoped_policies\.multiplicity",
     ),
 ), ids=("check", "foreign-key", "index", "policy"))
-def test_semantic_duplicates_abort_and_are_rolled_back(admin, ddl, message):
+def test_semantic_duplicates_abort_and_are_rolled_back(admin, historical_catalog, ddl, message):
     before = scoped_catalog(admin)
     with admin.transaction(force_rollback=True):
         admin.execute(ddl)
@@ -453,5 +519,22 @@ def test_semantic_duplicates_abort_and_are_rolled_back(admin, ddl, message):
         with pytest.raises(psycopg.errors.RaiseException, match=message):
             with admin.transaction():
                 admin.execute(_compensation_body())
+        assert scoped_catalog(admin) == incompatible
+    assert scoped_catalog(admin) == before == historical_catalog
+
+
+def test_historical_projection_keeps_unknown_extensions_rejected(admin):
+    before = scoped_catalog(admin)
+    with admin.transaction(force_rollback=True):
+        admin.execute("alter table public.email_campaigns add column task6_unknown text")
+        incompatible = scoped_catalog(admin)
+        with _historical_compensation_schema(admin):
+            projected = scoped_catalog(admin)
+            assert ("column", "email_campaigns", "task6_unknown", "text", True, None) in projected
+            assert not LATER_CATALOG_ROWS.intersection(projected)
+            with pytest.raises(psycopg.errors.RaiseException, match=r"scoped_columns\.unknown"):
+                with admin.transaction():
+                    admin.execute(_compensation_body())
+            assert scoped_catalog(admin) == projected
         assert scoped_catalog(admin) == incompatible
     assert scoped_catalog(admin) == before == expected_scoped_catalog()

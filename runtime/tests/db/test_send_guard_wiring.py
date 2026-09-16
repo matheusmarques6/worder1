@@ -347,7 +347,10 @@ class TestReadAndTypingFeedsTheBreaker:
                 },
             )
 
-        async def load_token(conn, organization_id):
+        token_calls = []
+
+        async def load_token(conn, organization_id, channel_external_id):
+            token_calls.append((conn, organization_id, channel_external_id))
             return "test-token"
 
         channel = CloudApiChannel(load_token=load_token, transport=httpx.MockTransport(handler))
@@ -363,6 +366,7 @@ class TestReadAndTypingFeedsTheBreaker:
         finally:
             await channel.aclose()
 
+        assert token_calls == [(conn, two_tenants.a.id, pnid)]
         assert len(seen) == 1
         assert seen[0].method == "POST"
         assert seen[0].url.path.endswith(f"/{pnid}/messages")
@@ -389,7 +393,10 @@ class TestReadAndTypingFeedsTheBreaker:
             reached.append(request)
             return httpx.Response(200, json={"success": True})
 
-        async def load_token(conn, organization_id):
+        token_calls = []
+
+        async def load_token(conn, organization_id, channel_external_id):
+            token_calls.append((conn, organization_id, channel_external_id))
             raise ValueError("local credential unavailable")
 
         channel = CloudApiChannel(load_token=load_token, transport=httpx.MockTransport(handler))
@@ -405,6 +412,7 @@ class TestReadAndTypingFeedsTheBreaker:
         finally:
             await channel.aclose()
 
+        assert token_calls == ([] if no_wamid else [(conn, two_tenants.a.id, pnid)])
         assert reached == []
         assert guard_row(admin, pnid) is None
 
