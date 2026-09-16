@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   ArrowRightLeft,
   Users,
@@ -38,12 +38,7 @@ export function TransferModal({
   const [isLoading, setIsLoading] = useState(false)
   const [isTransferring, setIsTransferring] = useState(false)
 
-  useEffect(() => {
-    if (!isOpen) return
-    fetchData()
-  }, [isOpen, organizationId])
-
-  async function fetchData() {
+  const fetchData = useCallback(async () => {
     setIsLoading(true)
     try {
       const [agentRes, queueRes] = await Promise.all([
@@ -63,7 +58,12 @@ export function TransferModal({
       // Non-critical
     }
     setIsLoading(false)
-  }
+  }, [organizationId])
+
+  useEffect(() => {
+    if (!isOpen) return
+    fetchData()
+  }, [isOpen, fetchData])
 
   async function handleTransfer() {
     if (tab === 'agent' && !selectedAgentId) return

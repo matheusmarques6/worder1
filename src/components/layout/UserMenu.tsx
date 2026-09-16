@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -63,14 +63,7 @@ export function UserMenu() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // Fetch agent status on mount
-  useEffect(() => {
-    if (isAgent && agentId) {
-      fetchAgentStatus()
-    }
-  }, [isAgent, agentId])
-
-  const fetchAgentStatus = async () => {
+  const fetchAgentStatus = useCallback(async () => {
     try {
       const res = await fetch(`/api/whatsapp/agents/status?agent_id=${agentId}`)
       if (res.ok) {
@@ -82,7 +75,14 @@ export function UserMenu() {
     } catch (error) {
       console.error('Error fetching agent status:', error)
     }
-  }
+  }, [agentId])
+
+  // Fetch agent status on mount
+  useEffect(() => {
+    if (isAgent && agentId) {
+      fetchAgentStatus()
+    }
+  }, [isAgent, agentId, fetchAgentStatus])
 
   const handleStatusChange = async (newStatus: string) => {
     if (!agentId || statusLoading) return

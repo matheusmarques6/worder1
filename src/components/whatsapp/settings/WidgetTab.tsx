@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Globe, Copy, Check, Loader2, MessageCircle } from 'lucide-react'
 
 interface WidgetConfig {
@@ -22,9 +22,7 @@ export function WidgetTab({ organizationId, storeId }: { organizationId: string;
   const [saving, setSaving] = useState(false)
   const [copied, setCopied] = useState(false)
 
-  useEffect(() => { load() }, [organizationId, storeId])
-
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true)
     try {
       const url = `/api/whatsapp/widget?organizationId=${organizationId}${storeId ? `&storeId=${storeId}` : ''}`
@@ -35,7 +33,9 @@ export function WidgetTab({ organizationId, storeId }: { organizationId: string;
       }
     } catch { /* */ }
     setLoading(false)
-  }
+  }, [organizationId, storeId])
+
+  useEffect(() => { load() }, [load])
 
   async function save() {
     if (!config.phone_number) return
