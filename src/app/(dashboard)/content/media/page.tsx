@@ -190,7 +190,7 @@ export default function MediaPage() {
 
   const semLoja = hasHydrated && !currentStore?.id;
   const gridImageSizes = selectedFile && !selectMode
-    ? '(min-width: 1280px) calc((100vw - 540px) / 6), (min-width: 1024px) calc((100vw - 528px) / 5), (min-width: 768px) calc((100vw - 428px) / 4), (min-width: 640px) calc((100vw - 416px) / 3), 64px'
+    ? '(min-width: 1280px) calc((100vw - 540px) / 6), (min-width: 1024px) calc((100vw - 528px) / 5), (min-width: 768px) calc((100vw - 428px) / 4), (min-width: 640px) calc((100vw - 416px) / 3), max(64px, calc((100vw - 404px) / 2))'
     : '(min-width: 1280px) calc((100vw - 228px) / 6), (min-width: 1024px) calc((100vw - 216px) / 5), (min-width: 768px) calc((100vw - 116px) / 4), (min-width: 640px) calc((100vw - 104px) / 3), calc((100vw - 92px) / 2)';
 
   return (
