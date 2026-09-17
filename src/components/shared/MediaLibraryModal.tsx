@@ -380,7 +380,7 @@ export function MediaLibraryModal({ onSelect, onClose }: MediaLibraryModalProps)
                             : 'border-gray-200 hover:border-brand-400'
                         }`}
                       >
-                        <Image src={img.url} alt={img.name || ''} fill sizes="(max-width: 640px) 25vw, 157px" className="object-cover" loading="lazy" />
+                        <Image src={img.url} alt={img.name || ''} fill sizes="(max-width: 720px) calc((100vw - 92px) / 4), 157px" className="object-cover" loading="lazy" />
                         <div className={`absolute inset-0 transition-colors ${isSel ? 'bg-brand-500/15' : 'bg-black/0 group-hover:bg-black/20'}`} />
 
                         {/* Rodapé com nome/tamanho */}
