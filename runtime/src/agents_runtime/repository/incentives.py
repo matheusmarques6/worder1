@@ -19,6 +19,8 @@ from uuid import UUID
 
 import psycopg
 
+from agents_runtime.repository import alerts as alerts_repo
+
 _GRANT_COLUMNS = """
     id, organization_id, contact_id, conversation_id, object_kind, object_ref,
     source, mission_version_id, moment_id, kind, value, validity_until,
@@ -196,17 +198,48 @@ async def append_ledger(
 
 
 async def record_coupon_code(
-    conn: psycopg.AsyncConnection, grant_id: UUID, coupon_code: str
-) -> None:
-    """O código do provedor, gravado DEPOIS da emissão — nunca sobrescreve."""
-    await conn.execute(
-        """
-        update public.incentive_grants
-           set coupon_code = %s
-         where id = %s and coupon_code is null
-        """,
-        (coupon_code, grant_id),
-    )
+    conn: psycopg.AsyncConnection,
+    grant_id: UUID,
+    coupon_code: str,
+    *,
+    organization_id: UUID,
+) -> bool:
+    """O código do provedor, gravado DEPOIS da emissão — nunca sobrescreve.
+
+    O código é determinístico do grant.id, então dois grants só colidem se
+    já existir outra linha da mesma org com o MESMO código (dado legado ou
+    corrida fora do processo) — o índice único do banco é quem detecta.
+    Colisão nunca rouba o desconto de outro contato: savepoint desfaz a
+    escrita, o grant fica suspenso (`revoked`, nunca reaberto sozinho), um
+    alerta nasce (dedupado por grant) e `False` volta para quem chamou NUNCA
+    tentar o provedor de novo por este grant.
+    """
+    try:
+        async with conn.transaction():  # savepoint: a transação de fora é do caller
+            await conn.execute(
+                """
+                update public.incentive_grants
+                   set coupon_code = %s
+                 where id = %s and coupon_code is null
+                """,
+                (coupon_code, grant_id),
+            )
+    except psycopg.errors.UniqueViolation:
+        await conn.execute(
+            "update public.incentive_grants set status = 'revoked' where id = %s",
+            (grant_id,),
+        )
+        await alerts_repo.open_alert(
+            conn,
+            organization_id=organization_id,
+            type="coupon_code_conflict",
+            severity="critical",
+            title=f"cupom {coupon_code} já pertence a outro grant desta organização",
+            payload={"grant_id": str(grant_id), "coupon_code": coupon_code},
+            dedup_key=f"coupon-conflict:{grant_id}",
+        )
+        return False
+    return True
 
 
 async def recent_ledger_lines(
