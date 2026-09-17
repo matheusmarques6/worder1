@@ -209,7 +209,10 @@ async function handleListAgents(body: any) {
   
   const { data: agents, error } = await supabaseAdmin
     .from('ai_agents')
-    .select('id, name, is_active, provider, model, total_messages, total_tokens_used, created_at')
+    // W4-TC-02: total_messages/total_tokens_used não saem daqui — não são
+    // alimentados por evento atribuído, produto não pode apresentá-los como
+    // atividade atual (colunas e dados de ai_agents continuam intocados).
+    .select('id, name, is_active, provider, model, created_at')
     .eq('organization_id', organizationId)
     .order('created_at', { ascending: false })
 
