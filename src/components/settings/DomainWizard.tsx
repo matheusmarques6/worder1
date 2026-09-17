@@ -169,7 +169,7 @@ export function DomainWizard({ domain, storeName, initialStep = 1, onClose, onDo
   return (
     <div className="wiz" role="dialog" aria-modal="true" aria-label={`Verificar domínio ${d.domain}`}>
       <div className="wiz-top">
-        <Image src="/worder favicon.svg" alt="" width={20} height={20} style={{ height: 20 }} />
+        <Image src="/worder favicon.svg" alt="" width={20} height={20} loading="eager" style={{ height: 20 }} />
         <span className="t">Verificar domínio</span><span className="d">{d.domain}</span>
         <button type="button" className="btn x" onClick={onClose}>Sair e continuar depois</button>
       </div>
