@@ -328,3 +328,105 @@ commit:
 - No wildcard media trust, global rule disable, unexpected dependency, or
   lockfile change.
 - Independent task reviews and whole-change review are clean.
+
+## Final closure — 2026-09-17
+
+Final source HEAD before this documentation commit:
+`445f63282adc899d06ca2796fc24fa011e398e49`.
+
+The actual implementation range is
+`0984bf40bd90414abc81bebd754cb55a269a91ed..445f63282adc899d06ca2796fc24fa011e398e49`.
+The plan's Task 13 text names `ba4cc3bce73f3bbee7d9962da42057f2d00839df`;
+that is the older design commit, not the implementation base. It is retained
+as historical context and was not used to rewrite history or inventory the work.
+
+### Reconciled inventory
+
+`eslint-final.json` was generated at the final source HEAD with:
+
+```powershell
+pnpm exec next lint --format json --max-warnings=0 --output-file .superpowers/sdd/2026-09-16-eslint-quality-gate/eslint-final.json
+```
+
+Exit code: `0`. Parsed result: `0` errors, `0` warnings, no remaining rule
+messages. This closes the immutable 273-item baseline exactly:
+
+| Baseline category | Count | Closing tasks/reports |
+| --- | ---: | --- |
+| JSX entities + obsolete TypeScript comments | 107 errors | Task 1 (`task-1-report.md`) |
+| Rules of Hooks | 5 errors | Task 2 (`task-2-report.md`) |
+| exhaustive-deps D1/D2/D3/D4 | 75 warnings | Tasks 3–9 (`task-3-report.md` … `task-9-report.md`) |
+| no-img-element | 74 warnings | Tasks 10–12 (`task-10-report.md` … `task-12-report.md`) |
+| accessibility | 6 warnings | Task 10 (`task-10-report.md`) |
+| root fonts | 3 warnings | Task 10 (`task-10-report.md`) |
+| anonymous default export | 3 warnings | Task 1 (`task-1-report.md`) |
+| **Total** | **273** | **Tasks 1–12** |
+
+The raw baseline rule totals were: `react/no-unescaped-entities` 88,
+`react-hooks/rules-of-hooks` 5, obsolete `@typescript-eslint` comments 19,
+`react-hooks/exhaustive-deps` 75, `@next/next/no-img-element` 74,
+`jsx-a11y` 6, `@next/next/no-page-custom-font` 3, and
+`import/no-anonymous-default-export` 3. No new final finding exists.
+
+Primary task commits are `37c5240` (T1), `5e6c30d` (T2), `b7a00a7`/`a60053d`
+(T3), `5dce8fb`/`403fbed` (T4), `549ee5d`/`390cdc4` (T5),
+`e98a6c6`/`dbe9fb4` (T6), `fac92f6` (T7), `5f576f2`/`34e8db8` (T8),
+`2dd24ee`/`c70ee7b` (T9), `0887b6b`/`0e03a15` (T10),
+`9e9fade`/`0cdd589` (T11), and `50dee4c`/`445f632` (T12).
+
+### Fresh pre-documentation gates
+
+All commands below ran on `445f6328`. Their stdout/stderr and outcomes are
+also retained in the ignored Task 13 report.
+
+| Command | Exit code | Result |
+| --- | ---: | --- |
+| `pnpm lint` | 0 | Next lint: no warnings or errors |
+| `pnpm exec next lint --max-warnings=0` | 0 | no warnings or errors |
+| `pnpm test` | summary green | 257 passed / 1 skipped files; 2715 passed / 3 skipped tests |
+| `pnpm typecheck` | 0 | `tsc --noEmit` |
+| `pnpm build` | 0 | compiled, lint/typechecked, 148 static pages and traces completed |
+| `git diff --check` | 0 | no whitespace findings |
+
+The pre-documentation test stdout completed green, but the execution wrapper
+was interrupted before it wrote its ExitCode sidecar. This is a tooling
+capture defect, not a test failure; no DOCX/mammoth rerun was needed. The
+post-documentation battery records a literal ExitCode for its final test run.
+
+Focused lifecycle evidence remains in
+`UniversalBits.test.tsx`, `eslint-local-closure-lifecycle.test.tsx`,
+`eslint-app-loader-lifecycle.test.tsx`, `eslint-crm-flow-loader-lifecycle.test.tsx`,
+`eslint-shopify-loader-lifecycle.test.tsx`, `eslint-ui-loader-lifecycle.test.tsx`,
+`eslint-polling-lifecycle.test.tsx`, and `eslint-initialization-lifecycle.test.tsx`.
+The lifecycle-harness detour is documented in
+`.superpowers/sdd/2026-09-16-eslint-quality-gate/lifecycle-harness-fix-report.md`.
+
+### Line-local media exceptions
+
+Task 10 retains its catalogued 33 dynamic/data/blob/unbounded native images,
+two react-pdf false-positive suppressions, and three root-font explanations.
+Their reasons are the E3–E5 decisions above; no global rule disable or wildcard
+host was added.
+
+Task 11 retains native images for uncontracted user/provider URLs at
+`contacts/[id]:500,926,982`; `content/products:405`; `crm/integrations:166,701,923`;
+`integrations/[slug]:176`; `integrations/meta:427`; `products:432`;
+`whatsapp/queue:183`; `ContactDrawer:1017,1133`; `ProductFeedModal:263,308`;
+`InstagramDirectConnect:259,348`; `Header:514`; `MentionInput:100`;
+`KanbanView:302`; `TaskDetailModal:261`; `Avatar:40`; `ContactPanel:258`;
+`ConversationList:83`; and `AssignModal:237`. Each is locally suppressed because
+its URL has no contracted/trusted host boundary; it remains native rather than
+expanding the Next image allowlist. The two contracted local assets
+(`contacts/[id]:730`, `DomainWizard:171`) use `next/image`.
+
+Task 12 retains local native-image explanations for API-editable template URLs
+at `content/page:160`, `email/campaigns/new:480`, and `email/templates:246`;
+the uncontracted Meta creative URL at `AdsTable:107`; and user-editable product
+URLs at `BrowseProductsModal:292,334`. The trusted storage/Shopify sources use
+`next/image`; no host/wildcard/config expansion was introduced.
+
+`pnpm-lock.yaml` and `next.config.js` have no diff across the implementation
+range. `.eslintrc.json` and `package.json` changed only in Task 1 to activate
+the documented `next/core-web-vitals` / `max-warnings=0` gate; they have no
+Task 13 diff. Builds emit only known Browserslist-staleness and webpack cache
+restoration warnings.
