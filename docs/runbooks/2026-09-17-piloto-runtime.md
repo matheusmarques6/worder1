@@ -226,8 +226,10 @@ uv run --directory runtime python scripts/piloto_check.py smoke --organization <
 ```
 
 Requer `SUPABASE_DB_URL` no ambiente. `--phone` é o número que mandou a
-mensagem do Passo 7 (com ou sem `+`, o comando tolera os dois formatos, a
-mesma tolerância que `internal.emit_ai_run_step` usa). `--minutes` é opcional,
+mensagem do Passo 7. Se digitado com `+`, o comando também tenta sem — a
+mesma tolerância que `internal.emit_ai_run_step` usa — mas não o contrário:
+se o banco guarda o telefone com `+` e `--phone` for digitado sem, a busca
+não encontra a conversa. Na dúvida, digite com `+`. `--minutes` é opcional,
 default 15 — a janela de tempo em que o smoke procura evidência; aumentar se
 o Passo 7 aconteceu há mais tempo.
 

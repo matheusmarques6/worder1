@@ -240,24 +240,12 @@ async def _smoke(
             )
         ).fetchall()
 
-        mirrored = await (
-            await conn.execute(
-                f"""
-                select count(*)
-                  from public.whatsapp_cloud_messages wcm
-                  join public.whatsapp_cloud_conversations wcc on wcc.id = wcm.conversation_id
-                 where wcc.organization_id = %s
-                   and wcm.direction = 'outbound'
-                   and wcm."timestamp" > now() - interval '{window}'
-                """,
-                (organization_id,),
-            )
-        ).fetchone()
-
-        # Chips são gravados na conversa CLOUD (internal.emit_ai_run_step,
-        # migration 20260817000002, grava `v_cloud` — não a canônica). Mesma
-        # resolução por organização + wa_id, tolerando o '+', que essa função
-        # usa e que a consulta de espelho acima já cobre por join.
+        # Chips e espelho são gravados na conversa CLOUD (internal.emit_ai_run_step,
+        # migration 20260817000002, grava `v_cloud` — não a canônica). Resolve
+        # uma vez, por organização + wa_id tolerando o '+', e as duas consultas
+        # abaixo bebem do mesmo id — sem isso o espelho, escopado só pela
+        # organização, contaria a mensagem de QUALQUER conversa da loja e o
+        # smoke sairia verde num turno que não teve resposta nenhuma.
         cloud_row = await (
             await conn.execute(
                 """
@@ -271,10 +259,25 @@ async def _smoke(
                 (organization_id, phone, phone.lstrip("+")),
             )
         ).fetchone()
+        cloud_conversation_id = cloud_row[0] if cloud_row is not None else None
 
-        if cloud_row is None:
+        if cloud_conversation_id is None:
+            mirrored: tuple[int] = (0,)
             steps: list[tuple[str]] = []
         else:
+            mirrored = await (
+                await conn.execute(
+                    f"""
+                    select count(*)
+                      from public.whatsapp_cloud_messages wcm
+                     where wcm.conversation_id = %s
+                       and wcm.direction = 'outbound'
+                       and wcm."timestamp" > now() - interval '{window}'
+                    """,
+                    (cloud_conversation_id,),
+                )
+            ).fetchone()
+
             steps = await (
                 await conn.execute(
                     f"""
@@ -284,7 +287,7 @@ async def _smoke(
                        and created_at > now() - interval '{window}'
                      order by created_at
                     """,
-                    (cloud_row[0],),
+                    (cloud_conversation_id,),
                 )
             ).fetchall()
     except Exception as exc:
@@ -326,17 +329,23 @@ def _main(argv: list[str] | None = None) -> int:
         return 1 if problems else 0
 
     if args.command == "probe":
-        healthy, lines = asyncio.run(
-            _probe(os.environ["SUPABASE_DB_URL"], stale_after=args.stale_after)
-        )
+        dsn = os.environ.get("SUPABASE_DB_URL")
+        if not dsn:
+            print("- SUPABASE_DB_URL não está definida")
+            return 1
+        healthy, lines = asyncio.run(_probe(dsn, stale_after=args.stale_after))
         for line in lines:
             print(f"- {line}")
         return 0 if healthy else 1
 
     if args.command == "smoke":
+        dsn = os.environ.get("SUPABASE_DB_URL")
+        if not dsn:
+            print("- SUPABASE_DB_URL não está definida")
+            return 1
         passed, lines = asyncio.run(
             _smoke(
-                os.environ["SUPABASE_DB_URL"],
+                dsn,
                 organization_id=args.organization,
                 phone=args.phone,
                 minutes=args.minutes,
