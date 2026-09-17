@@ -9,6 +9,8 @@
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getEmailProviderForOrg } from '@/lib/email/providers';
 import { prepareEmailHtml, resolveProductBlocks, resolveCartBlocks } from '@/lib/email/render';
+import { getUtmSettings } from '@/lib/tracking/utm-settings';
+import { makeLinkParamsResolver, type LinkContext, type UtmTemplates } from '@/lib/tracking/link-params';
 
 export interface SendCampaignEmailParams {
   campaignId: string;
@@ -41,6 +43,23 @@ export interface SendCampaignEmailParams {
    *  "Produtos do Gatilho" block builds the correct CTA link. Omitted for
    *  plain campaign broadcasts (link family inferred from the event). */
   triggerType?: string | null;
+  /**
+   * Trava de duplicidade. Quando presente, o índice único em
+   * email_sends garante que este envio saia UMA vez — mesmo com várias
+   * execuções concorrentes tentando ao mesmo tempo.
+   */
+  dedupeKey?: string | null;
+  /**
+   * Contexto para as UTMs + identificação de TODO link do e-mail
+   * (nome/id da campanha ou automação, nome/id da mensagem…). Sem ele,
+   * o envio é tratado como campanha quando há campaignId e como
+   * automação caso contrário. sendId/contactId/loja são preenchidos aqui.
+   */
+  linkContext?: Partial<LinkContext> | null;
+  /** Sobrescritas de UTM desta mensagem (nó do fluxo). */
+  utmOverrides?: Partial<UtmTemplates> | null;
+  /** Desliga só as UTMs desta mensagem — a identificação continua. */
+  utmDisabled?: boolean;
 }
 
 export async function sendCampaignEmail({
@@ -59,7 +78,13 @@ export async function sendCampaignEmail({
   storeId,
   eventData,
   triggerType,
-}: SendCampaignEmailParams): Promise<{ success: boolean; emailSendId?: string; error?: string }> {
+  dedupeKey,
+  linkContext,
+  utmOverrides,
+  utmDisabled,
+}: SendCampaignEmailParams): Promise<{ success: boolean; emailSendId?: string; error?: string; skipped?: boolean; reason?: string }> {
+  // Guardado para o log do catch: qual endereço a tentativa usou.
+  let effectiveFromForLog: string | null = null;
   let emailSendId = '' as string;
   // Hoisted so the catch block can flip email_consent on the contact
   // when Resend reports a permanent failure mid-send.
@@ -103,6 +128,23 @@ export async function sendCampaignEmail({
       }
     }
 
+    // 0b. A loja do envio. O fluxo sabe a sua (automations.store_id);
+    // um fluxo da organização inteira herda a loja do contato — o
+    // cliente é de UMA loja, e os produtos, links e a atribuição do
+    // envio têm de ser dela.
+    let sendStoreId: string | null = storeId || null;
+    if (!sendStoreId && resolvedContactId) {
+      try {
+        const { data: contactRow } = await supabaseAdmin
+          .from('contacts')
+          .select('store_id')
+          .eq('id', resolvedContactId)
+          .eq('organization_id', organizationId)
+          .maybeSingle();
+        sendStoreId = contactRow?.store_id || null;
+      } catch { /* segue sem loja */ }
+    }
+
     // 1. Create email_sends row with status 'queued'
     // 'queued' is the initial state allowed by email_sends_status_check;
     // 'pending' is NOT in the allowlist and would fail the CHECK constraint.
@@ -125,9 +167,26 @@ export async function sendCampaignEmail({
         provider: 'resend',
         status: 'queued',
         organization_id: organizationId,
+        // A loja do envio fica gravada: é o que o rastreador de clique
+        // usa para mandar o contato para a loja CERTA quando o destino
+        // do link está quebrado, e o que os relatórios por loja leem.
+        store_id: sendStoreId,
+        // Trava de duplicidade. O índice único faz o trabalho: seis runs
+        // paralelas disparando com 2s de intervalo TODAS leriam "ainda
+        // não enviei" numa verificação por SELECT, e todas mandariam.
+        // Aqui a segunda simplesmente não consegue gravar.
+        dedupe_key: dedupeKey || null,
       })
       .select('id')
       .single();
+
+    // 23505 = violação de unicidade: outra execução já registrou este
+    // mesmo envio. Não é erro — é a trava funcionando. Devolver sucesso
+    // com skipped deixa o fluxo seguir para o próximo nó normalmente.
+    if ((insertError as any)?.code === '23505' && dedupeKey) {
+      console.log(`[SendCampaignEmail] duplicado bloqueado: ${dedupeKey}`);
+      return { success: true, skipped: true, reason: 'duplicate_send' };
+    }
 
     if (insertError || !emailSend) {
       console.error('[SendCampaignEmail] Failed to create email_sends row:', insertError);
@@ -191,14 +250,22 @@ export async function sendCampaignEmail({
       }
     }
 
-    // 3. Resolve dynamic product blocks + cart blocks
-    let htmlWithProducts = await resolveProductBlocks(templateHtml, organizationId, contactId, eventData);
+    // 3. Resolve dynamic product blocks + cart blocks — sempre com a loja
+    // do envio, para que produtos e links saiam da loja certa numa
+    // organização com várias lojas.
+    let htmlWithProducts = await resolveProductBlocks(templateHtml, organizationId, resolvedContactId || contactId, eventData, sendStoreId);
     // Pass eventData so the cart block can adapt to the active trigger
     // (cart vs checkout vs browse vs order) via trigger_auto feed type.
-    htmlWithProducts = await resolveCartBlocks(htmlWithProducts, organizationId, contactId, eventData, triggerType, mergeData.store_url);
+    htmlWithProducts = await resolveCartBlocks(htmlWithProducts, organizationId, resolvedContactId || contactId, eventData, triggerType, mergeData.store_url, sendStoreId);
     // Resolve {{ trigger.link }}, {{ trigger.first_item_image }} etc.
     // — smart tags that adapt the right URL/title/image to whichever
     // event fired the email.
+    // Mapeamento da organização carregado UMA vez e reaproveitado pelas
+    // três metades (html, assunto, texto) — é o que faz o caminho
+    // configurado em Integrações valer no envio real.
+    const { loadTagMapping } = await import('@/lib/merge-tags/load-mapping');
+    const tagMapping = eventData ? await loadTagMapping(organizationId, sendStoreId) : undefined;
+
     if (eventData) {
       const { resolveTriggerSmartTags } = await import('@/lib/email/merge-tags');
       // escapeHtml: substituted values are HTML — escape & < > " ' (XSS).
@@ -206,7 +273,9 @@ export async function sendCampaignEmail({
       // hrefs before the click-tracking encoding.
       // store_url → absolutizes site-relative URLs (e.g. {{ event.ProductURL }}
       // = "/products/x") against the store domain so links don't 404 on the app.
-      htmlWithProducts = resolveTriggerSmartTags(htmlWithProducts, eventData, mergeData.store_url, { escapeHtml: true });
+      htmlWithProducts = resolveTriggerSmartTags(htmlWithProducts, eventData, mergeData.store_url, {
+        escapeHtml: true, mapping: tagMapping,
+      });
     }
 
     // 3. Prepare HTML with merge tags, tracking, unsubscribe.
@@ -216,35 +285,83 @@ export async function sendCampaignEmail({
     let trackingBaseUrl = baseUrl;
     try {
       const { getTrackingBaseUrl } = await import('@/lib/email/tracking-url');
-      trackingBaseUrl = await getTrackingBaseUrl(organizationId, storeId || null);
+      trackingBaseUrl = await getTrackingBaseUrl(organizationId, sendStoreId || null);
     } catch { /* mantém o baseUrl do caller */ }
 
-    const finalHtml = prepareEmailHtml({
-      html: htmlWithProducts,
-      mergeData,
-      emailSendId,
-      baseUrl: trackingBaseUrl,
-    });
-
-    // 4. Render subject merge tags — the subject must go through the SAME
+    // 3a. Render subject merge tags — the subject must go through the SAME
     // trigger resolvers as the body, otherwise {{ CheckoutURL }} /
     // {{ trigger.* }} / {{ event.* }} tags in the subject line reach the
     // inbox unresolved. Plain-text context: NO html-escaping here.
+    // Renderizado ANTES do HTML porque o assunto também alimenta as UTMs
+    // ({{email_subject}} / {{message_name}} de campanha).
     let subjectSrc = subject;
     if (eventData) {
       const { resolveTriggerSmartTags } = await import('@/lib/email/merge-tags');
-      subjectSrc = resolveTriggerSmartTags(subjectSrc, eventData, mergeData.store_url);
+      subjectSrc = resolveTriggerSmartTags(subjectSrc, eventData, mergeData.store_url, { mapping: tagMapping });
     }
     const { renderMergeTags } = await import('@/lib/email/render');
     // escape:false — the subject is text/plain: escaping would ship a
     // literal `&amp;` to the inbox ("Zé & Cia" → "Zé &amp; Cia").
     const finalSubject = renderMergeTags(subjectSrc, mergeData, { escape: false });
 
+    // 3b. UTM + identificação em todo link. A configuração é a da LOJA do
+    // envio (padrão da organização só quando a loja não configurou nada).
+    // Falha aqui nunca derruba o envio: o pior caso é o link sair só com
+    // o que o rastreador de clique carimba no redirect.
+    let linkParams: ReturnType<typeof makeLinkParamsResolver> | null = null;
+    try {
+      const { settings: utmSettings } = await getUtmSettings(organizationId, sendStoreId);
+      const messageType = linkContext?.messageType || (isUuid(campaignId) ? 'campaign' : 'automation');
+      const ctx: LinkContext = {
+        channel: 'email',
+        messageType,
+        // Numa automação o campaignId é só o id do fluxo como substituto
+        // (email_sends.campaign_id) — não é campanha.
+        campaignId: messageType === 'campaign' && isUuid(campaignId) ? campaignId : null,
+        ...(linkContext || {}),
+        sendId: emailSendId,
+        contactId: resolvedContactId || null,
+        emailSubject: linkContext?.emailSubject || finalSubject,
+        storeName: linkContext?.storeName || mergeData.store_name || null,
+        storeDomain: linkContext?.storeDomain || mergeData.store_url || null,
+        sentAt: new Date(),
+        extra: { ...mergeData, ...(linkContext?.extra || {}) },
+      };
+      linkParams = makeLinkParamsResolver(utmSettings, ctx, { utmOverrides, utmDisabled });
+    } catch (e) {
+      console.warn('[SendCampaignEmail] link params indisponíveis, seguindo sem UTM no href:', (e as Error)?.message);
+    }
+
+    const finalHtml = prepareEmailHtml({
+      html: htmlWithProducts,
+      mergeData,
+      emailSendId,
+      baseUrl: trackingBaseUrl,
+      contactId: resolvedContactId || undefined,
+      orgId: organizationId,
+      campaignId: campaignId || undefined,
+      // A página de preferências mostra a marca DESTA loja.
+      storeId: sendStoreId || undefined,
+      linkParams,
+    });
+
     // 5. Send via the org's configured provider (defaults to Resend).
-    // The factory caches per-org so we don't hit the DB on every send.
-    const { provider, config } = await getEmailProviderForOrg(organizationId, storeId);
-    const effectiveFrom = fromEmail || config.defaultFrom || 'onboarding@resend.dev';
-    const effectiveSenderName = senderName || config.defaultSenderName;
+    // Identidade da LOJA do envio: a do fluxo/campanha ou, num fluxo da
+    // organização inteira, a do contato — o cliente é de uma loja e o
+    // e-mail chega assinado por ela, nunca pela loja irmã.
+    const { provider, config } = await getEmailProviderForOrg(organizationId, sendStoreId);
+    // O endereço gravado no nó vence, exceto quando é o do domínio
+    // compartilhado e a loja já tem o próprio verificado — ver
+    // sender-preference. Sem isso, verificar o domínio não muda nada nas
+    // automações que já existiam.
+    const { chooseSender } = await import('@/lib/email/sender-preference');
+    const chosenSender = chooseSender(
+      { email: fromEmail, name: senderName },
+      { email: config.defaultFrom, name: config.defaultSenderName },
+    );
+    const effectiveFrom = chosenSender.email || 'onboarding@resend.dev';
+    effectiveFromForLog = effectiveFrom;
+    const effectiveSenderName = chosenSender.name || undefined;
 
     // List-Unsubscribe + List-Unsubscribe-Post headers (RFC 2369 +
     // 8058). Gmail Postmaster Tools demands both for high-volume
@@ -255,7 +372,7 @@ export async function sendCampaignEmail({
     const { buildUnsubscribeUrl, buildListUnsubscribeHeaders } = await import('@/lib/email/render');
     // Mesmo host dos demais links de tracking — o List-Unsubscribe do
     // header e o link do rodapé precisam apontar pro mesmo lugar.
-    const unsubUrl = buildUnsubscribeUrl(emailSendId, trackingBaseUrl, resolvedContactId || undefined, organizationId, campaignId || undefined);
+    const unsubUrl = buildUnsubscribeUrl(emailSendId, trackingBaseUrl, resolvedContactId || undefined, organizationId, campaignId || undefined, sendStoreId || undefined);
     const listUnsubHeaders = buildListUnsubscribeHeaders(unsubUrl);
 
     // Plain-text alternative — when caller supplied one (text-based
@@ -274,7 +391,7 @@ export async function sendCampaignEmail({
         // stripped as an unresolved tag.
         if (eventData) {
           const { resolveTriggerSmartTags } = await import('@/lib/email/merge-tags');
-          textSrc = resolveTriggerSmartTags(textSrc, eventData, mergeData.store_url);
+          textSrc = resolveTriggerSmartTags(textSrc, eventData, mergeData.store_url, { mapping: tagMapping });
         }
         const { renderPlainWithMergeData } = await import('@/lib/email/text-render');
         finalText = renderPlainWithMergeData(textSrc, mergeData);
@@ -343,31 +460,31 @@ export async function sendCampaignEmail({
         .eq('id', emailSendId);
     }
 
-    // Auto-suppress the contact's email on permanent failures. Without
-    // this every subsequent send retries Resend, eats API quota, and
-    // racks up the bounce rate. Resend's typical permanent rejections:
-    //   "Email is on the suppression list"
-    //   "Email address is invalid"
-    //   "Domain is not verified"
-    //   "Recipient does not exist" / "No such user"
-    const permanentPatterns = [
-      /suppres/i,
-      /invalid/i,
-      /does not exist/i,
-      /no such user/i,
-      /not allowed/i,
-      /not a verified/i,
-      /unable to deliver/i,
-    ];
+    // Desistir do endereço do contato só quando a culpa é DELE (caixa
+    // inexistente, lista de supressão). Erro de configuração do remetente
+    // — domínio não verificado, "from" inválido, chave errada — não diz
+    // nada sobre quem ia receber, e apagar o consentimento por causa disso
+    // descadastrava a lista inteira do lojista, um contato por vez.
     const message = String(error?.message || '');
-    const isPermanent = permanentPatterns.some((p) => p.test(message));
-    if (isPermanent && resolvedContactId) {
+    const { shouldSuppressContact, blameForSendFailure } = await import('@/lib/email/send-error');
+    const blame = blameForSendFailure(message);
+    if (blame === 'sender') {
+      console.error('[SendCampaignEmail] falha de CONFIGURAÇÃO do remetente — nenhum contato foi marcado', {
+        from: effectiveFromForLog,
+        error: message,
+      });
+    }
+    if (shouldSuppressContact(message) && resolvedContactId) {
       try {
         await supabaseAdmin
           .from('contacts')
-          .update({ email_consent: false, status: 'bounced' })
+          // A coluna é `suppressed` (booleana) — `status` nunca existiu em
+          // contacts, e o PostgREST recusa a linha inteira quando não
+          // conhece um campo: nem a supressão nem o email_consent eram
+          // gravados. O endereço com bounce ficava marcado em lugar nenhum.
+          .update({ email_consent: false, suppressed: true })
           .eq('id', resolvedContactId);
-        console.log('[SendCampaignEmail] flipped email_consent=false for permanent error', {
+        console.log('[SendCampaignEmail] endereço do contato recusado em definitivo', {
           contactId: resolvedContactId,
           error: message,
         });

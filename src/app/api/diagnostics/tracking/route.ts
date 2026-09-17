@@ -37,15 +37,15 @@ export async function GET(request: NextRequest) {
       .single();
     store = data;
   } else {
-    const { data } = await admin
-      .from('shopify_stores')
-      .select('*')
-      .eq('organization_id', orgId)
-      .eq('is_active', true)
-      .order('installed_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    store = data;
+    // Sem storeId só serve a ÚNICA loja ativa da organização — o
+    // diagnóstico da loja errada é pior que nenhum.
+    const { pickStore, pickStoreError } = await import('@/lib/stores/pick-store');
+    const picked = await pickStore<any>(admin, { orgIds: [orgId], select: '*' });
+    if (!picked.store) {
+      const err = pickStoreError(picked.reason);
+      return NextResponse.json({ error: err.error, code: err.code }, { status: err.status });
+    }
+    store = picked.store;
   }
 
   if (!store) {
@@ -116,7 +116,7 @@ export async function GET(request: NextRequest) {
   // Most recent identified contacts (last 10)
   const { data: recentContacts } = await admin
     .from('contacts')
-    .select('id, email, first_name, last_name, total_orders, total_spent, created_at, last_event_at')
+    .select('id, email, first_name, last_name, total_orders, total_spent, created_at, last_event_at:last_seen_at')
     .eq('organization_id', orgId)
     .eq('store_id', store.id)
     .order('created_at', { ascending: false })

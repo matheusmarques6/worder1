@@ -6,31 +6,18 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { authorizeCronRequest } from '@/lib/cron-auth';
 export const dynamic = 'force-dynamic';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 export async function GET(request: NextRequest) {
-  // Vercel Cron sends x-vercel-cron: 1 instead of Bearer auth.
-  // Without this branch the daily birthday/anniversary fan-out
-  // never fired in production — Vercel hit 401, the cron silently
-  // dropped, and merchants saw no birthday emails despite the
-  // trigger appearing fully wired.
-  const isVercelCron = request.headers.get('x-vercel-cron') === '1';
-  const isDev = process.env.NODE_ENV === 'development';
-  const cronSecret = process.env.CRON_SECRET;
-  const authHeader = request.headers.get('authorization');
-  // X-Internal-Request was removed: it's client-settable and not stripped
-  // by Vercel, so it let any caller spoof authorization. Only Vercel Cron
-  // or Bearer CRON_SECRET (or dev) is accepted now.
-  const isAuthorized = isVercelCron || isDev ||
-    (cronSecret && authHeader === `Bearer ${cronSecret}`);
-
-  if (!isAuthorized) {
+  if (!authorizeCronRequest(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const cronSecret = process.env.CRON_SECRET;
   const supabase = createClient(supabaseUrl, supabaseKey);
 
   try {
@@ -50,8 +37,10 @@ export async function GET(request: NextRequest) {
     // Processar eventos criados
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL;
     if (appUrl) {
-      // Chamar endpoint de processamento de eventos
-      fetch(`${appUrl}/api/cron/process-events`, {
+      // Chamar endpoint de processamento de eventos. A rota certa é a do
+      // worker — /api/cron/process-events não existe e o 404 era engolido
+      // pelo .catch, deixando os eventos de data parados em event_logs.
+      fetch(`${appUrl}/api/workers/process-events`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${cronSecret}`,

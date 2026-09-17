@@ -5,23 +5,25 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase'
+import { requireOrgFromAuth } from '@/lib/auth/require-org'
 export const dynamic = 'force-dynamic';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  // A organização vinha na URL e nada exigia sessão: bastava informar o
+  // par (id da loja, id da organização) de outra empresa.
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const organizationId = auth.orgId;
+
   const supabase = createAdminClient()
   if (!supabase) {
     return NextResponse.json({ error: 'Database not configured' }, { status: 503 })
   }
 
-  const searchParams = request.nextUrl.searchParams
-  const organizationId = searchParams.get('organizationId')
 
-  if (!organizationId) {
-    return NextResponse.json({ error: 'Organization ID required' }, { status: 400 })
-  }
 
   try {
     // Get store info
@@ -39,7 +41,9 @@ export async function GET(
     // Get webhook stats from automation logs
     const { data: logs } = await supabase
       .from('automation_logs')
-      .select('event_type, created_at')
+      // A coluna do evento é `trigger_event`; `event_type` não existe e
+      // derrubava a consulta — a tela de webhooks mostrava tudo zerado.
+      .select('trigger_event, created_at')
       .eq('organization_id', organizationId)
       .eq('source_type', 'shopify')
       .order('created_at', { ascending: false })
@@ -70,7 +74,9 @@ export async function GET(
     // Count logs by event type
     if (logs) {
       logs.forEach(log => {
-        const eventType = log.event_type
+        // Os logs gravam o topic do Shopify ('orders/create'); a chave do
+        // mapa usa underscore.
+        const eventType = String(log.trigger_event || '').replace('/', '_')
         if (webhookMap[eventType]) {
           webhookMap[eventType].totalReceived++
           if (!webhookMap[eventType].lastReceived) {

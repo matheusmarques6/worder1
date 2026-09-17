@@ -542,7 +542,7 @@ export function ExecutionPanel({ automationId, organizationId, onClose }: Execut
               <Zap className="w-8 h-8 text-gray-400" />
             </div>
             <p className="text-gray-500 text-sm mb-2">
-              Clique em "Executar Teste" para simular
+              Clique em &quot;Executar Teste&quot; para simular
             </p>
             <p className="text-gray-400 text-xs">
               Os nós serão executados em sequência com visualização em tempo real

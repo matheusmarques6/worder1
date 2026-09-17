@@ -132,6 +132,25 @@ export default function InboxContent({ height = 'calc(100vh - 4rem)' }: InboxCon
     clear: clearContact,
   } = useInboxContact()
 
+  const fetchConversationsRef = useRef(fetchConversations)
+  const fetchInstancesRef = useRef(fetchInstances)
+  const fetchMessagesRef = useRef(fetchMessages)
+  const fetchContactRef = useRef(fetchContact)
+  const clearMessagesRef = useRef(clearMessages)
+  const clearContactRef = useRef(clearContact)
+  const refetchLatestRef = useRef(refetchLatest)
+  const refreshConversationsRef = useRef(refreshConversations)
+  fetchConversationsRef.current = fetchConversations
+  fetchInstancesRef.current = fetchInstances
+  fetchMessagesRef.current = fetchMessages
+  fetchContactRef.current = fetchContact
+  clearMessagesRef.current = clearMessages
+  clearContactRef.current = clearContact
+  refetchLatestRef.current = refetchLatest
+  refreshConversationsRef.current = refreshConversations
+  const conversationId = selectedConversation?.id ?? null
+  const contactId = selectedConversation?.unified_contact_id || selectedConversation?.contact_id || null
+
   // =============================================
   // REALTIME CALLBACKS
   // =============================================
@@ -240,7 +259,7 @@ export default function InboxContent({ height = 'calc(100vh - 4rem)' }: InboxCon
   // =============================================
   const { isConnected: realtimeConnected, channels: realtimeChannels } = useCloudInboxRealtime({
     organizationId,
-    conversationId: selectedConversation?.id ?? null,
+    conversationId,
     onNewConversation: handleConversationInsert,
     onConversationUpdate: handleConversationUpdate,
     onNewMessage: handleNewMessage,
@@ -274,37 +293,31 @@ export default function InboxContent({ height = 'calc(100vh - 4rem)' }: InboxCon
   // EFFECTS
   // =============================================
   
-  // ✅ CORREÇÃO: Refetch quando trocar de loja
-  useEffect(() => {
-    if (storeId) {
-      console.log('🏪 [InboxContent] Store changed to:', storeId)
-      fetchConversations()
-      fetchInstances()
-    }
-  }, [storeId])
-
-  // Fetch conversations on mount
+  // Fetch list once for each organization/store identity.
   useEffect(() => { 
     if (organizationId && storeId) {
-      fetchConversations() 
+      console.log('🏪 [InboxContent] Store changed to:', storeId)
+      fetchConversationsRef.current()
+      fetchInstancesRef.current()
     }
   }, [organizationId, storeId])
 
   // Fetch messages when conversation selected
   useEffect(() => {
-    if (selectedConversation) {
-      fetchMessages(selectedConversation.id)
-      
-      // Fetch contact se tiver contact_id ou unified_contact_id
-      const contactId = selectedConversation.unified_contact_id || selectedConversation.contact_id
-      if (contactId) {
-        fetchContact(contactId, selectedConversation.id)
-      }
+    if (conversationId) {
+      fetchMessagesRef.current(conversationId)
     } else {
-      clearMessages()
-      clearContact()
+      clearMessagesRef.current()
     }
-  }, [selectedConversation?.id])
+  }, [conversationId])
+
+  useEffect(() => {
+    if (conversationId && contactId) {
+      fetchContactRef.current(contactId, conversationId)
+    } else if (!conversationId) {
+      clearContactRef.current()
+    }
+  }, [conversationId, contactId])
 
   // Polling fallback
   const pollingRef = useRef<NodeJS.Timeout | null>(null)
@@ -321,10 +334,10 @@ export default function InboxContent({ height = 'calc(100vh - 4rem)' }: InboxCon
       : POLLING_INTERVAL_FALLBACK
 
     pollingRef.current = setInterval(() => {
-      if (selectedConversation) {
-        refetchLatest()
+      if (conversationId) {
+        refetchLatestRef.current()
       }
-      refreshConversations()
+      refreshConversationsRef.current()
     }, interval)
 
     return () => {
@@ -332,7 +345,7 @@ export default function InboxContent({ height = 'calc(100vh - 4rem)' }: InboxCon
         clearInterval(pollingRef.current)
       }
     }
-  }, [selectedConversation?.id, refetchLatest, refreshConversations, realtimeConnected])
+  }, [conversationId, realtimeConnected])
 
   // =============================================
   // HANDLERS

@@ -11,19 +11,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { dispatchTrigger } from '@/lib/automation/trigger-dispatcher'
+import { authorizeCronRequest } from '@/lib/cron-auth'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-function isAuthorized(req: NextRequest): boolean {
-  if (req.headers.get('x-vercel-cron')) return true
-  const secret = process.env.CRON_SECRET
-  if (!secret) return process.env.NODE_ENV !== 'production'
-  return req.headers.get('authorization') === `Bearer ${secret}`
-}
-
 export async function GET(req: NextRequest) {
-  if (!isAuthorized(req)) {
+  if (!authorizeCronRequest(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -91,7 +85,12 @@ export async function GET(req: NextRequest) {
           .select('id, last_active_at, store_id')
           .eq('organization_id', auto.organization_id)
           .lte('last_active_at', threshold)
-          .eq('is_active', true)
+          // `contacts.is_active` não existe: o filtro derrubava a
+          // consulta inteira e a régua de inatividade nunca disparava
+          // para ninguém. O que o passo quer é não incomodar quem está
+          // bloqueado ou na lista de supressão.
+          .not('is_blocked', 'is', true)
+          .not('suppressed', 'is', true)
           .order('last_active_at', { ascending: true, nullsFirst: true })
           .range(from, from + PAGE_SIZE - 1)
         if (auto.store_id) {

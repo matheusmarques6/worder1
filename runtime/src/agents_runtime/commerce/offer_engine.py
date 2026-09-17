@@ -213,5 +213,6 @@ async def process(
 
 def coupon_code_for(grant: Grant) -> str:
     """Determinístico a partir do grant: o retry do provedor recria o MESMO
-    código, e código duplicado no provedor vira sucesso idempotente."""
-    return f"WD-{grant.id.hex[:8].upper()}"
+    código, e código duplicado no provedor vira sucesso idempotente. O UUID
+    inteiro, não o prefixo: oito hex colidem entre grants distintos."""
+    return f"WD-{grant.id.hex.upper()}"

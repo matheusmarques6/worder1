@@ -17,10 +17,12 @@ As diferenças que importam:
     no meio da geração mata o rascunho e o turno de RESPOSTA assume.
 """
 
+import json
 import logging
 import os
 from dataclasses import dataclass, replace
 from datetime import timedelta
+from functools import partial
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -29,11 +31,13 @@ import psycopg
 
 from agents_runtime.agent_core import openrouter
 from agents_runtime.agent_core.guards import (
+    _number,
+    behavior_of,
     evaluate_inbound_guards,
     resolve_blocked_topic,
     schedule_silence,
 )
-from agents_runtime.agent_core.llm import ChatRequest, LlmPort, Message
+from agents_runtime.agent_core.llm import LlmPort, Message, ToolCall, ToolSpec
 from agents_runtime.agent_core.metering import TurnBudget
 from agents_runtime.agent_core.mission_resolver import (
     NodeDelta,
@@ -55,13 +59,17 @@ from agents_runtime.agent_core.responder import (
     TRANSCRIPT_LIMIT,
     UNMIRRORED_DETAIL,
     _as_chat,
+    _knowledge,
     _metered,
     default_turn_llm_call_limit,
     delivery_flags,
     transfer_to_human,
 )
+from agents_runtime.agent_core.tool_loop import generate_with_tools
+from agents_runtime.agent_core.trace import AcceptedTracePayload, AttemptTraceCapture
 from agents_runtime.clock import Clock, SystemClock
 from agents_runtime.commerce.moments import apply_moment_restrictions, resolve_moments
+from agents_runtime.config import QueueingConfig, config_from_env
 from agents_runtime.evals.pack import load_rubrics
 from agents_runtime.judges.pre_send import (
     JUDGE_MODEL,
@@ -74,15 +82,23 @@ from agents_runtime.obs.telemetry import annotate
 from agents_runtime.queueing.jobs import MissionTouchJob
 from agents_runtime.repository import agent as agent_repo
 from agents_runtime.repository import alerts as alerts_repo
+from agents_runtime.repository import custom_tools as custom_tools_repo
 from agents_runtime.repository import engine as engine_repo
 from agents_runtime.repository import judge_scores as scores_repo
 from agents_runtime.repository import missions as missions_repo
 from agents_runtime.repository import moments as moments_repo
 from agents_runtime.repository import orders as orders_repo
 from agents_runtime.repository import provider_keys as keys_repo
-from agents_runtime.repository.scope import WORKER_ROLE, assert_rls_enforced, scope_to_organization
+from agents_runtime.repository.scope import (
+    WORKER_ROLE,
+    assert_rls_enforced,
+    scope_to_organization,
+    set_statement_timeout,
+)
 from agents_runtime.tools.base import ToolContext, run_tool
 from agents_runtime.tools.coupon import CreateCoupon
+from agents_runtime.tools.custom_http import CustomHttpTool, CustomToolRow, tool_spec_for
+from agents_runtime.tools.knowledge import DEFAULT_LIMIT
 
 logger = logging.getLogger(__name__)
 
@@ -98,11 +114,15 @@ class TouchDraft:
     content: dict | None
     moment_ids: tuple[UUID, ...]
     mission_version_id: UUID | None
+    trace: AcceptedTracePayload | None = None
 
 
-def fixed_toucher(text: str = FIXED_TOUCH):
+def fixed_toucher(text: str = FIXED_TOUCH, *, agent_id: UUID | None = None):
     async def touch(job: MissionTouchJob) -> TouchDraft:
-        return TouchDraft(content={"text": text}, moment_ids=(), mission_version_id=None)
+        trace = (AttemptTraceCapture().build(agent_id=agent_id, input_text="", output_text=text,
+                                            selected_attempt=None) if agent_id else None)
+        return TouchDraft(content={"text": text}, moment_ids=(), mission_version_id=None,
+                          trace=trace)
 
     return touch
 
@@ -111,7 +131,7 @@ def _node_delta(raw: dict | None) -> NodeDelta:
     raw = raw or {}
     return NodeDelta(
         objective=raw.get("objective"),
-        success_criteria=tuple(raw.get("success_criteria") or ()),
+        success_criteria=raw.get("success_criteria"),
         tone=raw.get("tone"),
         context=dict(raw.get("context") or {}),
         enabled_tools=(
@@ -132,14 +152,16 @@ def build_toucher(
     base_secret: str | None = None,
     shopify_transport: httpx.AsyncBaseTransport | None = None,
     turn_llm_call_limit: int | None = None,
+    config: QueueingConfig | None = None,
 ):
     """O toucher real. Mesmas costuras do build_responder — `llm` é a porta da
-    PLATAFORMA (Judge 1); a fala do agente sai pela cascata BYO em produção.
+    PLATAFORMA (Judge 1 e embeddings); a fala do agente sai pela cascata BYO em produção.
 
     `turn_llm_call_limit` (item 41, fix round 1): o toque é o SEGUNDO tipo de
     turno que passa por `guarded_reply`/`MeteredLlm` — sem isto ele ficava
     inteiramente fora do teto de chamadas do item 41 (achado da review)."""
     clock = clock or SystemClock()
+    config = config or QueueingConfig()
     from agents_runtime.agent_core.responder import default_rubrics_directory
 
     rubrics = load_rubrics(rubrics_directory or default_rubrics_directory())
@@ -148,9 +170,14 @@ def build_toucher(
     )
 
     async def touch(job: MissionTouchJob) -> TouchDraft:
-        async with await psycopg.AsyncConnection.connect(dsn, autocommit=True) as conn:
+        async with await psycopg.AsyncConnection.connect(
+            dsn,
+            autocommit=True,
+            connect_timeout=config.connect_timeout_seconds,
+        ) as conn:
             if set_role:
                 await conn.execute("set role " + set_role)
+            await set_statement_timeout(conn, config.statement_timeout_ms)
             await assert_rls_enforced(conn, WORKER_ROLE)
 
             # --- leitura: uma transação curta, fechada antes de qualquer rede
@@ -176,10 +203,21 @@ def build_toucher(
                 active_moments = await moments_repo.load_active_moments(conn)
                 # Item 30: o toque é o SEGUNDO produtor de fala do runtime, e
                 # lê o mesmo estado que o turno de resposta lê.
+                #
+                # W3-T6a: mesmos dois knobs do responder, computados do MESMO
+                # jeito. `version` pode ainda ser None aqui — o alerta de
+                # "sem versão ativa" só é lançado depois — e `behavior_of({})`
+                # preserva o caminho sem criar `AttributeError` antes dele.
+                behavior = behavior_of(version.settings if version is not None else {})
+                count_bot = (_number(behavior.get("max_messages_per_conversation"), 0) or 0) > 0
+                check_human = behavior.get("stop_on_human_reply") is not False
                 guard_state = await agent_repo.load_legacy_guard_state(
                     conn,
                     organization_id=job.organization_id,
                     conversation_id=job.conversation_id,
+                    channel_account_id=job.channel_account_id,
+                    count_bot=count_bot,
+                    check_human=check_human,
                 )
                 # E3 — o toque também fala com quem já comprou (ou nunca
                 # comprou): mesmo dado fixo do responder, mesma decisão 81b.
@@ -188,6 +226,7 @@ def build_toucher(
                     organization_id=job.organization_id,
                     contact_id=state.contact_id,
                 )
+                custom_rows = await custom_tools_repo.load_enabled_custom_tools(conn)
                 key_rows = (
                     await keys_repo.load_org_provider_keys(
                         conn, organization_id=job.organization_id
@@ -207,6 +246,22 @@ def build_toucher(
                 )
                 return TouchDraft(None, (), None)
 
+            # W3-GD-05: o diagnóstico de missão ausente roda ANTES dos guards
+            # de comportamento (linha mais abaixo) — antes disso, um guard que
+            # calasse o toque primeiro (ai_disabled, horário) nunca deixava a
+            # execução chegar ao `if mission is None` original, e o alerta
+            # nunca abria. O silêncio do turno continua decidido pelo guard
+            # que disparar primeiro; isto só garante que o diagnóstico é
+            # observável mesmo quando outro motivo venceu a corrida.
+            if mission is None:
+                await _alert(
+                    conn, job,
+                    type=alerts_repo.NO_ACTIVE_MISSION,
+                    title="Toque sem missão ativa — nada foi enviado",
+                    payload={"event_family": job.event_family, "node_ref": job.node_ref},
+                    dedup_key=f"no-active-mission:{job.conversation_id}",
+                )
+
             # --- chip de progresso no chat, o mesmo canal do responder. Sem
             # ele o toque calado por guard sumia: o nó pedia, recebia `queued`,
             # e nada acontecia — nem alerta (guard não é anomalia, e não deve
@@ -225,6 +280,7 @@ def build_toucher(
                         detail=step_detail,
                         agent_id=version.agent_id,
                         conversation_id=job.conversation_id,
+                        channel_account_id=job.channel_account_id,
                     )
                 except Exception:  # adereço nunca vira causa de morte do turno
                     logger.debug("run-step emit failed", exc_info=True)
@@ -255,13 +311,9 @@ def build_toucher(
 
             if mission is None:
                 # A emissão validou, mas a missão saiu do ar até aqui — a
-                # verdade é do turno (§3.2.2-2): alerta e silêncio.
-                await _alert(
-                    conn, job,
-                    type=alerts_repo.NO_ACTIVE_MISSION,
-                    title="Toque sem missão ativa — nada foi enviado",
-                    payload={"event_family": job.event_family, "node_ref": job.node_ref},
-                )
+                # verdade é do turno (§3.2.2-2). O alerta já foi aberto (ou
+                # deduplicado) mais acima, antes dos guards; aqui só resta o
+                # silêncio.
                 return TouchDraft(None, (), None)
 
             resolved = merge_mission(
@@ -357,6 +409,53 @@ def build_toucher(
                     # Negado ou provedor caído: o toque segue SEM benefício — a
                     # negativa já é ledger, e prometer sem cupom seria mentira.
 
+                # Um teto para embedding, resposta e juiz, como no responder.
+                turn_budget = TurnBudget(limit=turn_llm_call_limit)
+                knowledge = await _knowledge(
+                    conn, job, resolved.tools, resolved.objective,
+                    _metered(
+                        conn, job, llm, clock, "embedding", version.agent_id,
+                        budget=turn_budget,
+                    ),
+                    clock, DEFAULT_LIMIT,
+                )
+
+                capture = AttemptTraceCapture()
+                turn_tools: dict[str, CustomToolRow] = {}
+                tool_specs: tuple[ToolSpec, ...] = ()
+                for row in custom_rows:
+                    if row.name == "create_coupon":
+                        continue
+                    turn_tools[row.name] = row
+                    tool_specs = (*tool_specs, tool_spec_for(row))
+
+                async def run_turn_tool(attempt: int, call: ToolCall) -> str:
+                    tool = turn_tools.get(call.name)
+                    secrets: list[str] = []
+                    try:
+                        if isinstance(tool, CustomToolRow):
+                            tool = CustomHttpTool(
+                                tool, base_secret=base_secret, on_known_secrets=secrets.extend,
+                            )
+                        if tool is None:
+                            payload = {"error": f"tool desconhecida: {call.name}"}
+                        else:
+                            result = await run_tool(
+                                conn, tool,
+                                ToolContext(organization_id=job.organization_id,
+                                            conversation_id=job.conversation_id),
+                                dict(call.arguments), clock=clock,
+                            )
+                            payload = (dict(result.output or {}) if result.success
+                                       else {"error": result.error})
+                        capture.record_tool(
+                            attempt, {"name": call.name, "arguments": dict(call.arguments),
+                                      "result": payload}, known_secrets=secrets,
+                        )
+                        return json.dumps(payload, ensure_ascii=False)
+                    finally:
+                        secrets.clear()
+
                 agent = agent_block(version, settings)
                 window_open = (
                     state.last_inbound_at is not None
@@ -364,21 +463,9 @@ def build_toucher(
                 )
                 compiled = compile_prompt(
                     agent=agent,
-                    # Item 44: o toque NÃO passa `tools=` ao modelo — o dinheiro
-                    # dele já virou cupom antes da geração e entra no prompt
-                    # como FATO (`grant_lines` acima). Mas `resolved.tools` é a
-                    # interseção missão∩agente, e o compilador a despejava no
-                    # prompt como "Ferramentas desta situação": o toque dizia ao
-                    # modelo que ele podia emitir cupom e não lhe dava tool
-                    # nenhuma. O modelo ou ignorava, ou prometia de novo o
-                    # benefício que o prompt já dava como concedido. Zerar aqui,
-                    # e só aqui, é seguro porque no toque `resolved.tools` tem um
-                    # ÚNICO leitor, este anúncio: o cupom é dirigido por
-                    # `job.concession_request` e `CreateCoupon` não lê
-                    # `mission.tools`. O `resolved` que já foi para a tool
-                    # continua intocado, e um tool-loop futuro no toque
-                    # encontrará a lista de verdade em vez de uma mentira.
-                    mission=replace(resolved, tools=()),
+                    # A oferta do toque contém só consultas custom. O cupom já
+                    # foi materializado por concession_request e entra como fato.
+                    mission=replace(resolved, tools=tuple(turn_tools)),
                     state=StateBlock(
                         moment_ids=tuple(str(m) for m in moment_view.moment_ids),
                         moment_facts=moment_view.facts,
@@ -398,16 +485,9 @@ def build_toucher(
                         transcript=tuple((m.author, m.text) for m in transcript),
                     ),
                     mode="turn",
+                    knowledge=knowledge,
                 )
 
-                # Item 41, fix round 1: UM teto por toque, compartilhado pelas
-                # duas finalidades (`agent_reply`, `judge_pre`) — mesmo padrão
-                # de `respond()` em `responder.py`.
-                turn_budget = TurnBudget(limit=turn_llm_call_limit)
-                chat = _metered(
-                    conn, job, agent_llm, clock, "agent_reply", version.agent_id,
-                    budget=turn_budget,
-                )
                 judge = PreSendJudge(
                     _metered(
                         conn, job, llm, clock, "judge_pre", version.agent_id,
@@ -417,7 +497,7 @@ def build_toucher(
                 )
                 context = JudgeContext(
                     conversation=tuple(f"{m.author}: {m.text}" for m in transcript[-5:]),
-                    knowledge=(),
+                    knowledge=knowledge,
                     # Lida de volta do bloco do agente, não recalculada — uma
                     # fórmula só para a língua em todo o runtime (item 45).
                     language=agent.language,
@@ -426,6 +506,10 @@ def build_toucher(
                 conversation = _as_chat(transcript)
 
                 async def generate(attempt: int, feedback: tuple[str, ...]) -> str:
+                    chat = _metered(
+                        conn, job, agent_llm, clock, "agent_reply", version.agent_id,
+                        budget=turn_budget, capture=partial(capture.record_call, attempt),
+                    )
                     messages = [Message(role="system", content=compiled.text), *conversation]
                     if feedback:
                         messages.append(
@@ -437,14 +521,14 @@ def build_toucher(
                                 ),
                             )
                         )
-                    answer = await chat.chat(
-                        ChatRequest(
-                            model=version.config.model,
-                            messages=tuple(messages),
-                            think=False,
-                        )
+                    return await generate_with_tools(
+                        chat,
+                        model=version.config.model,
+                        messages=tuple(messages),
+                        tools=tool_specs,
+                        execute=partial(run_turn_tool, attempt),
+                        think=False,
                     )
-                    return answer.text
 
                 outcome = await guarded_reply(generate, judge, context=context)
 
@@ -494,6 +578,7 @@ def build_toucher(
                         organization_id=job.organization_id,
                         conversation_id=job.conversation_id,
                         reason="blocked_topic",
+                        channel_account_id=job.channel_account_id,
                         severity="critical",
                         title="Toque tocou num assunto proibido — nada foi enviado",
                         payload={
@@ -529,6 +614,11 @@ def build_toucher(
                     content={"text": outcome.draft, "humanize": {"split": split, "rhythm": rhythm}},
                     moment_ids=moment_view.moment_ids,
                     mission_version_id=mission_version_id,
+                    trace=capture.build(
+                        agent_id=version.agent_id,
+                        input_text="\n".join(f"{m.role}: {m.content}" for m in conversation),
+                        output_text=outcome.draft, selected_attempt=outcome.selected_attempt,
+                    ),
                 )
 
     return touch
@@ -542,6 +632,7 @@ async def _alert(
     title: str,
     payload: dict,
     severity: str = "warning",
+    dedup_key: str | None = None,
 ) -> None:
     async with conn.transaction():
         await scope_to_organization(conn, job.organization_id)
@@ -552,6 +643,7 @@ async def _alert(
             severity=severity,
             title=title,
             payload={**payload, "conversation_id": str(job.conversation_id)},
+            dedup_key=dedup_key,
         )
 
 
@@ -563,4 +655,5 @@ def agent_toucher(dsn: str):
         set_role=os.environ.get("AGENTS_WORKER_SET_ROLE"),
         agent_llm_from_org_keys=True,
         base_secret=os.environ.get("ENCRYPTION_KEY") or None,
+        config=config_from_env(dict(os.environ)),
     )

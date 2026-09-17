@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
+import { requireOrgFromAuth } from '@/lib/auth/require-org';
 
 export const dynamic = 'force-dynamic';
 
@@ -7,11 +8,18 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  // Sem sessão e sem organização, o id do modelo abria o histórico de
+  // qualquer organização.
+  const auth = await requireOrgFromAuth(request);
+  if (auth instanceof NextResponse) return auth;
+  const { orgId } = auth;
+
   try {
     const { data, error } = await supabase
       .from('whatsapp_templates')
       .select('category_change_history, last_category_change_at, name, category, status')
       .eq('id', params.id)
+      .eq('organization_id', orgId)
       .single();
 
     if (error || !data) {

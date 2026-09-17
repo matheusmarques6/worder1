@@ -43,6 +43,7 @@ from agents_runtime.queueing.failures import Failure, classify, is_rate_limited
 from agents_runtime.randomness import Randomness
 from agents_runtime.repository import engine
 from agents_runtime.repository.outbox import ClaimedSend
+from agents_runtime.repository.scope import scope_to_organization
 
 logger = logging.getLogger(__name__)
 
@@ -212,14 +213,6 @@ async def sender_pass(
 ) -> int:
     """Returns how many sends were attempted — the pass's only observable."""
     clock = clock or SystemClock()
-    # House-keeping before claiming: a dead sender's 'sending' rows become
-    # unknown (state only, NEVER a resend), and unknowns past the review
-    # window go to a human. Running here covers the startup case for free —
-    # the first pass of a fresh process is the sweep-at-boot.
-    await engine.sweep_outbox_unknown(conn)
-    await engine.review_stale_unknown(conn, review_after=config.unknown_review_after)
-    await engine.expire_incentive_grants(conn)
-
     token = uuid.uuid4()
     batch = await engine.claim_outbox_batch(
         conn, token, lease=config.send_lease, limit=limit
@@ -397,6 +390,7 @@ async def sender_pass(
                             " registrado: esta resposta não sai sozinha"
                         ),
                         phone=send.to_phone_e164,
+                        channel_account_id=send.channel_account_id,
                     )
                 except psycopg.Error:
                     pass
@@ -426,6 +420,7 @@ async def sender_pass(
                     step="sending",
                     detail="Enviando resposta",
                     phone=send.to_phone_e164,
+                    channel_account_id=send.channel_account_id,
                 )
             except psycopg.Error:
                 pass
@@ -507,6 +502,7 @@ async def sender_pass(
                         step="failed",
                         detail="Falha no envio da resposta",
                         phone=send.to_phone_e164,
+                        channel_account_id=send.channel_account_id,
                     )
                 except psycopg.Error:
                     pass
@@ -515,6 +511,12 @@ async def sender_pass(
         # O wamid da linha é o da 1ª bolha — paridade com o legado, e é
         # ele que o webhook de status correlaciona primeiro.
         recorded = await engine.mark_outbox_sent(conn, send.outbox_id, token, delivered[0][0])
+        if not recorded:
+            async with conn.transaction():
+                await scope_to_organization(conn, send.organization_id)
+                recorded = await engine.confirm_sender_delivery(
+                    conn, send.outbox_id, token, delivered[0][0]
+                )
         if not recorded:
             # Item 47. Tudo o que este booleano sabe: a linha já não estava
             # 'sending' com o NOSSO token. Quem a mudou, ele não diz — e não
@@ -562,6 +564,7 @@ async def sender_pass(
                         send.to_phone_e164,
                         wamid,
                         bubble,
+                        channel_account_id=send.channel_account_id,
                     )
                 except psycopg.Error:
                     # O canônico já registrou o envio; o espelho se
@@ -576,6 +579,7 @@ async def sender_pass(
                     step="sent",
                     detail="Resposta enviada",
                     phone=send.to_phone_e164,
+                    channel_account_id=send.channel_account_id,
                 )
             except psycopg.Error:
                 pass

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Plus, Search, Trash2, Play, Pause, Save, Settings, Zap, MessageSquare,
@@ -32,7 +32,7 @@ export default function FlowsPage() {
   const [edges, setEdges] = useState<any[]>([])
   const [isDirty, setIsDirty] = useState(false)
 
-  useEffect(() => { fetchFlows() }, [])
+  useEffect(() => { fetchFlows() }, [fetchFlows])
 
   useEffect(() => {
     if (selectedFlow) {

@@ -283,5 +283,7 @@ class TestReadAndTyping:
             _send("x", last_inbound_wamid="wamid.inbound-5"),
             payload={"template": {"name": "t", "language": "pt_BR"}},
         )
-        await send_humanized(channel, RecordingConnection(), send, humanize_delays=True, clock=_FROZEN)
+        await send_humanized(
+            channel, RecordingConnection(), send, humanize_delays=True, clock=_FROZEN
+        )
         assert channel.presence_calls == []

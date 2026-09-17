@@ -8,14 +8,17 @@ interface SendTestModalProps {
   onClose: () => void
   html: string
   defaultSubject: string
+  /** Loja cujo remetente (nome, e-mail, reply-to) o teste deve usar. */
+  storeId?: string | null
 }
 
-export function SendTestModal({ isOpen, onClose, html, defaultSubject }: SendTestModalProps) {
+export function SendTestModal({ isOpen, onClose, html, defaultSubject, storeId }: SendTestModalProps) {
   const [email, setEmail] = useState('')
   const [subject, setSubject] = useState(defaultSubject)
   const [sending, setSending] = useState(false)
   const [result, setResult] = useState<'success' | 'error' | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
+  const [sentFrom, setSentFrom] = useState('')
 
   if (!isOpen) return null
 
@@ -29,12 +32,13 @@ export function SendTestModal({ isOpen, onClose, html, defaultSubject }: SendTes
       const res = await fetch('/api/email/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ html, testEmail: email, subject }),
+        body: JSON.stringify({ html, testEmail: email, subject, storeId: storeId || undefined }),
       })
       const data = await res.json()
       if (res.ok) {
         setResult('success')
-        setTimeout(() => { onClose(); setResult(null); setEmail(''); }, 2000)
+        setSentFrom(data.from || '')
+        setTimeout(() => { onClose(); setResult(null); setEmail(''); setSentFrom('') }, 2600)
       } else {
         setResult('error')
         setErrorMsg(data.error || 'Falha ao enviar')
@@ -82,7 +86,10 @@ export function SendTestModal({ isOpen, onClose, html, defaultSubject }: SendTes
           {result === 'success' && (
             <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
               <CheckCircle className="w-4 h-4 text-emerald-600" />
-              <span className="text-sm text-emerald-700 font-medium">Teste enviado para {email}</span>
+              <span className="text-sm text-emerald-700 font-medium">
+                Teste enviado para {email}
+                {sentFrom && <span className="block text-xs font-normal text-emerald-600 mt-0.5">Remetente: {sentFrom}</span>}
+              </span>
             </div>
           )}
           {result === 'error' && (

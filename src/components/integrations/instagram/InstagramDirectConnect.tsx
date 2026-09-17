@@ -256,6 +256,7 @@ export function InstagramDirectConnect({ onConnect, onDisconnect }: InstagramDir
                 className="flex items-center gap-4 p-4 bg-white rounded-xl border border-gray-200"
               >
                 {account.profile_picture_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- Meta provider URL is not safely allowlisted.
                   <img
                     src={account.profile_picture_url}
                     alt={account.username}
@@ -345,6 +346,7 @@ export function InstagramDirectConnect({ onConnect, onDisconnect }: InstagramDir
                 )}
               >
                 {account.instagram_profile_picture ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- Meta provider URL is not safely allowlisted.
                   <img
                     src={account.instagram_profile_picture}
                     alt=""

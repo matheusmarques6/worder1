@@ -26,6 +26,13 @@ e nada neles deve ser (re)aplicado sem virar migration canônica:
   pelo baseline).
 - `_archive/sql/`, `src/lib/sql/`, `MIGRATIONS-MVP-RODAR.sql` (raiz).
 
+Os scripts históricos de agentes não definem mais `search_agent_knowledge`,
+`get_active_agent_for_conversation`, `increment_action_trigger` ou `update_agent_stats`.
+Busca e resolução de agente têm versões canônicas em `supabase/migrations/`; a substituta
+atômica de estatísticas ainda pertence ao item 67. Reaplicar uma cópia antiga pode reabrir
+privilégios sem escopo. A migration `20260910020800_restrict_legacy_agent_rpc_grants.sql`
+revoga os grants residuais sem remover funções, tabelas ou dados.
+
 ## Aviso de segurança pendente
 
 O banco vivo está com **RLS desabilitado nas tabelas legadas de `public`** (advisor

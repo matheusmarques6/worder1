@@ -136,8 +136,8 @@ export function PipelineAutomationConfig({
         setAutoTags([...new Set(existingTags)] as string[]);
 
         // Definir estágio padrão se não tiver
-        if (!selectedStage && stages.length > 0) {
-          setSelectedStage(stages[0].id);
+        if (stages.length > 0) {
+          setSelectedStage(current => current || stages[0].id);
         }
       }
     } catch (error) {
@@ -153,9 +153,9 @@ export function PipelineAutomationConfig({
 
   // Definir estágio padrão quando stages mudar
   useEffect(() => {
-    if (!selectedStage && stages.length > 0) {
-      setSelectedStage(stages[0].id);
-    }
+    if (stages.length > 0) {
+          setSelectedStage(current => current || stages[0].id);
+        }
   }, [stages, selectedStage]);
 
   // =============================================

@@ -16,6 +16,7 @@ dependencies = [
     # behaviours to reason about.
     "httpx>=0.27",
     "cryptography>=50.0.0",
+    "tzdata",
     # D13 (Adendo §B): Logfire com as instrumentações que o runtime usa de
     # verdade — httpx (provedores), psycopg (banco) e métricas de sistema.
     # A ativação é por token (AGENTS_LOGFIRE_TOKEN); sem token, custo zero.
@@ -45,6 +46,7 @@ packages = ["src/agents_runtime"]
 [tool.pytest.ini_options]
 addopts = "--strict-markers --strict-config -ra"
 testpaths = ["tests"]
+pythonpath = ["scripts"]
 asyncio_mode = "auto"
 markers = [
     "unit: no I/O at all — no Postgres, no network, no filesystem. Whole suite < 60s",

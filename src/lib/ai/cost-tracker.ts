@@ -11,6 +11,7 @@
 // =============================================
 
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { clearBudgetCache } from './budget'
 
 // =============================================
 // Preços em USD por 1M tokens (snapshot 2026-04).
@@ -43,6 +44,7 @@ const PRICING: Record<string, { in: number; out: number }> = {
   'openai/gpt-3.5-turbo': { in: 0.50,  out: 1.50 },
   'openai/o1-preview':    { in: 15.00, out: 60.00 },
   'openai/o1-mini':       { in: 3.00,  out: 12.00 },
+  'openai/text-embedding-3-small': { in: 0.02, out: 0 },
 
   // Anthropic
   'anthropic/claude-opus-4-6':   { in: 15.00, out: 75.00 },
@@ -132,7 +134,7 @@ export async function trackAiUsage(input: TrackAiUsageInput): Promise<void> {
       )
     }
 
-    await supabaseAdmin.from('ai_usage_logs').insert({
+    const { error } = await supabaseAdmin.from('ai_usage_logs').insert({
       organization_id: input.organizationId,
       provider: input.provider,
       model: input.model,
@@ -147,6 +149,8 @@ export async function trackAiUsage(input: TrackAiUsageInput): Promise<void> {
       error: input.error || null,
       metadata: input.metadata || {},
     })
+    if (error) throw error
+    if (input.metadata?.billable !== false) clearBudgetCache(input.organizationId)
   } catch (err: any) {
     // Não bloquear fluxo de IA se logging falhar
     console.warn('[trackAiUsage]', err?.message)

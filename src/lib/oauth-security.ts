@@ -13,7 +13,7 @@
  * 4. Usado apenas uma vez
  */
 
-import { createHmac, randomBytes } from 'crypto';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 
 // ============================================
@@ -34,7 +34,12 @@ export interface OAuthStateData {
 // ============================================
 
 const STATE_EXPIRY_MS = 10 * 60 * 1000; // 10 minutos
-const STATE_SECRET = process.env.OAUTH_STATE_SECRET || process.env.NEXTAUTH_SECRET || 'fallback-secret-change-me';
+
+function stateSecret(): string {
+  const secret = process.env.OAUTH_STATE_SECRET || process.env.NEXTAUTH_SECRET;
+  if (!secret) throw new Error('OAuth state secret is not configured');
+  return secret;
+}
 
 // ============================================
 // FUNÇÕES PRINCIPAIS
@@ -71,7 +76,7 @@ export function generateOAuthState(
   const payload = Buffer.from(JSON.stringify(data)).toString('base64url');
   
   // Criar assinatura HMAC
-  const signature = createHmac('sha256', STATE_SECRET)
+  const signature = createHmac('sha256', stateSecret())
     .update(payload)
     .digest('base64url');
   
@@ -101,11 +106,13 @@ export function validateOAuthState(
     const [payload, providedSignature] = parts;
     
     // Verificar assinatura
-    const expectedSignature = createHmac('sha256', STATE_SECRET)
+    const expectedSignature = createHmac('sha256', stateSecret())
       .update(payload)
       .digest('base64url');
     
-    if (providedSignature !== expectedSignature) {
+    const providedBytes = Buffer.from(providedSignature, 'utf8');
+    const expectedBytes = Buffer.from(expectedSignature, 'utf8');
+    if (providedBytes.length !== expectedBytes.length || !timingSafeEqual(providedBytes, expectedBytes)) {
       console.warn('[OAuth] State inválido: assinatura incorreta');
       return null;
     }
@@ -157,34 +164,20 @@ export async function consumeOAuthState(
   const data = validateOAuthState(state, expectedProvider);
   if (!data) return null;
   
-  const supabase = getSupabaseAdmin();
-  
   try {
-    // Verificar se nonce já foi usado (tabela oauth_states)
-    const { data: existingState } = await supabase
-      .from('oauth_states')
-      .select('id')
-      .eq('nonce', data.nonce)
-      .single();
-    
-    if (existingState) {
-      console.warn('[OAuth] State já utilizado (replay attack?)');
-      return null;
-    }
-    
-    // Marcar nonce como usado
-    await supabase.from('oauth_states').insert({
-      nonce: data.nonce,
+    const supabase = getSupabaseAdmin();
+    // UNIQUE(state) permite apenas um consumidor do nonce.
+    const { error } = await supabase.from('oauth_states').insert({
+      state: `nonce:${data.nonce}`,
       provider: data.provider,
       organization_id: data.organizationId,
-      user_id: data.userId,
-      used_at: new Date().toISOString(),
       expires_at: new Date(data.createdAt + STATE_EXPIRY_MS).toISOString(),
     });
+    if (error) return null;
     
     return data;
   } catch (error) {
-    // ✅ FAIL-CLOSED: se não conseguimos consultar/marcar o state (tabela
+    // ✅ FAIL-CLOSED: se não conseguimos marcar o state (tabela
     // indisponível, erro de rede, etc.), REJEITAMOS o state. Retornar `data`
     // aqui abriria um buraco de replay: um atacante poderia reutilizar um
     // state válido sempre que o storage estivesse indisponível.

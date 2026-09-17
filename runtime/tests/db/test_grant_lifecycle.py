@@ -14,11 +14,8 @@ from datetime import UTC, datetime, timedelta
 import psycopg
 import pytest
 
-from agents_runtime.config import QueueingConfig
-from agents_runtime.queueing.sender import sender_pass
-from agents_runtime.randomness import SystemRandomness
+from agents_runtime.repository import engine
 from tests.db.factories import create_contact, create_mission, unique_id
-from tests.support.fake_channel import SCHEMA_SQL, FakeChannel
 
 
 @pytest.fixture
@@ -145,19 +142,17 @@ async def as_sender(dsn: str):
 
 
 class TestExpiration:
-    async def test_the_sender_housekeeping_expires_without_a_human(
+    async def test_expiry_housekeeping_expires_without_a_human(
         self, dsn: str, admin: psycopg.Connection, org: uuid.UUID
     ) -> None:
+        """W2-T2b: a expiração deixou de ser efeito colateral do
+        `sender_pass` — mora no housekeeping independente (`app.run`), sem
+        depender de canal nem de entrega. Aqui é exercida diretamente pela
+        função que esse housekeeping chama."""
         grant_id, _ = _grant(admin, org, hours_left=-1)
-        admin.execute(SCHEMA_SQL)
 
         async with as_sender(dsn) as conn:
-            await sender_pass(
-                conn,
-                FakeChannel(dsn),
-                config=QueueingConfig(humanize_delays=False),
-                randomness=SystemRandomness(),
-            )
+            await engine.expire_incentive_grants(conn)
 
         status = admin.execute(
             "select status from public.incentive_grants where id = %s", (grant_id,)
@@ -173,10 +168,9 @@ class TestExpiration:
         self, dsn: str, admin: psycopg.Connection, org: uuid.UUID
     ) -> None:
         _grant(admin, org, hours_left=-1)
-        from agents_runtime.repository import engine as engine_repo
 
         async with as_sender(dsn) as conn:
-            first = await engine_repo.expire_incentive_grants(conn)
-            second = await engine_repo.expire_incentive_grants(conn)
+            first = await engine.expire_incentive_grants(conn)
+            second = await engine.expire_incentive_grants(conn)
 
         assert (first, second) == (1, 0)

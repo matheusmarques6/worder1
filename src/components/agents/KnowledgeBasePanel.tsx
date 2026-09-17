@@ -91,7 +91,7 @@ export default function KnowledgeBasePanel({ organizationId: _organizationId }: 
       .then(d => {
         const list = Array.isArray(d) ? d : (d.agents || [])
         setAgents(list)
-        if (list.length > 0 && !selectedAgent) setSelectedAgent(list[0].id)
+        if (list.length > 0) setSelectedAgent(current => current || list[0].id)
       })
       .catch(() => {})
       .finally(() => setLoading(false))

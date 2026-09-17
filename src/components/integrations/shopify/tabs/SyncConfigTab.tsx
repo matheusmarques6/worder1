@@ -10,7 +10,7 @@
 // - Carrinho abandonado
 // =============================================
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   Users,
   ShoppingCart,
@@ -122,11 +122,7 @@ export function SyncConfigTab({
   // Load config on mount
   // =============================================
   
-  useEffect(() => {
-    loadConfig()
-  }, [store.id])
-
-  const loadConfig = async () => {
+  const loadConfig = useCallback(async () => {
     setLoading(true)
     try {
       const res = await fetch(`/api/shopify/sync-config?storeId=${store.id}`)
@@ -141,7 +137,11 @@ export function SyncConfigTab({
     } finally {
       setLoading(false)
     }
-  }
+  }, [store.id])
+
+  useEffect(() => {
+    loadConfig()
+  }, [loadConfig])
 
   // =============================================
   // Save config

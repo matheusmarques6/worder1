@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Clock, Loader2, Check } from 'lucide-react'
 
 const DAYS = ['Domingo', 'Segunda', 'Terca', 'Quarta', 'Quinta', 'Sexta', 'Sabado']
@@ -23,9 +23,7 @@ export function BusinessHoursTab({ organizationId, storeId }: { organizationId: 
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
-  useEffect(() => { load() }, [organizationId, storeId])
-
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true)
     try {
       const url = `/api/whatsapp/business-hours?organizationId=${organizationId}${storeId ? `&storeId=${storeId}` : ''}`
@@ -43,7 +41,9 @@ export function BusinessHoursTab({ organizationId, storeId }: { organizationId: 
       }
     } catch { /* */ }
     setLoading(false)
-  }
+  }, [organizationId, storeId])
+
+  useEffect(() => { load() }, [load])
 
   async function save() {
     setSaving(true)

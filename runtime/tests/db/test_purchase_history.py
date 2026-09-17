@@ -17,6 +17,7 @@ escopo por org é explícito na query e estes testes vigiam três coisas:
 """
 
 import uuid
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import psycopg
@@ -46,6 +47,41 @@ async def _load(dsn: str, organization_id: uuid.UUID, contact_id: uuid.UUID):
         return await orders_repo.load_purchase_history(
             conn, organization_id=organization_id, contact_id=contact_id
         )
+
+
+async def test_last_order_is_max_of_shopify_time_or_local_time(
+    dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+) -> None:
+    store = create_store(admin, tenant)
+    contact = create_contact(admin, tenant)
+    old = create_order(admin, tenant, store, contact_id=contact, name="#old")
+    latest = create_order(admin, tenant, store, contact_id=contact, name="#fallback")
+    admin.execute(
+        """
+        update public.shopify_orders
+           set shopify_created_at = %s, created_at = %s
+         where id = %s
+        """,
+        (
+            datetime(2026, 8, 1, tzinfo=UTC),
+            datetime(2026, 9, 8, tzinfo=UTC),
+            old,
+        ),
+    )
+    admin.execute(
+        """
+        update public.shopify_orders
+           set shopify_created_at = null, created_at = %s
+         where id = %s
+        """,
+        (datetime(2026, 9, 2, tzinfo=UTC), latest),
+    )
+
+    history = await _load(dsn, tenant, contact)
+
+    assert history is not None
+    assert history.last_order_at == datetime(2026, 9, 2, tzinfo=UTC)
+    assert [row.label for row in history.recent] == ["#fallback", "#old"]
 
 
 class TestDecision81b:

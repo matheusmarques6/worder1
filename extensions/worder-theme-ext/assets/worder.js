@@ -254,11 +254,17 @@
     var contactId = getUrlParam('worderContactID');
     var sendId = getUrlParam('worderSendID');
     var campaignId = getUrlParam('worderCampaignID');
-    if (!contactId && !sendId && !campaignId) return null;
+    // Links de automação (e-mail, SMS, WhatsApp) trazem o fluxo e o nó
+    // que enviou, em vez de uma campanha.
+    var automationId = getUrlParam('worderAutomationID');
+    var messageId = getUrlParam('worderMessageID');
+    if (!contactId && !sendId && !campaignId && !automationId) return null;
     var attrib = {
       contactId: contactId,
       sendId: sendId,
       campaignId: campaignId,
+      automationId: automationId,
+      messageId: messageId,
       capturedAt: Date.now(),
       source: 'email_link',
     };
@@ -457,6 +463,8 @@
       properties: {
         worderSendID: cachedAttribution.sendId,
         worderCampaignID: cachedAttribution.campaignId,
+        worderAutomationID: cachedAttribution.automationId,
+        worderMessageID: cachedAttribution.messageId,
       },
     });
   }
@@ -656,30 +664,22 @@
     } catch (e) {}
   })();
 
-  // Fetch published popups for this store and inject their scripts
+  // Popups: um script só com todos os publicados da loja, cacheado na
+  // borda. Antes era um XHR para listar e um <script> por popup — N+1
+  // viagens em cada página. Cada popup dentro do bundle decide sozinho se
+  // aparece (gates, gatilhos, grupo de controle, prioridade).
   (function loadPopups() {
     var popupEndpoint = (config.endpoint || 'https://worder1.vercel.app/api/track').replace('/api/track', '');
     var domain = config.shopDomain || '';
     if (!domain) return;
-
+    if (document.getElementById('worder-popups-bundle')) return;
     try {
-      var xhr = new XMLHttpRequest();
-      xhr.open('GET', popupEndpoint + '/api/public/forms?domain=' + encodeURIComponent(domain) + '&status=published', true);
-      xhr.onload = function () {
-        if (xhr.status !== 200) return;
-        try {
-          var data = JSON.parse(xhr.responseText);
-          var forms = data.forms || data || [];
-          forms.forEach(function (form) {
-            if (!form.id) return;
-            var s = document.createElement('script');
-            s.src = popupEndpoint + '/api/public/forms/' + form.id + '/script';
-            s.async = true;
-            document.head.appendChild(s);
-          });
-        } catch (e) {}
-      };
-      xhr.send();
+      var s = document.createElement('script');
+      s.id = 'worder-popups-bundle';
+      s.src = popupEndpoint + '/api/public/popups/bundle?domain=' + encodeURIComponent(domain);
+      s.async = true;
+      s.crossOrigin = 'anonymous';
+      document.head.appendChild(s);
     } catch (e) {}
   })();
 })();

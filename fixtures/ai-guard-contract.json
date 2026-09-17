@@ -1,0 +1,38 @@
+{
+  "schedules": [
+    {"id":"W3-GD-01-sem-horario","now":"2026-09-08T12:00:00Z","schedule":null,"expected":true},
+    {"id":"W3-GD-01-abre","now":"2026-09-08T11:00:00Z","schedule":{"hours":{"start":"08:00","end":"18:00"}},"expected":true},
+    {"id":"W3-GD-01-fecha-inclusivo","now":"2026-09-08T21:00:00Z","schedule":{"hours":{"start":"08:00","end":"18:00"}},"expected":true},
+    {"id":"W3-GD-01-apos-fecho","now":"2026-09-08T21:01:00Z","schedule":{"hours":{"start":"08:00","end":"18:00"}},"expected":false},
+    {"id":"W3-GD-01-inicio-ausente","now":"2026-09-07T12:00:00Z","schedule":{"hours":{"end":"18:00"},"days":["mon"]},"expected":false},
+    {"id":"W3-GD-01-fim-ausente","now":"2026-09-07T12:00:00Z","schedule":{"hours":{"start":"08:00"},"days":["mon"]},"expected":false},
+    {"id":"W3-GD-01-hours-vazio","now":"2026-09-07T12:00:00Z","schedule":{"hours":{},"days":["mon"]},"expected":false},
+    {"id":"W3-GD-01-hours-ausente-usa-default","now":"2026-09-07T12:00:00Z","schedule":{"days":["mon"]},"expected":true},
+    {"id":"W3-GD-02-hora-sem-zero","now":"2026-09-07T12:00:00Z","schedule":{"hours":{"start":"8:00","end":"18:00"},"days":["mon"]},"expected":false},
+    {"id":"W3-GD-02-hora-24","now":"2026-09-07T12:00:00Z","schedule":{"hours":{"start":"24:00","end":"24:00"},"days":["mon"]},"expected":false},
+    {"id":"W3-GD-02-minuto-60","now":"2026-09-07T12:00:00Z","schedule":{"hours":{"start":"08:60","end":"18:00"},"days":["mon"]},"expected":false},
+    {"id":"W3-GD-02-dia-minusculo","now":"2026-09-07T12:00:00Z","schedule":{"hours":{"start":"08:00","end":"18:00"},"days":["mon"]},"expected":true},
+    {"id":"W3-GD-02-dia-maiusculo","now":"2026-09-07T12:00:00Z","schedule":{"hours":{"start":"08:00","end":"18:00"},"days":["MON"]},"expected":false},
+    {"id":"W3-GD-02-hours-null","now":"2026-09-07T12:00:00Z","schedule":{"hours":null,"days":["mon"]},"expected":false},
+    {"id":"W3-GD-02-days-string","now":"2026-09-07T12:00:00Z","schedule":{"hours":{"start":"08:00","end":"18:00"},"days":"mon"},"expected":false},
+    {"id":"W3-GD-02-days-object","now":"2026-09-07T12:00:00Z","schedule":{"hours":{"start":"08:00","end":"18:00"},"days":{}},"expected":false},
+    {"id":"W3-GD-02-days-number","now":"2026-09-07T12:00:00Z","schedule":{"hours":{"start":"08:00","end":"18:00"},"days":0},"expected":false},
+    {"id":"W3-GD-02-days-non-string","now":"2026-09-07T12:00:00Z","schedule":{"hours":{"start":"08:00","end":"18:00"},"days":["mon",{}]},"expected":false},
+    {"id":"W3-GD-02-dia-herdado","now":"2026-09-14T15:00:00Z","schedule":{"hours":{"start":"08:00","end":"18:00"},"days":["mon","constructor"]},"expected":false},
+    {"id":"W3-GD-02-hora-digito-unicode","now":"2026-09-14T15:00:00Z","schedule":{"hours":{"start":"0０:00","end":"23:59"},"days":["mon"]},"expected":false}
+  ],
+  "state_cases": [
+    {"id":"W3-GD-03-ai-disabled","now":"2026-09-08T12:00:00Z","settings":{},"state":{"ai_enabled":false},"expected":"ai_disabled","expected_badge":"ai_disabled"},
+    {"id":"W3-GD-07-manual-assigned","now":"2026-09-08T12:00:00Z","settings":{"behavior":{"activate_on":"manual"}},"state":{"assignment":"self"},"expected":null,"expected_badge":null},
+    {"id":"W3-GD-07-manual-other","now":"2026-09-08T12:00:00Z","settings":{"behavior":{"activate_on":"manual"}},"state":{"assignment":"other"},"expected":"manual_activation_required","expected_badge":"manual_activation_required"},
+    {"id":"W3-GD-07-manual-unassigned","now":"2026-09-08T12:00:00Z","settings":{"behavior":{"activate_on":"manual"}},"state":{"assignment":null},"expected":"manual_activation_required","expected_badge":"manual_activation_required"},
+    {"id":"W3-GD-03-cooldown-299","now":"2026-09-08T12:00:00Z","settings":{"behavior":{"cooldown_after_transfer":300}},"state":{"transferred_at":"2026-09-08T11:55:01Z"},"expected":"transfer_cooldown","expected_badge":"transfer_cooldown"},
+    {"id":"W3-GD-03-cooldown-300","now":"2026-09-08T12:00:00Z","settings":{"behavior":{"cooldown_after_transfer":300}},"state":{"transferred_at":"2026-09-08T11:55:00Z"},"expected":null,"expected_badge":null},
+    {"id":"W3-GD-03-max-1-of-2","now":"2026-09-08T12:00:00Z","settings":{"behavior":{"max_messages_per_conversation":2}},"state":{"bot_message_count":1},"expected":null,"expected_badge":null},
+    {"id":"W3-GD-03-max-2-of-2","now":"2026-09-08T12:00:00Z","settings":{"behavior":{"max_messages_per_conversation":2}},"state":{"bot_message_count":2},"expected":"max_messages","expected_badge":"max_messages"},
+    {"id":"W3-GD-03-human-default","now":"2026-09-08T12:00:00Z","settings":{},"state":{"has_human_reply":true},"expected":"stop_on_human","expected_badge":"stop_on_human"},
+    {"id":"W3-GD-03-human-disabled","now":"2026-09-08T12:00:00Z","settings":{"behavior":{"stop_on_human_reply":false}},"state":{"has_human_reply":true},"expected":null,"expected_badge":null},
+    {"id":"W3-GD-03-cooldown-wins","now":"2026-09-08T12:00:00Z","settings":{"behavior":{"cooldown_after_transfer":300,"max_messages_per_conversation":2}},"state":{"transferred_at":"2026-09-08T11:59:59Z","bot_message_count":2},"expected":"transfer_cooldown","expected_badge":"transfer_cooldown"},
+    {"id":"W3-GD-03-short-cooldown","now":"2026-09-08T12:00:00Z","settings":{},"state":{"last_bot_message_at":"2026-09-08T11:59:56Z"},"expected":"cooldown","expected_badge":null}
+  ]
+}

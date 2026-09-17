@@ -15,6 +15,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { BodyPortal } from '@/components/shared/BodyPortal';
 import {
   VariableCategory,
   Variable,
@@ -113,12 +114,17 @@ export function VariablePicker({ triggerType, onSelect, onClose, eventData }: Va
     return String(value);
   };
 
+  // No body: aberto de dentro do painel lateral (que anima com transform)
+  // ou de um wrapper com -translate-y-1/2, o `fixed` deixava de ser
+  // relativo à tela e o modal aparecia como uma coluna de 40px em cima
+  // do campo de assunto.
   return (
+    <BodyPortal>
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
       onClick={onClose}
     >
       <motion.div
@@ -239,11 +245,12 @@ export function VariablePicker({ triggerType, onSelect, onClose, eventData }: Va
         {/* Footer */}
         <div className="p-4 border-t border-gray-200 bg-gray-50">
           <p className="text-xs text-gray-500">
-            Clique em uma variável para inserir ou use o botão de copiar. Use <code className="text-blue-600 bg-gray-100 px-1 rounded">|default:'valor'</code> para valores padrão.
+            Clique em uma variável para inserir ou use o botão de copiar. Use <code className="text-blue-600 bg-gray-100 px-1 rounded">{"|default:'valor'"}</code> para valores padrão.
           </p>
         </div>
       </motion.div>
     </motion.div>
+    </BodyPortal>
   );
 }
 

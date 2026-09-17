@@ -1,814 +1,522 @@
 'use client'
 
-// =============================================
-// WORDER: Email Domains settings
-// /settings/email
-//
-// Adds a domain → Resend returns DNS records → merchant copies them
-// into their DNS provider → clicks "Verificar" → we call Resend's
-// verify API and update the status badge.
-// =============================================
+// Configurações → Domínios e remetente (desenho PDom v3): remetente padrão da
+// loja, domínios de envio (cards com DKIM/SPF/DMARC/links), assistente de
+// verificação, domínio dos links, warm-up e eventos de entrega do Resend.
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useStoreStore } from '@/stores'
-import {
-  Globe,
-  CheckCircle,
-  AlertCircle,
-  Copy,
-  RefreshCw,
-  Plus,
-  Shield,
-  Loader2,
-  Trash2,
-  Zap,
-  Mail,
-} from 'lucide-react'
+import { useToast } from '@/components/ui/Toast'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
+import { Card, Row, SaveBar, Title, LoadingCard, Badge, Tog, Modal, IconBtn, useForm, Empty } from '@/components/settings/ui'
+import { I } from '@/components/settings/icons'
+import { api, fmtDateBR } from '@/components/settings/format'
+import { useApi, useSave, useAction } from '@/components/settings/hooks'
+import { AddDomainModal, DomainWizard, recordsFor, type DomainRow } from '@/components/settings/DomainWizard'
 
-interface DnsRecord {
-  type?: string
-  name?: string
-  value?: string
-  record?: string
-  ttl?: string | number
-  priority?: number | null
-}
+interface EmailSettings { default_sender_name?: string; default_sender_email?: string; default_reply_to?: string; tracking_domain?: string | null }
+interface StoreEmail { email_settings: EmailSettings; shared_domain: string; is_shared_domain: boolean; suggested_local_part: string; allocated?: boolean; allowance?: { used: number; allowance: number; remaining: number } | null }
+interface DmarcInfo { ok: boolean; state: string }
 
-interface Domain {
-  id: string
-  domain: string
-  resend_domain_id: string | null
-  status: 'pending' | 'verified' | 'failed' | string
-  dns_records: DnsRecord[] | null
-  verified_at: string | null
-  created_at: string
-  warmup_enabled?: boolean
-  warmup_day?: number
-  warmup_daily_limit?: number
-}
+export default function DomainsSettingsPage() {
+  const { currentStore, _hasHydrated } = useStoreStore() as any
+  const storeId: string | null = currentStore?.id || null
+  const storeName: string = currentStore?.name || currentStore?.shop_name || 'sua loja'
+  const toast = useToast()
+  const confirm = useConfirm()
+  const { busy, run } = useAction()
 
-function statusBadgeClass(status: string) {
-  if (status === 'verified') return 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-  if (status === 'failed') return 'bg-red-50 text-red-700 border border-red-200'
-  return 'bg-amber-50 text-amber-700 border border-amber-200'
-}
+  const dom = useApi<{ domains: DomainRow[] }>(_hasHydrated ? `/api/email/domains${storeId ? `?storeId=${encodeURIComponent(storeId)}` : ''}` : null, [storeId])
+  const se = useApi<StoreEmail>(_hasHydrated && storeId ? `/api/settings/store-email?storeId=${encodeURIComponent(storeId)}` : null, [storeId])
+  // O domínio compartilhado é infraestrutura nossa, não algo que o
+  // lojista adiciona, verifica ou remove. Ele fica fora da lista: o que
+  // aparece aqui são os domínios DELE. Onde o endereço temporário importa
+  // (enquanto não há domínio verificado) a tela diz isso em palavras.
+  const domains = useMemo(() => (dom.data?.domains || []).filter((d) => !d.is_system), [dom.data?.domains])
+  const sharedDomain = se.data?.shared_domain || 'worder.email'
 
-function statusLabel(status: string) {
-  if (status === 'verified') return 'Verificado'
-  if (status === 'failed') return 'Falhou'
-  return 'Aguardando verificação'
-}
+  // DMARC por domínio (consulta DNS ao vivo; cacheada aqui).
+  const [dmarc, setDmarc] = useState<Record<string, DmarcInfo | null>>({})
+  useEffect(() => {
+    for (const d of domains) {
+      if (dmarc[d.domain] !== undefined) continue
+      setDmarc((o) => ({ ...o, [d.domain]: null }))
+      api<{ checks: { dmarc: DmarcInfo } }>(`/api/deliverability/domain-check?domain=${encodeURIComponent(d.domain)}`)
+        .then((r) => setDmarc((o) => ({ ...o, [d.domain]: r.checks?.dmarc || { ok: false, state: 'missing' } })))
+        .catch(() => setDmarc((o) => ({ ...o, [d.domain]: { ok: false, state: 'missing' } })))
+    }
+  }, [domains]) // eslint-disable-line react-hooks/exhaustive-deps
 
-export default function SettingsEmailPage() {
-  const { currentStore } = useStoreStore()
-  const hasHydrated = useStoreStore((s) => s._hasHydrated)
-  const storeId = currentStore?.id
-  const [domains, setDomains] = useState<Domain[]>([])
-  const [loading, setLoading] = useState(true)
-  const [newDomain, setNewDomain] = useState('')
-  const [adding, setAdding] = useState(false)
-  const [verifying, setVerifying] = useState<string | null>(null)
-  const [removing, setRemoving] = useState<string | null>(null)
-  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
-  const [copied, setCopied] = useState<string | null>(null)
+  const [addOpen, setAddOpen] = useState(false)
+  const [addErr, setAddErr] = useState<string | null>(null)
+  const [wiz, setWiz] = useState<{ d: DomainRow; step: 1 | 2 | 3 } | null>(null)
+  const senderRef = useRef<{ setDomain: (d: string) => void; setTracking: (v: string) => void } | null>(null)
 
-  const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
-    setToast({ msg, type })
-    setTimeout(() => setToast(null), 2200)
+  const addDomain = async (domain: string) => {
+    if (domains.some((x) => x.domain === domain)) { const ex = domains.find((x) => x.domain === domain)!; setAddOpen(false); setWiz({ d: ex, step: ex.status === 'verified' ? 3 : 2 }); return }
+    setAddErr(null)
+    const r = await run('add', async () => api<{ domain: DomainRow }>('/api/email/domains', { method: 'POST', json: { domain, storeId } }), { error: 'Não foi possível adicionar o domínio' })
+    if (!r?.domain) { setAddErr('Não foi possível adicionar. Confira o domínio e tente de novo.'); return }
+    setAddOpen(false)
+    await dom.reload(true)
+    setWiz({ d: r.domain, step: 1 })
   }
 
-  const loadDomains = async () => {
-    // Wait for zustand to hydrate so the storeId param is real and
-    // we don't briefly fetch all-org domains before re-fetching the
-    // store-scoped list (would flash a sibling store's custom domain).
-    if (!hasHydrated) return
-    try {
-      const qs = storeId ? `?storeId=${encodeURIComponent(storeId)}` : ''
-      const res = await fetch(`/api/email/domains${qs}`, { cache: 'no-store' })
-      if (res.ok) {
-        const data = await res.json()
-        setDomains(data.domains || [])
-      }
-    } catch { /* silent */ }
-    setLoading(false)
+  const removeDomain = async (d: DomainRow) => {
+    if (!(await confirm.confirm({ title: `Remover ${d.domain}?`, description: 'Remetentes neste domínio voltam para o domínio compartilhado do Worder. Os registros DNS podem ficar no seu provedor.', confirmLabel: 'Remover', destructive: true }))) return
+    await run(`rm-${d.id}`, async () => { await api(`/api/email/domains/${d.id}`, { method: 'DELETE' }); await dom.reload(true); se.reload(true) }, { success: 'Domínio removido' })
   }
 
-  useEffect(() => { loadDomains() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [storeId, hasHydrated])
+  const verifyQuick = (d: DomainRow) => setWiz({ d, step: 3 })
 
-  const handleAdd = async () => {
-    const d = newDomain.trim().toLowerCase()
-    if (!d) return
-    setAdding(true)
+  const onWizardDone = async () => {
+    const d = wiz?.d
+    setWiz(null)
+    await dom.reload(true)
+    if (!d || !storeId) return
+    // Domínio verificado vira o remetente padrão da loja (mesmo nome antes do @).
+    const cur = se.data?.email_settings || {}
+    const local = (cur.default_sender_email || '').split('@')[0] || se.data?.suggested_local_part || 'contato'
     try {
-      const res = await fetch('/api/email/domains', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        // Custom domains belong to a specific store so a multi-store
-        // merchant doesn't see the sibling shop's domain in settings.
-        body: JSON.stringify({ domain: d, storeId: storeId || null }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        showToast(data.error || 'Erro ao adicionar domínio', 'error')
+      const fresh = await api<{ domains: DomainRow[] }>(`/api/email/domains?storeId=${encodeURIComponent(storeId)}`)
+      const row = fresh.domains.find((x) => x.id === d.id)
+      if (row?.status === 'verified') {
+        const previousEmail = cur.default_sender_email || undefined
+        const nextEmail = `${local}@${d.domain}`
+        await api('/api/settings/store-email', { method: 'PATCH', json: { storeId, email_settings: { default_sender_email: nextEmail } } })
+        se.reload(true)
+        // O que já estava escrito (campanhas em rascunho e agendadas, nós
+        // de e-mail das automações) guarda o endereço antigo. Sem esta
+        // chamada, verificar o domínio não mudava nada do que já existia.
+        let carried = 0
+        try {
+          const r = await api<{ nodesUpdated: number; campaignsUpdated?: number }>('/api/email/sync-defaults', {
+            method: 'POST',
+            json: { storeId, senderEmail: nextEmail, previousEmail },
+          })
+          carried = (r.nodesUpdated || 0) + (r.campaignsUpdated || 0)
+        } catch { /* o remetente já trocou; o resto o lojista ajusta na tela */ }
+        toast.success(
+          `${d.domain} é o remetente padrão`,
+          carried > 0
+            ? `Envios de ${storeName} saem de ${nextEmail}. ${carried} ${carried === 1 ? 'e-mail já criado passou' : 'e-mails já criados passaram'} a usar o novo endereço.`
+            : `Envios de ${storeName} saem de ${nextEmail}.`,
+        )
       } else {
-        setNewDomain('')
-        showToast('Domínio adicionado. Configure os registros DNS abaixo.')
-        loadDomains()
+        senderRef.current?.setDomain(d.domain)
       }
-    } catch {
-      showToast('Erro ao adicionar domínio', 'error')
-    } finally {
-      setAdding(false)
+    } catch (e: any) {
+      toast.warning('Domínio verificado, mas o remetente não foi trocado', e.message)
     }
   }
-
-  const handleVerify = async (domainId: string) => {
-    setVerifying(domainId)
-    try {
-      const res = await fetch('/api/email/domains/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ domainId }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        showToast(data.error || 'Falha ao verificar', 'error')
-      } else {
-        const status = data.domain?.status || data.resend?.status || 'pending'
-        if (status === 'verified') {
-          showToast('Domínio verificado com sucesso!')
-        } else if (status === 'failed') {
-          showToast('Verificação falhou. Confira os registros DNS.', 'error')
-        } else {
-          showToast('Verificação iniciada. Aguarde alguns minutos e tente novamente.')
-        }
-        loadDomains()
+  const wizardAction = async (d: DomainRow, action: 'warmup' | 'links' | 'dmarc') => {
+    if (action === 'warmup') { await api('/api/email/domains/warmup', { method: 'POST', json: { domain_id: d.id, enabled: true } }); await dom.reload(true); toast.success('Warm-up ativado', 'Dia 1 de 14 · limite de 200 e-mails hoje.') }
+    if (action === 'links') {
+      // O host visível é o subdomínio de links DO PROVEDOR — ativá-lo é
+      // uma chamada, não um campo para o lojista preencher.
+      try {
+        await api(`/api/email/domains/${d.id}`, { method: 'PATCH', json: { tracking_subdomain: `click.${d.domain}` } })
+        await dom.reload(true)
+        toast.success('Subdomínio de links ativado', `Publique o CNAME de click.${d.domain} — ele já está na lista de registros.`)
+      } catch (e: any) {
+        toast.error('Não foi possível ativar o subdomínio de links', e?.message || 'Tente de novo em instantes.')
       }
-    } catch {
-      showToast('Erro ao verificar', 'error')
-    } finally {
-      setVerifying(null)
     }
+    if (action === 'dmarc') { try { await navigator.clipboard.writeText('v=DMARC1; p=quarantine; rua=mailto:dmarc@worder.email') } catch { /* sem clipboard */ } toast.info('Registro copiado', `Publique em _dmarc.${d.domain} quando os envios estiverem estáveis.`) }
   }
 
-  const handleRemove = async (domainId: string, domain: string) => {
-    if (!confirm(`Remover o domínio ${domain}? Os emails configurados para este domínio deixarão de funcionar.`)) return
-    setRemoving(domainId)
-    try {
-      const res = await fetch(`/api/email/domains/${domainId}`, { method: 'DELETE' })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        showToast(data.error || 'Falha ao remover', 'error')
-      } else {
-        showToast('Domínio removido')
-        loadDomains()
-      }
-    } catch {
-      showToast('Erro ao remover', 'error')
-    } finally {
-      setRemoving(null)
-    }
-  }
+  const ownDomain = domains[0]
+  const senderDomain = se.data?.email_settings?.default_sender_email?.split('@')[1] || sharedDomain
+  const trackingDomain = se.data?.email_settings?.tracking_domain || ''
 
-  const handleCopy = async (text: string, key: string) => {
-    try {
-      await navigator.clipboard.writeText(text)
-      setCopied(key)
-      setTimeout(() => setCopied(null), 1200)
-    } catch { /* silent */ }
-  }
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="w-6 h-6 text-gray-400 animate-spin" />
-      </div>
-    )
-  }
+  if (!_hasHydrated || (dom.loading && !dom.data)) return <><Title h="Domínios e remetente" p="De quem os e-mails saem e como o seu domínio é autenticado." /><LoadingCard rows={3} /><LoadingCard rows={2} /></>
 
   return (
-    <div className="max-w-3xl mx-auto px-6 py-8 space-y-8">
-      {toast && (
-        <div
-          className={`fixed top-20 right-6 z-50 px-4 py-2.5 rounded-lg shadow-lg text-sm font-medium ${
-            toast.type === 'success'
-              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-              : 'bg-red-50 text-red-700 border border-red-200'
-          }`}
-        >
-          {toast.msg}
-        </div>
+    <>
+      <Title h="Domínios e remetente" p="De quem os e-mails saem e como o seu domínio é autenticado." right={<button type="button" className="btn btn-primary" onClick={() => { setAddErr(null); setAddOpen(true) }}><I n="plus" s={15} />Adicionar domínio</button>} />
+
+      {storeId && se.data && (
+        <SendingAsCard
+          senderName={se.data.email_settings?.default_sender_name || storeName}
+          email={se.data.email_settings?.default_sender_email || `${se.data.suggested_local_part || 'contato'}@${sharedDomain}`}
+          isShared={senderDomain === sharedDomain}
+          hasVerifiedOwn={domains.some((d) => d.status === 'verified')}
+          pendingDomain={domains.find((d) => d.status !== 'verified') || null}
+          onAdd={() => { setAddErr(null); setAddOpen(true) }}
+          onContinue={(d: DomainRow) => setWiz({ d, step: 2 })}
+          onUseOwn={() => senderRef.current?.setDomain(domains.find((d) => d.status === 'verified')!.domain)}
+          allowance={se.data.allowance || null}
+        />
       )}
 
-      {/* Adicionar domínio */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-        <div className="px-6 py-5 border-b border-gray-100">
-          <div className="flex items-center gap-2">
-            <Shield className="w-4 h-4 text-[#FF6A2B]" />
-            <h2 className="text-base font-semibold text-gray-900">Adicionar Domínio</h2>
-          </div>
-          <p className="text-sm text-gray-500 mt-1 leading-relaxed">
-            Para enviar com sua marca (ex: <span className="font-mono text-[13px] text-gray-700">contato@sualoja.com.br</span>),
-            adicione o domínio e configure os registros DNS no seu provedor.
-          </p>
-        </div>
-        <div className="p-6 flex gap-3">
-          <input
-            type="text"
-            value={newDomain}
-            onChange={(e) => setNewDomain(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-            placeholder="sualoja.com.br"
-            className="flex-1 px-4 py-2.5 border border-zinc-200 rounded-lg text-sm text-gray-900 placeholder-gray-400 font-mono focus:outline-none focus:ring-2 focus:ring-[#FF6A2B]/20 focus:border-[#FF6A2B]"
-          />
-          <button
-            onClick={handleAdd}
-            disabled={adding || !newDomain.trim()}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#FF6A2B] text-white text-sm font-medium rounded-lg hover:bg-[#E85D1F] disabled:opacity-50 transition-colors"
-          >
-            {adding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-            Adicionar
-          </button>
-        </div>
-      </div>
+      {!storeId ? (
+        <Card><Empty title="Selecione uma loja">O remetente e os domínios de envio são configurados por loja. Escolha uma loja no menu lateral.</Empty></Card>
+      ) : se.error ? (
+        <Card><div className="empty2"><b>Não foi possível carregar o remetente</b>{se.error}<div><button className="btn" onClick={() => se.reload()}>Tentar de novo</button></div></div></Card>
+      ) : se.data ? (
+        <SenderCard key={storeId} storeId={storeId} storeName={storeName} data={se.data} domains={domains} refInit={(r) => { senderRef.current = r }} onSaved={() => se.reload(true)} />
+      ) : <LoadingCard rows={3} />}
 
-      {/* Lista de domínios */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-zinc-900">Seus Domínios</h3>
-          <span className="text-xs text-zinc-400">{domains.length} {domains.length === 1 ? 'domínio' : 'domínios'}</span>
-        </div>
-
-        {domains.length === 0 ? (
-          <div className="bg-white rounded-xl border border-dashed border-zinc-300 p-10 text-center">
-            <Globe className="w-6 h-6 text-zinc-300 mx-auto mb-2" />
-            <p className="text-sm text-zinc-500">Nenhum domínio configurado.</p>
-            <p className="text-xs text-zinc-400 mt-1">Adicione um domínio para autenticar seus emails com SPF, DKIM e DMARC.</p>
-          </div>
-        ) : (
-          domains.map((d) => {
-            const records = Array.isArray(d.dns_records) ? d.dns_records : []
-            return (
-              <div key={d.id} className="bg-white rounded-xl border border-zinc-200 shadow-sm">
-                {/* Header */}
-                <div className="px-6 py-4 flex items-center justify-between border-b border-zinc-100">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-9 h-9 rounded-lg bg-zinc-50 flex items-center justify-center flex-shrink-0">
-                      <Globe className="w-4 h-4 text-zinc-500" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-zinc-900 font-mono truncate">{d.domain}</p>
-                      <p className="text-[11px] text-zinc-400 mt-0.5">
-                        Adicionado em {new Date(d.created_at).toLocaleDateString('pt-BR')}
-                        {d.verified_at && (
-                          <> · Verificado em {new Date(d.verified_at).toLocaleDateString('pt-BR')}</>
-                        )}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full ${statusBadgeClass(d.status)}`}>
-                      {d.status === 'verified' ? <CheckCircle className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
-                      {statusLabel(d.status)}
-                    </span>
-                    <button
-                      onClick={() => handleVerify(d.id)}
-                      disabled={verifying === d.id}
-                      className="inline-flex items-center gap-1.5 text-[12px] font-medium text-zinc-700 bg-white hover:bg-zinc-50 border border-zinc-200 px-3 py-1.5 rounded-lg disabled:opacity-50 transition-colors"
-                    >
-                      {verifying === d.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                      Verificar
-                    </button>
-                    <button
-                      onClick={() => handleRemove(d.id, d.domain)}
-                      disabled={removing === d.id}
-                      className="inline-flex items-center justify-center w-8 h-8 text-zinc-400 hover:text-red-600 hover:bg-red-50 border border-zinc-200 hover:border-red-200 rounded-lg disabled:opacity-50 transition-colors"
-                      title="Remover domínio"
-                    >
-                      {removing === d.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                    </button>
-                  </div>
-                </div>
-
-                {/* DNS records */}
-                {records.length === 0 ? (
-                  <div className="px-6 py-5 text-sm text-zinc-500">
-                    Nenhum registro DNS disponível. Clique em "Verificar" para atualizar.
-                  </div>
-                ) : (
-                  <div className="px-6 py-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <p className="text-xs font-semibold text-zinc-700 uppercase tracking-wide">Registros DNS</p>
-                      <p className="text-xs text-zinc-400">Adicione no seu provedor (Cloudflare, Registro.br, etc.)</p>
-                    </div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="text-[11px] uppercase tracking-wide text-zinc-400 border-b border-zinc-100">
-                            <th className="text-left py-2 pr-4 font-semibold">Tipo</th>
-                            <th className="text-left py-2 pr-4 font-semibold">Nome / Host</th>
-                            <th className="text-left py-2 pr-4 font-semibold">Valor</th>
-                            <th className="py-2"></th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-zinc-100">
-                          {records.map((r: any, idx: number) => {
-                            const type = (r.type || r.record || '').toUpperCase()
-                            const name = r.name || '-'
-                            const value = r.value || ''
-                            const key = `${d.id}-${idx}`
-                            return (
-                              <tr key={idx} className="align-top">
-                                <td className="py-3 pr-4">
-                                  <span className="inline-flex items-center text-[11px] font-semibold text-zinc-700 bg-zinc-100 px-2 py-0.5 rounded">
-                                    {type || '—'}
-                                  </span>
-                                </td>
-                                <td className="py-3 pr-4 font-mono text-[12.5px] text-zinc-900 break-all">{name}</td>
-                                <td className="py-3 pr-4 font-mono text-[12.5px] text-zinc-900 break-all max-w-[320px]">
-                                  {value}
-                                </td>
-                                <td className="py-3 text-right whitespace-nowrap">
-                                  <button
-                                    onClick={() => handleCopy(value, key)}
-                                    className="inline-flex items-center gap-1 text-[11.5px] text-zinc-600 hover:text-zinc-900 transition-colors"
-                                    title="Copiar valor"
-                                  >
-                                    <Copy className="w-3 h-3" />
-                                    {copied === key ? 'Copiado' : 'Copiar'}
-                                  </button>
-                                </td>
-                              </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-
-                {/* Warm-up control */}
-                {d.status === 'verified' && (
-                  <div className="px-6 py-4 border-t border-zinc-100">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-zinc-900">🔥 Warm-up de IP</p>
-                        <p className="text-xs text-zinc-500 mt-0.5">
-                          {d.warmup_enabled
-                            ? `Dia ${d.warmup_day || 0} · Limite: ${(d.warmup_daily_limit || 200).toLocaleString('pt-BR')} emails/dia`
-                            : 'Aumente volume gradualmente para proteger reputação (recomendado para domínios novos)'}
-                        </p>
-                      </div>
-                      <button
-                        onClick={async () => {
-                          const newVal = !d.warmup_enabled
-                          try {
-                            const res = await fetch('/api/email/domains/warmup', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ domain_id: d.id, enabled: newVal }),
-                            })
-                            if (res.ok) {
-                              setDomains(prev => prev.map(dom =>
-                                dom.id === d.id ? { ...dom, warmup_enabled: newVal, warmup_day: newVal ? 1 : 0, warmup_daily_limit: 200 } : dom
-                              ))
-                              showToast(newVal ? 'Warm-up ativado' : 'Warm-up desativado', 'success')
-                            } else {
-                              showToast('Não foi possível atualizar o warm-up. Tente novamente.', 'error')
-                            }
-                          } catch {
-                            showToast('Não foi possível atualizar o warm-up. Tente novamente.', 'error')
-                          }
-                        }}
-                        className={`relative w-10 h-6 rounded-full transition-colors ${d.warmup_enabled ? 'bg-amber-500' : 'bg-gray-200'}`}
-                      >
-                        <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform shadow-sm ${d.warmup_enabled ? 'translate-x-4' : ''}`} />
-                      </button>
-                    </div>
-                  </div>
-                )}
+      <div className="st-title" style={{ marginTop: 8 }}><div><h2 style={{ fontSize: 16 }}>Domínios de envio</h2></div></div>
+      {dom.error && <Card><div className="empty2"><b>Não foi possível carregar os domínios</b>{dom.error}<div><button className="btn" onClick={() => dom.reload()}>Tentar de novo</button></div></div></Card>}
+      {domains.map((x) => {
+        const ok = x.status === 'verified'
+        const recs = recordsFor(x)
+        const dk = ok ? 1 : recs.some((r) => r.id === 'dkim' && r.status === 'verified') ? 1 : 0
+        const sp = ok ? 1 : recs.some((r) => r.id.startsWith('spf') && r.status === 'verified') ? 1 : 0
+        const dm = dmarc[x.domain]
+        const dmv = dm === null || dm === undefined ? 3 : dm.ok ? 1 : dm.state === 'warn' ? 2 : 0
+        const linksOk = !!trackingDomain && trackingDomain.endsWith(x.domain)
+        const missing = recs.filter((r) => r.required && r.status !== 'verified').length
+        const isDefault = senderDomain === x.domain
+        return (
+          <div key={x.id} className="dcard">
+            <div className="dcard-h">
+              <I n="mail" s={20} c={ok ? 'var(--pos)' : 'var(--text-3)'} />
+              <div><div className="dn">{x.domain}</div><div className="dm">{ok ? `Verificado em ${fmtDateBR(x.verified_at || x.created_at)}` : `Adicionado em ${fmtDateBR(x.created_at)} · aguardando DNS`}</div></div>
+              <div className="acts">
+                {ok ? <Badge k="ok">Verificado</Badge> : <Badge k="warn">Pendente</Badge>}
+                {isDefault && <Badge k="acc">Padrão</Badge>}
+                {!ok && <button type="button" className="btn btn-sm btn-primary" onClick={() => setWiz({ d: x, step: 2 })}>Continuar verificação</button>}
+                {ok && <button type="button" className="btn btn-sm" onClick={() => verifyQuick(x)}><I n="refresh" s={14} />Verificar</button>}
+                <IconBtn n="x" title="Remover" danger onClick={() => removeDomain(x)} disabled={busy === `rm-${x.id}`} />
               </div>
-            )
-          })
-        )}
-      </div>
-
-      {/* Configuração do Remetente (per-store).
-          key={storeId} remounts the component when the active store
-          switches — without that, the internal senderName / replyTo
-          state carries over from the previous store and the merchant
-          briefly sees the wrong sender while the fetch resolves. */}
-      <SenderConfig
-        key={storeId || 'no-store'}
-        verifiedDomains={domains.filter(d => d.status === 'verified')}
-        storeId={storeId || null}
-        storeName={currentStore?.name || null}
-      />
-
-      {/* Webhook Resend */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-        <div className="px-6 py-5 border-b border-gray-100">
-          <div className="flex items-center gap-2">
-            <Zap className="w-4 h-4 text-[#FF6A2B]" />
-            <h2 className="text-base font-semibold text-gray-900">Webhook de Tracking</h2>
+            </div>
+            <div className="auth">
+              <div><Ic v={dk} /><div>DKIM<small>{dk ? 'Assinando' : 'Não encontrado'}</small></div></div>
+              <div><Ic v={sp} /><div>SPF<small>{sp ? 'Autorizado' : 'Não encontrado'}</small></div></div>
+              <div><Ic v={dmv === 3 ? 2 : dmv} /><div>DMARC<small>{dmv === 3 ? 'Consultando…' : dmv === 1 ? 'Publicado' : dmv === 2 ? 'p=none' : 'Recomendado'}</small></div></div>
+              <div><Ic v={linksOk ? 1 : 0} /><div>Domínio dos links<small>{linksOk ? trackingDomain : 'Não configurado'}</small></div></div>
+            </div>
+            {!ok && <div className="warnbar"><I n="alert" s={16} />Faltam {missing} {missing === 1 ? 'registro' : 'registros'} DNS. Até publicar, seus e-mails saem por um endereço temporário nosso.<button type="button" className="btn btn-sm" onClick={() => setWiz({ d: x, step: 2 })}>Ver registros</button></div>}
           </div>
-          <p className="text-sm text-gray-500 mt-1 leading-relaxed">
-            Registre o webhook do Resend para receber eventos de bounce, abertura, clique e reclamação automaticamente.
-          </p>
+        )
+      })}
+      {!dom.error && domains.length === 0 && <Card><Empty title="Nenhum domínio de envio" action={<button type="button" className="btn btn-primary" onClick={() => setAddOpen(true)}><I n="plus" s={15} />Adicionar domínio</button>}>Adicione o domínio da sua loja para enviar como você. Até lá, usamos um endereço temporário nosso.</Empty></Card>}
+
+      {storeId && se.data && <LinkDomainCard key={`ld-${storeId}`} storeId={storeId} data={se.data} domains={domains} onSaved={() => { se.reload(true); dom.reload(true) }} register={(fn) => { const prev = senderRef.current; senderRef.current = { setDomain: prev?.setDomain || (() => {}), setTracking: fn } }} />}
+
+      <Card title="Aquecimento de envio">
+        <Row tg label="Warm-up automático" help={ownDomain ? (ownDomain.warmup_enabled ? `Aumenta o volume diário gradualmente para construir reputação. Dia ${ownDomain.warmup_day || 1} de 14 · limite hoje: ${(ownDomain.warmup_daily_limit || 200).toLocaleString('pt-BR')} e-mails.` : `Aumenta o volume diário gradualmente para construir reputação de ${ownDomain.domain}. Começa em 200 e-mails/dia.`) : 'Disponível depois de verificar o seu domínio. O endereço temporário que usamos até lá já está aquecido.'}>
+          <Tog on={!!ownDomain?.warmup_enabled} disabled={!ownDomain || busy === 'warm'} label="Warm-up automático" set={(v) => ownDomain && run('warm', async () => { await api('/api/email/domains/warmup', { method: 'POST', json: { domain_id: ownDomain.id, enabled: v } }); await dom.reload(true) }, { success: v ? 'Warm-up ativado' : 'Warm-up desativado' })} />
+        </Row>
+      </Card>
+
+      <ResendEventsCard />
+
+      {addOpen && <AddDomainModal onClose={() => setAddOpen(false)} onNext={addDomain} busy={busy === 'add'} error={addErr} />}
+      {wiz && <DomainWizard domain={wiz.d} storeName={storeName} initialStep={wiz.step} onClose={() => { setWiz(null); dom.reload(true) }} onDone={onWizardDone} onVerified={() => dom.reload(true)} onNextStep={(a) => wizardAction(wiz.d, a)} />}
+    </>
+  )
+}
+
+function Ic({ v }: { v: number }) {
+  return <span className={'ic ' + (v === 1 ? 'ok' : v === 2 ? 'warn' : 'no')}><I n={v === 1 ? 'check' : v === 2 ? 'clock' : 'x'} s={11} /></span>
+}
+
+// ---------- Enviando como ----------
+// A primeira coisa da tela responde a pergunta que o lojista tem: de qual
+// endereço os e-mails dele saem AGORA, e o que falta para sair do
+// endereço temporário. Enquanto isso não estiver claro, a lista de
+// domínios é só uma tabela de DNS sem propósito visível.
+function SendingAsCard({ senderName, email, isShared, hasVerifiedOwn, pendingDomain, onAdd, onContinue, onUseOwn, allowance }: {
+  senderName: string
+  email: string
+  isShared: boolean
+  hasVerifiedOwn: boolean
+  pendingDomain: DomainRow | null
+  onAdd: () => void
+  onContinue: (d: DomainRow) => void
+  onUseOwn: () => void
+  allowance: { used: number; allowance: number; remaining: number } | null
+}) {
+  const int = (n: number) => n.toLocaleString('pt-BR')
+  const esgotada = !!allowance && allowance.remaining <= 0
+  const acabando = !!allowance && !esgotada && allowance.remaining < allowance.allowance * 0.2
+  return (
+    <div className="dcard" style={{ marginBottom: 16 }}>
+      <div className="dcard-h">
+        <I n="mail" s={20} c={isShared ? 'var(--text-3)' : 'var(--pos)'} />
+        <div>
+          <div className="dn">{senderName} &lt;{email}&gt;</div>
+          <div className="dm">{isShared ? 'Endereço temporário do Worder' : 'Seu domínio, autenticado'}</div>
         </div>
-        <div className="p-6">
-          <WebhookResendButton />
+        <div className="acts">
+          {isShared ? <Badge k={esgotada ? 'err' : 'warn'}>Temporário</Badge> : <Badge k="ok">Seu domínio</Badge>}
         </div>
       </div>
+      {isShared && allowance && (
+        <div className="auth" style={{ gridTemplateColumns: '1fr' }}>
+          <div style={{ display: 'block' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 13 }}>
+              <span>Campanhas pelo endereço temporário</span>
+              <span className="mono" style={{ color: esgotada ? 'var(--neg)' : acabando ? 'var(--warn)' : 'var(--text-2)' }}>
+                {int(allowance.used)} de {int(allowance.allowance)} · 30 dias
+              </span>
+            </div>
+            <div style={{ height: 6, borderRadius: 999, background: 'var(--line)', marginTop: 8, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${Math.min(100, (allowance.used / Math.max(1, allowance.allowance)) * 100)}%`, background: esgotada ? 'var(--neg)' : acabando ? 'var(--warn)' : 'var(--acc)' }} />
+            </div>
+            <div style={{ fontSize: 12.5, color: 'var(--text-3)', marginTop: 8 }}>
+              {esgotada
+                ? 'A franquia acabou: novas campanhas exigem o seu domínio. Automações e e-mails transacionais continuam saindo.'
+                : 'A reputação do endereço temporário é dividida entre todas as lojas, por isso o limite. Com o seu domínio não há limite nosso.'}
+            </div>
+          </div>
+        </div>
+      )}
+      {isShared && (
+        <div className="warnbar">
+          <I n="alert" s={16} />
+          {hasVerifiedOwn
+            ? 'Você já tem um domínio verificado, mas os envios continuam saindo pelo endereço temporário.'
+            : pendingDomain
+              ? `Falta publicar o DNS de ${pendingDomain.domain}. Até lá, quem recebe vê um endereço que não é o seu.`
+              : 'Com o seu domínio, o e-mail chega assinado pela sua marca e cai menos em spam. Leva alguns minutos e um acesso ao DNS.'}
+          {hasVerifiedOwn
+            ? <button type="button" className="btn btn-sm btn-primary" onClick={onUseOwn}>Usar o meu domínio</button>
+            : pendingDomain
+              ? <button type="button" className="btn btn-sm btn-primary" onClick={() => onContinue(pendingDomain)}>Ver registros DNS</button>
+              : <button type="button" className="btn btn-sm btn-primary" onClick={onAdd}>Usar o meu domínio</button>}
+        </div>
+      )}
     </div>
   )
 }
 
-function SenderConfig({
-  verifiedDomains,
-  storeId,
-  storeName,
-}: {
-  verifiedDomains: Domain[]
-  storeId: string | null
-  storeName: string | null
-}) {
-  const [senderName, setSenderName] = useState('')
-  const [senderLocal, setSenderLocal] = useState('') // parte antes do @
-  const [selectedDomain, setSelectedDomain] = useState('')
-  const [replyTo, setReplyTo] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [loaded, setLoaded] = useState(false)
-  const [toast, setToast] = useState('')
-  // Originals to detect changes after save
-  const [originalSenderName, setOriginalSenderName] = useState('')
-  const [originalSenderEmail, setOriginalSenderEmail] = useState('')
-  const [originalReplyTo, setOriginalReplyTo] = useState('')
-  // "Apply to all" modal state
-  const [pendingSync, setPendingSync] = useState<{
-    senderName?: string
-    senderEmail?: string
-    replyTo?: string
-    previousEmail?: string
-  } | null>(null)
+// ---------- Remetente padrão ----------
+function SenderCard({ storeId, storeName, data, domains, refInit, onSaved }: { storeId: string; storeName: string; data: StoreEmail; domains: DomainRow[]; refInit: (r: { setDomain: (d: string) => void; setTracking: (v: string) => void }) => void; onSaved: () => void }) {
+  const toast = useToast()
+  const es = data.email_settings || {}
+  const [local0, domain0] = (es.default_sender_email || `${data.suggested_local_part || 'contato'}@${data.shared_domain}`).split('@')
+  const f = useForm({ name: es.default_sender_name || storeName, local: local0 || 'contato', domain: domain0 || data.shared_domain, replyTo: es.default_reply_to || '' })
+  const { saving, error, save, setError } = useSave()
+  const [avail, setAvail] = useState<{ state: 'idle' | 'checking' | 'ok' | 'taken'; suggestion?: string }>({ state: 'idle' })
+  const [pendingSync, setPendingSync] = useState<null | { senderName?: string; senderEmail?: string; replyTo?: string; previousEmail?: string }>(null)
   const [syncing, setSyncing] = useState(false)
   const [syncResult, setSyncResult] = useState<any>(null)
 
+  useEffect(() => { refInit({ setDomain: (d) => f.set('domain', d), setTracking: () => {} }) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const v = f.val!
+  // Só os domínios do lojista; o compartilhado não é um "domínio dele".
+  const ownVerified = useMemo(() => domains.filter((d) => !d.is_system && d.status === 'verified'), [domains])
+  const ownPending = useMemo(() => domains.filter((d) => !d.is_system && d.status !== 'verified'), [domains])
+  const hasOwn = ownVerified.length > 0
+  const isShared = v.domain === data.shared_domain
+  const email = `${v.local}@${v.domain}`
+  const localOk = /^[a-z0-9][a-z0-9._-]{0,62}$/.test(v.local)
+
+  // Disponibilidade do nome no domínio compartilhado (400 ms).
   useEffect(() => {
-    // Per-store config: ignore the previous org-scoped endpoint and
-    // pull this store's sender. Skip the fetch until we know which
-    // store is active — otherwise the first render lands on the org's
-    // legacy values and we'd flash the sibling store's sender.
-    if (!storeId) { setLoaded(true); return }
-    fetch(`/api/settings/store-email?storeId=${encodeURIComponent(storeId)}`)
-      .then(r => r.json())
-      .then(d => {
-        const s = d?.email_settings || {}
-        const name = s.default_sender_name || ''
-        const reply = s.default_reply_to || ''
-        const email = s.default_sender_email || ''
-        setSenderName(name)
-        setReplyTo(reply)
-        if (email.includes('@')) {
-          setSenderLocal(email.split('@')[0])
-          setSelectedDomain(email.split('@')[1])
-        } else {
-          setSenderLocal('')
-          setSelectedDomain('')
-        }
-        setOriginalSenderName(name)
-        setOriginalSenderEmail(email)
-        setOriginalReplyTo(reply)
-        setLoaded(true)
-      })
-      .catch(() => setLoaded(true))
-  }, [storeId])
+    if (!isShared || !localOk || v.local === local0) { setAvail({ state: 'idle' }); return }
+    setAvail({ state: 'checking' })
+    const t = setTimeout(async () => {
+      try {
+        const r = await api<{ available: boolean; suggestion?: string }>(`/api/email/shared-sender/check?local=${encodeURIComponent(v.local)}&storeId=${encodeURIComponent(storeId)}`)
+        setAvail(r.available ? { state: 'ok' } : { state: 'taken', suggestion: r.suggestion })
+      } catch { setAvail({ state: 'idle' }) }
+    }, 400)
+    return () => clearTimeout(t)
+  }, [v.local, isShared, localOk, storeId, local0])
 
-  useEffect(() => {
-    if (verifiedDomains.length > 0 && !selectedDomain) {
-      setSelectedDomain(verifiedDomains[0].domain)
-    }
-  }, [verifiedDomains, selectedDomain])
-
-  const fullEmail = senderLocal && selectedDomain ? `${senderLocal}@${selectedDomain}` : ''
-
-  const save = async () => {
-    if (!fullEmail) return
-    if (!storeId) return
-    setSaving(true)
+  const onSave = () => save(async () => {
+    if (!localOk) throw new Error('Use só letras minúsculas, números, ponto, hífen ou sublinhado antes do @.')
+    if (v.replyTo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.replyTo)) throw new Error('E-mail de resposta inválido.')
     try {
-      const res = await fetch('/api/settings/store-email', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          storeId,
-          email_settings: {
-            default_sender_name: senderName,
-            default_sender_email: fullEmail,
-            default_reply_to: replyTo || fullEmail,
-          },
-        }),
-      })
-      if (res.ok) {
-        setToast('Salvo com sucesso')
-        setTimeout(() => setToast(''), 2000)
-
-        // Detect what changed and prompt to apply to all emails
-        const finalReplyTo = replyTo || fullEmail
-        const nameChanged = senderName && senderName !== originalSenderName
-        const emailChanged = fullEmail && fullEmail !== originalSenderEmail
-        const replyChanged = finalReplyTo && finalReplyTo !== originalReplyTo
-        if (nameChanged || emailChanged || replyChanged) {
-          setPendingSync({
-            senderName: nameChanged ? senderName : undefined,
-            senderEmail: emailChanged ? fullEmail : undefined,
-            replyTo: replyChanged ? finalReplyTo : undefined,
-            previousEmail: emailChanged ? originalSenderEmail : undefined,
-          })
-        }
-
-        // Update originals so subsequent saves don't re-prompt
-        setOriginalSenderName(senderName)
-        setOriginalSenderEmail(fullEmail)
-        setOriginalReplyTo(finalReplyTo)
-      }
-    } finally { setSaving(false) }
-  }
+      await api('/api/settings/store-email', { method: 'PATCH', json: { storeId, email_settings: { default_sender_name: v.name.trim(), default_sender_email: email, default_reply_to: v.replyTo.trim() || null } } })
+    } catch (e: any) {
+      if (e.code === 'local_part_taken' || e.data?.code === 'local_part_taken') { setAvail({ state: 'taken', suggestion: e.data?.suggestion }); throw new Error(`“${v.local}@${data.shared_domain}” já está em uso por outra loja.${e.data?.suggestion ? ` Sugestão: ${e.data.suggestion}` : ''}`) }
+      throw e
+    }
+    const prevEmail = es.default_sender_email
+    const changed = { senderName: v.name.trim() !== (es.default_sender_name || ''), senderEmail: email !== prevEmail, replyTo: (v.replyTo.trim() || '') !== (es.default_reply_to || '') }
+    onSaved()
+    if (changed.senderName || changed.senderEmail || changed.replyTo) {
+      setPendingSync({ senderName: changed.senderName ? v.name.trim() : undefined, senderEmail: changed.senderEmail ? email : undefined, replyTo: changed.replyTo ? v.replyTo.trim() : undefined, previousEmail: prevEmail })
+    }
+  }, 'Remetente salvo')
 
   const applySync = async (scope: 'all' | 'empty') => {
     if (!pendingSync) return
     setSyncing(true)
     try {
-      const res = await fetch('/api/email/sync-defaults', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...pendingSync,
-          onlyEmpty: scope === 'empty',
-        }),
-      })
-      const data = await res.json()
-      if (res.ok) {
-        setSyncResult(data)
-      }
-    } finally {
-      setSyncing(false)
-    }
+      const r = await api<{ nodesUpdated: number; automationsUpdated: number }>('/api/email/sync-defaults', { method: 'POST', json: { ...pendingSync, storeId, onlyEmpty: scope === 'empty' } })
+      setSyncResult(r)
+    } catch (e: any) { toast.error('Não foi possível atualizar as automações', e.message) } finally { setSyncing(false) }
   }
-
-  if (!loaded) return null
 
   return (
     <>
-    {pendingSync && (
-      <div className="fixed inset-0 z-[10001] flex items-center justify-center p-4">
-        <div className="absolute inset-0 bg-black/50" onClick={syncing ? undefined : () => { setPendingSync(null); setSyncResult(null); }} />
-        <div className="relative bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden">
-          {syncResult ? (
-            <div className="p-6 text-center">
-              <div className="w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center mx-auto mb-3">
-                <svg className="w-6 h-6 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-              </div>
-              <h3 className="text-base font-semibold text-zinc-900 mb-1">Atualizado</h3>
-              <p className="text-sm text-zinc-500 mb-4">
-                {syncResult.nodesUpdated} email{syncResult.nodesUpdated !== 1 ? 's' : ''} em {syncResult.automationsUpdated} automaç{syncResult.automationsUpdated !== 1 ? 'ões' : 'ão'}
-                {syncResult.templatesUpdated > 0 && ` · ${syncResult.templatesUpdated} template${syncResult.templatesUpdated !== 1 ? 's' : ''}`}
-              </p>
-              <button onClick={() => { setPendingSync(null); setSyncResult(null); }} className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-white text-sm font-medium rounded-md">
-                Fechar
-              </button>
-            </div>
-          ) : (
-            <>
-              <div className="px-5 py-4 border-b border-zinc-100">
-                <h3 className="text-base font-semibold text-zinc-900">Aplicar a emails existentes?</h3>
-                <p className="text-xs text-zinc-500 mt-1">Você alterou as configurações de remetente. Aplicar nas automações e templates já criados?</p>
-              </div>
-              <div className="p-5 space-y-2 text-sm">
-                {pendingSync.senderName && (
-                  <div className="flex justify-between gap-3 text-zinc-700">
-                    <span className="text-zinc-500">Nome:</span>
-                    <span className="font-medium truncate">{pendingSync.senderName}</span>
-                  </div>
-                )}
-                {pendingSync.senderEmail && (
-                  <div className="flex justify-between gap-3 text-zinc-700">
-                    <span className="text-zinc-500">Email:</span>
-                    <span className="font-medium truncate">{pendingSync.senderEmail}</span>
-                  </div>
-                )}
-                {pendingSync.replyTo && (
-                  <div className="flex justify-between gap-3 text-zinc-700">
-                    <span className="text-zinc-500">Reply-to:</span>
-                    <span className="font-medium truncate">{pendingSync.replyTo}</span>
-                  </div>
-                )}
-              </div>
-              <div className="px-5 py-3 bg-zinc-50 border-t border-zinc-100 flex flex-col gap-2">
-                <button
-                  onClick={() => applySync('all')}
-                  disabled={syncing}
-                  className="w-full px-3 py-2 bg-zinc-900 hover:bg-zinc-800 text-white text-sm font-medium rounded-md transition-colors disabled:opacity-50"
-                >
-                  {syncing ? 'Atualizando...' : 'Atualizar em todos os emails'}
-                </button>
-                <button
-                  onClick={() => applySync('empty')}
-                  disabled={syncing}
-                  className="w-full px-3 py-2 bg-white border border-zinc-200 hover:bg-zinc-50 text-zinc-700 text-sm font-medium rounded-md transition-colors disabled:opacity-50"
-                >
-                  Aplicar apenas onde está vazio
-                </button>
-                <button
-                  onClick={() => setPendingSync(null)}
-                  disabled={syncing}
-                  className="w-full px-3 py-2 text-zinc-500 hover:text-zinc-700 text-sm rounded-md transition-colors disabled:opacity-50"
-                >
-                  Não atualizar emails existentes
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    )}
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-      <div className="px-6 py-5 border-b border-gray-100">
-        <div className="flex items-center gap-2">
-          <Mail className="w-4 h-4 text-[#FF6A2B]" />
-          <h2 className="text-base font-semibold text-gray-900">Remetente Padrão</h2>
-        </div>
-        <p className="text-sm text-gray-500 mt-1 leading-relaxed">
-          Configure o email e nome do remetente. Só é possível enviar a partir de domínios verificados.
-        </p>
-      </div>
-      <div className="p-6 space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Nome do remetente</label>
-          <input
-            type="text"
-            value={senderName}
-            onChange={e => setSenderName(e.target.value)}
-            placeholder="Minha Loja"
-            className="w-full px-4 py-2.5 border border-zinc-200 rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#FF6A2B]/20 focus:border-[#FF6A2B]"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Email do remetente</label>
-          {verifiedDomains.length === 0 ? (
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
-              Nenhum domínio verificado. Adicione e verifique um domínio acima primeiro.
-            </div>
-          ) : (
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={senderLocal}
-                onChange={e => setSenderLocal(e.target.value.replace(/[^a-zA-Z0-9._\-+]/g, ''))}
-                placeholder="contato"
-                className="flex-1 px-4 py-2.5 border border-zinc-200 rounded-lg text-sm text-gray-900 font-mono placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#FF6A2B]/20 focus:border-[#FF6A2B]"
-              />
-              <span className="flex items-center text-sm text-gray-400 font-mono">@</span>
-              <select
-                value={selectedDomain}
-                onChange={e => setSelectedDomain(e.target.value)}
-                className="flex-1 px-4 py-2.5 border border-zinc-200 rounded-lg text-sm text-gray-900 font-mono bg-white focus:outline-none focus:ring-2 focus:ring-[#FF6A2B]/20 focus:border-[#FF6A2B]"
-              >
-                {verifiedDomains.map(d => (
-                  <option key={d.id} value={d.domain}>{d.domain}</option>
-                ))}
+      <Card title="Remetente padrão" desc={`Usado em novas campanhas e automações da ${storeName}.`} foot={<SaveBar dirty={f.dirty} saving={saving} error={error} hint={`Envios de: ${v.name || storeName} <${email}>`} onSave={onSave} onCancel={() => { f.cancel(); setError(null) }} disabled={avail.state === 'taken' || avail.state === 'checking'} />}>
+        <Row label="Nome do remetente" htmlFor="sd-name"><input id="sd-name" className="in" value={v.name} onChange={(e) => f.set('name', e.target.value)} /></Row>
+        <Row label="E-mail do remetente" help={hasOwn ? 'Escolha um dos seus domínios verificados.' : 'Verifique o seu domínio para enviar com ele. Até lá, o endereço é temporário.'}>
+          <div className="in2">
+            <input className={'in' + (avail.state === 'taken' || !localOk ? ' err' : '')} value={v.local} onChange={(e) => f.set('local', e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ''))} aria-label="Parte antes do @" />
+            {hasOwn ? (
+              <select className="in" value={v.domain} onChange={(e) => f.set('domain', e.target.value)} aria-label="Domínio do remetente">
+                {ownVerified.map((d) => <option key={d.id} value={d.domain}>@{d.domain}</option>)}
+                {ownPending.map((d) => <option key={d.id} value={d.domain} disabled>@{d.domain} · aguardando DNS</option>)}
+                {/* Saída de emergência: se o DNS do lojista quebrar, ele
+                    consegue voltar sem abrir chamado. Nunca como opção
+                    lado a lado com o domínio dele. */}
+                {isShared && <option value={data.shared_domain}>@{data.shared_domain} · temporário</option>}
               </select>
+            ) : (
+              <span className="in" style={{ display: 'flex', alignItems: 'center', color: 'var(--text-3)' }}>@{data.shared_domain}</span>
+            )}
+          </div>
+          {hasOwn && isShared && (
+            <div className="hp" style={{ fontSize: 12.5 }}>
+              Você já tem um domínio verificado.{' '}
+              <button type="button" className="btn-link" style={{ color: 'var(--acc-ink)', fontWeight: 500 }} onClick={() => f.set('domain', ownVerified[0].domain)}>Enviar por @{ownVerified[0].domain}</button>
             </div>
           )}
-          {fullEmail && (
-            <p className="text-xs text-gray-500 mt-1.5 font-mono">
-              Envios de: <span className="text-gray-900 font-semibold">{senderName || 'Sua Loja'} &lt;{fullEmail}&gt;</span>
-            </p>
+          {!hasOwn && (
+            <div className="hp" style={{ fontSize: 12.5 }}>Endereço temporário do Worder. Adicione o seu domínio acima para enviar como a sua marca.</div>
           )}
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Responder para (opcional)</label>
-          <input
-            type="email"
-            value={replyTo}
-            onChange={e => setReplyTo(e.target.value)}
-            placeholder={fullEmail || 'contato@sualoja.com'}
-            className="w-full px-4 py-2.5 border border-zinc-200 rounded-lg text-sm text-gray-900 font-mono placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#FF6A2B]/20 focus:border-[#FF6A2B]"
-          />
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={save}
-            disabled={saving || !fullEmail || !senderName}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#FF6A2B] text-white text-sm font-medium rounded-lg hover:bg-[#E85D1F] disabled:opacity-50 transition-colors"
-          >
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-            Salvar Configuração
-          </button>
-          {toast && <span className="text-sm text-emerald-600">{toast}</span>}
-        </div>
-      </div>
-    </div>
+          {avail.state === 'checking' && <div className="hp" style={{ fontSize: 12.5, color: 'var(--text-3)' }}>Verificando disponibilidade…</div>}
+          {avail.state === 'ok' && <div className="hp" style={{ fontSize: 12.5, color: 'var(--pos)' }}>Disponível.</div>}
+          {avail.state === 'taken' && <div className="field-err">Já em uso por outra loja.{avail.suggestion && <> Sugestão: <button type="button" className="btn-link" style={{ color: 'var(--acc-ink)', fontWeight: 500 }} onClick={() => f.set('local', avail.suggestion!)}>{avail.suggestion}</button></>}</div>}
+        </Row>
+        <Row label="Responder para" help="Onde chegam as respostas dos clientes." htmlFor="sd-reply"><input id="sd-reply" className="in" type="email" placeholder={email} value={v.replyTo} onChange={(e) => f.set('replyTo', e.target.value)} /></Row>
+      </Card>
+
+      {pendingSync && (
+        <Modal title={syncResult ? 'Atualizado' : 'Aplicar nos e-mails já existentes?'} desc={syncResult ? `${syncResult.nodesUpdated} e-mail${syncResult.nodesUpdated === 1 ? '' : 's'} em ${syncResult.automationsUpdated} automaç${syncResult.automationsUpdated === 1 ? 'ão' : 'ões'} desta loja passaram a usar o novo remetente.` : 'As automações desta loja podem ter e-mails com o remetente antigo. Quer atualizar?'} onClose={() => { if (!syncing) { setPendingSync(null); setSyncResult(null) } }}
+          footer={syncResult ? <button type="button" className="btn btn-primary" onClick={() => { setPendingSync(null); setSyncResult(null) }}>Fechar</button> : <><button type="button" className="btn" disabled={syncing} onClick={() => setPendingSync(null)}>Não atualizar</button><button type="button" className="btn" disabled={syncing} onClick={() => applySync('empty')}>Apenas onde está vazio</button><button type="button" className="btn btn-primary" disabled={syncing} onClick={() => applySync('all')}>{syncing && <I n="refresh" s={14} className="spin" />}Atualizar em todos</button></>}>
+          {!syncResult && (
+            <div className="kv">
+              {pendingSync.senderName && <><span>Nome</span><b>{pendingSync.senderName}</b></>}
+              {pendingSync.senderEmail && <><span>E-mail</span><b>{pendingSync.senderEmail}</b></>}
+              {pendingSync.replyTo !== undefined && <><span>Responder para</span><b>{pendingSync.replyTo || '—'}</b></>}
+            </div>
+          )}
+        </Modal>
+      )}
     </>
   )
 }
 
-function WebhookResendButton() {
-  // The Resend webhook is a SINGLE platform-wide endpoint
-  // (https://app.worder.com.br/api/webhooks/resend) signed with our
-  // RESEND_WEBHOOK_SECRET env var. Once it's registered against our
-  // Resend account, it forwards events for every sender on the account
-  // — there's nothing per-merchant to register. So this UI just shows
-  // "ok, we're listening" most of the time. The merchant can re-run the
-  // POST in case they nuked the webhook on the Resend dashboard.
-  const [status, setStatus] = useState<'checking' | 'idle' | 'loading' | 'done' | 'error'>('checking')
-  const [message, setMessage] = useState('')
+// ---------- Domínio dos links ----------
+//
+// Quem reescreve o link por último é o provedor de envio, no disparo —
+// depois do nosso render. Então o host que o cliente lê ao passar o
+// mouse, e que o filtro compara com o remetente, é o subdomínio de
+// links DO PROVEDOR. Alinhá-lo com o domínio de envio é um CNAME, no
+// mesmo DNS onde o lojista já publicou SPF e DKIM.
+//
+// O nosso /api/t/* não aparece: fica no salto seguinte, carimbando a
+// atribuição. Por isso o campo antigo (apontar um domínio do lojista
+// para o NOSSO app) virou o caminho avançado — ele exige que o domínio
+// seja anexado à nossa hospedagem, e foi assim que todo link de todo
+// e-mail já morreu uma vez.
+function LinkDomainCard({ storeId, data, domains, onSaved, register }: { storeId: string; data: StoreEmail; domains: DomainRow[]; onSaved: () => void; register: (fn: (v: string) => void) => void }) {
+  const toast = useToast()
+  const f = useForm({ tracking: data.email_settings?.tracking_domain || '' })
+  useEffect(() => { register((v) => f.set('tracking', v)) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  const { saving, error, save } = useSave()
+  const [host, setHost] = useState('app.worder.com.br')
+  useEffect(() => { try { setHost(window.location.host) } catch { /* ssr */ } }, [])
+  const clean = (s: string) => s.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/[^a-z0-9.-]/g, '')
 
-  useEffect(() => {
-    let cancelled = false
-    fetch('/api/email/webhooks/register')
-      .then(r => r.json())
-      .then(d => {
-        if (cancelled) return
-        const list = d?.webhooks?.data || d?.webhooks || []
-        const ourEndpoint = `/api/webhooks/resend`
-        const found = Array.isArray(list)
-          ? list.some((w: any) => typeof w?.url === 'string' && w.url.includes(ourEndpoint))
-          : false
-        if (found) {
-          setStatus('done')
-          setMessage('Já está recebendo eventos do Resend.')
-        } else {
-          setStatus('idle')
-        }
-      })
-      .catch(() => { if (!cancelled) setStatus('idle') })
-    return () => { cancelled = true }
-  }, [])
+  const verificado = domains.find((d) => d.status === 'verified') || null
+  const subAtual = verificado?.tracking_config?.tracking_subdomain || ''
+  const sugerido = verificado ? `click.${verificado.domain}` : ''
+  const alinhado = Boolean(verificado && subAtual && subAtual.endsWith(`.${verificado.domain}`))
+  const [ativando, setAtivando] = useState(false)
 
-  const handleRegister = async () => {
-    setStatus('loading')
+  const ativarSubdominio = async () => {
+    if (!verificado) return
+    setAtivando(true)
     try {
-      const res = await fetch('/api/email/webhooks/register', { method: 'POST' })
-      const data = await res.json()
-      if (!res.ok) {
-        setStatus('error')
-        setMessage(data.error || 'Erro')
-      } else {
-        setStatus('done')
-        setMessage(data.message || 'Webhook registrado com sucesso')
-      }
-    } catch {
-      setStatus('error')
-      setMessage('Erro de conexão')
+      await api(`/api/email/domains/${verificado.id}`, { method: 'PATCH', json: { tracking_subdomain: sugerido } })
+      toast.success('Subdomínio de links ativado', `Publique o CNAME de ${sugerido} — ele aparece na lista de registros do domínio.`)
+      onSaved()
+    } catch (e: any) {
+      toast.error('Não foi possível ativar', e?.message || 'Tente de novo em instantes.')
+    } finally {
+      setAtivando(false)
     }
   }
 
-  // Already registered (most common state) — show a confirmation
-  // chip, not a CTA. Avoids the merchant clicking "Registrar" again
-  // and again thinking nothing happened.
-  if (status === 'done') {
-    return (
-      <div className="flex items-center gap-3 px-4 py-2.5 bg-emerald-50 border border-emerald-100 rounded-lg">
-        <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-emerald-900">Webhook ativo</p>
-          <p className="text-xs text-emerald-700/80">
-            {message || 'A Worder já está recebendo eventos do Resend (open / click / bounce).'}
-          </p>
-        </div>
-      </div>
-    )
-  }
+  const onSave = () => save(async () => {
+    const t = clean(f.val!.tracking)
+    if (t && !/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/.test(t)) throw new Error('Subdomínio inválido. Ex.: links.sualoja.com.br')
+    const r = await api<{ aviso?: { titulo: string; detalhe: string } | null }>('/api/settings/store-email', { method: 'PATCH', json: { storeId, email_settings: { tracking_domain: t || null } } })
+    if (r?.aviso) toast.warning(r.aviso.titulo, r.aviso.detalhe)
+    onSaved()
+  }, 'Domínio dos links salvo')
 
-  if (status === 'checking') {
-    return (
-      <div className="inline-flex items-center gap-2 text-sm text-gray-500">
-        <Loader2 className="w-4 h-4 animate-spin" />
-        Verificando status do webhook...
-      </div>
-    )
-  }
+  const t = clean(f.val!.tracking)
 
   return (
-    <div className="flex items-center gap-4">
-      <button
-        onClick={handleRegister}
-        disabled={status === 'loading'}
-        className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#FF6A2B] text-white text-sm font-medium rounded-lg hover:bg-[#E85D1F] disabled:opacity-50 transition-colors"
-      >
-        {status === 'loading' ? (
-          <Loader2 className="w-4 h-4 animate-spin" />
-        ) : (
-          <Zap className="w-4 h-4" />
-        )}
-        Registrar Webhook
-      </button>
-      {message && (
-        <span className={`text-sm ${status === 'error' ? 'text-red-600' : 'text-emerald-600'}`}>
-          {message}
-        </span>
+    <Card
+      title="Domínio dos links"
+      desc={`Cliques, aberturas e descadastro passam pelo seu domínio em vez de ${data.shared_domain}.`}
+      foot={f.dirty ? <SaveBar dirty={f.dirty} saving={saving} error={error} onSave={onSave} onCancel={f.cancel} /> : undefined}
+    >
+      {!verificado && (
+        <Row label="Situação" help={<>Enquanto o domínio de envio não estiver verificado, os links saem por um domínio nosso — funciona, e não há nada a fazer aqui.</>}>
+          <span className="muted">Verifique o domínio de envio primeiro</span>
+        </Row>
       )}
-    </div>
+
+      {verificado && alinhado && (
+        <Row label="Subdomínio" help={<>Publique o <b>CNAME</b> de <b>{subAtual}</b> — ele está na lista de registros do domínio, junto do SPF e do DKIM.</>}>
+          <span className="mono">{subAtual}</span>
+        </Row>
+      )}
+
+      {verificado && !alinhado && (
+        <Row
+          label="Subdomínio"
+          help={<>Hoje os links saem por um domínio nosso. Com <b>{sugerido}</b>, remetente e link ficam na mesma casa — é o que o filtro do Gmail lê como legítimo.</>}
+        >
+          <button type="button" className="btn btn-sm btn-primary" disabled={ativando} onClick={ativarSubdominio}>
+            {ativando ? <I n="refresh" s={13} className="spin" /> : null}Ativar {sugerido}
+          </button>
+        </Row>
+      )}
+
+      <details className="adv">
+        <summary>Avançado — apontar um domínio para o redirecionador da Worder</summary>
+        <Row label="Subdomínio" help={<>Só use se souber o que está fazendo: além do <b>CNAME</b> de {t || 'links.sualoja.com.br'} para <b>{host}</b>, o domínio precisa ser liberado na nossa hospedagem. Sem isso, todo link do e-mail vira página de erro.</>} htmlFor="ld-in">
+          <input id="ld-in" className="in mono" placeholder="links.sualoja.com.br" value={f.val!.tracking} onChange={(e) => f.set('tracking', e.target.value)} />
+        </Row>
+      </details>
+    </Card>
+  )
+}
+
+// ---------- Eventos de entrega (webhook do Resend) ----------
+function ResendEventsCard() {
+  const [status, setStatus] = useState<'checking' | 'idle' | 'loading' | 'done' | 'error'>('checking')
+  const [message, setMessage] = useState('')
+  useEffect(() => {
+    let cancelled = false
+    api<{ webhooks: any }>('/api/email/webhooks/register').then((d) => {
+      if (cancelled) return
+      const list: any[] = d?.webhooks?.data || d?.webhooks || []
+      const found = Array.isArray(list) && list.some((w) => String(w.endpoint || w.url || '').includes('/api/webhooks/resend'))
+      setStatus(found ? 'done' : 'idle')
+      if (found) setMessage('Entregas, aberturas, cliques e rejeições chegam do Resend em tempo real.')
+    }).catch(() => { if (!cancelled) setStatus('idle') })
+    return () => { cancelled = true }
+  }, [])
+  const register = async () => {
+    setStatus('loading')
+    try { const d = await api<{ message?: string }>('/api/email/webhooks/register', { method: 'POST' }); setStatus('done'); setMessage(d.message || 'Webhook registrado com sucesso.') }
+    catch (e: any) { setStatus('error'); setMessage(e.message || 'Erro') }
+  }
+  return (
+    <Card title="Eventos de entrega" desc="Conexão com o Resend para receber entregas, aberturas, cliques, rejeições e reclamações.">
+      <Row tg label="Webhook do Resend" help={status === 'done' ? message : status === 'error' ? message : 'Sem o webhook, as métricas de entregabilidade ficam incompletas.'}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          {status === 'checking' ? <Badge k="off">Verificando…</Badge> : status === 'done' ? <Badge k="ok">Ativo</Badge> : status === 'error' ? <Badge k="err">Erro</Badge> : <Badge k="warn">Não registrado</Badge>}
+          {status !== 'done' && status !== 'checking' && <button type="button" className="btn btn-sm" onClick={register} disabled={status === 'loading'}>{status === 'loading' && <I n="refresh" s={13} className="spin" />}Registrar</button>}
+        </div>
+      </Row>
+    </Card>
   )
 }

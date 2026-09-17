@@ -19,6 +19,7 @@ carimbo, que é o que está sob teste.
 """
 
 import uuid
+from dataclasses import replace
 from datetime import timedelta
 
 import pytest
@@ -46,7 +47,24 @@ def _a_claimed_send(channel_type: str = "email") -> ClaimedSend:
         payload={"text": "Uma bolha só."},
         idempotency_key="k-47",
         attempt_count=0,
+        channel_account_id=uuid.UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
     )
+
+
+class _NullTransaction:
+    """A conn.transaction() double for the callers that never inspect it —
+    only the ordering test (below) cares what happens inside the block."""
+
+    async def __aenter__(self):
+        return None
+
+    async def __aexit__(self, *exc_info):
+        return None
+
+
+class _ConnWithTransaction:
+    def transaction(self):
+        return _NullTransaction()
 
 
 async def _run_pass(monkeypatch: pytest.MonkeyPatch, *, recorded: bool) -> list[dict]:
@@ -62,15 +80,26 @@ async def _run_pass(monkeypatch: pytest.MonkeyPatch, *, recorded: bool) -> list[
     async def _mark_sent(*args, **kwargs):
         return recorded
 
+    async def _confirm(*args, **kwargs):
+        # `recorded=False` here means the provider's own confirmation ALSO
+        # failed to land (item 47's territory, not W2-T2b's) — the outcome
+        # this helper's callers assert on is unaffected either way.
+        return False
+
+    async def _scope(*args, **kwargs):
+        return None
+
     monkeypatch.setattr(engine, "sweep_outbox_unknown", _noop)
     monkeypatch.setattr(engine, "review_stale_unknown", _noop)
     monkeypatch.setattr(engine, "expire_incentive_grants", _noop)
     monkeypatch.setattr(engine, "claim_outbox_batch", _claim)
     monkeypatch.setattr(engine, "mark_outbox_sent", _mark_sent)
+    monkeypatch.setattr(engine, "confirm_sender_delivery", _confirm)
+    monkeypatch.setattr(sender_module, "scope_to_organization", _scope)
     monkeypatch.setattr(sender_module, "annotate", lambda **kw: annotations.append(kw))
 
     attempted = await sender_module.sender_pass(
-        object(),
+        _ConnWithTransaction(),
         FakeChannel(),
         config=QueueingConfig(humanize_delays=False),
         randomness=SystemRandomness(),
@@ -141,6 +170,72 @@ class TestTheSpanTellsWhatTheDatabaseRecorded:
         assert annotations == [{"outcome": "sent"}]
 
 
+class TestAConfirmationHappensInsideItsOwnScopedTransaction:
+    """W2-T2b: quando `mark_outbox_sent` recusa mas o provedor confirmou, a
+    tentativa de encerrar a linha (`confirm_sender_delivery`) tem que morar
+    dentro de UMA transação escopada por envio — nunca vazar `SET LOCAL` de A
+    para o commit de B. Este teste prova ORDEM, não segurança; a prova de
+    segurança é o teste de banco (isolamento de tenant) em
+    `tests/db/test_confirm_sender_delivery.py`."""
+
+    async def test_two_deliveries_each_get_their_own_scoped_transaction(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        order: list[str] = []
+        org_a, org_b = uuid.uuid4(), uuid.uuid4()
+        send_a = replace(_a_claimed_send(), organization_id=org_a)
+        send_b = replace(_a_claimed_send(), organization_id=org_b)
+
+        async def _noop(*args, **kwargs):
+            return 0
+
+        async def _claim(*args, **kwargs):
+            return [send_a, send_b]
+
+        async def _mark_sent(*args, **kwargs):
+            return False
+
+        async def _scope(conn, organization_id):
+            order.append(f"scope({'A' if organization_id == org_a else 'B'})")
+
+        async def _confirm(conn, outbox_id, token, provider_message_id):
+            tag = "A" if outbox_id == send_a.outbox_id else "B"
+            order.append(f"confirm({tag})")
+            return True
+
+        class _FakeTxn:
+            async def __aenter__(self):
+                order.append("transaction-enter")
+
+            async def __aexit__(self, *exc_info):
+                order.append("transaction-exit")
+
+        class _FakeConn:
+            def transaction(self):
+                return _FakeTxn()
+
+        monkeypatch.setattr(engine, "sweep_outbox_unknown", _noop)
+        monkeypatch.setattr(engine, "review_stale_unknown", _noop)
+        monkeypatch.setattr(engine, "expire_incentive_grants", _noop)
+        monkeypatch.setattr(engine, "claim_outbox_batch", _claim)
+        monkeypatch.setattr(engine, "mark_outbox_sent", _mark_sent)
+        monkeypatch.setattr(engine, "confirm_sender_delivery", _confirm)
+        monkeypatch.setattr(sender_module, "scope_to_organization", _scope)
+        monkeypatch.setattr(sender_module, "annotate", lambda **kw: None)
+
+        await sender_module.sender_pass(
+            _FakeConn(),
+            FakeChannel(),
+            config=QueueingConfig(humanize_delays=False),
+            randomness=SystemRandomness(),
+        )
+
+        assert order == [
+            "transaction-enter", "scope(A)", "confirm(A)", "transaction-exit",
+            "transaction-enter", "scope(B)", "confirm(B)", "transaction-exit",
+        ]
+
+
 class TestAHeldSendThatNeverRequeuedIsNotAnnotatedAsMerelyHeld:
     """`held:` promete que a linha VOLTA quando a janela do guard passar.
     Quando o `mark_outbox_failed(transient=True)` é recusado, ela não volta —
@@ -176,6 +271,9 @@ class TestTheChipTheMerchantReadsDoesNotPromiseAReturnThatWontHappen:
         _, chips = await _run_held_pass(monkeypatch, requeued=False)
 
         assert [chip["step"] for chip in chips] == ["failed"]
+        assert chips[0]["channel_account_id"] == uuid.UUID(
+            "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        )
         assert "retomando" not in chips[0]["detail"]
         assert "não sai sozinha" in chips[0]["detail"]
 

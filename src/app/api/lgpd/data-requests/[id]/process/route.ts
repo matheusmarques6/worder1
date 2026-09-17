@@ -10,6 +10,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { getAuthClient } from '@/lib/api-utils'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -26,8 +27,15 @@ export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  // Cron/interno (CRON_SECRET) ou um administrador logado da MESMA
+  // organização (botão "Processar" em Configurações → Privacidade e LGPD).
+  let orgScope: string | null = null
   if (!isAuthorized(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const auth = await getAuthClient()
+    if (!auth || !['owner', 'admin'].includes(String(auth.user.role || ''))) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    orgScope = auth.user.organization_id
   }
 
   const { data: request } = await supabaseAdmin
@@ -36,7 +44,7 @@ export async function POST(
     .eq('id', params.id)
     .maybeSingle()
 
-  if (!request) {
+  if (!request || (orgScope && request.organization_id !== orgScope)) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
   if (!request.verified_at) {
@@ -81,7 +89,7 @@ export async function POST(
     // Notifica o requisitante via email
     try {
       const { sendEmail } = await import('@/lib/email/resend')
-      const from = process.env.LGPD_FROM_EMAIL || 'privacy@worder.app'
+      const from = process.env.LGPD_FROM_EMAIL || process.env.RESEND_FROM_EMAIL || 'noreply@worder.email'
       await sendEmail({
         to: request.requester_email,
         from,
@@ -134,11 +142,23 @@ async function exportData(request: any) {
     .select('consent_type, granted, granted_at, revoked_at, source')
     .eq('contact_id', request.contact_id)
 
+  // Popups e formulários do site: respostas digitadas, prova do
+  // consentimento, cupons e o rastro do navegador. Sem isto a exportação
+  // dizia "não temos mais nada" enquanto tinha.
+  let popup: any = null
+  try {
+    const { exportPopupData } = await import('@/lib/popups/lgpd')
+    popup = await exportPopupData(supabaseAdmin, request.organization_id, request.contact_id)
+  } catch (e: any) {
+    popup = { error: e?.message || 'falha ao exportar os dados de popup' }
+  }
+
   return {
     contact,
     events: events || [],
     orders: orders || [],
     consents: consents || [],
+    popup,
     exported_at: new Date().toISOString(),
   }
 }
@@ -157,8 +177,7 @@ async function deleteData(request: any) {
       first_name: 'Apagado',
       last_name: 'LGPD',
       full_name: 'Apagado LGPD',
-      is_active: false,
-      status: 'deleted_lgpd',
+      suppressed: true,
       email_consent: false,
       sms_consent: false,
       whatsapp_consent: false,
@@ -176,7 +195,18 @@ async function deleteData(request: any) {
     })
     .eq('contact_id', request.contact_id)
 
-  return { deleted: true, anonymized_id: request.contact_id }
+  // Popups: as respostas do formulário guardam o que a pessoa digitou
+  // (e-mail, telefone, quiz) fora da ficha do contato. A prova do
+  // consentimento fica, sem IP nem user agent.
+  let popup: any = null
+  try {
+    const { erasePopupData } = await import('@/lib/popups/lgpd')
+    popup = await erasePopupData(supabaseAdmin, request.organization_id, request.contact_id)
+  } catch (e: any) {
+    popup = { error: e?.message || 'falha ao apagar os dados de popup' }
+  }
+
+  return { deleted: true, anonymized_id: request.contact_id, popup }
 }
 
 async function rectifyData(request: any) {
@@ -207,7 +237,6 @@ async function restrictProcessing(request: any) {
       email_consent: false,
       sms_consent: false,
       whatsapp_consent: false,
-      status: 'processing_restricted',
       updated_at: new Date().toISOString(),
     })
     .eq('id', request.contact_id)

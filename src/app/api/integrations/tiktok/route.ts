@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient, getAuthClient, authError } from '@/lib/api-utils';
+import { generateOAuthState } from '@/lib/oauth-security';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
@@ -44,7 +45,7 @@ export async function POST(request: NextRequest) {
     if (action === 'connect') {
       const clientId = process.env.TIKTOK_CLIENT_KEY;
       const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/integrations/tiktok/callback`;
-      const state = Buffer.from(JSON.stringify({ organizationId, userId: auth.user.id })).toString('base64');
+      const state = generateOAuthState(organizationId, auth.user.id, 'tiktok');
       const authUrl = `https://business-api.tiktok.com/portal/auth?app_id=${clientId}&redirect_uri=${redirectUri}&state=${state}`;
       
       return NextResponse.json({ authUrl });

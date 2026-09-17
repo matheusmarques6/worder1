@@ -44,11 +44,10 @@ export async function GET(request: NextRequest) {
     // Generate secure random state
     const state = crypto.randomBytes(32).toString('hex');
 
-    // Save state in oauth_states. O schema VIVO é (state, provider,
-    // organization_id, metadata, expires_at); o formato antigo era
-    // (state_token, data). O insert antigo falhava silencioso em 42703 e
-    // o callback caía nos fallbacks de resolução de org — gravar no vivo
-    // primeiro, formato antigo como fallback (CI/dev).
+    // Save state in oauth_states (state, provider, organization_id,
+    // metadata, expires_at). O formato antigo — (state_token, data) —
+    // não existe no banco: o insert falhava em silêncio com 42703 e o
+    // callback caía nos fallbacks de resolução de organização.
     const supabase = getSupabaseAdmin();
     const statePayload = {
       organization_id: auth.user.organization_id,
@@ -65,11 +64,11 @@ export async function GET(request: NextRequest) {
       expires_at: stateExpiresAt,
     });
     if (stateErr) {
-      await supabase.from('oauth_states').insert({
-        state_token: state,
-        data: statePayload,
-        expires_at: stateExpiresAt,
-      });
+      console.error('[Shopify OAuth] falha ao gravar o state:', stateErr);
+      return NextResponse.json(
+        { error: 'Falha ao iniciar a conexão com a Shopify' },
+        { status: 500 },
+      );
     }
 
     // Build OAuth authorization URL

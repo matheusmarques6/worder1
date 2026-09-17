@@ -42,8 +42,9 @@ TROCA = "Trocas em até sete dias corridos."
 def tenant(admin: psycopg.Connection) -> uuid.UUID:
     organization_id = create_tenant(admin)
     # FORK: ingest_chunk pendura em ai_agent_sources/ai_agent_chunks, que
-    # exigem um agente ativo na org.
-    create_agent(admin, organization_id)
+    # exigem um agente ativo na org. `create_agent` nasce inativo por padrão
+    # (W3-GD-07) — este agente precisa da ativação explícita.
+    create_agent(admin, organization_id, is_active=True)
     yield organization_id
     with admin.cursor() as cur:
         cur.execute("delete from public.organizations where id = %s", (organization_id,))
@@ -106,7 +107,7 @@ class TestSearchKnowledge:
         arguments. A `organization_id` among them is not a hint — it is an attack, and
         the only answer is to ignore it and scope from the job."""
         stranger = create_tenant(admin)
-        create_agent(admin, stranger)
+        create_agent(admin, stranger, is_active=True)
         try:
             thread = create_thread(admin, tenant)
             await _ingest(dsn, tenant, texts=(FRETE,))
@@ -169,6 +170,32 @@ class TestSearchKnowledge:
 
 
 class TestTheTrail:
+    async def test_trail_uses_tool_identity_not_lookup_alias(
+        self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+    ) -> None:
+        class NamedTool:
+            name = "canonical_63"
+
+            async def __call__(self, conn, context, arguments):
+                return tools.ToolResult(tool=self.name, success=True, output={"ok": True})
+
+        thread = create_thread(admin, tenant)
+        lookup = {"alias_63": NamedTool()}
+
+        async with as_runtime_worker(dsn) as conn:
+            result = await tools.run_tool(
+                conn,
+                lookup["alias_63"],
+                _context(tenant, thread.conversation_id),
+                {},
+                clock=FrozenClock(START),
+            )
+
+        assert result.tool == "canonical_63"
+        (row,) = await _recorded(admin, thread.conversation_id)
+        assert row[0] == "canonical_63"
+        assert row[0] != "alias_63"
+
     async def test_every_execution_leaves_a_row(
         self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
     ) -> None:

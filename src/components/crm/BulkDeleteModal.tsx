@@ -62,6 +62,28 @@ export function BulkDeleteModal({
 
   // Carregar preview quando modal abre
   useEffect(() => {
+    const loadPreview = async () => {
+      setLoading(true)
+      setError(null)
+
+      try {
+        const res = await fetch(
+          `/api/contacts/bulk?organizationId=${organizationId}&contactIds=${contactIds.join(',')}`
+        )
+        const data = await res.json()
+
+        if (!res.ok) {
+          throw new Error(data.error || 'Erro ao carregar preview')
+        }
+
+        setPreview(data.preview)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Erro ao carregar')
+      } finally {
+        setLoading(false)
+      }
+    }
+
     if (isOpen && contactIds.length > 0) {
       loadPreview()
     } else {
@@ -73,29 +95,7 @@ export function BulkDeleteModal({
       setError(null)
       setSuccess(false)
     }
-  }, [isOpen, contactIds])
-
-  const loadPreview = async () => {
-    setLoading(true)
-    setError(null)
-
-    try {
-      const res = await fetch(
-        `/api/contacts/bulk?organizationId=${organizationId}&contactIds=${contactIds.join(',')}`
-      )
-      const data = await res.json()
-
-      if (!res.ok) {
-        throw new Error(data.error || 'Erro ao carregar preview')
-      }
-
-      setPreview(data.preview)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao carregar')
-    } finally {
-      setLoading(false)
-    }
-  }
+  }, [isOpen, contactIds, organizationId])
 
   const handleDelete = async () => {
     if (confirmText !== 'EXCLUIR') {

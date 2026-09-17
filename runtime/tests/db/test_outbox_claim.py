@@ -12,12 +12,20 @@ disciplina da lease, repetida na outbox.
 
 import threading
 import uuid
+from datetime import timedelta
 
 import psycopg
 import pytest
 
 from tests.db.conftest import TwoTenants, as_app_role
-from tests.db.factories import Thread, create_message, create_outbox_item, create_thread, unique_id
+from tests.db.factories import (
+    Thread,
+    create_channel_account,
+    create_message,
+    create_outbox_item,
+    create_thread,
+    unique_id,
+)
 
 LIMIT = 50
 
@@ -63,6 +71,76 @@ def pending(admin: psycopg.Connection, two_tenants: TwoTenants, thread: Thread) 
 
 
 class TestTheClaim:
+    @pytest.mark.parametrize("invalid", ["foreign", "unknown"])
+    def test_explicit_invalid_account_still_rejects_without_mutation(
+        self, admin: psycopg.Connection, two_tenants: TwoTenants, invalid: str,
+    ) -> None:
+        thread = create_thread(admin, two_tenants.a.id)
+        pending = create_outbox_item(admin, two_tenants.a.id, thread)
+        account = (create_channel_account(admin, two_tenants.b.id).id
+                   if invalid == "foreign" else uuid.uuid4())
+        admin.execute(
+            "update internal.message_outbox set channel_account_id = %s where id = %s",
+            (account, pending),
+        )
+        before = outbox_row(admin, pending)
+        with pytest.raises(psycopg.errors.InvalidParameterValue):
+            claim(admin, uuid.uuid4())
+        assert outbox_row(admin, pending) == before
+
+    @pytest.mark.parametrize("active_accounts", [0, 2])
+    @pytest.mark.parametrize("valid_legacy", [False, True], ids=["explicit", "legacy"])
+    def test_ambiguous_legacy_row_does_not_block_another_tenant(
+        self, dsn: str, admin: psycopg.Connection, two_tenants: TwoTenants,
+        active_accounts: int, valid_legacy: bool,
+    ) -> None:
+        ambiguous_thread = create_thread(admin, two_tenants.a.id)
+        ambiguous = create_outbox_item(admin, two_tenants.a.id, ambiguous_thread)
+        admin.execute(
+            "update internal.message_outbox set channel_account_id = null,"
+            " next_attempt_at = now() - interval '1 hour' where id = %s", (ambiguous,),
+        )
+        if active_accounts == 0:
+            admin.execute(
+                "update public.whatsapp_business_accounts set status = 'inactive' where id = %s",
+                (ambiguous_thread.channel_account_id,),
+            )
+        else:
+            create_channel_account(admin, two_tenants.a.id)
+        valid_thread = create_thread(admin, two_tenants.b.id)
+        valid = create_outbox_item(admin, two_tenants.b.id, valid_thread)
+        if valid_legacy:
+            admin.execute(
+                "update internal.message_outbox set channel_account_id = null where id = %s",
+                (valid,),
+            )
+        before = admin.execute(
+            "select * from internal.message_outbox where id = %s", (ambiguous,),
+        ).fetchone()
+        token = uuid.uuid4()
+        with as_app_role(dsn, "sender_role", two_tenants.a.id) as conn:
+            (row,) = conn.execute(
+                "select * from internal.claim_outbox_batch(%s, 1, interval '90 seconds')",
+                (token,),
+            ).fetchall()
+            conn.commit()
+            assert claim(conn, uuid.uuid4()) == []
+        assert row[0] == valid and row[1] == two_tenants.b.id
+        assert row[12] == valid_thread.channel_account_id
+        assert row[3] == admin.execute(
+            "select phone_number_id from public.whatsapp_business_accounts where id = %s",
+            (valid_thread.channel_account_id,),
+        ).fetchone()[0]
+        assert admin.execute(
+            "select * from internal.message_outbox where id = %s", (ambiguous,),
+        ).fetchone() == before
+        assert admin.execute(
+            "select status, channel_account_id, locked_by, attempt_count,"
+            " locked_until - request_started_at from internal.message_outbox where id = %s",
+            (valid,),
+        ).fetchone() == ("sending", valid_thread.channel_account_id, str(token), 1,
+                         timedelta(seconds=90))
+
     def test_the_claimed_row_carries_everything_a_send_needs(
         self, admin: psycopg.Connection, two_tenants: TwoTenants, thread: Thread, pending: uuid.UUID
     ) -> None:
@@ -454,3 +532,21 @@ class TestWhoMayRun:
         ).fetchone()[0]
 
         assert public_can_execute is False
+
+        assert admin.execute(
+            "select pg_get_function_identity_arguments(p.oid), p.prorettype::regtype::text,"
+            " p.proretset, p.pronargdefaults, p.proconfig"
+            " from pg_proc p where p.oid ="
+            " 'internal.claim_outbox_batch(uuid,integer,interval)'::regprocedure",
+        ).fetchone() == (
+            "p_claim_token uuid, p_limit integer, p_lease interval",
+            "internal.claimed_send", True, 2,
+            ["search_path=pg_catalog, public, internal"],
+        )
+        for role, allowed in (("sender_role", True), ("worker_role", False),
+                              ("anon", False), ("authenticated", False)):
+            assert admin.execute(
+                "select has_function_privilege(%s,"
+                " 'internal.claim_outbox_batch(uuid,integer,interval)', 'EXECUTE')",
+                (role,),
+            ).fetchone() == (allowed,)

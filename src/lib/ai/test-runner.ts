@@ -127,10 +127,10 @@ export async function generateScenarios(
   organizationId: string,
   userId: string | null
 ): Promise<any[]> {
-  // Budget check: 402 se excedido (F3 é rota interna — deve retornar vazio, não lançar)
+  // Rota interna: qualquer bloqueio retorna vazio, preservando o motivo no log.
   const budget = await checkAiBudget(organizationId)
   if (!budget.allowed) {
-    console.warn(`[generateScenarios] budget_exceeded org=${organizationId}`)
+    console.warn(`[generateScenarios] ${budget.unknownReason ?? 'budget_exceeded'} org=${organizationId}`)
     return []
   }
 

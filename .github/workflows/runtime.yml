@@ -1,11 +1,8 @@
 # CI do runtime Python (fork do motor — ver runtime/FORK.md).
 # Path filters: só roda quando runtime/ ou as migrations canônicas mudam (D2).
 #
-# Jobs bloqueantes: lint, boundaries, tests-unit (inclui os fitness tests AST).
-# tests-db roda o stack local do Supabase e a suíte `db`/`rls`; está como
-# INFORMATIVO (continue-on-error) até a suíte ser adaptada ao schema do Worder
-# na Etapa 2 — flip rastreado em core/STATUS-agentes-por-evento.md.
-
+# Gates bloqueantes: lint, boundaries, tests-unit e tests-db (DB/RLS/pipeline).
+# O banco de testes precisa de identidade descartável comprovada.
 name: runtime
 
 on:
@@ -14,6 +11,7 @@ on:
       - "runtime/**"
       - "supabase/migrations/**"
       - "supabase/config.toml"
+      - "scripts/test-disposable-db.ps1"
       - ".github/workflows/runtime.yml"
   push:
     branches: ["**"]
@@ -21,6 +19,7 @@ on:
       - "runtime/**"
       - "supabase/migrations/**"
       - "supabase/config.toml"
+      - "scripts/test-disposable-db.ps1"
       - ".github/workflows/runtime.yml"
 
 concurrency:
@@ -29,12 +28,6 @@ concurrency:
 
 permissions:
   contents: read
-
-env:
-  SUPABASE_DB_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
-  # Stack enxuto — tudo que as suítes `db` e `rls` tocam é Postgres, mais o
-  # GoTrue porque profiles.id referencia auth.users.
-  SUPABASE_EXCLUDE: realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
 
 jobs:
   lint:
@@ -93,10 +86,22 @@ jobs:
         timeout-minutes: 3
         with:
           version: 2.111.0
-      # `supabase start` aplica supabase/migrations/ na subida — o schema sob
-      # teste é o que as migrations descrevem, nunca um dump.
-      - name: Start the lean stack
-        run: supabase start -x "$SUPABASE_EXCLUDE"
-      # db inclui a suíte rls (bloqueante em todo PR); pipeline roda o processo
-      # real com TINY_INTERVALS contra o stack local.
-      - run: uv run --directory runtime pytest -m "db or pipeline"
+      - run: uv sync --directory runtime --frozen
+      - name: Allocate disposable database run
+        shell: pwsh
+        run: |
+          $runPath = Join-Path $PWD ".superpowers/sdd/auditoria-ia-disposable/$([guid]::NewGuid().ToString('N'))"
+          "RUNTIME_DB_RUN_DIRECTORY=$runPath" >> $env:GITHUB_ENV
+      - name: Prepare disposable database
+        shell: pwsh
+        run: ./scripts/test-disposable-db.ps1 -Action Prepare -RunDirectory $env:RUNTIME_DB_RUN_DIRECTORY
+      - name: Replay canonical migrations
+        shell: pwsh
+        run: ./scripts/test-disposable-db.ps1 -Action Replay -RunDirectory $env:RUNTIME_DB_RUN_DIRECTORY
+      - name: Run complete database gates
+        shell: pwsh
+        run: ./scripts/test-disposable-db.ps1 -Action Test -RunDirectory $env:RUNTIME_DB_RUN_DIRECTORY
+      - name: Stop disposable database
+        if: always()
+        shell: pwsh
+        run: ./scripts/test-disposable-db.ps1 -Action Stop -RunDirectory $env:RUNTIME_DB_RUN_DIRECTORY

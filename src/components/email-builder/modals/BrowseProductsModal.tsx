@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
+import Image from 'next/image'
 import { X, Search, ChevronDown, ChevronUp, Trash2, Loader2 } from 'lucide-react'
+import { useStoreStore } from '@/stores'
 
 interface Product {
   id: string
@@ -18,6 +20,8 @@ interface Product {
   category?: string
   collections?: string[]
   buttonText?: string
+  /** Escondido dos feeds dinâmicos pelo lojista; ainda pode ser escolhido à mão. */
+  hidden_from_feeds?: boolean
 }
 
 interface RawProduct {
@@ -40,6 +44,7 @@ interface RawProduct {
   handle?: string
   url?: string
   shopify_product_id?: string
+  hidden_from_feeds?: boolean
 }
 
 interface BrowseProductsModalProps {
@@ -68,6 +73,7 @@ function normalizeProduct(raw: RawProduct, storeDomain?: string): Product {
     collections: raw.collections || (raw.product_type ? [raw.product_type] : []),
     status: raw.status,
     shopify_product_id: raw.shopify_product_id || String(raw.id),
+    hidden_from_feeds: raw.hidden_from_feeds === true,
   }
 }
 
@@ -80,6 +86,11 @@ export function BrowseProductsModal({ isOpen, onClose, onSelect, maxProducts = 9
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'all' | 'selected'>('all')
   const [storeDomain, setStoreDomain] = useState('')
+  // Produtos e domínio da loja SELECIONADA. Sem isto o modal pedia os
+  // produtos de todas as lojas da organização e montava os links com o
+  // domínio da primeira que viesse.
+  const { currentStore } = useStoreStore()
+  const storeId = currentStore?.id
 
   useEffect(() => {
     if (!isOpen) return
@@ -87,20 +98,22 @@ export function BrowseProductsModal({ isOpen, onClose, onSelect, maxProducts = 9
     setSelected(new Set())
     setTab('all')
 
-    fetch('/api/products')
+    const qs = storeId ? `?storeId=${encodeURIComponent(storeId)}` : ''
+    fetch(`/api/products${qs}`)
       .then(r => r.json())
       .then(data => {
         const rawProds: RawProduct[] = Array.isArray(data) ? data : data.products || data.data || []
-        // Get store domain for building URLs (prefer custom primaryDomain over myshopify domain)
-        const stores = data.stores || []
-        const domain = stores[0]?.primaryDomain || stores[0]?.domain || ''
+        // Domínio da loja selecionada (o principal, não o myshopify).
+        const stores: any[] = data.stores || []
+        const mine = storeId ? stores.find((s) => s.id === storeId) : (stores.length === 1 ? stores[0] : null)
+        const domain = mine?.primaryDomain || mine?.domain || ''
         setStoreDomain(domain)
         setCollections(data.collections || [])
         setProducts(rawProds.map(p => normalizeProduct(p, domain)))
       })
       .catch(() => setProducts([]))
       .finally(() => setLoading(false))
-  }, [isOpen])
+  }, [isOpen, storeId])
 
   // Use collections from API (fallback to product categories)
   const categories = useMemo(() => {
@@ -212,15 +225,22 @@ export function BrowseProductsModal({ isOpen, onClose, onSelect, maxProducts = 9
                   className={`flex items-center gap-3 px-6 py-3 border-b border-gray-50 hover:bg-gray-50 cursor-pointer transition-colors ${selected.has(product.id) ? 'bg-brand-50/30' : ''}`}>
                   <input type="checkbox" checked={selected.has(product.id)} readOnly
                     className="w-4 h-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500 flex-shrink-0 pointer-events-none" />
-                  <div className="w-12 h-12 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
+                  <div className="relative w-12 h-12 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
                     {product.image_url ? (
-                      <img src={product.image_url} alt="" className="w-full h-full object-cover" />
+                      <Image src={product.image_url} alt="" fill sizes="48px" className="w-full h-full object-cover" loading="eager" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-gray-300 text-[10px]">SEM FOTO</div>
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{product.title}</p>
+                    <p className="text-sm font-medium text-gray-900 truncate">
+                      {product.title}
+                      {product.hidden_from_feeds && (
+                        <span className="ml-2 inline-block align-middle px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200" title="Este produto não entra em feeds dinâmicos; aqui você o escolhe à mão.">
+                          Oculto dos feeds
+                        </span>
+                      )}
+                    </p>
                     <div className="flex items-center gap-2 mt-0.5">
                       {product.compare_at_price && product.compare_at_price > product.price && (
                         <span className="text-xs text-gray-400 line-through">{formatPrice(product.compare_at_price)}</span>
@@ -270,6 +290,7 @@ export function StaticProductsEditor({ products, onChange }: {
             <div className="flex items-center gap-2 min-w-0">
               {expandedId === product.id ? <ChevronUp className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />}
               {product.image_url && (
+                // eslint-disable-next-line @next/next/no-img-element -- product.image_url is editable in this component and can target an uncontracted host.
                 <img src={product.image_url} alt="" className="w-6 h-6 rounded object-cover flex-shrink-0" />
               )}
               <span className="text-xs font-medium text-gray-900 truncate">{product.title}</span>
@@ -312,6 +333,7 @@ export function StaticProductsEditor({ products, onChange }: {
                 }} className="w-full px-2 py-1 border border-gray-200 rounded text-xs text-gray-900 focus:border-brand-500 focus:outline-none" />
               </div>
               {product.image_url && (
+                // eslint-disable-next-line @next/next/no-img-element -- product.image_url is editable in this component and can target an uncontracted host.
                 <img src={product.image_url} alt="" className="w-full h-24 object-contain rounded border border-gray-100" />
               )}
             </div>

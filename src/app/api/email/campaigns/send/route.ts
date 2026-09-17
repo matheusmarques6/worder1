@@ -15,6 +15,9 @@ const BATCH_SIZE = 50;
 const QUEUE_NAME = 'email-send-batch';
 
 export async function POST(request: NextRequest) {
+  // Guardada fora do try para a recuperação lá embaixo poder prender a
+  // escrita à organização certa.
+  let orgParaRecuperacao: string | null = null
   try {
     // Suporta chamada interna (cron): header X-Internal + Bearer CRON_SECRET + X-Org-Id
     const internalHeader = request.headers.get('x-internal');
@@ -34,11 +37,34 @@ export async function POST(request: NextRequest) {
       if (!auth) return authError();
       organizationId = auth.user.organization_id;
     }
+    orgParaRecuperacao = organizationId
 
     const { campaign_id } = await request.json();
 
     if (!campaign_id) {
       return NextResponse.json({ error: 'campaign_id is required' }, { status: 400 });
+    }
+
+    /**
+     * Muda o status da campanha e CONFERE. Uma escrita de status que
+     * falha em silêncio é o pior estado possível: a rota responde
+     * "failed" e a linha continua em "sending" para sempre, sem worker
+     * nenhum atrás dela — a campanha some sem ninguém saber.
+     *
+     * A organização entra no filtro por princípio: aqui o cliente é o de
+     * serviço, que passa por cima do RLS.
+     */
+    const setCampaignStatus = async (patch: Record<string, any>, motivo: string) => {
+      const { error } = await supabaseAdmin
+        .from('email_campaigns')
+        .update(patch)
+        .eq('id', campaign_id)
+        .eq('organization_id', organizationId)
+      if (error) {
+        console.error(`[SendCampaign] NÃO consegui gravar o status (${motivo}) da campanha ${campaign_id}:`, error.message)
+        return false
+      }
+      return true
     }
 
     // Get campaign with template
@@ -107,6 +133,21 @@ export async function POST(request: NextRequest) {
       if (issues.length > 0) {
         console.log(`[SendCampaign] ${campaign_id} preflight warnings:`, issues.map(i => i.code).join(','))
       }
+
+      // Franquia do domínio compartilhado. Aqui só a checagem "já
+      // estourou": o número de destinatários ainda não é conhecido, e a
+      // conferência com ele acontece depois de resolver o público.
+      if (!isTestSend) {
+        const { allowanceStatus } = await import('@/lib/email/shared-domain-allowance')
+        const st = await allowanceStatus(supabaseAdmin, organizationId, campaign.store_id, fromEmail)
+        if (!st.allowed) {
+          return NextResponse.json({
+            error: st.reason,
+            code: 'SHARED_DOMAIN_ALLOWANCE',
+            allowance: { used: st.used, allowance: st.allowance, remaining: st.remaining },
+          }, { status: 422 })
+        }
+      }
     }
 
     // Bug fix: Atomic status transition to prevent race conditions.
@@ -133,7 +174,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Resolve contacts
-    const contactFields = 'id, email, first_name, last_name, phone, last_email_sent_at, engagement_score, best_send_hour'
+    // timezone/country entram para o modo "fuso do destinatário": sem
+    // eles todo contato cairia no fuso da loja e o recurso viraria um
+    // agendamento fixo com nome bonito.
+    const contactFields = 'id, email, first_name, last_name, phone, last_email_sent_at, engagement_score, best_send_hour, timezone, country, created_at, last_active_at, last_email_at, last_order_at, last_seen_at'
     let contacts: any[] = []
     let contactsError: any = null
 
@@ -169,20 +213,30 @@ export async function POST(request: NextRequest) {
       contactsError = error
     }
 
+    // Higiene da lista (Configurações → Entregabilidade): contatos sem
+    // engajamento há N dias saem das campanhas — continuam nas automações.
+    if (!contactsError && contacts.length) {
+      try {
+        const { getOrgSendingRules, filterInactiveContacts } = await import('@/lib/email/sending-rules')
+        const rules = await getOrgSendingRules(organizationId)
+        const { kept, suppressed } = filterInactiveContacts(contacts, rules)
+        if (suppressed > 0) {
+          console.log(`[SendCampaign] Higiene da lista: ${suppressed} contato(s) inativo(s) há ${rules.suppressInactiveDays} dias fora desta campanha`)
+          contacts = kept
+        }
+      } catch (e) {
+        console.warn('[SendCampaign] Higiene da lista indisponível:', (e as any)?.message)
+      }
+    }
+
     if (contactsError) {
       console.error('[SendCampaign] Error fetching contacts:', contactsError);
-      await supabaseAdmin
-        .from('email_campaigns')
-        .update({ status: 'failed' })
-        .eq('id', campaign_id);
+      await setCampaignStatus({ status: 'failed', error_message: 'Não foi possível resolver a lista de destinatários.' }, 'contatos não resolvidos');
       return NextResponse.json({ error: 'Failed to resolve contacts' }, { status: 500 });
     }
 
     if (!contacts || contacts.length === 0) {
-      await supabaseAdmin
-        .from('email_campaigns')
-        .update({ status: 'sent', total_sent: 0 })
-        .eq('id', campaign_id);
+      await setCampaignStatus({ status: 'sent', total_sent: 0 }, 'sem contatos');
       return NextResponse.json({ message: 'No contacts to send to', total: 0 });
     }
 
@@ -247,16 +301,39 @@ export async function POST(request: NextRequest) {
     }
 
     if (contacts.length === 0) {
-      await supabaseAdmin
-        .from('email_campaigns')
-        .update({ status: 'sent', total_sent: 0 })
-        .eq('id', campaign_id);
+      await setCampaignStatus({ status: 'sent', total_sent: 0 }, 'todos os contatos filtrados');
       return NextResponse.json({
         message: 'All contacts filtered (smart sending / engagement)',
         smartSendingSkipped,
         engagementSkipped,
         total: 0,
       });
+    }
+
+    // Agora que o público é conhecido, a franquia é conferida de novo: uma
+    // campanha para 5 mil pessoas não pode começar a sair e travar no
+    // meio. A campanha volta a rascunho para o lojista poder reenviar
+    // depois de verificar o domínio.
+    try {
+      const { evaluateSharedAllowance, sentInAllowanceWindow } = await import('@/lib/email/shared-domain-allowance')
+      const { resolveSendDomainVerification } = await import('@/lib/email/domain-verification')
+      const { fromEmail: resolvedFrom } = await resolveSendDomainVerification(organizationId, campaign.store_id, campaign.from_email)
+      const sentInWindow = await sentInAllowanceWindow(supabaseAdmin, organizationId, campaign.store_id)
+      const verdict = evaluateSharedAllowance({ fromEmail: resolvedFrom, sentInWindow, aboutToSend: contacts.length })
+      if (!verdict.allowed) {
+        // Com o motivo gravado, a tela explica por que a campanha voltou
+        // para rascunho em vez de deixar o lojista adivinhando.
+        await setCampaignStatus({ status: 'draft', sent_at: null, error_message: verdict.reason }, 'franquia do endereço temporário')
+        return NextResponse.json({
+          error: verdict.reason,
+          code: 'SHARED_DOMAIN_ALLOWANCE',
+          allowance: { used: verdict.used, allowance: verdict.allowance, remaining: verdict.remaining },
+          recipients: contacts.length,
+        }, { status: 422 })
+      }
+    } catch (e: any) {
+      // Falha de leitura não vira bloqueio: o envio segue.
+      console.warn('[SendCampaign] franquia do domínio compartilhado indisponível:', e?.message)
     }
 
     // ── Domain warm-up: cap daily volume for warming domains ──
@@ -279,10 +356,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Update total_recipients upfront
-    await supabaseAdmin
-      .from('email_campaigns')
-      .update({ total_recipients: contacts.length })
-      .eq('id', campaign_id);
+    await setCampaignStatus({ total_recipients: contacts.length }, 'total de destinatários');
 
     // Split contacts into batches, marcando A/B variant quando habilitado
     type ContactWithVariant = any & { ab_variant?: 'a' | 'b' }
@@ -304,55 +378,90 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // ── Send Time Optimization: bucket by best_send_hour ──
-    // When enabled, each contact is scheduled at their personal best hour (UTC).
-    // Klaviyo-style: learns from open history, defaults to 10 UTC when unknown.
-    const sendTimeOptimization = Boolean(campaign.send_time_optimization)
-    const DEFAULT_HOUR = 10
+    // ── Quando cada contato recebe ──
+    // Dois modos, mutuamente exclusivos, na ordem de precedência:
+    //
+    //  1. timezone_mode = 'recipient' — cada contato recebe no horário
+    //     de PAREDE escolhido, lido no fuso dele (o "Send in
+    //     recipient's time zone" da Omnisend).
+    //  2. send_time_optimization — cada contato recebe na hora em que
+    //     costuma abrir e-mail (best_send_hour, aprendido do histórico).
+    //
+    // Sem nenhum dos dois, todo mundo sai junto, como sempre foi.
+    const recipientTimezoneMode = campaign.timezone_mode === 'recipient'
+    const sendTimeOptimization = !recipientTimezoneMode && Boolean(campaign.send_time_optimization)
 
-    type HourBucket = { hour: number; contacts: ContactWithVariant[] }
-    const hourBuckets: HourBucket[] = []
+    type ScheduledBatch = { contacts: ContactWithVariant[]; delayMs: number }
+    const scheduledBatches: ScheduledBatch[] = []
+    const now = Date.now()
+    let timezoneBucketCount = 0
+    let hourBucketCount = 0
 
-    if (sendTimeOptimization) {
+    /** Fatia um grupo em lotes, escalonando dentro do grupo. */
+    const pushBatches = (list: ContactWithVariant[], baseDelayMs: number) => {
+      for (let i = 0; i < list.length; i += BATCH_SIZE) {
+        const batch = list.slice(i, i + BATCH_SIZE)
+        const intraThrottle = Math.floor((i / BATCH_SIZE) / 5) * 1000
+        scheduledBatches.push({ contacts: batch, delayMs: baseDelayMs + intraThrottle })
+      }
+    }
+
+    if (recipientTimezoneMode) {
+      const { planRecipientTimezoneSend } = await import('@/lib/scheduling/campaign-plan')
+
+      // O fuso de quem agendou define QUAL horário de parede foi
+      // escolhido — é o relógio que o lojista tinha na tela.
+      let authorTimezone: string | null = null
+      if (campaign.store_id) {
+        const { data: loja } = await supabaseAdmin
+          .from('shopify_stores').select('timezone').eq('id', campaign.store_id).maybeSingle()
+        authorTimezone = (loja as any)?.timezone || null
+      }
+      if (!authorTimezone) {
+        const { data: org } = await supabaseAdmin
+          .from('organizations').select('quiet_hours_timezone').eq('id', organizationId).maybeSingle()
+        authorTimezone = (org as any)?.quiet_hours_timezone || null
+      }
+
+      const buckets = planRecipientTimezoneSend(taggedContacts as any[], {
+        // Campanha enviada na hora (sem agendar) usa agora como
+        // referência: o horário de parede vira "este mesmo".
+        scheduledAt: campaign.scheduled_at ? new Date(campaign.scheduled_at) : new Date(now),
+        authorTimezone,
+        fallbackTimezone: authorTimezone,
+        now: new Date(now),
+      })
+      timezoneBucketCount = buckets.length
+      for (const b of buckets) pushBatches(b.contacts as ContactWithVariant[], b.delayMs)
+
+      console.log(
+        `[SendCampaign] ${campaign_id} no fuso do destinatário: ${buckets.length} fusos, ` +
+        `primeiro em ${Math.round((buckets[0]?.delayMs ?? 0) / 60000)}min, ` +
+        `último em ${Math.round((buckets[buckets.length - 1]?.delayMs ?? 0) / 60000)}min`
+      )
+    } else if (sendTimeOptimization) {
+      // best_send_hour é a MODA das aberturas em UTC, então o balde
+      // também é UTC — é a mesma unidade, não uma conversão perdida.
+      const DEFAULT_HOUR = 10
       const byHour = new Map<number, ContactWithVariant[]>()
       for (const c of taggedContacts) {
         const h = Number.isInteger(c.best_send_hour) ? c.best_send_hour : DEFAULT_HOUR
         const hour = Math.max(0, Math.min(23, h))
-        if (!byHour.has(hour)) byHour.set(hour, [])
-        byHour.get(hour)!.push(c)
+        const lista = byHour.get(hour)
+        if (lista) lista.push(c)
+        else byHour.set(hour, [c])
       }
-      for (const [hour, list] of byHour) hourBuckets.push({ hour, contacts: list })
-    } else {
-      hourBuckets.push({ hour: -1, contacts: taggedContacts })
-    }
-
-    // Build all batches with their scheduled delay
-    type ScheduledBatch = { contacts: ContactWithVariant[]; delayMs: number }
-    const scheduledBatches: ScheduledBatch[] = []
-
-    const now = Date.now()
-    for (const bucket of hourBuckets) {
-      // Base delay until this hour's next UTC occurrence (0 if bucket.hour === -1)
-      let bucketDelayMs = 0
-      if (bucket.hour >= 0) {
+      hourBucketCount = byHour.size
+      for (const [hour, list] of byHour) {
         const nowDate = new Date(now)
         const target = new Date(Date.UTC(
-          nowDate.getUTCFullYear(),
-          nowDate.getUTCMonth(),
-          nowDate.getUTCDate(),
-          bucket.hour,
-          0, 0, 0
+          nowDate.getUTCFullYear(), nowDate.getUTCMonth(), nowDate.getUTCDate(), hour, 0, 0, 0
         ))
         if (target.getTime() <= now) target.setUTCDate(target.getUTCDate() + 1)
-        bucketDelayMs = target.getTime() - now
+        pushBatches(list, target.getTime() - now)
       }
-
-      // Split bucket into batches of BATCH_SIZE with intra-bucket throttle staircase
-      for (let i = 0; i < bucket.contacts.length; i += BATCH_SIZE) {
-        const batch = bucket.contacts.slice(i, i + BATCH_SIZE)
-        const intraThrottle = Math.floor((i / BATCH_SIZE) / 5) * 1000
-        scheduledBatches.push({ contacts: batch, delayMs: bucketDelayMs + intraThrottle })
-      }
+    } else {
+      pushBatches(taggedContacts, 0)
     }
 
     const batches: ContactWithVariant[][] = scheduledBatches.map(sb => sb.contacts)
@@ -388,7 +497,9 @@ export async function POST(request: NextRequest) {
           );
         }
         console.log(
-          `[SendCampaign] Campaign ${campaign_id} enqueued: ${contacts.length} contacts in ${scheduledBatches.length} batches${sendTimeOptimization ? ` across ${hourBuckets.length} send-time buckets` : ''} (durable queue)`
+          `[SendCampaign] Campaign ${campaign_id} enqueued: ${contacts.length} contacts in ${scheduledBatches.length} batches` +
+          `${recipientTimezoneMode ? ` across ${timezoneBucketCount} timezones` : ''}` +
+          `${sendTimeOptimization ? ` across ${hourBucketCount} send-time buckets` : ''} (durable queue)`
         );
       } else {
         // Fallback sem Redis: dispara em paralelo com pequeno delay entre batches
@@ -405,7 +516,7 @@ export async function POST(request: NextRequest) {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'X-Internal': 'true',
+                authorization: `Bearer ${process.env.INTERNAL_API_SECRET || process.env.CRON_SECRET || ''}`,
               },
               body: JSON.stringify({
                 campaign_id,
@@ -424,15 +535,13 @@ export async function POST(request: NextRequest) {
       // All or partial batch dispatch failed — mark campaign as 'failed' to avoid
       // it being stuck in 'sending' forever with no workers processing it.
       console.error(`[SendCampaign] Batch dispatch failed for campaign ${campaign_id}:`, batchError);
-      await supabaseAdmin
-        .from('email_campaigns')
-        .update({
-          status: 'failed',
-          error_message: `Batch dispatch error: ${batchError instanceof Error ? batchError.message : String(batchError)}`,
-        })
-        .eq('id', campaign_id);
+      const marcou = await setCampaignStatus({
+        status: 'failed',
+        error_message: `Batch dispatch error: ${batchError instanceof Error ? batchError.message : String(batchError)}`,
+      }, 'lotes não despachados');
       return NextResponse.json(
-        { error: 'Failed to dispatch email batches', campaign_status: 'failed' },
+        // Se nem o "failed" foi gravado, a resposta não pode afirmar que foi.
+        { error: 'Failed to dispatch email batches', campaign_status: marcou ? 'failed' : 'sending' },
         { status: 500 }
       );
     }
@@ -441,7 +550,8 @@ export async function POST(request: NextRequest) {
       queued: true,
       totalContacts: contacts.length,
       batches: scheduledBatches.length,
-      sendTimeBuckets: sendTimeOptimization ? hourBuckets.length : undefined,
+      sendTimeBuckets: sendTimeOptimization ? hourBucketCount : undefined,
+      timezoneBuckets: recipientTimezoneMode ? timezoneBucketCount : undefined,
       smartSendingSkipped,
       engagementSkipped,
       warmupCapped,
@@ -454,16 +564,24 @@ export async function POST(request: NextRequest) {
     try {
       const body = await request.clone().json().catch(() => ({}));
       const cid = body?.campaign_id;
-      if (cid) {
+      // Sem organização resolvida, o erro veio antes da autenticação: não
+      // há campanha nossa para consertar, e escrever por id solto mexeria
+      // na linha de quem quer que seja dono daquele id.
+      if (cid && orgParaRecuperacao) {
         // Only reset if still in 'sending' — avoids overwriting a 'failed' already set above
-        await supabaseAdmin
+        const { error: recoveryError } = await supabaseAdmin
           .from('email_campaigns')
           .update({
             status: 'failed',
             error_message: `Unexpected error: ${error instanceof Error ? error.message : String(error)}`,
           })
           .eq('id', cid)
+          .eq('organization_id', orgParaRecuperacao)
           .eq('status', 'sending');
+        if (recoveryError) {
+          // A campanha fica presa em "sending". Dizer isso alto é o mínimo.
+          console.error(`[SendCampaign] campanha ${cid} presa em "sending": não consegui marcar como falha:`, recoveryError.message);
+        }
       }
     } catch (_) {
       // Best-effort recovery — don't mask the original error

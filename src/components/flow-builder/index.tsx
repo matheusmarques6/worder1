@@ -75,10 +75,12 @@ export function FlowBuilder({
 
   // Local state for saved automation ID
   const [savedAutomationId, setSavedAutomationId] = useState<string | undefined>(automationId);
+  const initializedFlowId = useRef<string | null>(null);
 
   // Fetch analytics when toggle is on
   useEffect(() => {
     if (!showAnalytics || !savedAutomationId || savedAutomationId === 'new') return;
+    let current = true;
 
     const fetchAnalytics = async () => {
       try {
@@ -87,7 +89,7 @@ export function FlowBuilder({
         );
         if (res.ok) {
           const data = await res.json();
-          if (data.nodeStats) {
+          if (current && data.nodeStats) {
             setAnalyticsData(data.nodeStats);
           }
         }
@@ -97,6 +99,7 @@ export function FlowBuilder({
     };
 
     fetchAnalytics();
+    return () => { current = false; };
   }, [showAnalytics, savedAutomationId, analyticsTimeframe, setAnalyticsData]);
 
   // Convert legacy nodes to new format
@@ -146,13 +149,18 @@ export function FlowBuilder({
     }));
   }, []);
 
-  // Load initial data
+  // Load once per automation identity; prop arrays may be recreated after edits.
   useEffect(() => {
+    const id = automationId || 'new';
+    if (initializedFlowId.current === id) return;
+    initializedFlowId.current = id;
+    setSavedAutomationId(automationId);
+    useFlowStore.setState({ showTestModal: false, showHistoryPanel: false, showAnalytics: false, analyticsData: {} });
     const convertedNodes = convertLegacyNodes(initialNodes);
     const convertedEdges = convertLegacyEdges(initialEdges);
 
     loadAutomation({
-      id: automationId || 'new',
+      id,
       name: automationName,
       status: automationStatus,
       nodes: convertedNodes,
@@ -160,6 +168,9 @@ export function FlowBuilder({
       config: automationStoreId ? { storeId: automationStoreId } : undefined,
     });
 
+  }, [automationId, automationName, automationStatus, automationStoreId, initialNodes, initialEdges, convertLegacyNodes, convertLegacyEdges, loadAutomation]);
+
+  useEffect(() => {
     // Keyboard shortcuts
     const handleKeyDown = (e: KeyboardEvent) => {
       // Don't trigger in input/textarea
@@ -181,12 +192,13 @@ export function FlowBuilder({
     };
     window.addEventListener('keydown', handleKeyDown);
 
-    // Cleanup on unmount
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      resetStore();
-    };
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
+
+  useEffect(() => () => {
+    initializedFlowId.current = null;
+    resetStore();
+  }, [resetStore]);
 
   // Handle save with conversion back to legacy format
   const handleSave = useCallback(async () => {
@@ -259,7 +271,7 @@ export function FlowBuilder({
           {/* Left panel: Sidebar OR Properties Panel (Klaviyo style) */}
           {!isFullscreen && (
             showPropertiesPanel ? (
-              <PropertiesPanel organizationId={organizationId} automationId={savedAutomationId} />
+              <PropertiesPanel organizationId={organizationId} automationId={savedAutomationId} storeId={automationStoreId} />
             ) : (
               <Sidebar />
             )

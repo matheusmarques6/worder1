@@ -1,4 +1,4 @@
-"""Unidade 4 — weighted polling 8:4:2:1 e promoção por idade.
+"""Unidade 4 — weighted polling 8:4:1 e promoção por idade.
 
 Prioridade estrita é proibida pela arquitetura, e o motivo é concreto: um
 evento de `order_paid` que fica atrás de uma fila de entrada movimentada chega
@@ -15,12 +15,12 @@ from datetime import timedelta
 import pytest
 
 from agents_runtime.config import QueueingConfig
-from agents_runtime.queueing import DOMAIN_EVENTS, EVALS, INBOUND, SCHEDULED
+from agents_runtime.queueing import DOMAIN_EVENTS, EVALS, INBOUND
 from agents_runtime.queueing.polling import WINDOW, effective_queue, next_queue
 
 CONFIG = QueueingConfig()
 
-ALL_BUSY = {INBOUND: True, DOMAIN_EVENTS: True, SCHEDULED: True, EVALS: True}
+ALL_BUSY = {INBOUND: True, DOMAIN_EVENTS: True, EVALS: True}
 
 
 def poll(has_work: dict[str, bool], turns: int) -> list[str]:
@@ -34,21 +34,20 @@ def poll(has_work: dict[str, bool], turns: int) -> list[str]:
 
 
 def test_a_full_window_respects_the_proportion() -> None:
-    # 8 + 4 + 2 + 1 = 15, que é o tamanho da janela por construção.
-    assert WINDOW == 15
+    # 8 + 4 + 1 = 13; a fila reservada não recebe slots.
+    assert WINDOW == 13
 
     assert Counter(poll(ALL_BUSY, WINDOW)) == {
         INBOUND: 8,
         DOMAIN_EVENTS: 4,
-        SCHEDULED: 2,
         EVALS: 1,
     }
 
 
 def test_no_queue_starves_even_when_the_busiest_never_empties() -> None:
-    # A asserção que proíbe prioridade estrita. Com tudo cheio, as quatro filas
+    # A asserção que proíbe prioridade estrita. Com tudo cheio, as três filas
     # aparecem numa única janela — não "eventualmente", nesta.
-    assert set(poll(ALL_BUSY, WINDOW)) == {INBOUND, DOMAIN_EVENTS, SCHEDULED, EVALS}
+    assert set(poll(ALL_BUSY, WINDOW)) == {INBOUND, DOMAIN_EVENTS, EVALS}
 
 
 def test_the_busiest_queue_does_not_take_the_whole_window_in_one_block() -> None:
@@ -82,7 +81,6 @@ def test_an_empty_queue_lends_its_turn_to_the_most_urgent_one_with_work() -> Non
 
     assert picked[INBOUND] == 0
     assert picked[DOMAIN_EVENTS] == 12
-    assert picked[SCHEDULED] == 2
     assert picked[EVALS] == 1
 
 
@@ -104,13 +102,6 @@ class TestPromotionByAge:
         assert (
             effective_queue(DOMAIN_EVENTS, timedelta(seconds=30), config=CONFIG)
             == DOMAIN_EVENTS
-        )
-
-    def test_a_scheduled_job_older_than_ten_minutes_moves_up_one_level(self) -> None:
-        # Um nível, não até o topo: um toque atrasado é urgente, não mais
-        # urgente que a pessoa que está escrevendo agora.
-        assert (
-            effective_queue(SCHEDULED, timedelta(minutes=11), config=CONFIG) == DOMAIN_EVENTS
         )
 
     @pytest.mark.parametrize("age", [timedelta(minutes=1), timedelta(hours=5)])

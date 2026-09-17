@@ -8,7 +8,7 @@
 // baseadas em eventos Shopify
 // =============================================
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Zap,
@@ -100,11 +100,7 @@ export function AutomationRulesTab({
   // Load rules
   // =============================================
   
-  useEffect(() => {
-    loadRules()
-  }, [store.id])
-
-  const loadRules = async () => {
+  const loadRules = useCallback(async () => {
     setLoading(true)
     try {
       const res = await fetch(`/api/shopify/transition-rules?storeId=${store.id}`)
@@ -117,7 +113,11 @@ export function AutomationRulesTab({
     } finally {
       setLoading(false)
     }
-  }
+  }, [store.id])
+
+  useEffect(() => {
+    loadRules()
+  }, [loadRules])
 
   // =============================================
   // Handlers

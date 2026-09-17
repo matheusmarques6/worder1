@@ -3,19 +3,10 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { campaignQueue } from '@/lib/whatsapp/queue';
 import { getWorkerHeartbeatAgeMs, evaluateWorkerHealth } from '@/lib/whatsapp/worker-heartbeat';
 import { sendAlert } from '@/lib/whatsapp/alerts';
+import { authorizeCronRequest } from '@/lib/cron-auth';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
-
-function authorize(req: NextRequest): boolean {
-  if (req.headers.get('x-vercel-cron')) return true;
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret) {
-    const auth = req.headers.get('authorization');
-    if (auth === `Bearer ${cronSecret}`) return true;
-  }
-  return process.env.NODE_ENV !== 'production';
-}
 
 // P0 — Saúde do campaign worker (Railway): fila com pending antigo +
 // heartbeat ausente => worker morto/travado. Chamada nos dois return paths.
@@ -82,8 +73,10 @@ async function checkCampaignWorkerHealth(): Promise<any> {
           type: 'whatsapp_campaign_worker_stalled',
           title: 'Campaign worker parado',
           message: workerHealth.reason,
-          severity: 'critical',
-          metadata: workerHealth,
+          // `severity` não existe na tabela; a gravidade vai junto do
+          // resto no metadata. Antes, o alerta mais importante que temos
+          // — o worker de campanha parado — não era gravado.
+          metadata: { ...workerHealth, severity: 'critical' },
           created_at: new Date().toISOString(),
         });
         if (notifErr) console.log('[dead-alert] notification insert failed (best-effort):', notifErr.message);
@@ -97,7 +90,7 @@ async function checkCampaignWorkerHealth(): Promise<any> {
 }
 
 export async function GET(req: NextRequest) {
-  if (!authorize(req)) {
+  if (!authorizeCronRequest(req)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 

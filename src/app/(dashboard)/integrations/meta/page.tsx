@@ -424,6 +424,7 @@ function InstagramAccountRow({ account }: { account: InstagramAccount }) {
     <div className="flex items-center gap-4 px-6 py-4">
       <div className="w-12 h-12 rounded-full overflow-hidden flex-shrink-0">
         {account.profile_picture_url ? (
+          // eslint-disable-next-line @next/next/no-img-element -- Meta provider URL is not safely allowlisted.
           <img
             src={account.profile_picture_url}
             alt={account.username}

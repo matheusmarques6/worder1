@@ -5,7 +5,7 @@
 // src/components/crm/MergeContactsModal.tsx
 // =============================================
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   X,
@@ -80,6 +80,21 @@ export function MergeContactsModal({
     currentGroup: '',
   })
   
+  const detectDuplicates = useCallback(async () => {
+    if (!organizationId) return
+
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/contacts/merge?organizationId=${organizationId}`)
+      const data = await res.json()
+      setDuplicates(data.duplicates || [])
+    } catch (error) {
+      console.error('Error detecting duplicates:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [organizationId])
+
   // Detectar duplicados ao abrir
   useEffect(() => {
     if (isOpen && organizationId && !preselectedContacts) {
@@ -94,22 +109,7 @@ export function MergeContactsModal({
       setPrimaryContactId(preselectedContacts[0].id)
       setStep('confirm')
     }
-  }, [isOpen, organizationId, preselectedContacts])
-  
-  const detectDuplicates = async () => {
-    if (!organizationId) return
-    
-    setLoading(true)
-    try {
-      const res = await fetch(`/api/contacts/merge?organizationId=${organizationId}`)
-      const data = await res.json()
-      setDuplicates(data.duplicates || [])
-    } catch (error) {
-      console.error('Error detecting duplicates:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
+  }, [isOpen, organizationId, preselectedContacts, detectDuplicates])
   
   const handleSelectGroup = (group: DuplicateGroup) => {
     setSelectedGroup(group)

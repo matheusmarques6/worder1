@@ -45,9 +45,10 @@ class ClaimedSend:
     # Carrier W3C do turno que gerou a linha (9.1b): o sender retoma o trace
     # como PARENT — turno e envio são a mesma história no Logfire.
     otel: dict[str, Any] | None = None
-    # provider_message_id do ÚLTIMO inbound da conversa (item 38): o único
+    # provider_message_id do ÚLTIMO inbound da conta nesta conversa: o único
     # jeito de a Meta aceitar `typing_indicator` é de carona num `status:
     # read` sobre ESSE wamid. Null quando não há conversa/inbound (toque de
     # funil, ou conversa nova) — nesse caso o sender não manda nada
     # (ruling D: sem wamid, silêncio; a linha que `humanize.py` já proíbe).
     last_inbound_wamid: str | None = None
+    channel_account_id: UUID | None = None

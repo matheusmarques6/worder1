@@ -1,7 +1,7 @@
 'use client'
 
 import { toast } from '@/components/ui/Toast'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import {
   TrendingUp,
@@ -208,7 +208,7 @@ export default function ShopifyAnalyticsPage() {
     { id: '90d', label: '90 dias' },
   ]
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     // ✅ NOVO: Verificar se tem loja selecionada
     if (!storeId) {
       setIsLoading(false)
@@ -237,14 +237,14 @@ export default function ShopifyAnalyticsPage() {
       setIsLoading(false)
       setIsRefreshing(false)
     }
-  }
+  }, [selectedPeriod, storeId])
 
   // ✅ MODIFICADO: Recarregar quando loja mudar
   const hasHydrated = useStoreStore((s) => s._hasHydrated)
   useEffect(() => {
     if (!hasHydrated) return
     fetchData()
-  }, [selectedPeriod, storeId, currentStore?.id, hasHydrated])
+  }, [hasHydrated, fetchData])
 
   const handleRefresh = () => {
     setIsRefreshing(true)

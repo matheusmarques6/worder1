@@ -130,7 +130,10 @@ function BlockPreview({ block }: { block: Block }) {
       return <input readOnly placeholder={p.placeholder} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-white" />
     case 'date-input': return <input type="date" className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-white" />
     case 'button': return <button style={{ backgroundColor: p.bgColor, color: p.textColor, borderRadius: p.borderRadius, width: p.fullWidth ? '100%' : 'auto' }} className="px-6 py-2.5 font-semibold text-sm">{p.text}</button>
-    case 'image': return p.src ? <img src={p.src} alt={p.alt} style={{ width: p.width }} /> : <div className="w-full h-24 bg-gray-100 rounded flex items-center justify-center text-gray-400 text-xs">Imagem</div>
+    case 'image': return p.src ? <>
+      {/* eslint-disable-next-line @next/next/no-img-element -- Form author supplied URL cannot be safely optimized or allowlisted. */}
+      <img src={p.src} alt={p.alt} style={{ width: p.width }} />
+    </> : <div className="w-full h-24 bg-gray-100 rounded flex items-center justify-center text-gray-400 text-xs">Imagem</div>
     case 'spacer': return <div style={{ height: p.height }} />
     case 'line': return <hr style={{ borderColor: p.color, borderWidth: p.thickness }} />
     case 'coupon': return <div className="border-2 border-dashed border-orange-300 rounded-lg p-3 text-center"><code className="text-lg font-bold text-orange-600">{p.code}</code><p className="text-xs text-gray-500 mt-1">{p.description}</p></div>
@@ -420,7 +423,10 @@ export default function PopupEditorPage() {
                 {/* Side image left */}
                 {s.sideImage.enabled && s.sideImage.position === 'left' && (
                   <div style={{ width: s.sideImage.width, flexShrink: 0 }} className="bg-gray-200 rounded-l-xl overflow-hidden">
-                    {s.sideImage.src ? <img src={s.sideImage.src} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">Imagem</div>}
+                    {s.sideImage.src ? <>
+                      {/* eslint-disable-next-line @next/next/no-img-element -- Form author supplied URL cannot be safely optimized or allowlisted. */}
+                      <img src={s.sideImage.src} alt="" className="w-full h-full object-cover" />
+                    </> : <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">Imagem</div>}
                   </div>
                 )}
                 {/* Popup body */}
@@ -443,7 +449,10 @@ export default function PopupEditorPage() {
                 {/* Side image right */}
                 {s.sideImage.enabled && s.sideImage.position === 'right' && (
                   <div style={{ width: s.sideImage.width, flexShrink: 0 }} className="bg-gray-200 rounded-r-xl overflow-hidden">
-                    {s.sideImage.src ? <img src={s.sideImage.src} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">Imagem</div>}
+                    {s.sideImage.src ? <>
+                      {/* eslint-disable-next-line @next/next/no-img-element -- Form author supplied URL cannot be safely optimized or allowlisted. */}
+                      <img src={s.sideImage.src} alt="" className="w-full h-full object-cover" />
+                    </> : <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">Imagem</div>}
                   </div>
                 )}
               </div>

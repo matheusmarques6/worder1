@@ -9,6 +9,8 @@ não está mapeado é marcado como tal em vez de adivinhado.
 import re
 from enum import Enum
 
+import httpx
+
 
 class Failure(Enum):
     """O que fazer com o erro."""
@@ -27,7 +29,7 @@ _STATUS = re.compile(r"\b(?:HTTP\s*)?([1-5]\d{2})\b")
 # em RuntimeError é permanente, e um 500 no mesmo tipo é transitório.
 _TRANSIENT_STATUS = {408, 425, 429, 500, 502, 503, 504}
 
-_TRANSIENT_TYPES = (TimeoutError, ConnectionError)
+_TRANSIENT_TYPES = (TimeoutError, ConnectionError, httpx.TransportError)
 _PERMANENT_TYPES = (ValueError, PermissionError, LookupError)
 
 _TRANSIENT_TEXT = ("deadlock", "timeout", "temporarily unavailable")

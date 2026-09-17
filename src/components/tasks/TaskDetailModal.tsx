@@ -258,6 +258,7 @@ export function TaskDetailModal({
                   <h3 className="text-sm font-medium text-gray-500 mb-3">Contato</h3>
                   <div className="flex items-center gap-3">
                     {task.contact.profile_picture_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- contact profile URL is not safely allowlisted.
                       <img 
                         src={task.contact.profile_picture_url} 
                         alt="" 

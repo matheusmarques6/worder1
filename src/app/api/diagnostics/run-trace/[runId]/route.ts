@@ -139,7 +139,7 @@ export async function GET(
       checks.push({
         stage: 'cron_eligible',
         status: 'warning',
-        message: `Eligible RIGHT NOW. If still here in 2 min, the Vercel cron isn't firing — try the Retomar button on the toolbar.`,
+        message: `Eligible RIGHT NOW. If still here in 2 min, verify the automation cron and worker logs.`,
       });
     }
   }

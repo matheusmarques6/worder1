@@ -1,6 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // ---- Mocks (hoisted) ----
+const mockQstashVerify = vi.hoisted(() => vi.fn(async (_args: unknown) => true))
+vi.mock('@upstash/qstash', () => ({
+  Receiver: class {
+    verify(args: unknown) {
+      return mockQstashVerify(args)
+    }
+  },
+}))
 vi.mock('node:dns/promises', () => ({ lookup: vi.fn() }))
 import { lookup } from 'node:dns/promises'
 const mockLookup = lookup as unknown as ReturnType<typeof vi.fn>
@@ -54,7 +62,7 @@ import { POST } from '../route'
 function req(body: any): any {
   return {
     text: async () => JSON.stringify(body),
-    headers: new Headers({ 'x-internal-request': 'true' }),
+    headers: new Headers({ 'upstash-signature': 'valid' }),
   }
 }
 
@@ -83,10 +91,12 @@ describe('POST /api/workers/webhook-delivery', () => {
   beforeEach(() => {
     resetChain()
     mockLookup.mockReset()
+    mockQstashVerify.mockReset()
+    mockQstashVerify.mockResolvedValue(true)
     fetchMock.mockReset()
     vi.stubGlobal('fetch', fetchMock)
-    delete process.env.QSTASH_CURRENT_SIGNING_KEY
-    delete process.env.QSTASH_NEXT_SIGNING_KEY
+    process.env.QSTASH_CURRENT_SIGNING_KEY = 'current'
+    process.env.QSTASH_NEXT_SIGNING_KEY = 'next'
   })
   afterEach(() => {
     vi.unstubAllGlobals()

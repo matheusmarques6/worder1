@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { CheckCircle, XCircle, Download, Search, Loader2 } from 'lucide-react'
 
 interface OptRecord {
@@ -20,9 +20,7 @@ export function OptStatusTab({ organizationId }: { organizationId: string }) {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'all' | 'opted_in' | 'opted_out'>('all')
 
-  useEffect(() => { load() }, [organizationId, filter, search])
-
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true)
     try {
       const params = new URLSearchParams({ organizationId })
@@ -36,7 +34,9 @@ export function OptStatusTab({ organizationId }: { organizationId: string }) {
       }
     } catch { /* */ }
     setLoading(false)
-  }
+  }, [organizationId, filter, search])
+
+  useEffect(() => { load() }, [load])
 
   function exportCsv() {
     const csv = [

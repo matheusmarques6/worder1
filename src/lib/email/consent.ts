@@ -12,6 +12,24 @@ const BLOCKED_STATUSES = new Set(['bounced', 'complained', 'unsubscribed', 'inva
 const BLOCKED_CONSENT_STRINGS = new Set(['pending', 'false', 'denied', 'unsubscribed', 'revoked']);
 
 /**
+ * O `status` que estas funções recebem nasceu como texto ('bounced',
+ * 'complained'…), mas a coluna que EXISTE no banco é `contacts.suppressed`,
+ * booleana. A coluna `contacts.status` nunca existiu: todo select que a
+ * pedia era recusado pelo PostgREST, o guarda recebia `undefined` e
+ * liberava todo mundo — inclusive quem estava com bounce e quem ainda não
+ * confirmou o opt-in duplo.
+ *
+ * Normalizar aqui mantém um único lugar decidindo: `true` vale como
+ * bloqueio técnico permanente (a mesma classe de 'bounced'), e o texto
+ * antigo continua funcionando para quem já passa string.
+ */
+function normalizeStatus(status: unknown): string {
+  if (status === true) return 'bounced';
+  if (status === false || status === null || status === undefined) return '';
+  return String(status).toLowerCase();
+}
+
+/**
  * Returns true when the contact must NOT be emailed.
  *
  * Blocks:
@@ -28,7 +46,101 @@ export function isEmailBlocked(emailConsent: unknown, status?: unknown): boolean
   if (emailConsent === false) return true;
   const consentStr = String(emailConsent ?? '').toLowerCase();
   if (BLOCKED_CONSENT_STRINGS.has(consentStr)) return true;
-  const statusStr = String(status ?? '').toLowerCase();
+  const statusStr = normalizeStatus(status);
   if (BLOCKED_STATUSES.has(statusStr)) return true;
   return false;
+}
+
+// =============================================
+// Sending thresholds (modelo da Omnisend)
+//
+// Cada automação escolhe, POR CANAL, quão longe o envio alcança:
+//
+//   'subscribed'    — só quem tem consentimento. É o padrão e equivale
+//                     exatamente ao isEmailBlocked acima (nenhuma
+//                     mudança de comportamento em fluxos já existentes).
+//   'nonSubscribed' — inclui também quem NUNCA optou (consent false ou
+//                     double-opt-in ainda pendente). Continua excluindo
+//                     quem pediu descadastro. É o nível que a Omnisend
+//                     usa nos fluxos de recuperação de carrinho.
+//   'all'           — inclui também quem se descadastrou. Só para
+//                     mensagens TRANSACIONais (confirmação de pedido,
+//                     rastreio), como na Omnisend.
+//
+// PISO INEGOCIÁVEL: endereços com bounce definitivo, denúncia de spam ou
+// inválidos NUNCA são liberados, em nenhum nível. Isso não é escolha de
+// consentimento — é proteção da reputação do domínio de envio, e voltar
+// a mandar para eles derruba a entregabilidade de toda a base.
+// =============================================
+
+export type SendingThreshold = 'subscribed' | 'nonSubscribed' | 'all';
+
+/** Bloqueio técnico permanente: nenhum threshold libera. */
+const HARD_BLOCKED_STATUSES = new Set(['bounced', 'complained', 'invalid']);
+/** Descadastro explícito: só o nível 'all' (transacional) libera. */
+const UNSUBSCRIBED_STATES = new Set(['unsubscribed', 'revoked', 'denied']);
+
+export function normalizeThreshold(value: unknown): SendingThreshold {
+  const v = String(value ?? '').trim();
+  if (v === 'all') return 'all';
+  if (v === 'nonSubscribed' || v === 'non_subscribed') return 'nonSubscribed';
+  return 'subscribed';
+}
+
+/**
+ * Decide se o e-mail deve ser bloqueado considerando o threshold da
+ * automação. Sem threshold (ou 'subscribed') o resultado é idêntico ao
+ * isEmailBlocked — nenhum fluxo existente muda.
+ */
+export function isEmailBlockedForThreshold(
+  emailConsent: unknown,
+  status: unknown,
+  threshold: SendingThreshold = 'subscribed'
+): boolean {
+  const statusStr = normalizeStatus(status);
+  const consentStr = String(emailConsent ?? '').toLowerCase();
+
+  // Piso técnico — vale para os três níveis.
+  if (HARD_BLOCKED_STATUSES.has(statusStr)) return true;
+
+  if (threshold === 'all') return false;
+
+  const isUnsubscribed =
+    UNSUBSCRIBED_STATES.has(statusStr) || UNSUBSCRIBED_STATES.has(consentStr);
+  if (isUnsubscribed) return true;
+
+  // 'nonSubscribed' alcança quem nunca optou (false / pendente).
+  if (threshold === 'nonSubscribed') return false;
+
+  return isEmailBlocked(emailConsent, status);
+}
+
+/**
+ * Equivalente para SMS. O canal usa contacts.sms_consent (boolean).
+ *
+ * ATENÇÃO ao default: hoje o nó de SMS envia sem nenhuma checagem de
+ * consentimento. Adotar 'subscribed' como padrão pararia, sem aviso,
+ * fluxos de SMS que já rodam em produção — por isso o padrão aqui é
+ * 'all' (comportamento atual) e o lojista escolhe explicitamente
+ * apertar. A recomendação de usar 'subscribed' está na própria UI.
+ */
+export function isSmsBlockedForThreshold(
+  smsConsent: unknown,
+  status: unknown,
+  threshold: SendingThreshold = 'all'
+): boolean {
+  const statusStr = normalizeStatus(status);
+
+  if (HARD_BLOCKED_STATUSES.has(statusStr)) return true;
+  if (threshold === 'all') return false;
+
+  const consentStr = String(smsConsent ?? '').toLowerCase();
+  const isUnsubscribed =
+    UNSUBSCRIBED_STATES.has(statusStr) || UNSUBSCRIBED_STATES.has(consentStr);
+  if (isUnsubscribed) return true;
+
+  if (threshold === 'nonSubscribed') return false;
+
+  // 'subscribed': exige sinal positivo de consentimento.
+  return !(smsConsent === true || consentStr === 'true' || consentStr === 'subscribed' || consentStr === 'granted');
 }

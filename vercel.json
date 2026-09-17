@@ -70,8 +70,16 @@
       "schedule": "0 3 * * *"
     },
     {
+      "path": "/api/cron/verify-email-domains",
+      "schedule": "*/15 * * * *"
+    },
+    {
       "path": "/api/cron/resolve-ab-winners",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/replenish-coupon-pools",
+      "schedule": "*/2 * * * *"
     },
     {
       "path": "/api/cron/update-send-times",
@@ -140,6 +148,10 @@
     {
       "path": "/api/cron/process-scheduled-messages",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/resolve-popup-experiments",
+      "schedule": "*/30 * * * *"
     }
   ]
 }

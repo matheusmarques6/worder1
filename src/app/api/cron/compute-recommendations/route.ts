@@ -21,6 +21,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { authorizeCronRequest } from '@/lib/cron-auth';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300; // 5 min — heavy aggregation
@@ -28,17 +29,6 @@ export const maxDuration = 300; // 5 min — heavy aggregation
 const TOP_N_PER_PRODUCT = 20;
 const LOOKBACK_DAYS = 90;
 const MIN_CO_OCCURRENCE = 2; // need at least 2 to be a meaningful pair
-
-function isCronAuthorized(request: NextRequest): boolean {
-  const authHeader = request.headers.get('authorization') || '';
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && authHeader === `Bearer ${cronSecret}`) return true;
-  // Vercel cron requests carry a special header
-  if (request.headers.get('x-vercel-cron') === '1') return true;
-  // Allow internal calls from our own admin UI for manual rebuilds
-  if (request.headers.get('x-worder-internal') === '1') return true;
-  return process.env.NODE_ENV !== 'production';
-}
 
 interface ProductSummary {
   shopify_product_id: string;
@@ -50,7 +40,7 @@ interface ProductSummary {
 }
 
 export async function POST(request: NextRequest) {
-  if (!isCronAuthorized(request)) {
+  if (!authorizeCronRequest(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

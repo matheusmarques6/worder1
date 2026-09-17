@@ -302,6 +302,7 @@ export default function EmbedFormPage() {
         {/* Logo */}
         {form.logo_url && (
           <div className="mb-6 text-center">
+            {/* eslint-disable-next-line @next/next/no-img-element -- Form logo URL is user-provided and cannot be safely optimized or allowlisted. */}
             <img src={form.logo_url} alt="" className="h-12 mx-auto" />
           </div>
         )}

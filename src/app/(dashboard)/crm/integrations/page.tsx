@@ -1,7 +1,7 @@
 'use client'
 
 import { toast } from '@/components/ui/Toast'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -163,6 +163,7 @@ function IntegrationCard({
           style={{ backgroundColor: `${integration.color}20` }}
         >
           {integration.icon_url ? (
+            // eslint-disable-next-line @next/next/no-img-element -- integration API icon URL is not safely allowlisted.
             <img
               src={integration.icon_url}
               alt={integration.name}
@@ -252,6 +253,8 @@ function IntegrationCard({
 export default function IntegrationsPage() {
   const { user } = useAuthStore()
   const { currentStore } = useStoreStore() // ✅ NOVO: Pegar loja atual
+  const organizationId = user?.organization_id
+  const storeId = currentStore?.id
   const router = useRouter()
   const [categories, setCategories] = useState<IntegrationCategory[]>([])
   const [integrations, setIntegrations] = useState<Integration[]>([])
@@ -268,19 +271,15 @@ export default function IntegrationsPage() {
   const [showConfigModal, setShowConfigModal] = useState(false)
 
   // Fetch data
-  useEffect(() => {
-    fetchData()
-  }, [user?.organization_id, currentStore?.id])
-
-  const fetchData = async () => {
-    if (!user?.organization_id || !currentStore?.id) return
+  const fetchData = useCallback(async () => {
+    if (!organizationId || !storeId) return
 
     setLoading(true)
     try {
       const [categoriesRes, integrationsRes, installedRes] = await Promise.all([
         fetch('/api/integrations/categories'),
         fetch('/api/integrations'),
-        fetch(`/api/integrations/installed?organizationId=${user.organization_id}`),
+        fetch(`/api/integrations/installed?organizationId=${organizationId}`),
       ])
 
       const categoriesData = await categoriesRes.json()
@@ -301,7 +300,11 @@ export default function IntegrationsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [organizationId, storeId])
+
+  useEffect(() => {
+    fetchData()
+  }, [fetchData])
 
   // Filter integrations
   const filteredIntegrations = integrations.filter((int) => {
@@ -603,6 +606,7 @@ function IntegrationInstallModal({
   onSuccess: () => void
 }) {
   const { user } = useAuthStore()
+  const organizationId = user?.organization_id
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
   const [pipelines, setPipelines] = useState<any[]>([])
@@ -611,14 +615,10 @@ function IntegrationInstallModal({
   const [autoTags, setAutoTags] = useState<string[]>([])
   const [newTag, setNewTag] = useState('')
 
-  useEffect(() => {
-    fetchPipelines()
-  }, [])
-
-  const fetchPipelines = async () => {
-    if (!user?.organization_id) return
+  const fetchPipelines = useCallback(async () => {
+    if (!organizationId) return
     try {
-      const res = await fetch(`/api/deals?type=pipelines&organizationId=${user.organization_id}`)
+      const res = await fetch(`/api/deals?type=pipelines&organizationId=${organizationId}`)
       const data = await res.json()
       setPipelines(data.pipelines || [])
       if (data.pipelines?.length > 0) {
@@ -630,7 +630,11 @@ function IntegrationInstallModal({
     } catch (error) {
       console.error('Error fetching pipelines:', error)
     }
-  }
+  }, [organizationId])
+
+  useEffect(() => {
+    fetchPipelines()
+  }, [fetchPipelines])
 
   const handleInstall = async () => {
     if (!user?.organization_id) return
@@ -695,6 +699,7 @@ function IntegrationInstallModal({
               style={{ backgroundColor: `${integration.color}20` }}
             >
               {integration.icon_url ? (
+                // eslint-disable-next-line @next/next/no-img-element -- integration API icon URL is not safely allowlisted.
                 <img src={integration.icon_url} alt="" className="w-8 h-8" />
               ) : (
                 <span style={{ color: integration.color }} className="text-2xl font-bold">
@@ -850,26 +855,27 @@ function IntegrationConfigModal({
   onSuccess: () => void
 }) {
   const { user } = useAuthStore()
+  const organizationId = user?.organization_id
   const [loading, setLoading] = useState(false)
   const [pipelines, setPipelines] = useState<any[]>([])
   const [selectedPipeline, setSelectedPipeline] = useState(installed.default_pipeline_id || '')
   const [autoTags, setAutoTags] = useState<string[]>(installed.auto_tags || [])
   const [newTag, setNewTag] = useState('')
 
-  useEffect(() => {
-    fetchPipelines()
-  }, [])
-
-  const fetchPipelines = async () => {
-    if (!user?.organization_id) return
+  const fetchPipelines = useCallback(async () => {
+    if (!organizationId) return
     try {
-      const res = await fetch(`/api/deals?type=pipelines&organizationId=${user.organization_id}`)
+      const res = await fetch(`/api/deals?type=pipelines&organizationId=${organizationId}`)
       const data = await res.json()
       setPipelines(data.pipelines || [])
     } catch (error) {
       console.error('Error:', error)
     }
-  }
+  }, [organizationId])
+
+  useEffect(() => {
+    fetchPipelines()
+  }, [fetchPipelines])
 
   const handleSave = async () => {
     setLoading(true)
@@ -916,6 +922,7 @@ function IntegrationConfigModal({
               style={{ backgroundColor: `${integration.color}20` }}
             >
               {integration.icon_url ? (
+                // eslint-disable-next-line @next/next/no-img-element -- integration API icon URL is not safely allowlisted.
                 <img src={integration.icon_url} alt="" className="w-7 h-7" />
               ) : (
                 <span style={{ color: integration.color }} className="text-xl font-bold">

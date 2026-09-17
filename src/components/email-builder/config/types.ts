@@ -267,8 +267,9 @@ export const BLOCK_DEFS: BlockDef[] = [
       buttonRadius: 4, buttonFontSize: 14,
       buttonAlign: 'left' as 'left' | 'center' | 'right' | 'full',
       buttonPaddingV: 10, buttonPaddingH: 24,
-      // Image
-      imageWidth: 200, imageBorderRadius: 0,
+      // Image — a caixa é quadrada por padrão; a foto encaixa dentro
+      // dela preservando a proporção, em vez de esticar a altura.
+      imageWidth: 200, imageHeight: 200, imageBorderRadius: 0,
       // Display
       showOutOfStock: false,
       stackOnMobile: true,

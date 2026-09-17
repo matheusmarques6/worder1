@@ -108,6 +108,23 @@ export async function PUT(
       }
     }
 
+    // UTM desta campanha vive em settings.utm — merge para não apagar
+    // outras chaves do jsonb. `utm: null` remove a sobrescrita.
+    if (body.utm !== undefined) {
+      const { normalizeMessageUtmConfig } = await import('@/lib/tracking/link-params');
+      const { data: current } = await supabaseAdmin
+        .from('email_campaigns')
+        .select('settings')
+        .eq('id', campaignId)
+        .eq('organization_id', organizationId)
+        .maybeSingle();
+      const settings = { ...(((current as any)?.settings as Record<string, any>) || {}) };
+      const utm = normalizeMessageUtmConfig(body.utm);
+      if (utm) settings.utm = utm;
+      else delete settings.utm;
+      updateData.settings = settings;
+    }
+
     // Only allow editing draft or scheduled campaigns
     const { data: campaign, error } = await supabaseAdmin
       .from('email_campaigns')

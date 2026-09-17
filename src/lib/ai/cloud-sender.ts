@@ -54,6 +54,8 @@ export interface SendHumanizedReplyParams {
   inboundMessageId?: string;
   /** simulador/testes: pula os delays (typing/reply_delay/intervalo). */
   skipDelays?: boolean;
+  /** Set only by cloud-runner after an inbound handoff keyword matched. */
+  handoffConfirmation?: true;
 }
 
 export interface SendHumanizedReplyResult {
@@ -119,7 +121,7 @@ function resolveReplyDelayMs(agent: any): number {
 export async function sendHumanizedReply(
   params: SendHumanizedReplyParams,
 ): Promise<SendHumanizedReplyResult> {
-  const { account, conversation, text, agent, inboundMessageId, skipDelays } = params;
+  const { account, conversation, text, agent, inboundMessageId, skipDelays, handoffConfirmation } = params;
 
   const trimmed = (text || '').trim();
   if (!trimmed) {
@@ -135,7 +137,12 @@ export async function sendHumanizedReply(
     trimmed,
     agent?.settings?.safety?.blocked_topics,
   );
-  if (blockedTopic) {
+  const configuredConfirmation = agent?.settings?.safety?.handoff_confirmation_message;
+  const isConfiguredHandoffConfirmation = handoffConfirmation === true
+    && typeof configuredConfirmation === 'string'
+    && configuredConfirmation.trim() !== ''
+    && trimmed === configuredConfirmation.trim();
+  if (blockedTopic && !isConfiguredHandoffConfirmation) {
     const nowIso = new Date().toISOString();
     wlog.warn('whatsapp.ai.blocked_topic', {
       organization_id: conversation.organization_id,

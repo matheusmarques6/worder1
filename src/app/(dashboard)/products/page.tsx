@@ -429,6 +429,7 @@ const ProductRow = ({
         <td className="px-3 py-3">
           <div className="flex items-center gap-3">
             {product.image ? (
+              // eslint-disable-next-line @next/next/no-img-element -- store product URL is not safely allowlisted.
               <img
                 src={product.image}
                 alt={product.title}

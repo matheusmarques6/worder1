@@ -90,7 +90,7 @@ async def _turn_system_prompt(
             organization_id=organization_id,
         )
     )
-    assert result is not None
+    assert result.content is not None
     agent_calls = [r for r in llm.asked if not r.model.startswith("openai/")]
     return agent_calls[0].messages[0].content
 

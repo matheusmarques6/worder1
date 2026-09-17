@@ -16,7 +16,7 @@ Convenção: RF-xxx = funcional · RNF-xxx = não-funcional. Tudo aqui é rastre
 - **RF-005** Um agente gerador transforma as respostas do formulário em prompt na arquitetura em camadas e cria a versão inicial do agente (draft), já conectado ao número porém **pausado**.
 - **RF-006** Gate duplo de ativação: o admin testa na conta admin e aprova → o cliente testa em cenários específicos, aponta ajustes e aprova → só então o agente começa a rodar. A tela de revisão mostra prompt gerado, cenários e scores.
 - **RF-007** Ao final da conexão, o cliente informa o e-mail, recebe link para criar senha e acessa o hub.
-- **RF-008** Todo tenant novo entra em shadow de estreia por 7 dias: 100% das respostas avaliadas + fila de acompanhamento para o admin, sem reter envio.
+- **RF-008** Shadow de estreia não implementado: reserva sem consumidor retirada na Wave 4. Reintrodução depende de consumidor, janela e plano aprovados; não há garantia de acompanhamento extra.
 
 ### 1.2 Agente de conversação
 
@@ -97,7 +97,7 @@ Convenção: RF-xxx = funcional · RNF-xxx = não-funcional. Tudo aqui é rastre
 
 - **RNF-020** Endpoint de webhook: p99 < 500 ms sob 50 eventos/s.
 - **RNF-021** Capacidade: baseline de 1.500–3.500 eventos/dia com folga; absorver rajadas intra-hora de 20–50x o baseline (todos os tenants simultaneamente) sem perda, degradando apenas a latência dos proativos.
-- **RNF-022** Priorização sem starvation: weighted polling 8 (inbound) : 4 (domain events) : 2 (scheduled) : 1 (evals) com empréstimo de slots ociosos + promoção por idade (domain event > 2 min sobe a peso de inbound) — inbound tem latência mínima e pagamentos/cancelamentos de funil nunca são adiados indefinidamente.
+- **RNF-022** Priorização sem starvation: weighted polling 8 (inbound) : 4 (domain events) : 1 (evals) com empréstimo de slots ociosos + promoção por idade (domain event > 2 min sobe a peso de inbound) — inbound tem latência mínima e pagamentos/cancelamentos de funil nunca são adiados indefinidamente. Scheduled não participa dessa política.
 - **RNF-023** Isolamento de vazão: teto de concorrência por tenant (default 3) — tenant em burst não afoga os demais. Premissa do MVP: runtime é um único processo asyncio (semáforo em memória é correto); multi-processo/2ª VPS exige semáforo distribuído (lease em Postgres/Redis) antes de escalar.
 - **RNF-024** Workers e senders são stateless; replicação horizontal (2ª VPS nas mesmas filas) está prevista, condicionada à migração do semáforo por tenant para mecanismo distribuído.
 - **RNF-025** Latência de resposta do agente: o delay humanizado é parte do produto; alvo operacional de p95 < 60s entre o fim do debounce e a gravação na outbox em operação normal.
@@ -181,7 +181,7 @@ Agrupadas por domínio. Todas as de negócio carregam `tenant_id` + RLS.
 | **Funnel** | Configuração de funil por ocasião | ocasião (pix\|checkout\|carrinho), cadência de toques, copy/templates, canal | → Tenant |
 | **ScheduledTouch** | Toque futuro agendado de funil/follow-up | due_at, funil, contato, nº do toque, status | → Funnel, Contact |
 | **MessageOutbox** | Intenção de envio (transactional outbox) | payload, idempotency_key (enviada em biz_opaque_callback_data), status (pending\|sending\|sent\|failed\|unknown), attempt_count, provider_message_id, locked_by/locked_until (lease do sending), next_attempt_at, last_error, request_started_at, payload_hash | → Conversation, ChannelAccount |
-| **Filas pgmq** (infra) | q_inbound, q_domain_events, q_scheduled, q_evals + DLQs | visibility timeout, read_ct | transportam refs de WebhookEvent/Conversation |
+| **Filas pgmq** (infra) | q_inbound, q_domain_events, q_scheduled, q_evals + DLQs | visibility timeout, read_ct | inventário físico; q_scheduled e sua DLQ preservadas sem consumidor, para inspeção manual |
 
 ### 3.6 Avaliação e observabilidade
 

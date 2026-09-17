@@ -19,7 +19,7 @@ import { callAI, AIProvider } from '@/lib/whatsapp/ai-providers'
 import { getActiveTools } from './tools/registry'
 import { runToolLoop } from './tools/loop'
 import { trackAiUsage } from './cost-tracker'
-import { checkAiBudget, AiBudgetExceededError } from './budget'
+import { checkAiBudget } from './budget'
 import { decodeProviderKey } from './provider-key-codec'
 import { isWithinSchedule } from './guards'
 
@@ -73,6 +73,7 @@ export class AIAgentEngine {
     const startTime = Date.now()
     const { conversationId, conversationHistory, contactInfo } = context
     const currentMessage = conversationHistory[conversationHistory.length - 1]?.content || ''
+    let providerUsagePending = false
 
     try {
       // 1. Validar agente
@@ -169,12 +170,10 @@ export class AIAgentEngine {
 
         await this.logUsage({
           conversationId,
-          // loopResult.{prompt,completion}Tokens = soma real de todas as
-          // rodadas do tool-loop (cada rodada carrega usage do provider) —
-          // sem isso o checkAiBudget não via custo de agentes com tools.
+          // Consumo financeiro é por rodada; a soma fica só nas estatísticas.
+          usageTracked: true,
           inputTokens: loopResult.promptTokens,
           outputTokens: loopResult.completionTokens,
-          costUsdOverride: loopResult.costUsd,
           responseTimeMs,
           sourcesUsed,
           actionsTriggered,
@@ -197,6 +196,10 @@ export class AIAgentEngine {
         }
       }
 
+      // O RAG pode ter persistido consumo desde o gate inicial.
+      // O ramo de tools revalida cada emissão dentro de runToolLoop.
+      await checkAiBudget(this.organizationId, { throwOnExceeded: true })
+      providerUsagePending = true
       const llmResponse = await callAI(
         {
           provider: this.agent.provider as AIProvider,
@@ -216,6 +219,8 @@ export class AIAgentEngine {
       // 9. Registrar uso
       const responseTimeMs = Date.now() - responseTimeMs0
 
+      // O tracker é best-effort; falha posterior de stats não é novo consumo.
+      providerUsagePending = false
       await this.logUsage({
         conversationId,
         inputTokens: llmResponse.usage?.promptTokens,
@@ -237,13 +242,15 @@ export class AIAgentEngine {
       }
 
     } catch (error: any) {
+      // Sem emissão pendente não há consumo a registrar; o loop mede suas rodadas.
+      if (!providerUsagePending) throw error
+      providerUsagePending = false
       const responseTimeMs = Date.now() - startTime
       
       // Registrar erro
       await this.logUsage({
         conversationId,
-        inputTokens: 0,
-        outputTokens: 0,
+        costUsdOverride: null,
         responseTimeMs,
         sourcesUsed: [],
         actionsTriggered: [],
@@ -299,13 +306,14 @@ export class AIAgentEngine {
     inputTokens?: number
     outputTokens?: number
     costUsdOverride?: number | null
+    usageTracked?: boolean
     responseTimeMs: number
     sourcesUsed: string[]
     actionsTriggered: string[]
     success: boolean
     errorMessage?: string
   }): Promise<void> {
-    await trackAiUsage({
+    if (!params.usageTracked) await trackAiUsage({
       organizationId: this.organizationId,
       provider: this.agent.provider,
       model: this.agent.model,
@@ -319,6 +327,7 @@ export class AIAgentEngine {
       success: params.success,
       error: params.errorMessage,
       metadata: {
+        billable: true,
         chunks_used: params.sourcesUsed.length,
         sources_used: params.sourcesUsed,
         actions_triggered: params.actionsTriggered,

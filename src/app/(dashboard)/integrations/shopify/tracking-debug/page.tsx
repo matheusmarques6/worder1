@@ -677,7 +677,7 @@ export default function TrackingDebugPage() {
       <div className="bg-white border border-gray-200 rounded-xl p-4 flex items-end gap-3">
         <div className="flex-1">
           <p className="text-[13px] font-semibold text-gray-900 mb-0.5 flex items-center gap-1.5">
-            <RefreshCw className="w-3.5 h-3.5 text-purple-500" /> Re-vincular checkouts "Desconhecido"
+            <RefreshCw className="w-3.5 h-3.5 text-purple-500" /> Re-vincular checkouts &quot;Desconhecido&quot;
           </p>
           <p className="text-[11px] text-gray-500">
             Tenta resolver contato por email/customer_id em checkouts antigos sem vínculo. Para os que ainda não têm email salvo,
@@ -769,7 +769,7 @@ export default function TrackingDebugPage() {
             </p>
             <p className="text-[11.5px] text-amber-800 mt-0.5">
               O auto-install via API falhou (provável: integração manual sem nossa Web Pixel Extension publicada).
-              Cole o código abaixo em <strong>Shopify Admin → Configurações → Customer Events → Adicionar pixel personalizado</strong> e marque "Não obrigatório" em privacidade.
+              Cole o código abaixo em <strong>Shopify Admin → Configurações → Customer Events → Adicionar pixel personalizado</strong> e marque &quot;Não obrigatório&quot; em privacidade.
             </p>
           </div>
           <div className="p-4 space-y-2">
@@ -788,11 +788,11 @@ export default function TrackingDebugPage() {
             </div>
             <ol className="text-[11.5px] text-gray-600 space-y-0.5 pl-4 list-decimal">
               <li>No admin da Shopify, abra <strong>Configurações → Customer Events</strong>.</li>
-              <li>Clique em <strong>Adicionar pixel personalizado</strong> e nomeie como "Worder".</li>
+              <li>Clique em <strong>Adicionar pixel personalizado</strong> e nomeie como &quot;Worder&quot;.</li>
               <li>Cole o código acima no editor.</li>
-              <li>Em "Privacidade do cliente", mantenha <strong>Não obrigatório</strong> (ou ajuste conforme sua política LGPD).</li>
+              <li>Em &quot;Privacidade do cliente&quot;, mantenha <strong>Não obrigatório</strong> (ou ajuste conforme sua política LGPD).</li>
               <li>Clique em <strong>Salvar</strong> e depois em <strong>Conectar</strong>.</li>
-              <li>Volte aqui e clique em "Atualizar" — pixelInstalled deve virar verde após o primeiro evento.</li>
+              <li>Volte aqui e clique em &quot;Atualizar&quot; — pixelInstalled deve virar verde após o primeiro evento.</li>
             </ol>
           </div>
         </div>
@@ -855,7 +855,7 @@ export default function TrackingDebugPage() {
           {(data.install.webhookUrlMismatchCount || 0) > 0 && (
             <div className="px-4 py-2.5 bg-red-50 border-t border-red-200 text-[11.5px] text-red-800">
               ⚠️ <strong>{data.install.webhookUrlMismatchCount} subscription{(data.install.webhookUrlMismatchCount || 0) > 1 ? 's' : ''} apontando pra URL errada.</strong>{' '}
-              Shopify está mandando os eventos pra um endpoint que não é o nosso. Use <strong>"Reinstalar tudo"</strong> acima — ele apaga as antigas e cria no endpoint certo.
+              Shopify está mandando os eventos pra um endpoint que não é o nosso. Use <strong>&quot;Reinstalar tudo&quot;</strong> acima — ele apaga as antigas e cria no endpoint certo.
             </div>
           )}
           {data.install.syncCheckoutsEnabled === false && (

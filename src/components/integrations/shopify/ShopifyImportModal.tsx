@@ -5,7 +5,7 @@
 // src/components/integrations/shopify/ShopifyImportModal.tsx
 // =============================================
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   X,
@@ -92,11 +92,34 @@ export default function ShopifyImportModal({
   // =============================================
   // Load initial data
   // =============================================
-  useEffect(() => {
-    loadInitialData()
-  }, [])
+  const loadInitialData = useCallback(async () => {
+    const loadAvailableTags = async () => {
+      setLoadingTags(true)
+      try {
+        const res = await fetch(`/api/shopify/import-customers?storeId=${storeId}&includeTags=true`)
 
-  const loadInitialData = async () => {
+        const contentType = res.headers.get('content-type')
+        if (!contentType || !contentType.includes('application/json')) {
+          console.error('Invalid response for filters')
+          return
+        }
+
+        const data = await res.json()
+        if (data.success) {
+          if (data.availableTags) {
+            setAvailableTags(data.availableTags)
+          }
+          if (data.emailStatusOptions) {
+            setEmailStatusOptions(data.emailStatusOptions)
+          }
+        }
+      } catch (err) {
+        console.error('Error loading filters:', err)
+      } finally {
+        setLoadingTags(false)
+      }
+    }
+
     setStatus('loading')
     try {
       // Fetch customer count (sem tags inicialmente, mais rápido)
@@ -127,40 +150,17 @@ export default function ShopifyImportModal({
       setStatus('idle')
       
       // Buscar tags em background (não bloqueia a UI)
-      loadAvailableTags()
+      void loadAvailableTags()
     } catch (err: any) {
       console.error('Error loading data:', err)
       setError(err.message || 'Erro ao carregar dados')
       setStatus('error')
     }
-  }
+  }, [storeId, organizationId])
 
-  const loadAvailableTags = async () => {
-    setLoadingTags(true)
-    try {
-      const res = await fetch(`/api/shopify/import-customers?storeId=${storeId}&includeTags=true`)
-      
-      const contentType = res.headers.get('content-type')
-      if (!contentType || !contentType.includes('application/json')) {
-        console.error('Invalid response for filters')
-        return
-      }
-      
-      const data = await res.json()
-      if (data.success) {
-        if (data.availableTags) {
-          setAvailableTags(data.availableTags)
-        }
-        if (data.emailStatusOptions) {
-          setEmailStatusOptions(data.emailStatusOptions)
-        }
-      }
-    } catch (err) {
-      console.error('Error loading filters:', err)
-    } finally {
-      setLoadingTags(false)
-    }
-  }
+  useEffect(() => {
+    loadInitialData()
+  }, [loadInitialData])
 
   const toggleShopifyTag = (tag: string) => {
     setSelectedShopifyTags(prev => 

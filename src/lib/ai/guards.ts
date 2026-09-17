@@ -30,6 +30,7 @@ export function matchHandoffKeyword(
   const haystack = normalizeForMatch(text);
   if (!haystack) return null;
   for (const kw of keywords) {
+    if (typeof kw !== 'string') continue;
     const needle = normalizeForMatch(kw);
     if (needle && haystack.includes(needle)) return kw;
   }
@@ -52,7 +53,7 @@ export interface TransferCooldownParams {
   /** whatsapp_cloud_conversations.ai_transferred_at (ISO) — null se nunca transferiu. */
   transferredAt: string | null | undefined;
   /** behavior.cooldown_after_transfer em SEGUNDOS (default 300; <=0 desliga). */
-  cooldownSeconds: number | null | undefined;
+  cooldownSeconds: number | boolean | null | undefined;
   /** Date.now() injetável para teste. */
   now?: number;
 }
@@ -61,6 +62,7 @@ export interface TransferCooldownParams {
 export function isTransferCooldownActive(params: TransferCooldownParams): boolean {
   const { transferredAt, now = Date.now() } = params;
   if (!transferredAt) return false;
+  if (typeof params.cooldownSeconds === 'boolean') return false;
   const seconds = Number(params.cooldownSeconds ?? 300);
   if (!Number.isFinite(seconds) || seconds <= 0) return false;
   const transferredMs = new Date(transferredAt).getTime();
@@ -104,13 +106,14 @@ export function isWithinSchedule(
   const [hours, minutes] = timeString.split(':').map(Number);
   const currentTime = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
 
-  const { start, end } = schedule.hours || { start: '08:00', end: '18:00' };
-  // `as string`: se `schedule.hours` vier parcial (só start ou só end, jsonb
-  // de configuração ruim), o lado que faltar é `undefined` em runtime — igual
-  // ao `engine.ts` original, que não tinha fallback nenhum aqui (comparação
-  // com `undefined` dá sempre `false`, então bloqueia em silêncio). O cast é
-  // só pra satisfazer o `strictNullChecks`; o comportamento não mudou.
-  const inTimeRange = currentTime >= (start as string) && currentTime <= (end as string);
+  const hoursConfig = schedule.hours as unknown;
+  const { start, end } = hoursConfig === undefined
+    ? { start: '08:00', end: '18:00' }
+    : hoursConfig && typeof hoursConfig === 'object' && !Array.isArray(hoursConfig)
+      ? hoursConfig as { start?: unknown; end?: unknown }
+      : { start: undefined, end: undefined };
+  if (!isCanonicalTime(start) || !isCanonicalTime(end)) return false;
+  const inTimeRange = currentTime >= start && currentTime <= end;
 
   const dayFormatter = new Intl.DateTimeFormat('en-US', {
     timeZone: tz,
@@ -122,8 +125,24 @@ export function isWithinSchedule(
   };
   const today = dayMap[dayName];
 
-  const days = schedule.days || ['mon', 'tue', 'wed', 'thu', 'fri'];
+  const days = schedule.days === undefined ? ['mon', 'tue', 'wed', 'thu', 'fri'] : schedule.days;
+  if (!Array.isArray(days) || !days.every((day) => typeof day === 'string' && Object.hasOwn(dayMap, day))) {
+    return false;
+  }
   const inDayRange = days.includes(today);
 
   return inTimeRange && inDayRange;
+}
+
+function isCanonicalTime(value: unknown): value is string {
+  return typeof value === 'string' && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value);
+}
+
+/** Only the agent writers reject the legacy boolean; guards keep it harmless. */
+export function hasBooleanTransferCooldown(settings: unknown): boolean {
+  if (!settings || typeof settings !== 'object') return false;
+  const behavior = (settings as { behavior?: unknown }).behavior;
+  return !!behavior
+    && typeof behavior === 'object'
+    && typeof (behavior as { cooldown_after_transfer?: unknown }).cooldown_after_transfer === 'boolean';
 }

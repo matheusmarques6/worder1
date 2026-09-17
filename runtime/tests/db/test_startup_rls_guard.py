@@ -81,6 +81,8 @@ class TestTheGuardIsWiredIntoTheOnlySeam:
         conn = await _connect(dsn, WORKER_ROLE, WORKER_ROLE)
         try:
             assert not conn.closed
+            timeout = await (await conn.execute("show statement_timeout")).fetchone()
+            assert timeout == ("15s",)
         finally:
             await conn.close()
 
@@ -112,6 +114,7 @@ class TestTheTurnConnectionsAreGuarded:
                     organization_id=organization_id,
                     contact_id=uuid.uuid4(),
                     conversation_id=uuid.uuid4(),
+                    touch_id=uuid.UUID("00000000-0000-4000-8000-000000000095"),
                     event_family="cart.abandoned",
                 )
             )

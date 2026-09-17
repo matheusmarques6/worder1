@@ -67,35 +67,23 @@ export async function GET(request: NextRequest) {
     let organizationId: string | null = null;
 
     // Try 1: State saved in oauth_states (Worder OAuth flow).
-    // Schema vivo: (state, metadata); formato antigo: (state_token, data).
     if (state) {
       const nowIso = new Date().toISOString();
-      let statePayload: any = null;
 
-      const { data: modernRow, error: modernErr } = await supabase
+      const { data: stateRow, error: stateErr } = await supabase
         .from('oauth_states')
         .select('metadata')
         .eq('state', state)
         .gte('expires_at', nowIso)
         .maybeSingle();
-      if (!modernErr && modernRow?.metadata) statePayload = modernRow.metadata;
-      if (modernErr) {
-        const { data: legacyRow } = await supabase
-          .from('oauth_states')
-          .select('data')
-          .eq('state_token', state)
-          .gte('expires_at', nowIso)
-          .maybeSingle();
-        if (legacyRow?.data) statePayload = legacyRow.data;
-      }
+      if (stateErr) console.warn('[Shopify Callback] leitura do state falhou:', stateErr);
+
+      const statePayload: any = stateRow?.metadata ?? null;
 
       if (statePayload?.organization_id) {
         organizationId = statePayload.organization_id;
-        // Delete used state (nos dois formatos, best-effort)
-        const del = await supabase.from('oauth_states').delete().eq('state', state);
-        if (del.error) {
-          await supabase.from('oauth_states').delete().eq('state_token', state);
-        }
+        // Consumir o state usado
+        await supabase.from('oauth_states').delete().eq('state', state);
         console.log('[Shopify Callback] Resolved org via oauth_states:', organizationId);
       }
     }
@@ -241,6 +229,13 @@ export async function GET(request: NextRequest) {
         return NextResponse.redirect(`${APP_URL}/integrations/shopify?error=save_failed`);
       }
       storeId = newStore.id;
+      // A loja nasce com remetente próprio: <nome-da-loja>@worder.email.
+      try {
+        const { ensureStoreSharedSender } = await import('@/lib/email/shared-sender');
+        await ensureStoreSharedSender(storeId);
+      } catch (e) {
+        console.warn('[Shopify Callback] remetente compartilhado não alocado:', (e as Error).message);
+      }
     }
 
     // =============================================
@@ -376,7 +371,7 @@ export async function GET(request: NextRequest) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Internal-Request': 'true',
+          authorization: `Bearer ${process.env.INTERNAL_API_SECRET || process.env.CRON_SECRET || ''}`,
         },
         body: JSON.stringify({ storeId }),
       }).catch(() => {});

@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getAuthClient, authError } from '@/lib/api-utils';
+import { sanitizeSearchTerm } from '@/lib/db/search-term'
 export const dynamic = 'force-dynamic';
 
 // =============================================
@@ -30,6 +31,9 @@ export async function GET(request: NextRequest) {
     const orderId = searchParams.get('order_id');
     const storeId = searchParams.get('storeId') || searchParams.get('store_id');
     const search = searchParams.get('search');
+    // O termo vai para dentro de um filtro do PostgREST: vírgula e
+    // parêntese deixariam de ser texto e passariam a ser consulta.
+    const buscaSegura = sanitizeSearchTerm(search)
     const limit = parseInt(searchParams.get('limit') || '50');
     const offset = parseInt(searchParams.get('offset') || '0');
 
@@ -87,8 +91,11 @@ export async function GET(request: NextRequest) {
     if (orderId) query = query.eq('order_id', orderId);
 
     // Busca por texto
-    if (search) {
-      query = query.or(`title.ilike.%${search}%,description.ilike.%${search}%,ticket_number.eq.${parseInt(search) || 0}`);
+    if (buscaSegura) {
+      // O número do ticket entra como inteiro; qualquer coisa que não seja
+      // número vira 0, que não casa com ticket algum.
+      const numeroDoTicket = Number.parseInt(buscaSegura, 10)
+      query = query.or(`title.ilike.%${buscaSegura}%,description.ilike.%${buscaSegura}%,ticket_number.eq.${Number.isFinite(numeroDoTicket) ? numeroDoTicket : 0}`);
     }
 
     const { data, error, count } = await query;

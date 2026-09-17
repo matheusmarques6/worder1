@@ -234,6 +234,7 @@ export function AssignModal({
                   }`}
                 >
                   {user.avatar_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- user or agent profile URL is not safely allowlisted.
                     <img 
                       src={user.avatar_url} 
                       alt={user.name}

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import {
@@ -41,6 +41,7 @@ export default function IntegrationConfigPage() {
   const router = useRouter()
   const { user } = useAuthStore()
   const slug = params.slug as string
+  const organizationId = user?.organization_id
 
   const [integration, setIntegration] = useState<Integration | null>(null)
   const [installed, setInstalled] = useState<InstalledIntegration | null>(null)
@@ -55,13 +56,7 @@ export default function IntegrationConfigPage() {
     }
   }, [slug, router])
 
-  useEffect(() => {
-    if (slug && slug !== 'whatsapp') {
-      loadIntegration()
-    }
-  }, [slug, user])
-
-  const loadIntegration = async () => {
+  const loadIntegration = useCallback(async () => {
     try {
       setLoading(true)
 
@@ -78,8 +73,8 @@ export default function IntegrationConfigPage() {
       setIntegration(int)
 
       // Buscar se já está instalada
-      if (user?.organization_id) {
-        const instRes = await fetch(`/api/integrations/installed?organizationId=${user.organization_id}`)
+      if (organizationId) {
+        const instRes = await fetch(`/api/integrations/installed?organizationId=${organizationId}`)
         const instData = await instRes.json()
         const inst = instData.installed?.find((i: any) => i.integration_id === int.id)
         setInstalled(inst || null)
@@ -90,7 +85,13 @@ export default function IntegrationConfigPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [slug, organizationId])
+
+  useEffect(() => {
+    if (slug && slug !== 'whatsapp') {
+      loadIntegration()
+    }
+  }, [slug, loadIntegration])
 
   const handleInstall = async () => {
     if (!user?.organization_id || !integration) return
@@ -172,6 +173,7 @@ export default function IntegrationConfigPage() {
                 style={{ backgroundColor: `${integration.color}20` }}
               >
                 {integration.icon_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- integration API icon URL is not safely allowlisted.
                   <img src={integration.icon_url} alt="" className="w-10 h-10" />
                 ) : (
                   <span style={{ color: integration.color }} className="text-2xl font-bold">

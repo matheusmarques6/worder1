@@ -8,6 +8,7 @@ import { useWhatsAppPhonebooks } from '@/hooks/useWhatsApp'
 export default function PhonebooksPage() {
   const { phonebooks, contacts, isLoading, fetchPhonebooks, fetchContacts, createPhonebook, addContacts, updateContact, importCSV, deletePhonebook } = useWhatsAppPhonebooks()
   const [selectedPhonebook, setSelectedPhonebook] = useState<any>(null)
+  const selectedPhonebookId = selectedPhonebook?.id
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showAddContactModal, setShowAddContactModal] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
@@ -20,8 +21,8 @@ export default function PhonebooksPage() {
   const [editForm, setEditForm] = useState({ name: '', mobile: '', email: '' })
   const [savingEdit, setSavingEdit] = useState(false)
 
-  useEffect(() => { fetchPhonebooks() }, [])
-  useEffect(() => { if (selectedPhonebook) fetchContacts(selectedPhonebook.id) }, [selectedPhonebook])
+  useEffect(() => { fetchPhonebooks() }, [fetchPhonebooks])
+  useEffect(() => { if (selectedPhonebookId) fetchContacts(selectedPhonebookId) }, [fetchContacts, selectedPhonebookId])
 
   const handleCreatePhonebook = async () => {
     if (!formData.name) return

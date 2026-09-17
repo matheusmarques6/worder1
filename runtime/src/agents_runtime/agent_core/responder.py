@@ -42,13 +42,14 @@ import psycopg
 import agents_runtime
 from agents_runtime.agent_core import openrouter
 from agents_runtime.agent_core.guards import (
+    _number,
+    behavior_of,
     evaluate_inbound_guards,
     resolve_blocked_topic,
     resolve_handoff,
     schedule_silence,
 )
 from agents_runtime.agent_core.llm import (
-    ChatRequest,
     LlmPort,
     Message,
     ToolCall,
@@ -83,8 +84,12 @@ from agents_runtime.agent_core.prompt_compiler import (
 )
 from agents_runtime.agent_core.providers import NoOrgLlmKey, resolve_agent_llm, scoped_agent_llm
 from agents_runtime.agent_core.think_gate import PendingMessage, should_think
+from agents_runtime.agent_core.tool_loop import MAX_TOOL_ROUNDS as MAX_TOOL_ROUNDS
+from agents_runtime.agent_core.tool_loop import generate_with_tools
+from agents_runtime.agent_core.trace import AttemptTraceCapture, ReplyDraft
 from agents_runtime.clock import Clock, SystemClock
 from agents_runtime.commerce.moments import apply_moment_restrictions, resolve_moments
+from agents_runtime.config import QueueingConfig, config_from_env
 from agents_runtime.evals.pack import load_rubrics
 from agents_runtime.judges.pre_send import (
     JUDGE_MODEL,
@@ -94,7 +99,7 @@ from agents_runtime.judges.pre_send import (
     with_merchant_judges,
 )
 from agents_runtime.obs.telemetry import annotate
-from agents_runtime.queueing.jobs import InboundJob
+from agents_runtime.queueing.jobs import InboundJob, MissionTouchJob
 from agents_runtime.repository import agent as agent_repo
 from agents_runtime.repository import alerts as alerts_repo
 from agents_runtime.repository import custom_tools as custom_tools_repo
@@ -106,10 +111,15 @@ from agents_runtime.repository import missions as missions_repo
 from agents_runtime.repository import moments as moments_repo
 from agents_runtime.repository import orders as orders_repo
 from agents_runtime.repository import provider_keys as keys_repo
-from agents_runtime.repository.scope import WORKER_ROLE, assert_rls_enforced, scope_to_organization
+from agents_runtime.repository.scope import (
+    WORKER_ROLE,
+    assert_rls_enforced,
+    scope_to_organization,
+    set_statement_timeout,
+)
 from agents_runtime.tools.base import ToolContext, run_tool
 from agents_runtime.tools.coupon import BENEFIT_KINDS, OBJECT_KINDS, CreateCoupon
-from agents_runtime.tools.custom_http import CustomHttpTool, tool_spec_for
+from agents_runtime.tools.custom_http import CustomHttpTool, CustomToolRow, tool_spec_for
 from agents_runtime.tools.knowledge import SearchKnowledge
 
 logger = logging.getLogger(__name__)
@@ -128,9 +138,9 @@ def delivery_flags(settings: Mapping | None) -> tuple[bool, bool]:
     )
 
 
-#: A costura do motor, intocada desde o E1: o worker chama isto e nada mais.
-#: `None` significa "conclua o turno e não envie nada" (S8).
-Responder = Callable[[InboundJob], Awaitable[dict[str, Any] | None]]
+#: O worker aceita conteúdo e metadados juntos, na mesma transação do CAS.
+#: Conteúdo/trace nulos significam "conclua o turno e não envie nada" (S8).
+Responder = Callable[[InboundJob], Awaitable[ReplyDraft]]
 
 FIXED_REPLY = "Recebemos sua mensagem! Já estamos cuidando do seu pedido. 🧡"
 
@@ -139,12 +149,6 @@ TRANSCRIPT_LIMIT = 20
 
 #: Variável de ambiente que sobrescreve de onde as rubricas do Judge 1 são lidas.
 RUBRICS_DIRECTORY_VARIABLE = "AGENTS_RUBRICS_DIR"
-
-#: Rodadas de tool por TENTATIVA de geração (9.3b). Esgotou, a chamada final
-#: sai sem tools — o modelo é obrigado a concluir em texto. Regeneração do
-#: Judge reabre o loop, e o dinheiro aguenta: o offer engine reusa antes de
-#: emitir e o idempotency_key mata a duplicata no banco.
-MAX_TOOL_ROUNDS = 3
 
 #: O que o modelo lê antes de decidir pedir. A autoridade está no texto: quem
 #: decide é o engine — o modelo só PEDE (§3.3.5).
@@ -193,13 +197,15 @@ def _money_lines(grants: Sequence[incentives_repo.Grant]) -> tuple[str, ...]:
     )
 
 
-def fixed_responder(text: str = FIXED_REPLY):
+def fixed_responder(text: str = FIXED_REPLY, *, agent_id: UUID | None = None):
     """A resposta constante do E1. Continua existindo porque os cenários do
     motor a usam: enquanto a resposta é fixa, toda diferença observada é do
     motor."""
 
-    async def respond(job: InboundJob) -> dict[str, Any]:
-        return {"text": text}
+    async def respond(job: InboundJob) -> ReplyDraft:
+        trace = (AttemptTraceCapture().build(agent_id=agent_id, input_text="", output_text=text,
+                                            selected_attempt=None) if agent_id else None)
+        return ReplyDraft({"text": text}, trace)
 
     return respond
 
@@ -263,6 +269,7 @@ def build_responder(
     base_secret: str | None = None,
     shopify_transport: httpx.AsyncBaseTransport | None = None,
     turn_llm_call_limit: int | None = None,
+    config: QueueingConfig | None = None,
 ):
     """O responder real. `llm` é a porta da PLATAFORMA (Judge 1 + embeddings —
     D4); com `agent_llm_from_org_keys` ligado (produção), a resposta do agente
@@ -273,15 +280,21 @@ def build_responder(
     `None` lê o default/override de ambiente uma vez aqui, na composição, do
     mesmo jeito que `rubrics_directory` lê o seu."""
     clock = clock or SystemClock()
+    config = config or QueueingConfig()
     rubrics = load_rubrics(rubrics_directory or default_rubrics_directory())
     turn_llm_call_limit = (
         turn_llm_call_limit if turn_llm_call_limit is not None else default_turn_llm_call_limit()
     )
 
-    async def respond(job: InboundJob) -> dict[str, Any] | None:
-        async with await psycopg.AsyncConnection.connect(dsn, autocommit=True) as conn:
+    async def respond(job: InboundJob) -> ReplyDraft:
+        async with await psycopg.AsyncConnection.connect(
+            dsn,
+            autocommit=True,
+            connect_timeout=config.connect_timeout_seconds,
+        ) as conn:
             if set_role:
                 await conn.execute("set role " + set_role)
+            await set_statement_timeout(conn, config.statement_timeout_ms)
             await assert_rls_enforced(conn, WORKER_ROLE)
 
             # --- leitura: uma transação curta, fechada antes de qualquer rede
@@ -350,10 +363,23 @@ def build_responder(
                 # Item 30: o estado que os guards de comportamento leem. Vem do
                 # espelho legado do inbox porque a canônica não tem o dado —
                 # ver `load_legacy_guard_state`.
+                #
+                # W3-T6a: os dois knobs pulam a varredura de mensagens que
+                # este agente não usa. `version` pode ainda ser None aqui —
+                # o `NoActiveVersion` só é levantado depois — e `behavior_of`
+                # trata `{}` como "sem teto, sem stop_on_human_reply
+                # desligado" (defaults True/True), o mesmo caminho que já ia
+                # levantar a exceção sem criar `AttributeError` antes dela.
+                behavior = behavior_of(version.settings if version is not None else {})
+                count_bot = (_number(behavior.get("max_messages_per_conversation"), 0) or 0) > 0
+                check_human = behavior.get("stop_on_human_reply") is not False
                 guard_state = await agent_repo.load_legacy_guard_state(
                     conn,
                     organization_id=job.organization_id,
                     conversation_id=job.conversation_id,
+                    channel_account_id=job.channel_account_id,
+                    count_bot=count_bot,
+                    check_human=check_human,
                 )
                 custom_rows = await custom_tools_repo.load_enabled_custom_tools(conn)
                 key_rows = (
@@ -367,10 +393,47 @@ def build_responder(
             if version is None:
                 raise NoActiveVersion(f"tenant {job.organization_id} has no active agent version")
 
+            capture = AttemptTraceCapture()
+            conversation = _as_chat(transcript + pending)
+            input_text = "\n".join(f"{message.role}: {message.content}" for message in conversation)
+
+            def accepted(content: dict, attempt: int | None = None) -> ReplyDraft:
+                return ReplyDraft(content, capture.build(
+                    agent_id=version.agent_id, input_text=input_text,
+                    output_text=content["text"], selected_attempt=attempt,
+                ))
+
             if not pending:
                 # Janela vazia: não há o que responder, e a conversa precisa
                 # avançar mesmo assim — senão o coalescer a recria para sempre.
-                return None
+                return ReplyDraft(None, None)
+
+            # W3-GD-05: a arbitragem roda AGORA, antes de qualquer guard de
+            # comportamento — não só na hora de decidir o conteúdo (mais
+            # abaixo). Antes disso, missão ausente só produzia o alerta
+            # quando NENHUM outro guard silenciava o turno primeiro: um guard
+            # `ai_disabled`, horário ou mídia calava a resposta na sua própria
+            # linha e o `arbitrate` nunca era alcançado, engolindo o
+            # diagnóstico. O silêncio em si continua decidido pelo guard que
+            # disparar primeiro (ordem inalterada); isto só garante que o
+            # alerta é observável mesmo quando outro motivo venceu a corrida.
+            try:
+                mission_winner, _losers = arbitrate(
+                    owner=owner_mission, discovery=discovery_mission
+                )
+            except MissionUnavailable:
+                mission_winner = None
+                async with conn.transaction():
+                    await scope_to_organization(conn, job.organization_id)
+                    await alerts_repo.open_alert(
+                        conn,
+                        organization_id=job.organization_id,
+                        type=alerts_repo.NO_ACTIVE_MISSION,
+                        severity="warning",
+                        title="Inbound sem missão ativa — nada foi respondido",
+                        payload={"conversation_id": str(job.conversation_id)},
+                        dedup_key=f"no-active-mission:{job.conversation_id}",
+                    )
 
             # Item 41: UM teto por turno, compartilhado pelas três finalidades
             # (agent_reply, judge_pre, embedding) que `metered(...)` constrói
@@ -393,6 +456,7 @@ def build_responder(
                         detail=step_detail,
                         agent_id=version.agent_id,
                         conversation_id=job.conversation_id,
+                        channel_account_id=job.channel_account_id,
                     )
                 except Exception:  # adereço nunca vira causa de morte do turno
                     logger.debug("run-step emit failed", exc_info=True)
@@ -410,7 +474,7 @@ def build_responder(
             )
             if silence is not None:
                 await note_step("skipped", silence.detail)
-                return None
+                return ReplyDraft(None, None)
 
             # --- handoff por keyword (item 30): o cliente pediu um humano.
             # Depois dos guards e ANTES da cascata de chave BYO — um pedido de
@@ -423,6 +487,7 @@ def build_responder(
                     organization_id=job.organization_id,
                     conversation_id=job.conversation_id,
                     reason="handoff_keyword",
+                    channel_account_id=job.channel_account_id,
                     severity="warning",
                     title="Cliente pediu atendimento humano — IA transferida",
                     payload={"keyword": handoff.keyword},
@@ -433,15 +498,15 @@ def build_responder(
                     + ("" if marked else UNMIRRORED_DETAIL),
                 )
                 if not handoff.confirmation:
-                    return None
+                    return ReplyDraft(None, None)
                 # A confirmação sai pelo caminho normal de envio. Falha na
                 # entrega não desfaz a transferência: quem já foi passado para
                 # um humano continua passado.
                 split, rhythm = delivery_flags(version.settings)
-                return {
+                return accepted({
                     "text": handoff.confirmation,
                     "humanize": {"split": split, "rhythm": rhythm},
-                }
+                })
 
             # --- horário de atendimento (item 30). DEPOIS do handoff, como
             # no TS: lá o horário é checado dentro do engine (engine.ts:85-88),
@@ -450,7 +515,7 @@ def build_responder(
             outside = schedule_silence(version.settings, now=clock.now())
             if outside is not None:
                 await note_step("skipped", outside.detail)
-                return None
+                return ReplyDraft(None, None)
 
             # --- mídia sem uma palavra (item 31). O runtime não transcreve
             # áudio nem enxerga imagem, e os dois NÃO são `unsupported` para o
@@ -477,6 +542,7 @@ def build_responder(
                         organization_id=job.organization_id,
                         conversation_id=job.conversation_id,
                         reason="media_handoff",
+                        channel_account_id=job.channel_account_id,
                         severity="warning",
                         title="Cliente enviou mídia que a IA não interpreta — IA transferida",
                         payload={"media_kind": speechless},
@@ -486,34 +552,24 @@ def build_responder(
                         media_step_detail(speechless, handoff=True)
                         + ("" if marked else UNMIRRORED_DETAIL),
                     )
-                    return None
+                    return ReplyDraft(None, None)
                 await note_step("started", media_step_detail(speechless))
                 split, rhythm = delivery_flags(version.settings)
-                return {
+                return accepted({
                     "text": media_apology(speechless, version.settings),
                     "humanize": {"split": split, "rhythm": rhythm},
-                }
+                })
 
-            # --- arbitragem: uma missão vence o turno; sem nenhuma, alerta e
-            # silêncio deliberado (a conversa avança; §3.4 inv. 8).
-            try:
-                winner, _losers = arbitrate(owner=owner_mission, discovery=discovery_mission)
-            except MissionUnavailable:
-                async with conn.transaction():
-                    await scope_to_organization(conn, job.organization_id)
-                    await alerts_repo.open_alert(
-                        conn,
-                        organization_id=job.organization_id,
-                        type=alerts_repo.NO_ACTIVE_MISSION,
-                        severity="warning",
-                        title="Inbound sem missão ativa — nada foi respondido",
-                        payload={"conversation_id": str(job.conversation_id)},
-                    )
+            # --- arbitragem: uma missão vence o turno; sem nenhuma, silêncio
+            # deliberado (a conversa avança; §3.4 inv. 8). O alerta em si já
+            # foi aberto (ou não) mais acima, ANTES dos guards — aqui só resta
+            # decidir o desfecho do turno com o resultado já calculado.
+            if mission_winner is None:
                 await note_step("skipped", "Sem missão ativa para este evento — nada respondido")
-                return None
+                return ReplyDraft(None, None)
 
             resolved = merge_mission(
-                winner, None, agent_tools=version.config.enabled_tools
+                mission_winner, None, agent_tools=version.config.enabled_tools
             )
 
             # --- momentos (§3.3.4): fatos somam; a frase promocional só entra
@@ -557,14 +613,15 @@ def build_responder(
                             },
                         )
                     await note_step("skipped", "Sem chave de LLM da loja — agente não respondeu")
-                    return None
+                    return ReplyDraft(None, None)
 
             async with scoped_agent_llm(agent_llm, owns=owns_agent_llm):
+                query = " ".join(message.text for message in pending if message.author == "contact")
                 knowledge = await _knowledge(
                     conn,
                     job,
                     resolved.tools,
-                    pending,
+                    query,
                     metered("embedding", version.agent_id),
                     clock,
                     knowledge_limit,
@@ -596,6 +653,7 @@ def build_responder(
                         transcript=tuple((m.author, m.text) for m in transcript),
                     ),
                     mode="turn",
+                    knowledge=knowledge,
                 )
                 # 9.1: o span do turno (aberto pelo worker) ganha os IDs que a
                 # trilha interna já tem — telemetria e banco contam UMA história.
@@ -610,20 +668,7 @@ def build_responder(
                 )
 
                 system = compiled.text
-                if knowledge:
-                    # Conhecimento é recuperação, não área de config — anexa ao
-                    # frame sem virar bloco de dono (registro em tool_calls).
-                    system += "\n\n# CONHECIMENTO\n" + "\n".join(
-                        f"- {chunk}" for chunk in knowledge
-                    )
-                # Item 39: `transcript` já exclui a janela pendente (query em
-                # `repository/agent.py::load_recent_transcript`), então concatenar
-                # é seguro — nenhuma mensagem aparece duas vezes.
-                conversation = _as_chat(transcript + pending)
 
-                chat = _metered(
-                    conn, job, agent_llm, clock, "agent_reply", version.agent_id, budget=turn_budget
-                )
                 # Juízes do lojista (radial → Juízes) entram como rubrica extra,
                 # sempre standard — o veto de silêncio segue só da plataforma.
                 judge = PreSendJudge(
@@ -632,7 +677,7 @@ def build_responder(
                 )
                 context = JudgeContext(
                     conversation=tuple(f"{message.author}: {message.text}" for message in pending),
-                    knowledge=tuple(knowledge),
+                    knowledge=knowledge,
                     # A língua do juiz é a MESMA do bloco do agente — lida de
                     # volta dele, não recalculada: duas cópias da fórmula
                     # `persona["language"] or settings.primary_language` são o
@@ -662,32 +707,41 @@ def build_responder(
                 for row in custom_rows:
                     if row.name in turn_tools:
                         continue
-                    turn_tools[row.name] = CustomHttpTool(row, base_secret=base_secret)
+                    turn_tools[row.name] = row
                     tool_specs = (*tool_specs, tool_spec_for(row))
 
-                async def run_turn_tool(call: ToolCall) -> str:
+                async def run_turn_tool(attempt: int, call: ToolCall) -> str:
                     tool = turn_tools.get(call.name)
-                    if tool is None:
-                        payload: dict[str, Any] = {"error": f"tool desconhecida: {call.name}"}
-                    else:
-                        result = await run_tool(
-                            conn,
-                            tool,
-                            ToolContext(
-                                organization_id=job.organization_id,
-                                conversation_id=job.conversation_id,
-                            ),
-                            dict(call.arguments),
-                            clock=clock,
+                    secrets: list[str] = []
+                    try:
+                        if isinstance(tool, CustomToolRow):
+                            tool = CustomHttpTool(
+                                tool, base_secret=base_secret, on_known_secrets=secrets.extend,
+                            )
+                        if tool is None:
+                            payload = {"error": f"tool desconhecida: {call.name}"}
+                        else:
+                            result = await run_tool(
+                                conn, tool,
+                                ToolContext(organization_id=job.organization_id,
+                                            conversation_id=job.conversation_id),
+                                dict(call.arguments), clock=clock,
+                            )
+                            payload = (dict(result.output or {}) if result.success
+                                       else {"error": result.error})
+                        capture.record_tool(
+                            attempt, {"name": call.name, "arguments": dict(call.arguments),
+                                      "result": payload}, known_secrets=secrets,
                         )
-                        payload = (
-                            dict(result.output or {})
-                            if result.success
-                            else {"error": result.error}
-                        )
-                    return json.dumps(payload, ensure_ascii=False)
+                        return json.dumps(payload, ensure_ascii=False)
+                    finally:
+                        secrets.clear()
 
                 async def generate(attempt: int, feedback: tuple[str, ...]) -> str:
+                    chat = _metered(
+                        conn, job, agent_llm, clock, "agent_reply", version.agent_id,
+                        budget=turn_budget, capture=partial(capture.record_call, attempt),
+                    )
                     messages = [Message(role="system", content=system), *conversation]
                     if feedback:
                         # Regenerar sem dizer o que estava errado é repetir.
@@ -700,50 +754,14 @@ def build_responder(
                                 ),
                             )
                         )
-                    for _ in range(MAX_TOOL_ROUNDS):
-                        answer = await chat.chat(
-                            ChatRequest(
-                                model=version.config.model,
-                                messages=tuple(messages),
-                                think=gate.think,
-                                tools=tool_specs,
-                            )
-                        )
-                        if not answer.tool_calls:
-                            # Cru de propósito: o desembrulho do envelope JSON
-                            # mora em `guarded_reply` (item 44), o ponto único
-                            # por onde este `generate` e o do toque passam.
-                            # Desembrulhar aqui também seria a mesma correção
-                            # duas vezes no mesmo caminho.
-                            return answer.text
-                        # A volta do loop: o pedido do modelo e a resposta da tool
-                        # entram na conversa; nenhuma transação fica aberta aqui
-                        # (run_tool abre e fecha as suas — ADR-6 vale no loop).
-                        messages.append(
-                            Message(
-                                role="assistant",
-                                content=answer.text,
-                                tool_calls=answer.tool_calls,
-                            )
-                        )
-                        for call in answer.tool_calls:
-                            messages.append(
-                                Message(
-                                    role="tool",
-                                    content=await run_turn_tool(call),
-                                    tool_call_id=call.id,
-                                )
-                            )
-                    # Rodadas esgotadas: a última chamada sai SEM tools — concluir
-                    # em texto deixa de ser opcional.
-                    answer = await chat.chat(
-                        ChatRequest(
-                            model=version.config.model,
-                            messages=tuple(messages),
-                            think=gate.think,
-                        )
+                    return await generate_with_tools(
+                        chat,
+                        model=version.config.model,
+                        messages=tuple(messages),
+                        tools=tool_specs,
+                        execute=partial(run_turn_tool, attempt),
+                        think=gate.think,
                     )
-                    return answer.text
 
                 await note_step("started", f"{version.name} assumiu a conversa")
 
@@ -820,7 +838,7 @@ def build_responder(
                         else "Resposta retida pela verificação de qualidade"
                     )
                     await note_step("skipped", skip_reason + preview)
-                    return None
+                    return ReplyDraft(None, None)
 
                 # --- blocked_topics (item 30): a última coisa antes do envio.
                 # Os outros guards decidem sobre o que CHEGOU; este decide sobre o
@@ -834,6 +852,7 @@ def build_responder(
                         organization_id=job.organization_id,
                         conversation_id=job.conversation_id,
                         reason="blocked_topic",
+                        channel_account_id=job.channel_account_id,
                         severity="critical",
                         title="Resposta tocou num assunto proibido — nada foi enviado",
                         # Mesma regra do veto do Judge 1: o bloqueio segura o
@@ -845,12 +864,15 @@ def build_responder(
                         f"Assunto proibido na resposta (“{topic}”)"
                         + ("" if marked else UNMIRRORED_DETAIL),
                     )
-                    return None
+                    return ReplyDraft(None, None)
 
                 # As flags de entrega viajam COM o envio (payload da outbox): o
                 # sender obedece por linha, sem env global (Pacote B 17/08).
                 split, rhythm = delivery_flags(version.settings)
-                return {"text": outcome.draft, "humanize": {"split": split, "rhythm": rhythm}}
+                return accepted(
+                    {"text": outcome.draft, "humanize": {"split": split, "rhythm": rhythm}},
+                    outcome.selected_attempt,
+                )
 
     return respond
 
@@ -870,6 +892,7 @@ async def transfer_to_human(
     severity: str,
     title: str,
     payload: dict,
+    channel_account_id: UUID | None = None,
 ) -> bool:
     """Tira a IA de cena e registra — devolvendo se a marca PEGOU.
 
@@ -899,6 +922,7 @@ async def transfer_to_human(
             organization_id=organization_id,
             conversation_id=conversation_id,
             reason=reason,
+            channel_account_id=channel_account_id,
         )
         await alerts_repo.open_alert(
             conn,
@@ -934,18 +958,20 @@ def agent_responder(dsn: str):
         set_role=os.environ.get("AGENTS_WORKER_SET_ROLE"),
         agent_llm_from_org_keys=True,
         base_secret=os.environ.get("ENCRYPTION_KEY") or None,
+        config=config_from_env(dict(os.environ)),
     )
 
 
 def _metered(
     conn: psycopg.AsyncConnection,
-    job: InboundJob,
+    job: InboundJob | MissionTouchJob,
     llm: LlmPort,
     clock: Clock,
     purpose: str,
     agent_id: UUID | None = None,
     *,
     budget: TurnBudget | None = None,
+    capture: Callable[[CallRecord], None] | None = None,
 ) -> MeteredLlm:
     """Um medidor por finalidade: o custo do agente e o custo do portão são
     linhas diferentes da mesma conta.
@@ -959,10 +985,17 @@ def _metered(
     aqui uma vez por finalidade (agent_reply, judge_pre, embedding), para que
     as três dividam o mesmo teto em vez de cada uma ter o seu.
     """
+    record = _recorder(conn, job.organization_id, job.conversation_id, agent_id)
+
+    async def captured(call: CallRecord) -> None:
+        if capture is not None:
+            capture(call)
+        await record(call)
+
     return MeteredLlm(
         llm,
         clock=clock,
-        record=_recorder(conn, job.organization_id, job.conversation_id, agent_id),
+        record=captured,
         purpose=purpose,
         budget=budget,
     )
@@ -1006,9 +1039,9 @@ def _recorder(
 
 async def _knowledge(
     conn: psycopg.AsyncConnection,
-    job: InboundJob,
+    job: InboundJob | MissionTouchJob,
     enabled_tools: tuple[str, ...],
-    pending: Sequence[PendingMessage],
+    query: str,
     embedder: MeteredLlm,
     clock: Clock,
     limit: int,
@@ -1024,7 +1057,6 @@ async def _knowledge(
     if "search_knowledge" not in enabled_tools:
         return ()
 
-    query = " ".join(message.text for message in pending if message.author == "contact")
     if not query.strip():
         return ()
 

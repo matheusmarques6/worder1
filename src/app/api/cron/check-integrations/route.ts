@@ -8,30 +8,15 @@ export const maxDuration = 60;
 
 import { NextRequest, NextResponse } from 'next/server';
 import { IntegrationHealthService, IntegrationType } from '@/lib/services/integration-health';
-
-function verifyCronAuth(request: NextRequest): boolean {
-  if (request.headers.get('x-vercel-cron')) return true;
-  const authHeader = request.headers.get('authorization');
-  const cronSecret = process.env.CRON_SECRET;
-
-  // Fail-closed in production: a missing CRON_SECRET must NOT open the
-  // endpoint in prod. Open only in dev (where the secret is often unset).
-  if (!cronSecret) {
-    if (process.env.NODE_ENV === 'production') return false;
-    console.log('⚠️  CRON_SECRET não configurado - rodando em modo dev');
-    return true;
-  }
-
-  return authHeader === `Bearer ${cronSecret}`;
-}
+import { authorizeCronRequest } from '@/lib/cron-auth';
 
 export async function GET(request: NextRequest) {
-  console.log('🔄 Cron job iniciado:', new Date().toISOString());
-  
-  if (!verifyCronAuth(request)) {
+  if (!authorizeCronRequest(request)) {
     console.log('❌ Autorização negada');
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  console.log('🔄 Cron job iniciado:', new Date().toISOString());
   
   const startTime = Date.now();
   
@@ -67,6 +52,10 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  if (!authorizeCronRequest(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   try {
     const body = await request.json();
     const { type, integrationId } = body as {

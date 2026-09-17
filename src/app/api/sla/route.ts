@@ -1,6 +1,6 @@
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 import { NextRequest, NextResponse } from 'next/server'
+import { requireOrgFromAuth } from '@/lib/auth/require-org'
 
 // =============================================
 // Types
@@ -73,18 +73,22 @@ interface SLAStats {
 // =============================================
 
 export async function GET(request: NextRequest) {
+  // Nenhuma sessão era exigida e a organização vinha na URL. O cliente
+  // aqui é o de componente de servidor, que depende de um cookie que
+  // este app não grava — então a consulta ia como anônima. A
+  // organização passa a vir do token.
+  const auth = await requireOrgFromAuth(request)
+  if (auth instanceof NextResponse) return auth
+  const organizationId = auth.orgId
+
   try {
-    const supabase = createServerComponentClient({ cookies })
+    const supabase = supabaseAdmin
     const { searchParams } = new URL(request.url)
 
-    const organizationId = searchParams.get('organization_id')
     const configId = searchParams.get('config_id')
     const includeMetrics = searchParams.get('include_metrics') === 'true'
     const period = searchParams.get('period') || '7d'
 
-    if (!organizationId) {
-      return NextResponse.json({ error: 'organization_id is required' }, { status: 400 })
-    }
 
     // Get single config with metrics
     if (configId) {
@@ -170,9 +174,15 @@ export async function GET(request: NextRequest) {
 // =============================================
 
 export async function POST(request: NextRequest) {
+  // Sessão obrigatória; a organização do corpo é substituída pela do
+  // token para que nenhum dos caminhos abaixo escreva em outra.
+  const auth = await requireOrgFromAuth(request)
+  if (auth instanceof NextResponse) return auth
+
   try {
-    const supabase = createServerComponentClient({ cookies })
+    const supabase = supabaseAdmin
     const body = await request.json()
+    body.organization_id = auth.orgId
 
     const { action } = body
 
@@ -201,9 +211,15 @@ export async function POST(request: NextRequest) {
 // =============================================
 
 export async function PUT(request: NextRequest) {
+  // Sessão obrigatória; a organização do corpo é substituída pela do
+  // token para que nenhum dos caminhos abaixo escreva em outra.
+  const auth = await requireOrgFromAuth(request)
+  if (auth instanceof NextResponse) return auth
+
   try {
-    const supabase = createServerComponentClient({ cookies })
+    const supabase = supabaseAdmin
     const body = await request.json()
+    body.organization_id = auth.orgId
 
     const { id, ...updates } = body
 
@@ -218,6 +234,7 @@ export async function PUT(request: NextRequest) {
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)
+      .eq('organization_id', auth.orgId)
       .select()
       .single()
 
@@ -238,8 +255,13 @@ export async function PUT(request: NextRequest) {
 // =============================================
 
 export async function DELETE(request: NextRequest) {
+  // Sessão obrigatória; a organização do corpo é substituída pela do
+  // token para que nenhum dos caminhos abaixo escreva em outra.
+  const auth = await requireOrgFromAuth(request)
+  if (auth instanceof NextResponse) return auth
+
   try {
-    const supabase = createServerComponentClient({ cookies })
+    const supabase = supabaseAdmin
     const { searchParams } = new URL(request.url)
 
     const id = searchParams.get('id')
@@ -252,6 +274,7 @@ export async function DELETE(request: NextRequest) {
       .from('sla_configs')
       .delete()
       .eq('id', id)
+      .eq('organization_id', auth.orgId)
 
     if (error) {
       console.error('[SLA] Delete error:', error)
@@ -422,6 +445,7 @@ async function trackConversation(supabase: any, body: any) {
     .from('sla_configs')
     .select('*')
     .eq('id', sla_config_id)
+    .eq('organization_id', organization_id)
     .single()
 
   if (configError || !config) {
@@ -465,7 +489,8 @@ async function trackConversation(supabase: any, body: any) {
 }
 
 async function updateMetric(supabase: any, body: any) {
-  const { metric_id, event } = body
+  // `organization_id` foi sobrescrito pelo do token no handler.
+  const { metric_id, event, organization_id } = body
 
   if (!metric_id || !event) {
     return NextResponse.json({ error: 'metric_id e event sao obrigatorios' }, { status: 400 })
@@ -475,6 +500,7 @@ async function updateMetric(supabase: any, body: any) {
     .from('sla_metrics')
     .select('*')
     .eq('id', metric_id)
+    .eq('organization_id', organization_id)
     .single()
 
   if (fetchError || !metric) {
@@ -506,6 +532,7 @@ async function updateMetric(supabase: any, body: any) {
     .from('sla_metrics')
     .update(updates)
     .eq('id', metric_id)
+    .eq('organization_id', organization_id)
     .select()
     .single()
 

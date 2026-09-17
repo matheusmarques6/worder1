@@ -23,6 +23,7 @@
  * `legacy`, e o describe "org em legacy" ao lado prova que nada mudou nesse
  * caminho — a mesma régua de sempre, guard por guard.
  */
+import { readFileSync } from 'node:fs';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ---------------------------------------------------------------------------
@@ -97,13 +98,19 @@ vi.mock('@/lib/supabase-admin', () => ({
   getSupabaseAdmin: () => ({ from: (t: string) => from(t), rpc: (n: string, a: any) => rpc(n, a) }),
 }));
 
-import { resolveConversationAiStatus, AI_BLOCKER_LABELS } from '../conversation-ai-status';
-import { clearRuntimeModeCache } from '../runtime-rollout';
+import {
+  resolveConversationAiStatus,
+  AI_BLOCKER_LABELS,
+  AI_BLOCKER_REASON_ALIASES,
+} from '../conversation-ai-status';
 
 // ---------------------------------------------------------------------------
 
 const ORG = '11111111-1111-1111-1111-111111111111';
 const AGENT = '22222222-2222-2222-2222-222222222222';
+const { state_cases: stateCases } = JSON.parse(readFileSync('fixtures/ai-guard-contract.json', 'utf8')) as {
+  state_cases: Array<{ id: string; now: string; settings: any; state: any; expected_badge: string | null }>
+};
 
 describe('errors from guard reads do not become factual status (Task 37)', () => {
   it('throws when ai_agents lookup fails instead of returning agent_not_found', async () => {
@@ -143,7 +150,6 @@ function ask(over: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   rpc.mockClear();
-  clearRuntimeModeCache();
   db.activeAgentRows = [{ agent_id: AGENT }];
   db.agent = { id: AGENT, name: 'Matheus', settings: { behavior: {} } };
   db.agentError = null;
@@ -152,6 +158,28 @@ beforeEach(() => {
   db.hasHumanReply = false;
   db.humanReplyError = null;
   db.runtimeMode = 'legacy';
+});
+
+describe('contrato comum de estado — badge', () => {
+  it.each(stateCases)('$id', async (testCase) => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(testCase.now));
+    try {
+      const state = testCase.state;
+      db.agent!.settings = testCase.settings;
+      db.botMessages = state.bot_message_count ?? 0;
+      db.hasHumanReply = state.has_human_reply ?? false;
+      const status = await ask({
+        ai_enabled: state.ai_enabled ?? true,
+        ai_agent_id: state.assignment === 'self' ? AGENT : state.assignment === 'other' ? 'other-agent' : null,
+        ai_transferred_at: state.transferred_at ?? null,
+      });
+
+      expect(status.reason).toBe(testCase.expected_badge);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('ordem dos guards — o caminho legado, como está hoje', () => {
@@ -258,6 +286,9 @@ describe('ordem dos guards — o caminho legado, como está hoje', () => {
 // ---------------------------------------------------------------------------
 
 describe('item 37 — o badge para de mentir em runtime', () => {
+  it('declara outside_schedule como alias do outside_business_hours do runtime', () => {
+    expect(AI_BLOCKER_REASON_ALIASES.outside_business_hours).toBe('outside_schedule');
+  });
   it('org em runtime: activate_on=manual sem atribuição bloqueia igual ao legacy', async () => {
     db.runtimeMode = 'runtime';
     db.agent!.settings.behavior = { activate_on: 'manual' };
@@ -372,15 +403,9 @@ describe('item 37 — o badge para de mentir em runtime', () => {
     expect(await ask()).toMatchObject({ willRespond: true, reason: null });
   });
 
-  it('erro ao ler ai_runtime_rollout: cai pra legacy — horário não é avaliado', async () => {
+  it('erro ao ler ai_runtime_rollout sobe em vez de inventar um modo', async () => {
     db.runtimeMode = null; // resultFor devolve error para a leitura de ai_runtime_rollout
-    db.agent!.settings = { behavior: { max_messages_per_conversation: 1 }, schedule: { days: [] } };
-    db.botMessages = 5;
-    // getRuntimeMode falha aberto para 'legacy': o guard de max_messages
-    // continua valendo (era assim antes desta tarefa), e horário — que só
-    // roda em runtime — não é avaliado, então não é ele quem explicaria o
-    // silêncio mesmo que fosse consultado.
-    expect(await ask()).toMatchObject({ willRespond: false, reason: 'max_messages' });
+    await expect(ask()).rejects.toEqual({ message: 'leitura falhou' });
   });
 });
 

@@ -64,7 +64,14 @@ export interface ProcessResult {
   details: Array<{ type: string; status: string; reason?: string }>;
 }
 
-export async function processWebhookPayload(payload: any): Promise<ProcessResult> {
+interface ProcessOptions {
+  resumeExistingMessages?: boolean;
+}
+
+export async function processWebhookPayload(
+  payload: any,
+  options: ProcessOptions = {},
+): Promise<ProcessResult> {
   const result: ProcessResult = { processed: 0, skipped: 0, errors: 0, details: [] };
 
   if (payload?.object !== 'whatsapp_business_account') {
@@ -162,7 +169,12 @@ export async function processWebhookPayload(payload: any): Promise<ProcessResult
 
           for (const message of value.messages || []) {
             try {
-              await processMessage(account, message, value.contacts);
+              await processMessage(
+                account,
+                message,
+                value.contacts,
+                options.resumeExistingMessages === true,
+              );
               result.processed++;
               result.details.push({ type: 'message', status: 'ok' });
             } catch (err: any) {
@@ -260,6 +272,10 @@ export async function processWebhookPayload(payload: any): Promise<ProcessResult
     }
   }
 
+  if (result.errors > 0) {
+    const reason = result.details.find((detail) => detail.status === 'error')?.reason;
+    throw new Error(reason || `${result.errors} webhook item(s) failed`);
+  }
   return result;
 }
 
@@ -270,7 +286,8 @@ export async function processWebhookPayload(payload: any): Promise<ProcessResult
 async function processMessage(
   account: any,
   message: WebhookMessage,
-  contacts: Array<{ wa_id: string; profile: { name: string } }> | undefined
+  contacts: Array<{ wa_id: string; profile: { name: string } }> | undefined,
+  resumeExistingMessage = false,
 ) {
   const phoneNumber = normalizePhone(message.from);
   const contactInfo = contacts?.find((c) => c.wa_id === message.from);
@@ -288,7 +305,7 @@ async function processMessage(
     .eq('message_id', message.id)
     .maybeSingle();
 
-  if (existingMsg) {
+  if (existingMsg && !resumeExistingMessage) {
     return;
   }
 
@@ -320,132 +337,154 @@ async function processMessage(
     message.sticker?.mime_type ||
     null;
 
-  const { data: insertedMsg, error: insertError } = await supabase
-    .from('whatsapp_cloud_messages')
-    .insert({
-      organization_id: account.organization_id,
-      store_id: account.store_id || conversation.store_id || null,
-      waba_id: account.id,
-      conversation_id: conversation.id,
-      message_id: message.id,
-      direction: 'inbound',
-      from_number: phoneNumber,
-      to_number: account.phone_number,
-      message_type: messageType,
-      content,
-      text_body: textBody,
-      caption: mediaCaption,
-      media_id: mediaId,
-      media_download_status: mediaId ? 'pending' : null,
-      status: 'received',
-      timestamp: new Date(parseInt(message.timestamp) * 1000).toISOString(),
-    })
-    .select('id')
-    .maybeSingle();
-
-  // Não engolir erro de insert: se o schema estiver atrasado (coluna nova
-  // ainda não migrada) ou qualquer outra falha do PostgREST, propaga para o
-  // caller (processMessage's caller conta em result.errors e o evento do
-  // webhook é reprocessado pelo cron) em vez de marcar o evento como "done"
-  // com a mensagem inbound silenciosamente perdida.
-  if (insertError) {
-    throw insertError;
-  }
-
-  // ============================================================
-  // PIPELINE DE MÍDIA INBOUND — nunca quebra a persistência.
-  // Preferência: QStash (async). Fallback: inline (ambientes sem fila).
-  // Falha aqui deixa media_download_status='pending'/'failed' e a
-  // mensagem segue visível no inbox (sem mídia).
-  // ============================================================
-  if (mediaId && insertedMsg?.id) {
-    try {
-      const mediaJob = {
-        cloudMessageId: insertedMsg.id,
-        accountId: account.id,
-        organizationId: account.organization_id,
-      };
-      const { enqueueWhatsAppInboundMedia } = await import('@/lib/queue');
-      const queued = await enqueueWhatsAppInboundMedia(mediaJob);
-      if (!queued) {
-        const { processInboundMedia } = await import('./inbound-media');
-        await processInboundMedia(mediaJob);
-      }
-    } catch (err: any) {
-      wlog.error('whatsapp.media.inbound_pipeline_error', {
-        error: err?.message,
-        message_id: message.id,
+  if (!existingMsg) {
+    const { data: insertedMsg, error: insertError } = await supabase
+      .from('whatsapp_cloud_messages')
+      .insert({
+        organization_id: account.organization_id,
+        store_id: account.store_id || conversation.store_id || null,
+        waba_id: account.id,
         conversation_id: conversation.id,
-      });
-    }
-  }
-
-  const nowIso = new Date().toISOString();
-  // Counters via RPC: UPDATE atomico (COALESCE(col,0)+1). Sem isso, duas
-  // webhooks concorrentes pro mesmo contato perdem incrementos.
-  await supabase.rpc('increment_conversation_inbound', {
-    p_conversation_id: conversation.id,
-    p_preview: textBody.substring(0, 100),
-    p_now: nowIso,
-  });
-
-  await supabase.rpc('increment_account_inbound', {
-    p_account_id: account.id,
-    p_now: nowIso,
-  });
-
-  let crmContactId: string | undefined = contact?.crm_contact_id;
-  if (!crmContactId) {
-    const { data: crmContact } = await supabase
-      .from('contacts')
+        message_id: message.id,
+        direction: 'inbound',
+        from_number: phoneNumber,
+        to_number: account.phone_number,
+        message_type: messageType,
+        content,
+        text_body: textBody,
+        caption: mediaCaption,
+        media_id: mediaId,
+        media_download_status: mediaId ? 'pending' : null,
+        status: 'received',
+        timestamp: new Date(parseInt(message.timestamp) * 1000).toISOString(),
+      })
       .select('id')
-      .eq('organization_id', account.organization_id)
-      .or(`whatsapp.eq.${phoneNumber},phone.eq.${phoneNumber}`)
-      .limit(1)
       .maybeSingle();
 
-    if (crmContact) {
-      crmContactId = crmContact.id;
-      await supabase
-        .from('whatsapp_contacts')
-        .update({ crm_contact_id: crmContact.id })
-        .eq('id', contact.id);
+    // Não engolir erro de insert: se o schema estiver atrasado (coluna nova
+    // ainda não migrada) ou qualquer outra falha do PostgREST, propaga para o
+    // caller (processMessage's caller conta em result.errors e o evento do
+    // webhook é reprocessado pelo cron) em vez de marcar o evento como "done"
+    // com a mensagem inbound silenciosamente perdida.
+    if (insertError) {
+      throw insertError;
     }
-  }
 
-  const eventData: EventData = {
-    contact_id: crmContactId,
-    contact_name: contactName,
-    contact_phone: phoneNumber,
-    conversation_id: conversation.id,
-    message_text: textBody,
-    message_timestamp: message.timestamp,
-    source_id: `whatsapp_${conversation.id}`,
-  };
+    // ============================================================
+    // PIPELINE DE MÍDIA INBOUND — nunca quebra a persistência.
+    // Preferência: QStash (async). Fallback: inline (ambientes sem fila).
+    // Falha aqui deixa media_download_status='pending'/'failed' e a
+    // mensagem segue visível no inbox (sem mídia).
+    // ============================================================
+    if (mediaId && insertedMsg?.id) {
+      try {
+        const mediaJob = {
+          cloudMessageId: insertedMsg.id,
+          accountId: account.id,
+          organizationId: account.organization_id,
+        };
+        const { enqueueWhatsAppInboundMedia } = await import('@/lib/queue');
+        const queued = await enqueueWhatsAppInboundMedia(mediaJob);
+        if (!queued) {
+          const { processInboundMedia } = await import('./inbound-media');
+          await processInboundMedia(mediaJob);
+        }
+      } catch (err: any) {
+        wlog.error('whatsapp.media.inbound_pipeline_error', {
+          error: err?.message,
+          message_id: message.id,
+          conversation_id: conversation.id,
+        });
+      }
+    }
 
-  if (isNewConversation) {
+    const nowIso = new Date().toISOString();
+    // Counters via RPC: UPDATE atomico (COALESCE(col,0)+1). Sem isso, duas
+    // webhooks concorrentes pro mesmo contato perdem incrementos.
+    await supabase.rpc('increment_conversation_inbound', {
+      p_conversation_id: conversation.id,
+      p_preview: textBody.substring(0, 100),
+      p_now: nowIso,
+    });
+
+    await supabase.rpc('increment_account_inbound', {
+      p_account_id: account.id,
+      p_now: nowIso,
+    });
+
+    let crmContactId: string | undefined = contact?.crm_contact_id;
+    if (!crmContactId) {
+      const { data: crmContact } = await supabase
+        .from('contacts')
+        .select('id')
+        .eq('organization_id', account.organization_id)
+        .or(`whatsapp.eq.${phoneNumber},phone.eq.${phoneNumber}`)
+        .limit(1)
+        .maybeSingle();
+
+      if (crmContact) {
+        crmContactId = crmContact.id;
+        await supabase
+          .from('whatsapp_contacts')
+          .update({ crm_contact_id: crmContact.id })
+          .eq('id', contact.id);
+      }
+    }
+
+    // Confirmação de opt-in pedida por popup ("SIM" ou o botão do template).
+    // Só age quando há pedido pendente para este telefone; nunca derruba o
+    // ingest.
+    try {
+      const { confirmWhatsAppOptInFromInbound } = await import('./popup-opt-in');
+      const optIn = await confirmWhatsAppOptInFromInbound(supabase, {
+        organizationId: account.organization_id,
+        storeId: account.store_id || null,
+        phone: phoneNumber,
+        message,
+        textBody,
+        crmContactId: crmContactId || null,
+      });
+      if (optIn.outcome !== 'ignored') {
+        wlog.info('whatsapp.popup_optin.' + optIn.outcome, { organization_id: account.organization_id, conversation_id: conversation.id });
+      }
+    } catch (err: any) {
+      wlog.error('whatsapp.popup_optin.error', { error: err?.message, conversation_id: conversation?.id });
+    }
+
+    const eventData: EventData = {
+      contact_id: crmContactId,
+      contact_name: contactName,
+      contact_phone: phoneNumber,
+      conversation_id: conversation.id,
+      message_text: textBody,
+      message_timestamp: message.timestamp,
+      source_id: `whatsapp_${conversation.id}`,
+    };
+
+    if (isNewConversation) {
+      await RuleEngine.processCreationRules(
+        account.organization_id,
+        'whatsapp',
+        'conversation_started',
+        eventData
+      );
+    }
+
     await RuleEngine.processCreationRules(
       account.organization_id,
       'whatsapp',
-      'conversation_started',
+      'message_received',
       eventData
     );
-  }
 
-  await RuleEngine.processCreationRules(
-    account.organization_id,
-    'whatsapp',
-    'message_received',
-    eventData
-  );
-
-  if (isNewContact && crmContactId) {
-    await RuleEngine.processCreationRules(
-      account.organization_id,
-      'whatsapp',
-      'contact_created',
-      eventData
-    );
+    if (isNewContact && crmContactId) {
+      await RuleEngine.processCreationRules(
+        account.organization_id,
+        'whatsapp',
+        'contact_created',
+        eventData
+      );
+    }
   }
 
   // ============================================================
@@ -454,8 +493,8 @@ async function processMessage(
   // atômico + pending_response_at e NÃO enfileira — o coalescer do runtime
   // Python cria o job único da rajada. O bloco de debounce legado abaixo é
   // PULADO por inteiro (uma conversa nunca está nos dois mecanismos). Org sem
-  // linha em ai_runtime_rollout = legacy; erro de leitura reaproveita o cache
-  // stale da org (getRuntimeMode), senão legacy.
+  // linha em ai_runtime_rollout = legacy; erro de leitura sobe para a entrega
+  // ser repetida, sem escolher um motor a partir de estado stale.
   // ============================================================
   const { getRuntimeMode } = await import('@/lib/ai/runtime-rollout');
   const runtimeMode = await getRuntimeMode(supabase, account.organization_id);
@@ -493,6 +532,7 @@ async function processMessage(
           ingestContent.caption = mediaCaption ?? null;
         }
         const { error: ingestError } = await supabase.rpc('ingest_inbound_message', {
+          p_waba_id: account.id,
           p_organization_id: account.organization_id,
           p_channel: 'whatsapp',
           p_external_id: String(phoneNumber ?? ''),

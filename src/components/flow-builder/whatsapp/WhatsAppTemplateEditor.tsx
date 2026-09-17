@@ -29,6 +29,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { BodyPortal } from '@/components/shared/BodyPortal';
 import { VariablePicker } from '../variables/VariablePicker';
 import { extractVariablesFromText } from '../variables/variableDefinitions';
 
@@ -72,6 +73,15 @@ interface WhatsAppTemplateEditorProps {
   onClose?: () => void;
   isModal?: boolean;
 }
+
+const DEFAULT_CONFIG: WhatsAppConfig = {
+  messageMode: 'free',
+  templateCategory: 'marketing',
+  headerType: 'none',
+  language: 'pt_BR',
+  buttons: [],
+  templateVariables: [],
+};
 
 // ============================================
 // TEMPLATE TYPES (Pre-defined templates)
@@ -172,17 +182,7 @@ export function WhatsAppTemplateEditor({
   const [activeField, setActiveField] = useState<string>('');
   const [showPreview, setShowPreview] = useState(true);
 
-  // Merge config with defaults
-  const defaultConfig: WhatsAppConfig = {
-    messageMode: 'free',
-    templateCategory: 'marketing',
-    headerType: 'none',
-    language: 'pt_BR',
-    buttons: [],
-    templateVariables: [],
-  };
-
-  const currentConfig: WhatsAppConfig = { ...defaultConfig, ...config };
+  const currentConfig = useMemo<WhatsAppConfig>(() => ({ ...DEFAULT_CONFIG, ...config }), [config]);
 
   const handleUpdate = useCallback((updates: Partial<WhatsAppConfig>) => {
     onConfigChange({ ...currentConfig, ...updates });
@@ -420,12 +420,15 @@ export function WhatsAppTemplateEditor({
   );
 
   if (isModal) {
+    // No body: aberto de dentro do painel lateral (que anima com
+    // transform) o `fixed` não cobriria a tela. Ver BodyPortal.
     return (
+      <BodyPortal>
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+        className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
         onClick={onClose}
       >
         <motion.div
@@ -438,6 +441,7 @@ export function WhatsAppTemplateEditor({
           {content}
         </motion.div>
       </motion.div>
+      </BodyPortal>
     );
   }
 

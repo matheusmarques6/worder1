@@ -7,6 +7,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { executeWorkflow, Workflow } from '@/lib/automation/execution-engine';
+import { mergeNodeResults } from '@/lib/automation/node-results';
+import { authorizeCronRequest } from '@/lib/cron-auth';
 export const dynamic = 'force-dynamic';
 // Vercel default for cron is 60s on Pro. Action_email itself has a 60s
 // node timeout, plus DB writes + Resend round-trip — one slow run can
@@ -18,22 +20,8 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 export async function GET(request: NextRequest) {
-  // Verificar autorização
-  // X-Internal-Request was removed from the authorize check: it's
-  // client-settable and not stripped by Vercel, so any caller could spoof
-  // it. Only Vercel Cron or Bearer CRON_SECRET is accepted now.
-  const isVercelCron = request.headers.get('x-vercel-cron') === '1';
-  const authHeader = request.headers.get('authorization');
-  const cronSecret = process.env.CRON_SECRET;
-
-  const isAuthorized = isVercelCron ||
-    (cronSecret && authHeader === `Bearer ${cronSecret}`);
-
-  if (!isAuthorized) {
-    console.log('[ProcessRuns] Unauthorized request - headers:', {
-      'x-vercel-cron': request.headers.get('x-vercel-cron'),
-      hasAuth: !!authHeader,
-    });
+  if (!authorizeCronRequest(request)) {
+    console.log('[ProcessRuns] Unauthorized request');
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -267,6 +255,13 @@ export async function GET(request: NextRequest) {
               customFields: contact.custom_fields || {},
               createdAt: contact.created_at,
               updatedAt: contact.updated_at,
+              totalOrders: contact.total_orders ?? 0,
+              totalSpent: contact.total_spent ?? 0,
+              // O delay usa estes dois para decidir o fuso do
+              // destinatário; sem eles a janela de horário cairia
+              // sempre no fuso da loja.
+              timezone: contact.timezone ?? null,
+              country: contact.country ?? null,
             } : undefined,
             deal,
             // Variable engine expects {type, data, timestamp}; passing
@@ -314,7 +309,13 @@ export async function GET(request: NextRequest) {
             ...metadata,
             result: {
               duration: result.duration,
-              nodeResults: result.nodeResults,
+              // Merge with the previous segments: a resumed run only
+              // executes the nodes after the pause, so overwriting here
+              // erased Email 1 the moment the run reached Email 2.
+              nodeResults: mergeNodeResults(
+                (metadata as any)?.result?.nodeResults,
+                result.nodeResults
+              ),
             },
             // Snapshot for the resume path above. rerunOnResume tells
             // the next pickup whether to re-execute the paused node

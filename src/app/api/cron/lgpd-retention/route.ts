@@ -11,19 +11,13 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { authorizeCronRequest } from '@/lib/cron-auth'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-function isAuthorized(req: NextRequest): boolean {
-  if (req.headers.get('x-vercel-cron')) return true
-  const secret = process.env.CRON_SECRET
-  if (!secret) return process.env.NODE_ENV !== 'production'
-  return req.headers.get('authorization') === `Bearer ${secret}`
-}
-
 export async function GET(req: NextRequest) {
-  if (!isAuthorized(req)) {
+  if (!authorizeCronRequest(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -81,7 +75,12 @@ export async function GET(req: NextRequest) {
                 first_name: 'Anonimizado',
                 last_name: 'Retenção',
                 custom_fields: {},
-                is_active: false,
+                // `is_active` não existe em contacts: com ela no payload, o
+                // PostgREST recusava a linha inteira e a ANONIMIZAÇÃO NÃO
+                // ACONTECIA — uma política de retenção configurada não
+                // fazia nada. `suppressed` é a coluna real e diz o que
+                // importa aqui: não mandar mais nada para este endereço.
+                suppressed: true,
               }, { count: 'exact' })
               .eq('organization_id', policy.organization_id)
               .lt('last_active_at', cutoff)
@@ -94,6 +93,47 @@ export async function GET(req: NextRequest) {
               .eq('organization_id', policy.organization_id)
               .lt('last_active_at', cutoff)
               .or('total_orders.is.null,total_orders.eq.0')
+            affected = count || 0
+          }
+          break
+        }
+        case 'popup_events': {
+          // A tabela que mais cresce: uma linha por exibição de popup, em
+          // toda página da loja. Aqui é apagar mesmo — o número que a tela
+          // mostra vem de agregados por dia, não do evento cru.
+          const { count } = await supabaseAdmin
+            .from('form_events')
+            .delete({ count: 'exact' })
+            .eq('organization_id', policy.organization_id)
+            .lt('occurred_at', cutoff)
+          affected = count || 0
+          break
+        }
+        case 'popup_submissions': {
+          // Por padrão anonimiza: as respostas digitadas somem, mas a
+          // inscrição continua contando na série e na receita atribuída.
+          if (policy.anonymize_only) {
+            const { count } = await supabaseAdmin
+              .from('crm_form_submissions')
+              .update({
+                answers: {},
+                ip_address: null,
+                user_agent: null,
+                referrer: null,
+                page_url: null,
+                visitor_id: null,
+                session_id: null,
+              }, { count: 'exact' })
+              .eq('organization_id', policy.organization_id)
+              .lt('created_at', cutoff)
+              .neq('answers', '{}')
+            affected = count || 0
+          } else {
+            const { count } = await supabaseAdmin
+              .from('crm_form_submissions')
+              .delete({ count: 'exact' })
+              .eq('organization_id', policy.organization_id)
+              .lt('created_at', cutoff)
             affected = count || 0
           }
           break

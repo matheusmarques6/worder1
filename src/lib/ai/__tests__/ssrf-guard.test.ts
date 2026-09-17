@@ -130,6 +130,106 @@ describe('safeFetch', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
+  it('303 troca POST por GET e remove corpo e headers de representação', async () => {
+    mockLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response(null, { status: 303, headers: { location: 'https://loja.com/final' } }),
+      )
+      .mockResolvedValueOnce(new Response('ok', { status: 200 }))
+
+    await safeFetch('https://loja.com/start', {
+      method: 'POST',
+      body: 'secret-body',
+      headers: {
+        authorization: 'Bearer token',
+        'content-encoding': 'gzip',
+        'content-language': 'pt-BR',
+        'content-location': '/start',
+        'content-type': 'application/json',
+        'content-length': '11',
+      },
+    })
+
+    const secondInit = fetchMock.mock.calls[1][1]
+    const headers = new Headers(secondInit.headers)
+    expect(secondInit.method).toBe('GET')
+    expect(secondInit.body).toBeUndefined()
+    expect(headers.get('authorization')).toBe('Bearer token')
+    for (const name of [
+      'content-encoding',
+      'content-language',
+      'content-location',
+      'content-type',
+      'content-length',
+    ]) {
+      expect(headers.has(name)).toBe(false)
+    }
+  })
+
+  it('303 preserva HEAD', async () => {
+    mockLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response(null, { status: 303, headers: { location: 'https://loja.com/final' } }),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+
+    await safeFetch('https://loja.com/start', { method: 'HEAD' })
+
+    expect(fetchMock.mock.calls[1][1].method).toBe('HEAD')
+  })
+
+  it.each([307, 308])('%s preserva método POST e corpo', async (status) => {
+    mockLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response(null, { status, headers: { location: 'https://loja.com/final' } }),
+      )
+      .mockResolvedValueOnce(new Response('ok', { status: 200 }))
+
+    await safeFetch('https://loja.com/start', { method: 'POST', body: 'secret-body' })
+
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({
+      method: 'POST',
+      body: 'secret-body',
+    })
+  })
+
+  it('303 cross-origin também remove Authorization', async () => {
+    mockLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response(null, { status: 303, headers: { location: 'https://outraloja.com/final' } }),
+      )
+      .mockResolvedValueOnce(new Response('ok', { status: 200 }))
+
+    await safeFetch('https://loja.com/start', {
+      method: 'POST',
+      body: 'secret-body',
+      headers: { authorization: 'Bearer token', 'content-type': 'application/json' },
+    })
+
+    const secondInit = fetchMock.mock.calls[1][1]
+    expect(secondInit.method).toBe('GET')
+    expect(new Headers(secondInit.headers).has('authorization')).toBe(false)
+  })
+
+  it('303 nunca busca destino privado', async () => {
+    mockLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
+    fetchMock.mockResolvedValueOnce(
+      new Response(null, {
+        status: 303,
+        headers: { location: 'http://169.254.169.254/latest/meta-data/' },
+      }),
+    )
+
+    await expect(safeFetch('https://loja.com/start', { method: 'POST' })).rejects.toThrow(
+      /não pode ser usado como fonte/,
+    )
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
   it('recusa quando o redirect aponta para IP interno — verificado NO SALTO', async () => {
     mockLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }])
     fetchMock.mockResolvedValueOnce(

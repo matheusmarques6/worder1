@@ -53,22 +53,36 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const selectedAccountId = accountId || accounts[0]?.id;
+    // O accountId vem da URL: só vale se for de uma conta desta
+    // organização (as `accounts` já vêm filtradas por ela).
+    const selectedAccountId = accountId && accounts.some((a: any) => a.id === accountId)
+      ? accountId
+      : accounts[0]?.id;
 
-    // Get campaigns
+    // Get campaigns. A coluna que liga campanha à conta é
+    // `google_account_id`; com `google_ads_account_id` o PostgREST
+    // recusava a consulta e a tela do Google Ads ficava vazia mesmo com
+    // conta conectada e dados sincronizados.
     const { data: campaigns } = await supabase
       .from('google_ads_campaigns')
       .select('*')
-      .eq('google_ads_account_id', selectedAccountId)
+      .eq('organization_id', organizationId)
+      .eq('google_account_id', selectedAccountId)
       .order('name');
 
-    // Get aggregated metrics
-    const { data: metrics } = await supabase
-      .from('google_ads_metrics')
-      .select('*')
-      .eq('google_ads_account_id', selectedAccountId)
-      .gte('date', startDate.toISOString().split('T')[0])
-      .lte('date', now.toISOString().split('T')[0]);
+    // Get aggregated metrics. `google_ads_metrics` não guarda a conta:
+    // o vínculo é pela campanha (é assim que o agrupamento abaixo casa
+    // metric.campaign_id com campaign.id).
+    const idsDasCampanhas = (campaigns || []).map((c: any) => c.id);
+    const { data: metrics } = idsDasCampanhas.length
+      ? await supabase
+          .from('google_ads_metrics')
+          .select('*')
+          .eq('organization_id', organizationId)
+          .in('campaign_id', idsDasCampanhas)
+          .gte('date', startDate.toISOString().split('T')[0])
+          .lte('date', now.toISOString().split('T')[0])
+      : { data: [] as any[] };
 
     // Calculate KPIs
     const kpis = calculateKPIs(metrics || []);
@@ -79,24 +93,41 @@ export async function GET(request: NextRequest) {
     // Get campaign type breakdown
     const campaignTypes = aggregateCampaignTypes(campaigns || [], metrics || []);
 
+    // Palavra-chave e termo de busca não têm organization_id: o dono é
+    // a campanha, via grupo de anúncios. Sem esse escopo, a tela
+    // mostrava palavra-chave e termo de busca de TODAS as organizações.
+    const { data: gruposDeAnuncio } = idsDasCampanhas.length
+      ? await supabase
+          .from('google_ads_ad_groups')
+          .select('id')
+          .in('campaign_id', idsDasCampanhas)
+      : { data: [] as any[] };
+    const idsDosGrupos = (gruposDeAnuncio || []).map((g: any) => g.id);
+
     // Get keywords with metrics
-    const { data: keywords } = await supabase
-      .from('google_ads_keywords')
-      .select(`
-        *,
-        ad_group:google_ads_ad_groups(
-          campaign:google_ads_campaigns(id, name)
-        )
-      `)
-      .limit(20);
+    const { data: keywords } = idsDosGrupos.length
+      ? await supabase
+          .from('google_ads_keywords')
+          .select(`
+            *,
+            ad_group:google_ads_ad_groups(
+              campaign:google_ads_campaigns(id, name)
+            )
+          `)
+          .in('ad_group_id', idsDosGrupos)
+          .limit(20)
+      : { data: [] as any[] };
 
     // Get search terms
-    const { data: searchTerms } = await supabase
-      .from('google_ads_search_terms')
-      .select('*')
-      .gte('date', startDate.toISOString().split('T')[0])
-      .order('clicks', { ascending: false })
-      .limit(20);
+    const { data: searchTerms } = idsDasCampanhas.length
+      ? await supabase
+          .from('google_ads_search_terms')
+          .select('*')
+          .in('campaign_id', idsDasCampanhas)
+          .gte('date', startDate.toISOString().split('T')[0])
+          .order('clicks', { ascending: false })
+          .limit(20)
+      : { data: [] as any[] };
 
     // Get products (Shopping)
     const { data: products } = await supabase
@@ -105,6 +136,7 @@ export async function GET(request: NextRequest) {
         *,
         metrics:google_ads_product_metrics(*)
       `)
+      .eq('organization_id', organizationId)
       .eq('google_ads_account_id', selectedAccountId)
       .limit(20);
 

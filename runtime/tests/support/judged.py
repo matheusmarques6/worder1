@@ -11,10 +11,9 @@ the alert opened in `public.alerts`, and the credential doing it — `worker_rol
 with the tenant scope set per transaction, exactly like production.
 """
 
-from typing import Any
-
 import psycopg
 
+from agents_runtime.agent_core.trace import ReplyDraft
 from agents_runtime.evals.rubrics import parse_rubric
 from agents_runtime.judges.pre_send import (
     JUDGE_MODEL,
@@ -26,6 +25,7 @@ from agents_runtime.queueing.jobs import InboundJob
 from agents_runtime.repository import alerts as alerts_repo
 from agents_runtime.repository import engine
 from agents_runtime.repository import judge_scores as scores_repo
+from tests.support.constant_reply import draft_for
 
 DRAFT = "Claro! Já verifico isso para você. 🧡"
 
@@ -69,7 +69,7 @@ def judged_responder(dsn: str, *, verdict: str):
     async def judge(draft: str, context: JudgeContext | None):
         return judge_verdicts({RUBRIC.name: RUBRIC}, _VERDICTS[verdict], rationale="roteirizado")
 
-    async def respond(job: InboundJob) -> dict[str, Any] | None:
+    async def respond(job: InboundJob) -> ReplyDraft:
         outcome = await guarded_reply(generate, judge)
 
         async with await psycopg.AsyncConnection.connect(dsn, autocommit=True) as conn:
@@ -109,6 +109,6 @@ def judged_responder(dsn: str, *, verdict: str):
                         },
                     )
 
-        return None if outcome.draft is None else {"text": outcome.draft}
+        return await draft_for(dsn, job, None if outcome.draft is None else {"text": outcome.draft})
 
     return respond

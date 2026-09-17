@@ -30,6 +30,7 @@ export function PixelHealthBanner() {
   const router = useRouter()
   const pathname = usePathname()
   const { currentStore } = useStoreStore()
+  const storeId = currentStore?.id
   const [needsPixel, setNeedsPixel] = useState(false)
   const [dismissed, setDismissed] = useState(true) // start dismissed to avoid flash
 
@@ -50,12 +51,12 @@ export function PixelHealthBanner() {
   const onAuth = pathname?.startsWith('/login') || pathname?.startsWith('/signup') || pathname?.startsWith('/onboarding')
 
   useEffect(() => {
-    if (!currentStore?.id) { setNeedsPixel(false); return }
+    if (!storeId) { setNeedsPixel(false); return }
     let cancelled = false
 
     async function check() {
       try {
-        const res = await fetch(`/api/integrations/shopify/status?store_id=${currentStore!.id}`, { cache: 'no-store' })
+        const res = await fetch(`/api/integrations/shopify/status?store_id=${storeId}`, { cache: 'no-store' })
         if (!res.ok) return
         const j = await res.json()
         if (cancelled) return
@@ -69,7 +70,7 @@ export function PixelHealthBanner() {
     check()
     const id = setInterval(check, 60_000) // 1 min
     return () => { cancelled = true; clearInterval(id) }
-  }, [currentStore?.id])
+  }, [storeId])
 
   if (!needsPixel || dismissed || onWizard || onAuth) return null
 

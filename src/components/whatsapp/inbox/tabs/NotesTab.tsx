@@ -12,7 +12,7 @@ import {
   Loader2,
   Send,
   Paperclip,
-  Image,
+  Image as ImageIcon,
   FileText,
   X,
   Download,
@@ -183,11 +183,14 @@ export function NotesTab({
                     className="relative group bg-gray-200 rounded-lg overflow-hidden"
                   >
                     {att.type === 'image' ? (
+                      <>
+                      {/* eslint-disable-next-line @next/next/no-img-element -- Local blob attachment preview cannot be safely optimized or allowlisted. */}
                       <img 
                         src={att.url} 
                         alt={att.name}
                         className="w-16 h-16 object-cover"
                       />
+                      </>
                     ) : (
                       <div className="w-32 p-2 flex items-center gap-2">
                         <FileText className="w-5 h-5 text-blue-400 flex-shrink-0" />
@@ -220,8 +223,9 @@ export function NotesTab({
                 disabled={isUploading}
                 className="p-2 text-gray-500 hover:text-white hover:bg-gray-200 rounded-lg transition-colors"
                 title="Anexar imagem (preview local)"
+                aria-label="Anexar imagem"
               >
-                <Image className="w-4 h-4" />
+                <ImageIcon className="w-4 h-4" />
               </button>
               <input
                 ref={imageInputRef}
@@ -394,6 +398,7 @@ function NoteCard({
                 <div key={index} className="relative group/att">
                   {att.type === 'image' ? (
                     <a href={att.url} target="_blank" rel="noopener noreferrer">
+                      {/* eslint-disable-next-line @next/next/no-img-element -- Persisted attachment URL cannot be safely optimized or allowlisted. */}
                       <img 
                         src={att.url} 
                         alt={att.name}

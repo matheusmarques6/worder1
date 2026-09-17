@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   Mail,
   Send,
@@ -156,6 +156,7 @@ function DeliverabilityScore({ metrics }: { metrics: EmailMetrics }) {
 // Main Page
 export default function EmailAnalyticsPage() {
   const { currentStore } = useStoreStore()
+  const storeId = currentStore?.id
   const [data, setData] = useState<AnalyticsData>({
     metrics: null,
     timeline: [],
@@ -164,11 +165,11 @@ export default function EmailAnalyticsPage() {
   const [loading, setLoading] = useState(true)
   const [days, setDays] = useState(30)
 
-  const fetchData = async (d: number = days) => {
-    if (!currentStore?.id) return
+  const fetchData = useCallback(async (d: number = days) => {
+    if (!storeId) return
     setLoading(true)
     try {
-      const res = await fetch(`/api/analytics/email-dashboard?days=${d}&storeId=${currentStore.id}`)
+      const res = await fetch(`/api/analytics/email-dashboard?days=${d}&storeId=${storeId}`)
       if (!res.ok) throw new Error('Failed to fetch')
       const json = await res.json()
       setData(json)
@@ -177,7 +178,7 @@ export default function EmailAnalyticsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [days, storeId])
 
   // Hydration gate — without it the first F5 fires fetchData with
   // currentStore=undefined and the analytics endpoint falls back
@@ -187,7 +188,7 @@ export default function EmailAnalyticsPage() {
   useEffect(() => {
     if (!hasHydrated) return
     fetchData()
-  }, [days, currentStore?.id, hasHydrated])
+  }, [hasHydrated, fetchData])
 
   const metrics = data.metrics || {
     emailsSent: 0,

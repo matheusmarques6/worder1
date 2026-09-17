@@ -54,10 +54,10 @@ DEFAULT_API_VERSION = "v22.0"
 
 GRAPH_URL = "https://graph.facebook.com"
 
-#: A assinatura do seam de token — uma função da conexão do sender + a org do
+#: A assinatura do seam de token — conexão do sender + org + número da conta do
 #: envio para o token JÁ decifrado. `from_env` liga a real (banco + secret_box);
 #: os testes de unidade ligam uma falsa, sem tocar em Postgres.
-TokenLoader = Callable[[psycopg.AsyncConnection, UUID], Awaitable[str]]
+TokenLoader = Callable[[psycopg.AsyncConnection, UUID, str], Awaitable[str]]
 
 #: O seam da porta de templates (item 34): conexão + org + nome + idioma → a
 #: forma do template aprovado, ou `None` se a org nunca sincronizou aquele
@@ -93,7 +93,7 @@ class CloudApiChannel:
 
     async def send(self, conn: psycopg.AsyncConnection, send: ClaimedSend) -> str:
         try:
-            token = await self._load_token(conn, send.organization_id)
+            token = await self._load_token(conn, send.organization_id, send.channel_external_id)
             payload = await self._payload_for(conn, send)
         except BaseException as error:
             # Item 32, ruling U(a): nada disto tocou a Meta. Token que não abre
@@ -150,7 +150,7 @@ class CloudApiChannel:
         if not wamid:
             return
         try:
-            token = await self._load_token(conn, send.organization_id)
+            token = await self._load_token(conn, send.organization_id, send.channel_external_id)
         except BaseException as error:
             mark_before_the_provider(error)
             raise
@@ -244,8 +244,14 @@ def from_env(dsn: str) -> ChannelPort:
     """
     base_secret = base_secret_from_env()
 
-    async def load_token(conn: psycopg.AsyncConnection, organization_id: UUID) -> str:
-        account = await load_active_account(conn, organization_id=organization_id)
+    async def load_token(
+        conn: psycopg.AsyncConnection, organization_id: UUID, channel_external_id: str,
+    ) -> str:
+        if not channel_external_id:
+            raise ValueError("WhatsApp send has no account number")
+        account = await load_active_account(
+            conn, organization_id=organization_id, channel_external_id=channel_external_id,
+        )
         if account is None:
             raise RuntimeError(
                 f"organização {organization_id} não tem conta WhatsApp Cloud ativa"

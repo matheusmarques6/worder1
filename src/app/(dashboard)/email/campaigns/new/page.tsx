@@ -10,7 +10,9 @@ import Link from 'next/link'
 import { useStoreStore, useAuthStore } from '@/stores'
 import ABTestPanel, { type ABTestConfig } from '@/components/email/ABTestPanel'
 import SmartSendingPanel, { type SmartSendingConfig } from '@/components/email/SmartSendingPanel'
+import UtmPanel from '@/components/email/UtmPanel'
 import InboxPreview from '@/components/email/InboxPreview'
+import { normalizeMessageUtmConfig, type MessageUtmConfig } from '@/lib/tracking/link-params'
 
 interface Template {
   id: string
@@ -80,6 +82,8 @@ export default function NewCampaignPage() {
     skipUnengaged: false, skipUnengagedDays: 120,
     sendTimeOptimization: false,
   })
+  // UTM desta campanha (sobrescreve o padrão da loja só aqui).
+  const [utmConfig, setUtmConfig] = useState<MessageUtmConfig>({})
 
   // Send
   const [sendType, setSendType] = useState<'now' | 'schedule'>('now')
@@ -137,10 +141,15 @@ export default function NewCampaignPage() {
     fetchTemplates()
     fetchSegments()
     fetchSubscriberCount()
-    fetch('/api/settings/organization')
+    // O remetente é da LOJA. Partir do padrão da organização gravava o
+    // endereço do domínio compartilhado na campanha, e ele continuava
+    // valendo mesmo depois de o lojista verificar o domínio dele.
+    const storeId = currentStore?.id
+    const url = storeId ? `/api/settings/store-email?storeId=${encodeURIComponent(storeId)}` : '/api/settings/organization'
+    fetch(url)
       .then((r) => r.json())
       .then((d) => {
-        const s = d?.organization?.email_settings || {}
+        const s = (storeId ? d?.email_settings : d?.organization?.email_settings) || {}
         if (!senderName && s.default_sender_name) setSenderName(s.default_sender_name)
         if (!senderEmail && s.default_sender_email) setSenderEmail(s.default_sender_email)
       })
@@ -216,6 +225,7 @@ export default function NewCampaignPage() {
           skip_unengaged: smartConfig.skipUnengaged,
           skip_unengaged_days: smartConfig.skipUnengagedDays,
           send_time_optimization: smartConfig.sendTimeOptimization,
+          utm: normalizeMessageUtmConfig(utmConfig),
         }),
       })
       if (!res.ok) {
@@ -235,7 +245,7 @@ export default function NewCampaignPage() {
           throw new Error(d.error || 'Erro ao enviar')
         }
       }
-      router.push('/email/campaigns')
+      router.push('/campaigns')
     } catch (err: any) {
       setError(err.message || 'Erro ao criar campanha')
     } finally { setSaving(false) }
@@ -294,7 +304,7 @@ export default function NewCampaignPage() {
         </nav>
         <button
           type="button"
-          onClick={() => router.push('/email/campaigns')}
+          onClick={() => router.push('/campaigns')}
           className="ml-4 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
         >
           <X className="w-5 h-5" />
@@ -467,6 +477,7 @@ export default function NewCampaignPage() {
                         >
                           <div className="aspect-[4/5] bg-gray-100 overflow-hidden relative">
                             {t.thumbnail_url ? (
+                              // eslint-disable-next-line @next/next/no-img-element -- template thumbnails are API-editable URLs with no contracted hostname.
                               <img src={t.thumbnail_url} alt={t.name} className="w-full h-full object-cover" />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center">
@@ -678,6 +689,15 @@ export default function NewCampaignPage() {
               <div className="mt-4">
                 <SmartSendingPanel config={smartConfig} onChange={setSmartConfig} />
               </div>
+              <div className="mt-4">
+                <UtmPanel
+                  storeId={currentStore?.id || null}
+                  campaignName={name || subject}
+                  subject={subject}
+                  value={utmConfig}
+                  onChange={setUtmConfig}
+                />
+              </div>
 
               {/* Send */}
               <div className="bg-white border border-gray-200 rounded-xl p-5 mt-4">
@@ -755,11 +775,12 @@ export default function NewCampaignPage() {
                       reply_to: replyTo || null,
                       store_id: currentStore?.id || null,
                       status: 'draft',
+                      utm: normalizeMessageUtmConfig(utmConfig),
                     }),
                   })
                 } catch {}
               }
-              router.push('/email/campaigns')
+              router.push('/campaigns')
             }}
             className="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
           >

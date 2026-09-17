@@ -6,7 +6,8 @@
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthClient, authError } from '@/lib/api-utils';
+import { getAuthClient, authError, validateStoreAccess } from '@/lib/api-utils';
+import { getSupabaseAdmin } from '@/lib/supabase-admin';
 
 export const dynamic = 'force-dynamic';
 
@@ -109,6 +110,17 @@ export async function POST(request: NextRequest) {
       return jsonResponse({ success: false, error: 'storeId required' }, 400);
     }
 
+    const validation = await validateStoreAccess(
+      supabase, auth.user.organization_id, storeId, auth.user.id,
+    );
+    if (!validation.valid) {
+      return jsonResponse(
+        { success: false, error: validation.error },
+        validation.status || 403,
+      );
+    }
+    const storeOrganizationId = validation.storeOrganizationId!;
+
     // Verificar se já existe job em andamento
     const { data: existingJob } = await supabase
       .from('shopify_import_jobs')
@@ -126,10 +138,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Buscar store
-    const { data: store, error: storeError } = await supabase
+    const supabaseAdmin = getSupabaseAdmin();
+    const { data: store, error: storeError } = await supabaseAdmin
       .from('shopify_stores')
       .select('organization_id, shop_domain, access_token')
       .eq('id', storeId)
+      .eq('organization_id', storeOrganizationId)
       .single();
 
     if (storeError || !store) {

@@ -156,6 +156,7 @@ export function EmailEditorOverlay({
             templateId,
             triggerType,
             organizationId,
+            storeId,
           } : undefined}
           onSave={handleSaveText}
           onRename={handleRename}
@@ -180,6 +181,7 @@ export function EmailEditorOverlay({
           templateId,
           triggerType,
           organizationId,
+          storeId,
         } : undefined}
         flowName={flowName}
         emailSiblings={emailSiblings}

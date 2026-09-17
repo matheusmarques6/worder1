@@ -45,26 +45,79 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Campaign template not found' }, { status: 404 });
     }
 
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
+    // O teste tem de mostrar o link que o cliente vai receber: mesmo host
+    // de rastreamento do disparo de verdade.
+    const { getTrackingBaseUrl } = await import('@/lib/email/tracking-url');
+    const baseUrl = await getTrackingBaseUrl(user.organization_id, campaign.store_id || null);
     const sampleData = getSampleMergeData();
 
     // Use a fake emailSendId for test emails
     const testSendId = 'test-' + Date.now();
 
+    // Blocos dinâmicos de produto com a loja DA CAMPANHA — o teste tem de
+    // mostrar os produtos e links que o cliente vai receber. Sem isto o
+    // e-mail de teste saía com os comentários <!-- WORDER_*_BLOCK --> crus.
+    let htmlSource: string = template.html;
+    try {
+      const { resolveProductBlocks, resolveCartBlocks } = await import('@/lib/email/render');
+      htmlSource = await resolveProductBlocks(htmlSource, user.organization_id, undefined, undefined, campaign.store_id || null);
+      htmlSource = await resolveCartBlocks(htmlSource, user.organization_id, undefined, undefined, null, undefined, campaign.store_id || null);
+    } catch (e: any) {
+      console.warn('[TestCampaign] dynamic block resolve failed:', e?.message);
+    }
+
+    // UTM + identificação como no envio real (configuração da loja da campanha).
+    let linkParams: any = null;
+    try {
+      const { getUtmSettings } = await import('@/lib/tracking/utm-settings');
+      const { makeLinkParamsResolver, normalizeMessageUtmConfig } = await import('@/lib/tracking/link-params');
+      const { settings } = await getUtmSettings(user.organization_id, campaign.store_id || null);
+      const campaignUtm = normalizeMessageUtmConfig((campaign as any).settings?.utm);
+      linkParams = makeLinkParamsResolver(settings, {
+        channel: 'email',
+        messageType: 'campaign',
+        campaignName: campaign.name || '',
+        campaignId: campaign.id,
+        emailSubject: renderMergeTags(campaign.subject || '', sampleData, { escape: false }),
+        sendId: testSendId,
+        storeName: sampleData.store_name,
+        storeDomain: sampleData.store_url,
+        extra: sampleData,
+      }, { utmOverrides: campaignUtm?.overrides || null, utmDisabled: campaignUtm?.disabled === true });
+    } catch { /* teste segue sem UTM no href */ }
+
     const finalHtml = prepareEmailHtml({
-      html: template.html,
+      html: htmlSource,
       mergeData: sampleData,
       emailSendId: testSendId,
       baseUrl,
+      linkParams,
     });
 
     // escape:false — subject is text/plain (no &amp; in the inbox).
     const finalSubject = `[TESTE] ${renderMergeTags(campaign.subject, sampleData, { escape: false })}`;
 
+    // O teste tem de sair pelo mesmo endereço do envio de verdade: era
+    // aqui que o lojista via "worder.email" e concluía que a troca de
+    // domínio não tinha funcionado.
+    let testFrom = campaign.from_email as string | null
+    let testSenderName = campaign.sender_name as string | null
+    try {
+      const { getEmailProviderForOrg } = await import('@/lib/email/providers')
+      const { chooseSender } = await import('@/lib/email/sender-preference')
+      const { config } = await getEmailProviderForOrg(user.organization_id, campaign.store_id || undefined)
+      const chosen = chooseSender(
+        { email: campaign.from_email, name: campaign.sender_name },
+        { email: config.defaultFrom, name: config.defaultSenderName },
+      )
+      testFrom = chosen.email
+      testSenderName = chosen.name
+    } catch { /* mantém o que está na campanha */ }
+
     await sendEmail({
       to: testEmail,
-      from: campaign.from_email,
-      senderName: campaign.sender_name,
+      from: testFrom as string,
+      senderName: testSenderName || undefined,
       subject: finalSubject,
       html: finalHtml,
       replyTo: campaign.reply_to,

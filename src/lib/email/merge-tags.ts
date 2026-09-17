@@ -16,6 +16,8 @@
 // =============================================
 
 import { normalizeHost, getShopDomain, absolutizeSiteUrl } from './trigger-cta';
+import { CATALOG_BY_TAG, EVENT_TAGS, MERGE_TAG_CATALOG } from '@/lib/merge-tags/catalog';
+import { resolveEventTag, type TagMappingIndex } from '@/lib/merge-tags/resolve';
 
 export interface MergeTag {
   tag: string;
@@ -192,6 +194,15 @@ export interface ResolveTriggerSmartTagsOptions {
    * click-tracking encoding.
    */
   escapeHtml?: boolean;
+  /**
+   * Mapeamento de variáveis da organização (Integrações → Mapeamento de
+   * variáveis). Quando presente, o caminho configurado pelo lojista é
+   * consultado ANTES da cascata padrão — é o que permite acomodar uma
+   * integração que manda o link do checkout em outro campo sem tocar em
+   * template nenhum. Ausente = só a cascata padrão, comportamento de
+   * quem nunca abriu a tela.
+   */
+  mapping?: TagMappingIndex;
 }
 
 // Tiny local escape — keep this module client-safe (no server imports).
@@ -425,8 +436,20 @@ export function resolveTriggerSmartTags(
   // {{ email }} / {{ first_name }} (resolved later by renderMergeTags from
   // mergeData) are NOT clobbered. The whitelist is PascalCase/dotted and
   // collision-free with the flat snake_case tags.
-  for (const path of CANONICAL_TRIGGER_PATHS) {
-    let value = resolveCanonicalPath(path);
+  // União da whitelist histórica com o catálogo novo: nenhum template
+  // existente pode parar de resolver por causa da reorganização, e as
+  // variáveis novas (SKU, variante, transportadora) passam a valer.
+  const resolvablePaths = Array.from(
+    new Set([...CANONICAL_TRIGGER_PATHS, ...EVENT_TAGS.map((t) => t.tag)])
+  );
+
+  for (const path of resolvablePaths) {
+    // Quando o catálogo conhece a variável, quem resolve é o motor com
+    // mapeamento — assim o caminho configurado pelo lojista vale aqui,
+    // no envio de verdade, e não só na tela de mapeamento.
+    let value = CATALOG_BY_TAG.has(path)
+      ? resolveEventTag(path, ev, options?.mapping).value
+      : resolveCanonicalPath(path);
     // Absolutize URL-typed canonical tags (…URL) so a relative "/products/x"
     // becomes "https://<store>/products/x" instead of hitting the app domain.
     if (value !== undefined && isUrlLeaf(path)) value = absolutizeSiteUrl(value, shopHost);
@@ -512,6 +535,12 @@ export function getSampleMergeData(): Record<string, string> {
   // so test sends / previews resolve them like real sends do.
   for (const spec of CANONICAL_SPEC) {
     data[spec.tag] = spec.sampleValue;
+  }
+  // Catálogo novo — inclui as variáveis que a lista canônica antiga não
+  // tinha (SKU, variante, transportadora). Sem isto, a pré-visualização
+  // mostraria a tag literal para elas enquanto o envio real resolve.
+  for (const spec of MERGE_TAG_CATALOG) {
+    if (!(spec.tag in data)) data[spec.tag] = spec.sample;
   }
   return data;
 }

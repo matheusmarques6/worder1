@@ -92,10 +92,9 @@ class ActiveVersion:
 
 @dataclass(frozen=True, slots=True)
 class TenantSettings:
-    """A política do tenant mais o que decide o modo shadow (S9b)."""
+    """A política do tenant usada pelos produtores de prompt."""
 
     policy: TenantPolicy
-    shadow_until: datetime | None
 
     @property
     def primary_language(self) -> str:
@@ -192,11 +191,11 @@ async def load_tenant_policy(
     conn: psycopg.AsyncConnection, *, organization_id: UUID
 ) -> TenantSettings:
     # FORK: Worder has no `tenants` table; the org-level policy knobs the motor
-    # kept there (primary_language, never_say_ai, shadow_until) do not exist on
+    # kept there (primary_language, never_say_ai) do not exist on
     # `organizations`, so the motor defaults are pinned here. Etapa 3 replaces
     # this loader with per-agent config from ai_agents (see FORK.md).
     cursor = await conn.execute(
-        "select 'pt-BR'::text, true, null::timestamptz from public.organizations where id = %s",
+        "select 'pt-BR'::text, true from public.organizations where id = %s",
         (organization_id,),
     )
     row = await cursor.fetchone()
@@ -205,7 +204,6 @@ async def load_tenant_policy(
 
     return TenantSettings(
         policy=TenantPolicy(primary_language=row[0], never_say_ai=row[1]),
-        shadow_until=row[2],
     )
 
 
@@ -333,7 +331,9 @@ async def load_recent_transcript(
 
 
 async def load_legacy_guard_state(
-    conn: psycopg.AsyncConnection, *, organization_id: UUID, conversation_id: UUID
+    conn: psycopg.AsyncConnection, *, organization_id: UUID, conversation_id: UUID,
+    channel_account_id: UUID | None = None,
+    count_bot: bool = True, check_human: bool = True,
 ) -> GuardState:
     """O estado que os guards de comportamento leem (auditoria item 30).
 
@@ -347,10 +347,16 @@ async def load_legacy_guard_state(
 
     Conversa ausente do espelho devolve o estado zerado — ninguém transferiu,
     o bot não respondeu, nenhum humano falou, e o bot segue ligado.
+
+    `count_bot`/`check_human` (W3-T6a) pulam a varredura de mensagens que o
+    agente não usa — teto por conversa desligado, ou stop_on_human_reply
+    desligado. `last_bot_message_at` NUNCA é pulado: o cooldown curto
+    anti-loop (`guards.py` RECENT_REPLY_COOLDOWN_SECONDS) não é knob de loja e
+    lê esse campo sempre, nos dois defaults `True` de quem não passa nada.
     """
     cursor = await conn.execute(
-        "select * from internal.legacy_conversation_guard_state(%s, %s)",
-        (organization_id, conversation_id),
+        "select * from internal.legacy_conversation_guard_state(%s, %s, %s, %s, %s)",
+        (organization_id, conversation_id, channel_account_id, count_bot, check_human),
     )
     row = await cursor.fetchone()
     if row is None:
@@ -371,6 +377,7 @@ async def mark_ai_handoff(
     organization_id: UUID,
     conversation_id: UUID,
     reason: str,
+    channel_account_id: UUID | None = None,
 ) -> bool:
     """Transfere a conversa para humano no espelho legado (item 30).
 
@@ -379,7 +386,7 @@ async def mark_ai_handoff(
     transferência vale para os turnos SEGUINTES e não só para este.
     """
     cursor = await conn.execute(
-        "select internal.mark_ai_handoff(%s, %s, %s)",
-        (organization_id, conversation_id, reason),
+        "select internal.mark_ai_handoff(%s, %s, %s, %s)",
+        (organization_id, conversation_id, reason, channel_account_id),
     )
     return bool((await cursor.fetchone())[0])

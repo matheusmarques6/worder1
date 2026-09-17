@@ -180,6 +180,7 @@ function AgentCard({ agent }: AgentCardProps) {
         <div className="relative">
           <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
             {agent.profile?.avatar_url ? (
+              // eslint-disable-next-line @next/next/no-img-element -- agent profile URL is not safely allowlisted.
               <img
                 src={agent.profile.avatar_url}
                 alt=""

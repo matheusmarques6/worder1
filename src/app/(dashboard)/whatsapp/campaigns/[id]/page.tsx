@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { motion } from 'framer-motion'
 import {
@@ -73,7 +73,7 @@ export default function CampaignDetailsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
 
-  const fetchCampaign = async () => {
+  const fetchCampaign = useCallback(async () => {
     try {
       const res = await fetch(`/api/whatsapp/campaigns/${campaignId}`)
       const data = await res.json()
@@ -85,11 +85,11 @@ export default function CampaignDetailsPage() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [campaignId])
 
   useEffect(() => {
     if (campaignId) fetchCampaign()
-  }, [campaignId])
+  }, [campaignId, fetchCampaign])
 
   const handleAction = async (action: string) => {
     setActionLoading(action)

@@ -13,19 +13,13 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { authorizeCronRequest } from '@/lib/cron-auth'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
 
-function isAuthorized(req: NextRequest): boolean {
-  if (req.headers.get('x-vercel-cron')) return true
-  const secret = process.env.CRON_SECRET
-  if (!secret) return process.env.NODE_ENV !== 'production'
-  return req.headers.get('authorization') === `Bearer ${secret}`
-}
-
 export async function GET(req: NextRequest) {
-  if (!isAuthorized(req)) {
+  if (!authorizeCronRequest(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -174,7 +168,10 @@ export async function GET(req: NextRequest) {
           try {
             const resp = await fetch(`${baseUrl}/api/email/campaigns/send-batch`, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'X-Internal': 'true' },
+              headers: {
+                'Content-Type': 'application/json',
+                authorization: `Bearer ${process.env.INTERNAL_API_SECRET || process.env.CRON_SECRET || ''}`,
+              },
               body: JSON.stringify({
                 campaign_id: camp.id,
                 contact_ids: batches[i],

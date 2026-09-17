@@ -1,6 +1,7 @@
 'use client'
 
 import { useParams, useRouter } from 'next/navigation'
+import Image from 'next/image'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
@@ -60,6 +61,7 @@ const shopifyEventLabels: Record<string, string> = {
   fulfilled_order: 'Pedido Entregue',
   cancelled_order: 'Pedido Cancelado',
   refunded_order: 'Pedido Reembolsado',
+  form_submitted: 'Inscreveu-se por um popup',
   checkout_started: 'Checkout Iniciado',
   checkout_completed: 'Checkout Concluído',
   checkout_abandoned: 'Carrinho Abandonado',
@@ -355,7 +357,9 @@ export default function ContactDetailPage() {
         ? `Pedido #${evt.properties.OrderNumber || evt.properties.order_number}`
         : evt.properties?.ProductName || evt.properties?.product_title || null,
       created_at: evt.occurredAt,
-      source: 'shopify',
+      // Nem todo evento do contato veio da Shopify: a inscrição por popup
+      // saía com o selo da loja, o que confundia a origem do contato.
+      source: evt.eventType === 'form_submitted' ? 'popup' : 'shopify',
       properties: evt.properties,
       monetaryValue: evt.monetaryValue,
       currency: evt.currency,
@@ -494,6 +498,7 @@ export default function ContactDetailPage() {
           <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
             <div className="flex flex-col items-center text-center">
               {contact.avatar_url || contact.profile_picture_url ? (
+                // eslint-disable-next-line @next/next/no-img-element -- contact-provided avatar URL is not safely allowlisted.
                 <img
                   src={contact.avatar_url || contact.profile_picture_url}
                   alt={contactName}
@@ -724,7 +729,7 @@ export default function ContactDetailPage() {
                                   <div className={`w-8 h-8 rounded-full ${iconCfg.bgColor} flex items-center justify-center flex-shrink-0 relative`}>
                                     <Icon size={16} className={iconCfg.color} weight="fill" />
                                     {isShopify && (
-                                      <img src="/integrations/icone shopify .png" alt="" className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-white p-[1px]" />
+                                      <Image src="/integrations/icone shopify .png" alt="" width={14} height={14} loading="eager" className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-white p-[1px]" />
                                     )}
                                   </div>
                                   {i < group.items.length - 1 && <div className="w-px h-full bg-gray-50 min-h-[24px]" />}
@@ -920,6 +925,7 @@ export default function ContactDetailPage() {
                     return (
                       <div key={evt.id} className="flex items-center gap-3 py-2 border-b border-gray-100 last:border-0">
                         {evt.properties?.imageUrl || evt.properties?.image_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element -- event-provided product URL is not safely allowlisted.
                           <img
                             src={evt.properties.imageUrl || evt.properties.image_url}
                             alt={title}
@@ -976,6 +982,7 @@ export default function ContactDetailPage() {
                     return (
                       <div key={evt.id} className="flex items-center gap-3 py-2 border-b border-gray-100 last:border-0">
                         {imageUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element -- event-provided product URL is not safely allowlisted.
                           <img
                             src={imageUrl}
                             alt={title}

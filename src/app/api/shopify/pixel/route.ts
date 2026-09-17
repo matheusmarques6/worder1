@@ -8,7 +8,8 @@
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthClient, authError } from '@/lib/api-utils';
+import { getAuthClient, authError, validateStoreAccess } from '@/lib/api-utils';
+import { getSupabaseAdmin } from '@/lib/supabase-admin';
 export const dynamic = 'force-dynamic';
 
 const SHOPIFY_API_VERSION = '2024-01';
@@ -19,7 +20,7 @@ const SHOPIFY_API_VERSION = '2024-01';
 export async function POST(request: NextRequest) {
   const auth = await getAuthClient();
   if (!auth) return authError();
-  const { supabase } = auth;
+  const { supabase, user } = auth;
   
   try {
     const { storeId } = await request.json();
@@ -27,12 +28,24 @@ export async function POST(request: NextRequest) {
     if (!storeId) {
       return NextResponse.json({ error: 'storeId required' }, { status: 400 });
     }
-    
-    // Buscar loja - RLS filtra automaticamente
-    const { data: store, error: storeError } = await supabase
+
+    const validation = await validateStoreAccess(
+      supabase, user.organization_id, storeId, auth.user.id,
+    );
+    if (!validation.valid) {
+      return NextResponse.json(
+        { error: validation.error },
+        { status: validation.status || 403 },
+      );
+    }
+
+    const storeOrganizationId = validation.storeOrganizationId!;
+    const supabaseAdmin = getSupabaseAdmin();
+    const { data: store, error: storeError } = await supabaseAdmin
       .from('shopify_stores')
       .select('*')
       .eq('id', storeId)
+      .eq('organization_id', storeOrganizationId)
       .maybeSingle();
     
     if (storeError || !store) {
@@ -64,14 +77,15 @@ export async function POST(request: NextRequest) {
     const existingScript = script_tags?.find((s: any) => s.src.includes('/api/shopify/track'));
     
     if (existingScript) {
-      await supabase
+      await supabaseAdmin
         .from('shopify_stores')
         .update({
           tracking_enabled: true,
           tracking_script_id: String(existingScript.id),
           updated_at: new Date().toISOString(),
         })
-        .eq('id', store.id);
+        .eq('id', store.id)
+        .eq('organization_id', storeOrganizationId);
       
       return NextResponse.json({
         success: true,
@@ -107,14 +121,15 @@ export async function POST(request: NextRequest) {
     
     const { script_tag } = await createResponse.json();
     
-    await supabase
+    await supabaseAdmin
       .from('shopify_stores')
       .update({
         tracking_enabled: true,
         tracking_script_id: String(script_tag.id),
         updated_at: new Date().toISOString(),
       })
-      .eq('id', store.id);
+      .eq('id', store.id)
+      .eq('organization_id', storeOrganizationId);
     
     return NextResponse.json({
       success: true,
@@ -135,13 +150,14 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   const auth = await getAuthClient();
   if (!auth) return authError();
-  const { supabase } = auth;
+  const { user } = auth;
   
   try {
-    // RLS filtra automaticamente
-    const { data: store } = await supabase
+    const supabaseAdmin = getSupabaseAdmin();
+    const { data: store } = await supabaseAdmin
       .from('shopify_stores')
       .select('id, shop_domain, access_token, tracking_enabled, tracking_script_id')
+      .eq('organization_id', user.organization_id)
       .eq('is_active', true)
       .maybeSingle();
     
@@ -193,13 +209,14 @@ export async function GET(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const auth = await getAuthClient();
   if (!auth) return authError();
-  const { supabase } = auth;
+  const { user } = auth;
   
   try {
-    // RLS filtra automaticamente
-    const { data: store } = await supabase
+    const supabaseAdmin = getSupabaseAdmin();
+    const { data: store } = await supabaseAdmin
       .from('shopify_stores')
       .select('id, shop_domain, access_token, tracking_script_id')
+      .eq('organization_id', user.organization_id)
       .eq('is_active', true)
       .maybeSingle();
     
@@ -222,15 +239,16 @@ export async function DELETE(request: NextRequest) {
       }
     }
     
-    // Atualizar banco - RLS filtra automaticamente
-    await supabase
+    // Atualizar banco
+    await supabaseAdmin
       .from('shopify_stores')
       .update({
         tracking_enabled: false,
         tracking_script_id: null,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', store.id);
+      .eq('id', store.id)
+      .eq('organization_id', user.organization_id);
     
     return NextResponse.json({
       success: true,

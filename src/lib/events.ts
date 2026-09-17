@@ -1,15 +1,16 @@
 /**
- * EventBus - Sistema Central de Eventos para Automações
- * 
- * Este módulo é o coração do sistema de automações. Ele é responsável por:
+ * EventBus - Porta de entrada de eventos para Automações
+ *
+ * Responsabilidades:
  * 1. Receber eventos de qualquer parte do sistema
- * 2. Encontrar automações que devem ser disparadas
- * 3. Criar registros de execução
- * 4. Enfileirar para processamento assíncrono
+ * 2. Registrar o evento (event_logs) e disparar webhooks outbound
+ * 3. Delegar a criação dos runs ao dispatchTrigger — o ÚNICO motor de
+ *    disparo — que aplica store-scope, filtros de audiência/payload,
+ *    limite de frequência e idempotência
+ * 4. Enfileirar os runs criados para execução imediata
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { shouldIncludeAutomationForStore } from './automation/trigger-dispatcher';
 
 // ============================================
 // TIPOS DE EVENTOS
@@ -78,7 +79,10 @@ const EVENT_TO_TRIGGER_MAP: Record<EventType, string> = {
   [EventType.ORDER_CREATED]: 'trigger_order',
   [EventType.ORDER_PAID]: 'trigger_order_paid',
   [EventType.ORDER_FULFILLED]: 'trigger_order_fulfilled',
-  [EventType.ORDER_CANCELLED]: 'trigger_order_cancelled',
+  // O tipo que existe na paleta do builder é trigger_cancelled_order —
+  // o antigo trigger_order_cancelled não existe em lugar nenhum da UI,
+  // então o gatilho de pedido cancelado nunca disparava.
+  [EventType.ORDER_CANCELLED]: 'trigger_cancelled_order',
   [EventType.CHECKOUT_CREATED]: 'trigger_checkout',
   [EventType.CHECKOUT_UPDATED]: 'trigger_checkout',
   [EventType.CART_ABANDONED]: 'trigger_abandon',
@@ -158,6 +162,49 @@ export function extractEventPayloadStoreId(
   return null;
 }
 
+/**
+ * Chave de idempotência canônica por EVENTO DE NEGÓCIO.
+ *
+ * O mesmo pedido chega por até três caminhos (webhook Shopify →
+ * dispatchTrigger, EventBus.emit e pixel de checkout_completed) e cada um
+ * criava seu próprio run: o contato entrava três vezes no mesmo fluxo.
+ * Derivando a chave do id do recurso — e usando exatamente o formato que
+ * os produtores diretos já usam (`trigger:placed_order:<id>` etc.) — o
+ * primeiro caminho a chegar cria o run e os outros dois são descartados
+ * pela janela de 24h do dispatchTrigger.
+ *
+ * Retorna undefined quando não há id estável no payload (aí não há dedup,
+ * comportamento antigo preservado). Exportada para teste unitário.
+ */
+export function buildEventIdempotencyKey(
+  eventType: EventType,
+  payload: EventPayload
+): string | undefined {
+  const d: any = payload?.data || {};
+  const orderId = payload.order_id || d.order_id || d.orderId || d.id;
+  const checkoutId = d.checkout_id || d.checkoutId || d.token || d.cart_token;
+
+  switch (eventType) {
+    case EventType.ORDER_CREATED:
+      return orderId ? `trigger:placed_order:${orderId}` : undefined;
+    case EventType.ORDER_PAID:
+      return orderId ? `trigger:order_paid:${orderId}` : undefined;
+    case EventType.ORDER_FULFILLED:
+      return orderId ? `trigger:fulfilled_order:${orderId}` : undefined;
+    case EventType.ORDER_CANCELLED:
+      return orderId ? `trigger:cancelled_order:${orderId}` : undefined;
+    case EventType.CART_ABANDONED:
+    case EventType.CHECKOUT_ABANDONED:
+      return checkoutId ? `trigger:checkout_abandoned:${checkoutId}` : undefined;
+    case EventType.CONTACT_CREATED:
+      // Um contato só entra no welcome flow uma vez, venha o signup do
+      // Shopify, do CRM ou do Klaviyo.
+      return payload.contact_id ? `trigger:signup:${payload.contact_id}` : undefined;
+    default:
+      return undefined;
+  }
+}
+
 export interface EmitResult {
   success: boolean;
   automationsTriggered: number;
@@ -211,6 +258,7 @@ class EventBusClass {
           'order.created', 'order.paid', 'order.fulfilled', 'order.cancelled',
           'checkout.abandoned', 'customer.created', 'shipment.tracking_created',
           'payment.pix.abandoned', 'payment.boleto.abandoned', 'browse.abandoned',
+          'popup.signup', 'popup.reward',
         ]);
         if (OUTBOUND_V1_CATALOG.has(eventType) && payload.data?._webhook_dispatch_meta) {
           const meta = payload.data._webhook_dispatch_meta;
@@ -229,34 +277,54 @@ class EventBusClass {
         console.error('[EventBus] outbound dispatch failed:', err);
       }
 
-      // 2. Buscar automações ativas que correspondem ao trigger
+      // 2. Disparar automações via dispatchTrigger — o MESMO motor do
+      // caminho moderno. Antes este path criava runs por conta própria e
+      // ignorava audience_filters, trigger_filters, frequency_config e
+      // idempotência: os filtros e a regra de re-entrada configurados no
+      // editor eram silenciosamente descartados para todo gatilho servido
+      // pelo EventBus (signup, pedido pago/enviado, deals, webhook...).
       const triggerType = EVENT_TO_TRIGGER_MAP[eventType];
-      const automations = await this.findMatchingAutomations(
-        payload.organization_id,
-        triggerType,
-        payload
-      );
-
-      if (automations.length === 0) {
-        console.log(`[EventBus] No automations found for ${eventType} in org ${payload.organization_id}`);
+      if (!triggerType) {
+        console.log(`[EventBus] No trigger mapping for ${eventType} — event logged only`);
         return result;
       }
 
-      console.log(`[EventBus] Found ${automations.length} automations for ${eventType}`);
+      const { dispatchTrigger } = await import('./automation/trigger-dispatcher');
+      const dispatch = await dispatchTrigger({
+        organizationId: payload.organization_id,
+        triggerType,
+        triggerData: payload.data,
+        contactId: payload.contact_id || null,
+        dealId: payload.deal_id || null,
+        storeId: this.getPayloadStoreId(payload),
+        // As condições legadas do trigger_config (tag, estágio, valor
+        // mínimo, pipeline, webhook) continuam valendo — agora como um
+        // filtro a mais dentro do pipeline unificado.
+        matchConfig: (cfg) => this.matchesTriggerConditions({ trigger_config: cfg }, payload),
+        // Chave canônica por evento de negócio: o mesmo pedido chegando
+        // pelo webhook, pelo EventBus e pelo pixel converge na mesma
+        // chave e gera UM run, não três.
+        idempotencyKey: buildEventIdempotencyKey(eventType, payload),
+      });
 
-      // 3. Para cada automação, criar um run e enfileirar
-      for (const automation of automations) {
+      if (dispatch.runsCreated === 0) {
+        console.log(`[EventBus] No runs created for ${eventType} in org ${payload.organization_id}`);
+        return result;
+      }
+
+      console.log(`[EventBus] ${dispatch.runsCreated} run(s) created for ${eventType}`);
+
+      // 3. Enfileirar cada run para execução imediata. O dispatchTrigger
+      // só cria o run (o cron process-runs o pegaria depois); enfileirar
+      // aqui preserva a latência baixa que este path sempre teve.
+      for (const runId of dispatch.runIds) {
         try {
-          const runId = await this.createAutomationRun(automation, payload);
-          
-          // 4. Enfileirar para processamento assíncrono
           await this.enqueueRun(runId);
-          
           result.runIds.push(runId);
           result.automationsTriggered++;
         } catch (error: any) {
-          console.error(`[EventBus] Error triggering automation ${automation.id}:`, error);
-          result.errors?.push(`Automation ${automation.id}: ${error.message}`);
+          console.error(`[EventBus] Error enqueueing run ${runId}:`, error);
+          result.errors?.push(`Run ${runId}: ${error.message}`);
         }
       }
 
@@ -312,51 +380,6 @@ class EventBusClass {
   }
 
   /**
-   * Busca automações ativas que correspondem ao trigger
-   */
-  private async findMatchingAutomations(
-    organizationId: string,
-    triggerType: string,
-    payload: EventPayload
-  ): Promise<any[]> {
-    const supabase = this.getSupabase();
-
-    const payloadStoreId = this.getPayloadStoreId(payload);
-
-    // Buscar automações ativas com o trigger correspondente.
-    // Multi-tenant: quando o evento traz uma loja (payloadStoreId), escopar
-    // para flows DESSA loja OU flows org-wide (store_id NULL) — mesmo semântica
-    // do path moderno (shouldIncludeAutomationForStore). Sem isso, um checkout
-    // na loja Dr. Groot enrola o contato (compartilhado por org) em TODOS os
-    // funis de todas as lojas da org — vazamento cross-loja.
-    let query = supabase
-      .from('automations')
-      .select('*')
-      .eq('organization_id', organizationId)
-      .eq('trigger_type', triggerType)
-      .eq('status', 'active');
-    if (payloadStoreId) {
-      query = query.or(`store_id.eq.${payloadStoreId},store_id.is.null`);
-    }
-    const { data: automations, error } = await query;
-
-    if (error) {
-      throw error;
-    }
-
-    // Filtrar por condições adicionais do trigger_config + store-scope
-    // defense-in-depth em JS (no-op quando não há loja no evento).
-    const matchingAutomations = (automations || []).filter((automation) => {
-      if (!shouldIncludeAutomationForStore(automation.store_id, payloadStoreId)) {
-        return false;
-      }
-      return this.matchesTriggerConditions(automation, payload);
-    });
-
-    return matchingAutomations;
-  }
-
-  /**
    * Verifica se o payload atende às condições do trigger
    */
   private matchesTriggerConditions(automation: any, payload: EventPayload): boolean {
@@ -367,94 +390,52 @@ class EventBusClass {
       return true;
     }
 
-    // Verificar cada condição configurada
-    
+    // Verificar cada condição configurada. O editor grava as chaves em
+    // camelCase (tagName, minValue, pipelineId, stageId, webhookId) e
+    // fluxos antigos/API em snake_case — aceitar as duas grafias, senão
+    // o filtro configurado na UI era silenciosamente ignorado aqui.
+
     // Tag específica
-    if (config.tag_name && payload.data.tag_name) {
-      if (config.tag_name !== payload.data.tag_name) {
+    const cfgTag = config.tag_name || config.tagName;
+    if (cfgTag && payload.data.tag_name) {
+      if (cfgTag !== payload.data.tag_name) {
         return false;
       }
     }
 
     // Estágio específico
-    if (config.stage_id && payload.data.to_stage_id) {
-      if (config.stage_id !== payload.data.to_stage_id) {
+    const cfgStage = config.stage_id || config.stageId;
+    if (cfgStage && payload.data.to_stage_id) {
+      if (cfgStage !== payload.data.to_stage_id) {
         return false;
       }
     }
 
     // Valor mínimo
-    if (config.min_value && payload.data.total_value) {
-      if (parseFloat(payload.data.total_value) < parseFloat(config.min_value)) {
+    const cfgMinValue = config.min_value ?? config.minValue;
+    if (cfgMinValue && payload.data.total_value) {
+      if (parseFloat(payload.data.total_value) < parseFloat(cfgMinValue)) {
         return false;
       }
     }
 
     // Pipeline específica
-    if (config.pipeline_id && payload.data.pipeline_id) {
-      if (config.pipeline_id !== payload.data.pipeline_id) {
+    const cfgPipeline = config.pipeline_id || config.pipelineId;
+    if (cfgPipeline && payload.data.pipeline_id) {
+      if (cfgPipeline !== payload.data.pipeline_id) {
         return false;
       }
     }
 
     // Webhook ID específico
-    if (config.webhook_id && payload.data.webhook_id) {
-      if (config.webhook_id !== payload.data.webhook_id) {
+    const cfgWebhook = config.webhook_id || config.webhookId;
+    if (cfgWebhook && payload.data.webhook_id) {
+      if (cfgWebhook !== payload.data.webhook_id) {
         return false;
       }
     }
 
     return true;
-  }
-
-  /**
-   * Cria um registro de execução de automação
-   */
-  private async createAutomationRun(automation: any, payload: EventPayload): Promise<string> {
-    const supabase = this.getSupabase();
-
-    const payloadStoreId = this.getPayloadStoreId(payload);
-
-    // Preparar contexto inicial
-    // NOTE: automation_runs não tem coluna store_id nesta schema, então o
-    // store id é atribuído via metadata.store_id (o run fica store-attributed
-    // sem mudança de schema). O gate anti-vazamento real acontece em
-    // findMatchingAutomations; isto é só atribuição/auditoria.
-    // KNOWN (fora do escopo desta correção): este path não aplica delay/
-    // idempotency/frequency como o dispatchTrigger moderno — divergência
-    // conhecida, tratada separadamente.
-    const initialContext = {
-      organization_id: payload.organization_id,
-      automation_id: automation.id,
-      contact_id: payload.contact_id,
-      deal_id: payload.deal_id,
-      order_id: payload.order_id,
-      store_id: payloadStoreId ?? null,
-      email: payload.email,
-      phone: payload.phone,
-      trigger_type: automation.trigger_type,
-      trigger_data: payload.data,
-      triggered_at: new Date().toISOString(),
-    };
-
-    // Criar o run
-    const { data: run, error } = await supabase
-      .from('automation_runs')
-      .insert({
-        automation_id: automation.id,
-        contact_id: payload.contact_id || null,
-        status: 'pending',
-        metadata: initialContext,
-        started_at: new Date().toISOString(),
-      })
-      .select()
-      .single();
-
-    if (error) {
-      throw error;
-    }
-
-    return run.id;
   }
 
   /**
@@ -494,7 +475,7 @@ class EventBusClass {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Internal-Request': 'true', // Marker para bypass de auth
+          Authorization: `Bearer ${process.env.CRON_SECRET}`,
         },
         body: JSON.stringify({
           type: 'automation_run',

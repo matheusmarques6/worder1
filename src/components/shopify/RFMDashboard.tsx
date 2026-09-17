@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Users,
@@ -172,7 +172,7 @@ export function RFMDashboard({ storeId }: RFMDashboardProps) {
   const [lastCalculated, setLastCalculated] = useState<string | null>(null)
 
   // Fetch RFM data
-  const fetchRFMData = async () => {
+  const fetchRFMData = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
@@ -199,7 +199,7 @@ export function RFMDashboard({ storeId }: RFMDashboardProps) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [storeId])
 
   // Calculate RFM
   const calculateRFM = async () => {
@@ -232,7 +232,7 @@ export function RFMDashboard({ storeId }: RFMDashboardProps) {
     if (storeId) {
       fetchRFMData()
     }
-  }, [storeId])
+  }, [storeId, fetchRFMData])
 
   // Prepare chart data
   const pieData = summary.map(s => ({

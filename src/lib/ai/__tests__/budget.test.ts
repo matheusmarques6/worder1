@@ -164,12 +164,10 @@ describe('checkAiBudget', () => {
 
     const result = await checkAiBudget(ORG)
 
-    // $2 conhecido < $10 de limite: comparação de budget não muda de
-    // comportamento (ruling E — decidir bloquear por custo desconhecido é
-    // decisão de produto, registrada como item novo, não implementada aqui).
-    expect(result.allowed).toBe(true)
+    expect(result.allowed).toBe(false)
     expect(result.spentUsd).toBeCloseTo(2.0)
     expect(result.hasUnknownCost).toBe(true)
+    expect(result.unknownReason).toBe('unpriced_model')
   })
 
   it('fallback para .select() quando RPC nao existe (erro 42883)', async () => {
@@ -191,6 +189,56 @@ describe('checkAiBudget', () => {
     expect(result.budgetUsd).toBe(10.0)
   })
 
+  it('fallback exclui plataforma, preserva historico e ignora null nao billable', async () => {
+    const budgetChain = makeChain({ data: { monthly_limit_usd: 50 }, error: null })
+    const usageChain = makeChain({
+      data: [
+        { cost_usd: 10, metadata: { billable: true } },
+        { cost_usd: 90, metadata: { billable: false } },
+        { cost_usd: null, metadata: { billable: false } },
+        { cost_usd: 5, metadata: null },
+      ],
+      error: null,
+    })
+    ;(supabaseAdmin as any).from = vi.fn()
+      .mockReturnValueOnce(budgetChain)
+      .mockReturnValueOnce(usageChain)
+    ;(supabaseAdmin as any).rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: '42883', message: 'function ai_monthly_cost_usd does not exist' },
+    })
+
+    const result = await checkAiBudget(ORG)
+
+    expect(usageChain.select).toHaveBeenCalledWith('cost_usd,metadata')
+    expect(result).toMatchObject({ allowed: true, spentUsd: 15, hasUnknownCost: false })
+  })
+
+  it('fallback bloqueia apenas quando a linha null e billable', async () => {
+    ;(supabaseAdmin as any).from = vi.fn()
+      .mockReturnValueOnce(makeChain({ data: { monthly_limit_usd: 50 }, error: null }))
+      .mockReturnValueOnce(makeChain({
+        data: [
+          { cost_usd: 10, metadata: { billable: true } },
+          { cost_usd: null, metadata: { billable: true } },
+        ],
+        error: null,
+      }))
+    ;(supabaseAdmin as any).rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: '42883', message: 'function ai_monthly_cost_usd does not exist' },
+    })
+
+    const result = await checkAiBudget(ORG)
+
+    expect(result).toMatchObject({
+      allowed: false,
+      spentUsd: 10,
+      hasUnknownCost: true,
+      unknownReason: 'unpriced_model',
+    })
+  })
+
   it('lanca AiBudgetExceededError quando budget excedido e throwOnExceeded=true', async () => {
     const fromMock = vi.fn()
     ;(supabaseAdmin as any).from = fromMock
@@ -204,13 +252,63 @@ describe('checkAiBudget', () => {
       .toBeInstanceOf(AiBudgetExceededError)
   })
 
+  it('limite exato continua excedido e lanca 402', async () => {
+    ;(supabaseAdmin as any).from = vi.fn()
+      .mockReturnValueOnce(makeChain({ data: { monthly_limit_usd: 5 }, error: null }))
+    ;(supabaseAdmin as any).rpc = vi.fn().mockResolvedValue(rpcRow(5))
+
+    await expect(checkAiBudget(ORG, { throwOnExceeded: true }))
+      .rejects
+      .toMatchObject({ name: 'AiBudgetExceededError', status: 402 })
+  })
+
+  it('throwOnExceeded lanca 503 com lookup_error quando a consulta falha', async () => {
+    ;(supabaseAdmin as any).from = vi.fn()
+      .mockReturnValueOnce(makeChain({ data: null, error: new Error('db error') }))
+
+    await expect(checkAiBudget(ORG, { throwOnExceeded: true }))
+      .rejects
+      .toMatchObject({
+        name: 'AiBudgetUnavailableError',
+        status: 503,
+        unknownReason: 'lookup_error',
+      })
+  })
+
+  it('throwOnExceeded lanca 503 com unpriced_model para custo cobrável desconhecido', async () => {
+    ;(supabaseAdmin as any).from = vi.fn()
+      .mockReturnValueOnce(makeChain({ data: { monthly_limit_usd: 10 }, error: null }))
+    ;(supabaseAdmin as any).rpc = vi.fn().mockResolvedValue(rpcRow(2, true))
+
+    await expect(checkAiBudget(ORG, { throwOnExceeded: true }))
+      .rejects
+      .toMatchObject({
+        name: 'AiBudgetUnavailableError',
+        status: 503,
+        unknownReason: 'unpriced_model',
+      })
+  })
+
+  it('throwOnExceeded preserva o motivo desconhecido recuperado do cache', async () => {
+    ;(supabaseAdmin as any).from = vi.fn()
+      .mockReturnValueOnce(makeChain({ data: { monthly_limit_usd: 10 }, error: null }))
+    ;(supabaseAdmin as any).rpc = vi.fn().mockResolvedValue(rpcRow(2, true))
+
+    await checkAiBudget(ORG)
+
+    await expect(checkAiBudget(ORG, { throwOnExceeded: true }))
+      .rejects
+      .toMatchObject({ status: 503, unknownReason: 'unpriced_model' })
+    expect((supabaseAdmin as any).rpc).toHaveBeenCalledTimes(1)
+  })
+
   it('AiBudgetExceededError tem status 402', () => {
     const err = new AiBudgetExceededError(5.0, 6.0)
     expect(err.status).toBe(402)
     expect(err.message).toContain('budget')
   })
 
-  it('retorna { allowed: true } quando erro de DB em ai_budgets (fail-open gracioso)', async () => {
+  it('bloqueia com lookup_error quando ai_budgets fica indisponivel', async () => {
     const fromMock = vi.fn()
     ;(supabaseAdmin as any).from = fromMock
 
@@ -218,10 +316,16 @@ describe('checkAiBudget', () => {
 
     const result = await checkAiBudget(ORG)
 
-    expect(result.allowed).toBe(true)
+    expect(result).toMatchObject({
+      allowed: false,
+      budgetUsd: null,
+      spentUsd: 0,
+      hasUnknownCost: false,
+      unknownReason: 'lookup_error',
+    })
   })
 
-  it('retorna { allowed: true } quando RPC falha com erro inesperado (fail-open gracioso)', async () => {
+  it('bloqueia com lookup_error quando RPC falha com erro inesperado', async () => {
     const fromMock = vi.fn()
     ;(supabaseAdmin as any).from = fromMock
 
@@ -234,6 +338,99 @@ describe('checkAiBudget', () => {
 
     const result = await checkAiBudget(ORG)
 
-    expect(result.allowed).toBe(true)
+    expect(result).toMatchObject({
+      allowed: false,
+      budgetUsd: 10,
+      spentUsd: 0,
+      hasUnknownCost: false,
+      unknownReason: 'lookup_error',
+    })
+  })
+
+  it('lookup_error com limite zero continua indisponivel 503, nao teto 402', async () => {
+    ;(supabaseAdmin as any).from = vi.fn()
+      .mockReturnValueOnce(makeChain({ data: { monthly_limit_usd: 0 }, error: null }))
+    ;(supabaseAdmin as any).rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: '08006', message: 'connection failure' },
+    })
+
+    await expect(checkAiBudget(ORG, { throwOnExceeded: true }))
+      .rejects
+      .toMatchObject({
+        name: 'AiBudgetUnavailableError',
+        status: 503,
+        unknownReason: 'lookup_error',
+      })
+  })
+
+  it('bloqueia com lookup_error quando o fallback falha', async () => {
+    ;(supabaseAdmin as any).from = vi.fn()
+      .mockReturnValueOnce(makeChain({ data: { monthly_limit_usd: 10 }, error: null }))
+      .mockReturnValueOnce(makeChain({ data: null, error: new Error('fallback failed') }))
+    ;(supabaseAdmin as any).rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: '42883', message: 'function ai_monthly_cost_usd does not exist' },
+    })
+
+    const result = await checkAiBudget(ORG)
+
+    expect(result).toMatchObject({
+      allowed: false,
+      budgetUsd: 10,
+      spentUsd: 0,
+      hasUnknownCost: false,
+      unknownReason: 'lookup_error',
+    })
+  })
+
+  it('catch-all bloqueia com lookup_error em vez de liberar', async () => {
+    ;(supabaseAdmin as any).from = vi.fn(() => {
+      throw new Error('unexpected')
+    })
+
+    const result = await checkAiBudget(ORG)
+
+    expect(result).toMatchObject({
+      allowed: false,
+      budgetUsd: null,
+      spentUsd: 0,
+      hasUnknownCost: false,
+      unknownReason: 'lookup_error',
+    })
+  })
+
+  it('cacheia bloqueio desconhecido por org e skipCache força nova consulta', async () => {
+    const fromMock = vi.fn()
+      .mockReturnValueOnce(makeChain({ data: { monthly_limit_usd: 10 }, error: null }))
+      .mockReturnValueOnce(makeChain({ data: { monthly_limit_usd: 10 }, error: null }))
+    ;(supabaseAdmin as any).from = fromMock
+    ;(supabaseAdmin as any).rpc = vi.fn()
+      .mockResolvedValueOnce(rpcRow(2, true))
+      .mockResolvedValueOnce(rpcRow(3, false))
+
+    const cold = await checkAiBudget(ORG)
+    const warm = await checkAiBudget(ORG)
+    const refreshed = await checkAiBudget(ORG, { skipCache: true })
+
+    expect(cold).toMatchObject({ allowed: false, unknownReason: 'unpriced_model' })
+    expect(warm).toEqual(cold)
+    expect(refreshed).toMatchObject({ allowed: true, spentUsd: 3 })
+    expect((supabaseAdmin as any).rpc).toHaveBeenCalledTimes(2)
+  })
+
+  it('nao mistura cache entre organizacoes', async () => {
+    ;(supabaseAdmin as any).from = vi.fn()
+      .mockReturnValueOnce(makeChain({ data: { monthly_limit_usd: 10 }, error: null }))
+      .mockReturnValueOnce(makeChain({ data: { monthly_limit_usd: 10 }, error: null }))
+    ;(supabaseAdmin as any).rpc = vi.fn()
+      .mockResolvedValueOnce(rpcRow(2))
+      .mockResolvedValueOnce(rpcRow(12))
+
+    const orgA = await checkAiBudget('org-a')
+    const orgB = await checkAiBudget('org-b')
+
+    expect(orgA.allowed).toBe(true)
+    expect(orgB.allowed).toBe(false)
   })
 })

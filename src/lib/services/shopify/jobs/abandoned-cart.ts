@@ -518,7 +518,8 @@ async function createAbandonedCartNotification(store: any, checkout: any): Promi
       type: 'shopify_abandoned_cart',
       title: `Carrinho abandonado: ${formattedValue}`,
       message: `${checkout.email || 'Cliente'} abandonou um carrinho na loja ${store.shop_name || store.shop_domain}`,
-      data: {
+      // `metadata`/`read` são as colunas; `data`/`is_read` não existem.
+      metadata: {
         checkout_id: checkout.id,
         shopify_checkout_id: checkout.shopify_checkout_id,
         recovery_url: checkout.recovery_url,
@@ -528,7 +529,7 @@ async function createAbandonedCartNotification(store: any, checkout: any): Promi
         value: checkout.total_price,
         items_count: checkout.line_items?.length || 0,
       },
-      is_read: false,
+      read: false,
     });
   } catch (error) {
     console.error('Failed to create notification:', error);

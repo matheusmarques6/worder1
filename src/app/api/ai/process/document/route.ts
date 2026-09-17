@@ -3,7 +3,7 @@ import { chunkText, cleanTextForIndexing, extractTextMetadata } from '@/lib/ai/p
 import { generateEmbeddingsBatch, EMBEDDING_SPACE } from '@/lib/ai/embeddings'
 import { resolveEmbeddingKey } from '@/lib/ai/embedding-key'
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
-import { checkAiBudget } from '@/lib/ai/budget';
+import { AiBudgetExceededError, AiBudgetUnavailableError, checkAiBudget } from '@/lib/ai/budget';
 import { extractTextFromFile } from '@/lib/ai/processors/file-extractor'
 import { extractStoragePathFromFileUrl, AI_SOURCES_BUCKET } from '@/lib/ai/source-storage'
 import { crawlSite } from '@/lib/ai/crawler'
@@ -42,12 +42,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'source_id e organization_id são obrigatórios' }, { status: 400 })
     }
 
-    // Verificação de orçamento (soft gate): se excedido, marca fonte como erro
-    // com mensagem de budget em vez de processar embeddings (custo desnecessário).
-    // Fail-open: erro de DB no checkAiBudget nunca bloqueia o fluxo.
+    // Verificação de orçamento antes de processar embeddings pagos.
     const budgetCheck = await checkAiBudget(organization_id, { skipCache: false })
     if (!budgetCheck.allowed) {
-      const budgetMsg = `Orçamento AI excedido: $${budgetCheck.spentUsd.toFixed(4)} de $${budgetCheck.budgetUsd?.toFixed(4)} USD/mês`
+      const exceeded =
+        budgetCheck.budgetUsd !== null && budgetCheck.spentUsd >= budgetCheck.budgetUsd
+      const unavailable = budgetCheck.unknownReason === 'lookup_error' ||
+        (!exceeded && budgetCheck.unknownReason !== undefined)
+      const budgetMsg = unavailable
+        ? 'Não foi possível verificar o orçamento de IA'
+        : `Orçamento AI excedido: $${budgetCheck.spentUsd.toFixed(4)} de $${budgetCheck.budgetUsd?.toFixed(4)} USD/mês`
       if (sourceId) {
         await supabase
           .from('ai_agent_sources')
@@ -58,7 +62,14 @@ export async function POST(request: NextRequest) {
           })
           .eq('id', sourceId)
       }
-      return NextResponse.json({ error: budgetMsg, code: 'AI_BUDGET_EXCEEDED' }, { status: 402 })
+      return NextResponse.json(
+        {
+          error: budgetMsg,
+          code: unavailable ? 'AI_BUDGET_UNAVAILABLE' : 'AI_BUDGET_EXCEEDED',
+          ...(unavailable ? { unknownReason: budgetCheck.unknownReason } : {}),
+        },
+        { status: unavailable ? 503 : 402 },
+      )
     }
 
     // Buscar fonte
@@ -148,7 +159,7 @@ export async function POST(request: NextRequest) {
     }
 
     const chunkTexts = chunks.map(c => c.content)
-    const embeddings = await generateEmbeddingsBatch(chunkTexts, openaiKey)
+    const embeddings = await generateEmbeddingsBatch(chunkTexts, openaiKey, organization_id)
 
     console.log(`Generated ${embeddings.length} embeddings for source ${sourceId}`)
 
@@ -223,6 +234,15 @@ export async function POST(request: NextRequest) {
         .eq('id', sourceId)
     }
 
+    if (error instanceof AiBudgetExceededError) {
+      return NextResponse.json({ error: error.message, code: 'AI_BUDGET_EXCEEDED' }, { status: 402 })
+    }
+    if (error instanceof AiBudgetUnavailableError) {
+      return NextResponse.json(
+        { error: error.message, code: 'AI_BUDGET_UNAVAILABLE', unknownReason: error.unknownReason },
+        { status: 503 },
+      )
+    }
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }

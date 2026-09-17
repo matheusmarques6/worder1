@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { chunkText } from '@/lib/ai/processors/text-processor'
 import { generateEmbeddingsBatch, EMBEDDING_SPACE } from '@/lib/ai/embeddings'
 import { resolveEmbeddingKey } from '@/lib/ai/embedding-key'
+import { AiBudgetExceededError, AiBudgetUnavailableError } from '@/lib/ai/budget'
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { getAuthClient } from '@/lib/api-utils';
 
@@ -117,12 +118,6 @@ export async function POST(
       throw new Error('Não foi possível criar fonte de produtos')
     }
 
-    // Limpar chunks antigos
-    await supabase
-      .from('ai_agent_chunks')
-      .delete()
-      .eq('source_id', sourceId)
-
     // Gerar embeddings (BYO total, Onda 13.6: chave OpenAI da propria org).
     const openaiKey = await resolveEmbeddingKey(supabase, organization_id)
     if (!openaiKey) {
@@ -131,7 +126,32 @@ export async function POST(
       )
     }
 
-    const embeddings = await generateEmbeddingsBatch(productTexts, openaiKey)
+    let embeddings: number[][]
+    try {
+      embeddings = await generateEmbeddingsBatch(productTexts, openaiKey, organization_id)
+    } catch (error) {
+      const syncError = error instanceof AiBudgetExceededError
+        ? 'Orçamento de IA excedido'
+        : error instanceof AiBudgetUnavailableError
+          ? 'Orçamento de IA indisponível'
+          : 'Falha ao gerar embeddings'
+      await supabase
+        .from('ai_agent_integrations')
+        .update({
+          sync_status: 'error',
+          sync_error: syncError,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', integrationId)
+        .eq('organization_id', organization_id)
+      throw error
+    }
+
+    // Só remover a base anterior depois de todos os substitutos existirem.
+    await supabase
+      .from('ai_agent_chunks')
+      .delete()
+      .eq('source_id', sourceId)
 
     // Inserir chunks
     const chunks = productTexts.map((text, i) => ({
@@ -190,6 +210,15 @@ export async function POST(
 
   } catch (error: any) {
     console.error('Error in POST /api/ai/agents/[id]/integrations/[integrationId]/sync:', error)
+    if (error instanceof AiBudgetExceededError) {
+      return NextResponse.json({ error: error.message, code: 'AI_BUDGET_EXCEEDED' }, { status: 402 })
+    }
+    if (error instanceof AiBudgetUnavailableError) {
+      return NextResponse.json(
+        { error: error.message, code: 'AI_BUDGET_UNAVAILABLE', unknownReason: error.unknownReason },
+        { status: 503 },
+      )
+    }
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }

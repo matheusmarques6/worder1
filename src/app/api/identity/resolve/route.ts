@@ -68,42 +68,25 @@ export async function POST(request: NextRequest) {
     // myshopifyDomain (e.g. lojalaclode.myshopify.com) still finds the
     // store even when shop_domain in our DB is the renamed/secondary
     // domain (e.g. sourosa.myshopify.com).
-    let organizationId = accountId as string | undefined;
-    let resolvedStoreId = storeId as string | undefined;
-    if (!organizationId || !resolvedStoreId) {
-      let store: { id: string; organization_id: string } | null = null;
-      if (storeId) {
-        const { data } = await supabase
-          .from('shopify_stores')
-          .select('id, organization_id')
-          .eq('id', storeId)
-          .maybeSingle();
-        store = data;
-      } else if (storeDomain) {
-        const { resolveStoreByDomain } = await import('@/lib/shopify/resolve-store-by-domain');
-        store = await resolveStoreByDomain<{ id: string; organization_id: string }>(
-          supabase,
-          storeDomain,
-          { select: 'id, organization_id', activeOnly: false }
-        );
-      } else if (accountId) {
-        const { data } = await supabase
-          .from('shopify_stores')
-          .select('id, organization_id')
-          .eq('organization_id', accountId)
-          .limit(1)
-          .maybeSingle();
-        store = data;
-      }
-      if (!store) {
-        return NextResponse.json(
-          { error: 'Store not found' },
-          { status: 404, headers: CH }
-        );
-      }
-      organizationId = organizationId || store.organization_id;
-      resolvedStoreId = resolvedStoreId || store.id;
+    // A loja é sempre resolvida no banco (storeId → storeDomain →
+    // accountId só com uma loja), e a organização é a DA LOJA. Antes o
+    // accountId do corpo era aceito como organização sem conferência, e
+    // sem storeId a loja era "qualquer uma da organização" — o cookie
+    // __worder_id e o contato criado ficavam presos à loja errada.
+    const { resolveTrackingStore } = await import('@/lib/shopify/resolve-store-by-domain');
+    const store = await resolveTrackingStore<{ id: string; organization_id: string }>(
+      supabase,
+      { storeId, storeDomain, accountId },
+      'id, organization_id'
+    );
+    if (!store) {
+      return NextResponse.json(
+        { error: 'Store not found' },
+        { status: 404, headers: CH }
+      );
     }
+    const organizationId: string = store.organization_id;
+    const resolvedStoreId: string = store.id;
 
     const ua = request.headers.get('user-agent') || null;
     const ip = getClientIp(request) || null;

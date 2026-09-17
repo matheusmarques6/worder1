@@ -20,13 +20,28 @@ reabertura passa, e a posse — não o SQL, que `tests/db/test_server.py` cobre.
 """
 
 import asyncio
+from datetime import timedelta
 
+import psycopg
 import pytest
+from psycopg.pq import TransactionStatus
 
 from agents_runtime import server
+from agents_runtime.config import QueueingConfig
 from agents_runtime.repository.scope import WORKER_ROLE
 
 DSN = "postgresql://exemplo/nao-conecta"
+
+
+class FakePgconn:
+    def __init__(self) -> None:
+        self.finished = False
+        self.socket = 1
+        self.transaction_status = TransactionStatus.ACTIVE
+
+    def finish(self) -> None:
+        self.finished = True
+        self.transaction_status = TransactionStatus.UNKNOWN
 
 
 class FakeConnection:
@@ -40,6 +55,7 @@ class FakeConnection:
     def __init__(self, *, alive: bool = True) -> None:
         self.alive = alive
         self.closed = False
+        self.pgconn = FakePgconn()
 
     async def beat_age(self) -> float:
         await asyncio.sleep(0)
@@ -52,15 +68,28 @@ class FakeConnection:
         self.closed = True
 
 
+class SlowThenDeadConnection(FakeConnection):
+    async def beat_age(self) -> float:
+        if self.alive:
+            try:
+                await asyncio.Event().wait()
+            finally:
+                self.alive = False
+        raise RuntimeError("the timed-out session is no longer usable")
+
+
 @pytest.fixture
 def guarded_door(monkeypatch: pytest.MonkeyPatch) -> list[tuple]:
     """Substitui a porta guardada e a leitura do beat; devolve o log de aberturas."""
     opened: list[tuple] = []
 
-    async def fake_connect(dsn, set_role, expected_role):
+    async def fake_connect(dsn, set_role, expected_role, *, config=None, on_open=None):
         await asyncio.sleep(0)
         opened.append((dsn, set_role, expected_role))
-        return FakeConnection()
+        conn = FakeConnection()
+        if on_open is not None:
+            on_open(conn)
+        return conn
 
     async def fake_age(conn):
         return await conn.beat_age()
@@ -148,7 +177,199 @@ class TestTheHealthzConnectionIsOnePerProcess:
             "este item veio fechar."
         )
         assert health._conn is None
-        # A segunda leitura depois do fechamento reabre em vez de estourar: o
-        # objeto fechado não fica guardado como se estivesse vivo.
-        assert await health.beat_age_seconds() == 1.5
-        assert len(guarded_door) == 2
+        raw = await server._healthz(health, max_age_s=180.0)
+        assert _status(raw) == 503
+        assert len(guarded_door) == 1
+
+    async def test_a_timed_out_probe_returns_503_and_the_next_probe_reconnects(
+        self, guarded_door: list
+    ) -> None:
+        health = server.HealthConnection(DSN, "worker_role", SlowThenDeadConnection())
+
+        timed_out = await server._healthz(
+            health,
+            max_age_s=180.0,
+            probe_timeout=timedelta(milliseconds=10),
+        )
+        recovered = await server._healthz(
+            health,
+            max_age_s=180.0,
+            probe_timeout=timedelta(milliseconds=100),
+        )
+
+        assert _status(timed_out) == 503
+        assert _status(recovered) == 200
+        assert guarded_door == [(DSN, "worker_role", WORKER_ROLE)]
+
+    async def test_reconnect_receives_the_health_config_snapshot(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        snapshot = QueueingConfig(connect_timeout_seconds=7, statement_timeout_ms=23)
+        seen = []
+
+        async def connect(*_, config, on_open):
+            seen.append(config)
+            conn = FakeConnection()
+            on_open(conn)
+            return conn
+
+        async def fake_age(conn):
+            return await conn.beat_age()
+
+        monkeypatch.setattr(server, "_connect", connect)
+        monkeypatch.setattr(server.engine_repo, "heartbeat_age_seconds", fake_age)
+        health = server.HealthConnection(
+            DSN,
+            "worker_role",
+            FakeConnection(alive=False),
+            config=snapshot,
+        )
+
+        assert _status(await server._healthz(health, max_age_s=180.0)) == 200
+        assert seen == [snapshot]
+
+    async def test_cancelling_a_slow_open_leaves_no_connection_or_locked_probe(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        async def slow_open(*_, **__):
+            await asyncio.Event().wait()
+
+        monkeypatch.setattr(server, "_connect", slow_open)
+        health = server.HealthConnection(DSN, "worker_role")
+
+        raw = await server._healthz(
+            health,
+            max_age_s=180.0,
+            probe_timeout=timedelta(milliseconds=10),
+        )
+
+        assert _status(raw) == 503
+        assert health._conn is None
+        assert not health._lock.locked()
+
+    async def test_probe_waiting_for_the_lock_does_not_close_the_owners_session(
+        self, guarded_door: list
+    ) -> None:
+        conn = FakeConnection()
+        health = server.HealthConnection(DSN, "worker_role", conn)
+        await health._lock.acquire()
+        try:
+            started = asyncio.get_running_loop().time()
+            raw = await server._healthz(
+                health,
+                max_age_s=180.0,
+                probe_timeout=timedelta(milliseconds=10),
+            )
+            elapsed = asyncio.get_running_loop().time() - started
+        finally:
+            health._lock.release()
+
+        assert _status(raw) == 503
+        assert elapsed < 0.1
+        assert not conn.pgconn.finished
+
+    async def test_expired_waiter_refuses_sql_if_it_wins_lock_before_cancellation(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        calls = 0
+
+        async def age(_):
+            nonlocal calls
+            calls += 1
+            return 0.0
+
+        monkeypatch.setattr(server.engine_repo, "heartbeat_age_seconds", age)
+        health = server.HealthConnection(DSN, "worker_role", FakeConnection())
+        await health._lock.acquire()
+        token = object()
+        waiting = asyncio.create_task(health.beat_age_seconds(probe=token))
+        await asyncio.sleep(0)
+
+        health.expire(token, waiting)
+        health._lock.release()
+
+        with pytest.raises(TimeoutError):
+            await waiting
+        assert calls == 0
+        assert not health._conn.pgconn.finished
+
+    async def test_probe_finishes_raw_connection_before_psycopg_can_wait_to_cancel(
+        self, guarded_door: list, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        conn = FakeConnection()
+        cancel_started = asyncio.Event()
+        allow_cancel = asyncio.Event()
+        waits = 0
+
+        async def wait_async(*_, **__):
+            nonlocal waits
+            waits += 1
+            if waits > 1:
+                raise psycopg.errors.QueryCanceled("cancelled")
+            await asyncio.Event().wait()
+
+        async def slow_cancel(*_, **__):
+            cancel_started.set()
+            await allow_cancel.wait()
+
+        async def age(raw_conn):
+            raw_conn._try_cancel = slow_cancel
+            await psycopg.AsyncConnection.wait(raw_conn, iter(()))
+
+        monkeypatch.setattr(psycopg.connection_async.waiting, "wait_async", wait_async)
+        monkeypatch.setattr(server.engine_repo, "heartbeat_age_seconds", age)
+        health = server.HealthConnection(DSN, "worker_role", conn)
+        running = asyncio.create_task(
+            server._healthz(
+                health,
+                max_age_s=180.0,
+                probe_timeout=timedelta(milliseconds=10),
+            )
+        )
+        done, _ = await asyncio.wait({running}, timeout=0.1)
+        if not done:
+            allow_cancel.set()
+            await asyncio.wait({running}, timeout=0.1)
+            pytest.fail("psycopg entrou na espera de cancelamento de 5s")
+
+        assert _status(await running) == 503
+        assert conn.pgconn.finished
+        assert not cancel_started.is_set()
+
+    @pytest.mark.parametrize("reconnecting", [False, True])
+    async def test_slow_session_initialization_is_aborted_and_never_published(
+        self, reconnecting: bool, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        candidate = FakeConnection()
+        started = asyncio.Event()
+
+        async def slow_open(*_, on_open=None, **__):
+            assert on_open is not None
+            on_open(candidate)
+            started.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                return candidate
+
+        async def age(conn):
+            if reconnecting and conn is not candidate:
+                raise RuntimeError("dead")
+            return await conn.beat_age()
+
+        monkeypatch.setattr(server, "_connect", slow_open)
+        monkeypatch.setattr(server.engine_repo, "heartbeat_age_seconds", age)
+        initial = FakeConnection(alive=False) if reconnecting else None
+        health = server.HealthConnection(DSN, "worker_role", initial)
+
+        raw = await server._healthz(
+            health,
+            max_age_s=180.0,
+            probe_timeout=timedelta(milliseconds=10),
+        )
+
+        assert started.is_set()
+        assert _status(raw) == 503
+        assert candidate.pgconn.finished
+        assert health._conn is None
+        assert health._opening is None

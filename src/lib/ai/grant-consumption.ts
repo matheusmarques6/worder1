@@ -1,10 +1,14 @@
 // Consumo de grant no pedido pago (Adendo §B, 9.2).
 //
-// O cupom que o offer_engine emitiu volta no webhook de pedido como
-// discount_code — a RPC consome (uses++ → 'consumed' quando esgota) com
-// dedup por (grant, pedido) DENTRO do banco: webhook reentregue recebe
-// 'already' e nunca consome duas vezes. Cupom que não nasceu de grant
-// (criado à mão na loja) responde 'not_found' e não é assunto nosso.
+// O cupom que o offer_engine — ou o popup — emitiu volta no webhook de
+// pedido como discount_code. A RPC consome (uses++ → 'consumed' quando
+// esgota) com dedup por (grant, pedido) DENTRO do banco: webhook
+// reentregue recebe 'already' e nunca consome duas vezes. Cupom que não
+// nasceu de grant (criado à mão na loja) responde 'not_found' e não é
+// assunto nosso.
+//
+// O contato do pedido vai junto: com códigos estáticos (o mesmo texto
+// para todo mundo) é ele que diz QUAL grant foi usado.
 //
 // Best-effort por contrato: consumo de grant JAMAIS derruba o processamento
 // do pedido — o pedido pago é o fato; o ledger se acerta na reentrega.
@@ -26,6 +30,8 @@ export interface GrantConsumption {
 export async function consumeGrantsForOrder(
   organizationId: string,
   order: OrderLikePayload,
+  contactId: string | null = null,
+  storeId: string | null = null,
 ): Promise<GrantConsumption[]> {
   const codes = (order.discount_codes ?? [])
     .map((d) => (d?.code ?? '').trim())
@@ -42,6 +48,9 @@ export async function consumeGrantsForOrder(
         p_organization_id: organizationId,
         p_coupon_code: code,
         p_order_ref: orderRef,
+        p_contact_id: contactId,
+        // Loja do pedido: um código estático de outra loja da org não casa.
+        p_store_id: storeId,
       });
       if (error) {
         console.warn('[grant-consumption] RPC falhou (best-effort):', error.message);

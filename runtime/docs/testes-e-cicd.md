@@ -15,7 +15,7 @@ Este documento operacionaliza o plano: o que é unitário, o que é integração
 - **PITR:** point-in-time recovery — recuperação do banco para um instante específico.
 - **RLS tripla:** suíte de vazamento cross-tenant executada com as três credenciais (JWT de usuário, `worker_role`, `sender_role`).
 - **Judge 1:** avaliador síncrono pré-envio; toda resposta do agente passa por ele antes de sair.
-- **Shadow:** os 7 primeiros dias de um tenant novo, com 100% das respostas avaliadas e fila de acompanhamento, sem reter envio.
+- **Shadow de estreia:** não implementado; a reserva sem consumidor foi retirada na Wave 4. Reintrodução exige consumidor e plano aprovados.
 - **Warm-up:** aquecimento de número Evolution com teto diário crescente de envios proativos.
 - **`unknown` / `manual_review`:** estados da outbox — envio sem confirmação de resultado / item aguardando decisão humana.
 - **Cassete:** gravação de requisição/resposta real de uma API externa, usada como simulação determinística nos níveis inferiores.
@@ -43,7 +43,7 @@ Regra prática ao escrever um teste novo: se dá para testar sem Postgres, é un
 
 | Módulo | Casos principais |
 |---|---|
-| `queueing` | cálculo do backoff exponencial e limites do jitter; classificação de erro transitório × permanente (timeout/429/5xx vs. payload inválido/credencial revogada); decisão do weighted polling 8:4:2:1 dado o estado das filas; decisão de promoção por idade (evento de domínio > 2 min, agendado > 10 min); semáforo por tenant (aquisição, liberação, teto 3, tenant no limite → decisão de `set_vt`) |
+| `queueing` | cálculo do backoff exponencial e limites do jitter; classificação de erro transitório × permanente (timeout/429/5xx vs. payload inválido/credencial revogada); decisão do weighted polling 8:4:1 dado o estado das filas; decisão de promoção por idade (evento de domínio > 2 min); semáforo por tenant (aquisição, liberação, teto 3, tenant no limite → decisão de `set_vt`) |
 | `agent_core` | montagem do prompt na ordem fixa dos **blocos** (AGENTE → MISSÃO → ESTADO → CANAL → CONVERSA — o motor de camadas do RF-010 foi apagado pelo item 56 e o vocabulário desta linha era o dele); missão escolhida pelo evento que abriu a conversa (`load_active_mission` por `event_type`, mais a arbitragem dona × descoberta) — **esta é a única regra da linha sem trava executável em tier nenhum: a trava saiu junto com `test_prompt_layers.py`, e `load_active_mission` nunca teve teste (registrado no item 63)**; contexto de compras dentro do bloco ESTADO (nº de pedidos, total gasto, data do último — *ticket médio* e *primeira compra* nunca chegaram ao prompt em produção e saíram desta linha por isso); idioma (persona vence, idioma do tenant é o piso); regra de não negar ser uma IA, emitida incondicionalmente e resistente a guideline hostil do lojista; think-gate |
 | `dispatch` | supressão pelos 3 motivos; limites de proteção (1 proativo/contato/24h somando origens como default, teto da plataforma de 4/24h — afrouxar é só do admin, lojista só aperta; intervalo mínimo de 72h entre funis; mensagem reativa nunca bloqueada); decisão de obsolescência de evento (mensagem posterior / pedido pago / contato suprimido); cálculo de cadência do funil; seleção de canal (`cloud \| evolution \| auto`) |
 | `channels` | variação do texto da mensagem nunca repete a última do mesmo número; jitter dentro de 30–120s; tetos de warm-up por estágio (20→50→100); token bucket do tier Meta com pausa de proativos a 80%; montagem de payload por adaptador (template + botões Autorizar/Bloquear em contato novo); cálculo do atraso humanizado |
@@ -82,7 +82,7 @@ Para cada tabela de negócio: leitura e escrita cross-tenant tentadas com (a) JW
 5. Lease expira no meio da FASE 2 → um segundo worker assume → o CAS do primeiro falha → nada é enviado em duplicidade.
 6. Heartbeat: processamento longo simulado → VT renovado → sem reentrega durante o trabalho.
 7. Mensagem envenenada → backoff → limite de tentativas → DLQ da fila correta + alerta criado; o reprocessamento manual conclui o tratamento e remove o item da DLQ.
-8. Weighted polling sob mistura de filas: proporção 8:4:2:1 observada; um evento de domínio com mais de dois minutos recebe prioridade sobre a fila de entrada (promoção por idade).
+8. Weighted polling sob mistura de filas: proporção 8:4:1 observada; um evento de domínio com mais de dois minutos recebe prioridade sobre a fila de entrada (promoção por idade). `q_scheduled` e sua DLQ são preservadas para inspeção manual, sem consumidor ou política de polling/retry/promoção.
 9. Semáforo: um tenant que atingiu o limite de processamento simultâneo tem suas mensagens devolvidas (`set_vt`) enquanto os demais tenants seguem fluindo.
 10. Outbox: encerramento abrupto do processo de envio durante uma operação em andamento → item em `unknown` → **nenhum reenvio**; status webhook correlacionado (wamid/`biz_opaque_callback_data`) → `sent`; janela sem evidência → `manual_review` + alerta.
 11. Dispatch: `order_paid` cancela os `scheduled_touches` pendentes; supressão bloqueia o proativo; evento obsoleto é descartado; o funil completo respeita o limite por contato/24h vigente, a cadência configurada e o intervalo entre funis.
@@ -108,7 +108,7 @@ Sem simulações internas: as jornadas integram contas e ambientes externos de t
 | Jornada | Cobre |
 |---|---|
 | Onboarding completo: admin gera convite → formulário → OAuth na loja de desenvolvimento → conexão do WhatsApp de teste → gerador cria versão rascunho pausada | RF-001 a RF-005 |
-| Gate duplo: admin testa e aprova → cliente testa, aponta ajuste e aprova → ativação + shadow ligado | RF-006 e RF-008 |
+| Gate duplo: admin testa e aprova → cliente testa, aponta ajuste e aprova → ativação | RF-006; RF-008 sem capacidade implementada |
 | Criação de conta: e-mail → link de senha → primeiro acesso ao hub | RF-007 |
 | Recuperação ponta a ponta: checkout abandonado sintético na loja de desenvolvimento → toque chega no WhatsApp de teste → resposta do contato → funil cancelado → conversa com o agente → conversão | RF-030 a RF-035 |
 | Inbox em tempo real: mensagem aparece ao vivo → takeover → agente em modo observador → devolver para IA | RF-016 e RF-040 |

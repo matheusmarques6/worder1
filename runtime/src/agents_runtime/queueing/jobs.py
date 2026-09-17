@@ -5,6 +5,9 @@ The payload shapes are fixed by the SQL that produces them (the coalescer for
 a job with a missing field is a contract violation, and a contract violation
 classifies as permanent (unidade 4), which routes it to the DLQ instead of
 retrying forever.
+
+Older jobs may omit channel_account_id. The worker resolves that absence
+once, inside its scoped transaction and before creating the producer.
 """
 
 from dataclasses import dataclass
@@ -21,6 +24,7 @@ class InboundJob:
     target_seq: int
     organization_id: UUID
     otel: dict[str, Any] | None = None
+    channel_account_id: UUID | None = None
 
     @classmethod
     def from_payload(cls, payload: dict[str, Any]) -> "InboundJob":
@@ -31,6 +35,10 @@ class InboundJob:
                 target_seq=int(payload["target_seq"]),
                 organization_id=UUID(payload["organization_id"]),
                 otel=payload.get("otel"),
+                channel_account_id=(
+                    UUID(payload["channel_account_id"])
+                    if payload.get("channel_account_id") is not None else None
+                ),
             )
         except (KeyError, TypeError, ValueError) as error:
             raise ValueError(f"malformed inbound job: {payload!r}") from error
@@ -49,12 +57,14 @@ class MissionTouchJob:
     organization_id: UUID
     contact_id: UUID
     conversation_id: UUID
+    touch_id: UUID
     event_family: str
     node_ref: str | None = None
     delta: dict[str, Any] | None = None
     concession_request: dict[str, Any] | None = None
     preferred_channel: str = "whatsapp"
     otel: dict[str, Any] | None = None
+    channel_account_id: UUID | None = None
 
     @classmethod
     def from_payload(cls, payload: dict[str, Any]) -> "MissionTouchJob":
@@ -65,12 +75,17 @@ class MissionTouchJob:
                 organization_id=UUID(payload["organization_id"]),
                 contact_id=UUID(payload["contact_id"]),
                 conversation_id=UUID(payload["conversation_id"]),
+                touch_id=UUID(payload["touch_id"]),
                 event_family=str(payload["event_family"]),
                 node_ref=payload.get("node_ref"),
                 delta=payload.get("delta") or None,
                 concession_request=payload.get("concession_request"),
                 preferred_channel=str(payload.get("preferred_channel") or "whatsapp"),
                 otel=payload.get("otel"),
+                channel_account_id=(
+                    UUID(payload["channel_account_id"])
+                    if payload.get("channel_account_id") is not None else None
+                ),
             )
         except (KeyError, TypeError, ValueError) as error:
             raise ValueError(f"malformed mission touch job: {payload!r}") from error

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { authedFetch } from '@/lib/api/authed-fetch'
@@ -40,11 +40,7 @@ export default function WhatsAppIntegrationCard({ organizationId }: WhatsAppInte
   const [config, setConfig] = useState<WhatsAppConfig | null>(null)
   const [disconnecting, setDisconnecting] = useState(false)
 
-  useEffect(() => {
-    fetchStatus()
-  }, [organizationId])
-
-  const fetchStatus = async () => {
+  const fetchStatus = useCallback(async () => {
     try {
       setLoading(true)
       
@@ -59,7 +55,11 @@ export default function WhatsAppIntegrationCard({ organizationId }: WhatsAppInte
     } finally {
       setLoading(false)
     }
-  }
+  }, [organizationId])
+
+  useEffect(() => {
+    fetchStatus()
+  }, [fetchStatus])
 
   const handleConnect = () => {
     // Redirecionar para página de configuração do WhatsApp

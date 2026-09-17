@@ -87,20 +87,18 @@ export async function validateReportAccess(
 }
 
 /**
- * Busca o ID da primeira loja do usuário (se nenhuma especificada)
+ * Loja padrão quando o relatório não diz qual: só existe quando a
+ * organização tem UMA loja ativa. Com várias, devolve null e o
+ * relatório pede a loja — atribuir números à "primeira" era mostrar
+ * a loja errada em silêncio. (A tabela é shopify_stores; `stores`
+ * não existe.)
  */
 export async function getDefaultStoreId(organizationId: string): Promise<string | null> {
   try {
     const supabase = createServerComponentClient({ cookies })
-    
-    const { data: stores } = await supabase
-      .from('stores')
-      .select('id')
-      .eq('organization_id', organizationId)
-      .order('created_at', { ascending: true })
-      .limit(1)
-
-    return stores?.[0]?.id || null
+    const { pickStore } = await import('@/lib/stores/pick-store')
+    const picked = await pickStore<{ id: string }>(supabase as any, { orgIds: [organizationId], select: 'id' })
+    return picked.store?.id || null
   } catch {
     return null
   }

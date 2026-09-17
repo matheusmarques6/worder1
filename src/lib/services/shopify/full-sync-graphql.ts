@@ -21,6 +21,7 @@ import {
 } from '@/lib/shopify/graphql-queries';
 import { createEvent } from '@/lib/shopify/event-service';
 import { WORDER_SHOPIFY_EVENTS, EVENT_SOURCES } from '@/lib/shopify/event-types';
+import { computeProductAvailability, normalizeSyncedVariant } from '@/lib/shopify/product-availability';
 
 // =============================================
 // TYPES
@@ -576,17 +577,14 @@ async function syncProductsGraphQL(
       const batch = nodes.slice(i, i + 50);
 
       const products = batch.map((p: any) => {
-        const variants = (p.variants?.nodes || []).map((v: any) => ({
-          id: extractShopifyId(v.id),
-          title: v.title,
-          sku: v.sku,
-          price: v.price,
-          compare_at_price: v.compareAtPrice,
-          inventory_quantity: v.inventoryQuantity,
-          barcode: v.barcode,
-        }));
+        // Variantes na forma que a disponibilidade e o webhook de
+        // estoque leem (política, controle, inventory_item_id).
+        const variants = (p.variants?.nodes || []).map(normalizeSyncedVariant);
 
         const mainVariant = variants[0] || {};
+        // `available` é o que os feeds usam para não oferecer produto
+        // esgotado; `inventory_quantity` soma só as variantes controladas.
+        const availability = computeProductAvailability(variants);
 
         return {
           store_id: store.id,
@@ -601,7 +599,8 @@ async function syncProductsGraphQL(
           price: parseFloat(mainVariant.price || '0'),
           compare_at_price: mainVariant.compare_at_price ? parseFloat(mainVariant.compare_at_price) : null,
           sku: mainVariant.sku || null,
-          inventory_quantity: p.totalInventory || 0,
+          inventory_quantity: availability.inventoryQuantity ?? (p.totalInventory || 0),
+          available: availability.available,
           variants,
           images: (p.images?.nodes || []).map((img: any) => ({ url: img.url, alt: img.altText })),
           created_at: p.createdAt,

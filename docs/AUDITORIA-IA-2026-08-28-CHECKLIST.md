@@ -11,6 +11,9 @@
 
 ## Fase 0 — CI verde (CONCLUÍDA em 28/08)
 
+Revalidado na Onda 0: comportamento de data em America/Sao_Paulo e ignores confirmados;
+guardas diretas presentes. Prova dinâmica de RLS vinculada ao gate descartável W0-T3.
+
 Não estava na fila original: apareceu ao verificar a pipeline antes de começar. O
 workflow `runtime` falhou em **15 de 15** execuções — nunca esteve verde, e os números
 de suíte registrados no STATUS sempre vieram de execução local. Sem isto, "acompanhar o
@@ -4495,12 +4498,12 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   dos quatro arquivos tocados é TypeScript, Python ou workflow, e **nenhum teste, script ou passo de
   CI lê um `.example`**.
 
-- [ ] **63. Lacunas de teste** `[relatado]`
+- [x] **63. Lacunas de teste** `[confirmado]`
   **Reescrito no fecho da fila da auditoria (âncora `ef5c5f1b`), lacuna por lacuna, por leitura do
   teste que fecharia cada uma.** Metade da lista de abertura já estava fechada e ninguém tinha
   registrado — um item cuja metade já está feita faz o próximo leitor refazer trabalho pronto. O que
-  fechou vai riscado com quem fechou; o que sobra fica com **rubrica e dono**. **O item continua
-  `[ ]` de propósito** — ver o fecho, no fim.
+  já estava fechado vai riscado com quem fechou; as lacunas restantes receberam testes executáveis
+  nas Tasks 1/2/9/10/11 da Onda 3. **O item agora fecha `[x]`** — ver o fecho, no fim.
   **Lista de abertura, estado MEDIDO:**
   ~~`toucher._node_delta` com `success_criteria`/`enabled_tools`/`forbidden`~~ — fechada **aqui**:
   `runtime/tests/unit/test_node_delta.py`, 4 casos, `-m unit`. O caso de maior consequência é
@@ -4532,7 +4535,12 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   *"para permitir alertar quando a tabela abaixo envelhecer"*, e `Failure.UNKNOWN` tem **zero
   leitores fora de `failures.py`**: ninguém é avisado. **O defeito foi para o item 95**, com o
   critério de aceite já escrito (os quatro casos são `xfail(strict=True)`).
-  **Segue aberta:** contagem de duplicação do transcript; `server._read_request` malformado.
+  ~~contagem de duplicação do transcript~~ — fechada na Onda 3 em duas camadas: composição, por
+  `runtime/tests/unit/test_prompt_compiler_blocks.py::TestTheConversationBlockDoesNotDuplicateTheChatArray::`
+  `test_turn_transcript_remains_only_in_chat`; e overlap das consultas reais, por
+  `runtime/tests/db/test_agent_loaders.py::TestTheTranscript::test_transcript_and_pending_do_not_overlap`;
+  ~~`server._read_request` malformado~~ — fechado na Onda 3 por
+  `runtime/tests/unit/test_listener_request_contract.py` (`fb416860` + `50278a2f`).
   **O bug de tipo que morava na primeira lacuna NÃO foi consertado aqui, e o critério é a data.**
   `toucher.py:114` (era citado como `:92` — **citação podre**: `:92` é **linha em branco**; o campo
   `mission_version_id`, que a v1 desta nota atribuía a `:92`, está em `:100`. A correção do sítio
@@ -4556,14 +4564,14 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   esquecido. Gravar o comportamento atual seria o anti-padrão do item 40 com o sinal trocado. A
   linha de resumo do gate muda de **forma** (`N passed, M xfailed`) e **nada a lê**:
   `.github/workflows/runtime.yml` roda `pytest -m unit` e usa só o código de saída.
-  **Acrescentado pelo item 52 (revisão da execução, `2ee8c2f2`) — SEGUE ABERTO:**
-  `agent_llm_from_org_keys` tem **zero ocorrências em `runtime/tests/`** — nenhum tier chega nele,
-  nem com Postgres. O bloco inteiro é inalcançável por teste, e não é só a fiação da posse do item
-  52: ficam sem cobertura também a cascata D4 em contexto real e a **emissão do alerta
-  `no_org_llm_key`**, que aparece em teste apenas dentro de uma docstring. É o vão mais fundo desta
-  lista, porque não se fecha com banco — precisa de um teste que exercite a função. **Foi ele que
-  deixou passar a regressão que `ef5c5f1b` consertou**, e `test_resolved_names_do_not_collide.py`
-  fecha só a beirada (o nome ligado ao retorno), não o ramo.
+  **Acrescentado pelo item 52 (revisão da execução, `2ee8c2f2`) — FECHADO na Onda 3:**
+  `agent_llm_from_org_keys` é argumento dos builders, não função. Os dois chamadores reais agora
+  provam que zero chave da organização com o opt-in ligado produz zero chamada ao LLM e um alerta
+  `no_org_llm_key`: `runtime/tests/db/test_responder_agent_identity.py::`
+  `test_byo_without_org_keys_stays_silent_and_alerts` e
+  `runtime/tests/db/test_toucher.py::TestTheDraft::test_byo_without_org_keys_stays_silent_and_alerts`.
+  As duas travas falharam por mutação ao retirar o argumento do respectivo builder; a prova isolada de
+  `resolve_agent_llm` continua em `runtime/tests/unit/test_provider_cascade.py`.
   **Acrescentado pelo item 53 (revisão da execução, `89eca846`) — um dos três degraus fechou aqui:**
   a fiação de `never_say_ai` — do literal do loader (`agent.py:199`; era `:169`, **reancorado pelo
   item 56 em `ea5cbb35`**, que deslocou o arquivo +33 linhas) até `JudgeContext` — não tinha trava
@@ -4571,7 +4579,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   (`judges/pre_send.py:295`, o `if` que põe a "Regra fixa da plataforma" no prompt do juiz)~~ fechou
   aqui, pelos **dois lados**, em `test_pre_send_judge.py` — só o par prova: com um lado só, apagar o
   `if` e deixar a linha incondicional passaria igual. **Seguem sem trava** o literal do loader
-  (`agent.py:199`, SQL) e os dois call sites (`responder.py:640`, `toucher.py:423`), que vivem
+  (`agent.py:199`, SQL) e os dois call sites (`responder.py:641`, `toucher.py:424`), que vivem
   dentro de `respond`/`touch`.
   **Acrescentado pelo item 59 (`5f5dba63`) — quatro vãos que a deleção ABRIU, declarados na saída em
   vez de descobertos depois.** Os três primeiros existiam só em `tools/registry.py` +
@@ -4657,25 +4665,25 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   no molde de `test_the_guard_has_someone_to_guard`
   (`runtime/tests/unit/test_resolved_names_do_not_collide.py:99-101`). **Não reabre** a política do
   `.env.example` da raiz (43 envs), que o item 62 devolveu ao dono do produto (`:4449-4455`).
-  **O que sobra, com rubrica — nove lacunas vivas, contadas depois da medição acima:**
-  **(i) "só fecha com Postgres local"** — bloqueio de **ambiente**, não de prioridade (a memória do
-  projeto registra que o CI nunca viu as migrations): a fiação de `agent_llm_from_org_keys` e o
-  alerta `no_org_llm_key`; a seleção da missão pelo `event_type`; `last_order_at` × `max(...)`; a
-  contagem de duplicação do transcript (virou SQL, `exclude_inbound_after_seq`); os vãos **(3)** e
-  **(4)** do item 59; e o loader de `never_say_ai` (`agent.py:199`) com os dois call sites. **Sete.**
-  **(ii) "barato, backlog — a fila da auditoria termina aqui, então isto só sai se alguém abrir
-  trabalho novo"**: `server._read_request` malformado (executável e barato, mas não é caminho do
-  cliente, do dinheiro nem cross-tenant) e o vão **(1)** do item 59 (nome desconhecido em
-  `enabled_tools`, com cobertura parcial em `test_mission_resolver.py:93-99` e o silêncio descrito
-  em `FORK.md:274-275`). **Duas.** *(A rubrica diz "backlog" e não "fila de fundo" de propósito:
-  este é o último item da fila, e prometer que "a próxima sessão pega" seria promessa falsa.)*
-  **Por que o item NÃO fecha `[x]`, e isto é o resultado certo.** Ele fecha a **metade executável** —
-  riscada acima, com o teste que fecha cada uma — e continua `[ ]` como **dono nomeado** das nove
-  que sobram. Sendo o último item da fila, um `[x]` aqui seria a diferença entre "pendência
-  conhecida com nome" e "pendência esquecida", e a revisão do item 60 chamou sobra sem dono de
-  **pior que item errado**. Abrir um item 96 só para hospedar o resto foi rejeitado: renomearia o 63
-  e custaria renumeração de referências cruzadas por nada — o nome deste item **é** "Lacunas de
-  teste".
+  **Fechado pela Task 9 da Onda 3:** seleção da missão por família, lookup do evento e isolamento
+  entre organizações em `runtime/tests/db/test_mission_event_selection.py::`
+  `test_mission_is_selected_by_event_family`; máximo real de `last_order_at` e fallback da data
+  local em `runtime/tests/db/test_purchase_history.py::`
+  `test_last_order_is_max_of_shopify_time_or_local_time` (`55600c15`).
+  **Fechado pela Task 10 da Onda 3:** literal e os dois fios reais de `never_say_ai` em
+  `runtime/tests/db/test_responder_agent_identity.py::test_responder_never_say_ai_reaches_judge` e
+  `runtime/tests/db/test_toucher.py::test_toucher_never_say_ai_reaches_judge`; nome desconhecido não
+  oferecido, não executado e não persistido em `runtime/tests/db/test_responder_tool_loop.py`
+  (`9e47145a`).
+  **Fechado pela Task 11 da Onda 3:** identidade da tool persistida na trilha em
+  `runtime/tests/db/test_tools.py::TestTheTrail::test_trail_uses_tool_identity_not_lookup_alias`; e
+  conversa alheia recusada pela tool de dinheiro em
+  `runtime/tests/db/test_create_coupon_tool.py::test_coupon_cannot_read_a_foreign_conversation`
+  (`57d91304`). As duas mutações comportamentais e a mutação isolada da policy RLS ficaram RED; o
+  replay limpo ficou `20/20` GREEN, sem HTTP nem recursos Docker residuais.
+  **Por que o item agora fecha `[x]`.** As Tasks 1/2/9/10/11 registram teste, node ID, mutação RED e
+  GREEN para cada lacuna que ainda estava viva. O catálogo Python apagado não voltou: os testes
+  exercitam as instâncias e o fluxo reais, sem recriar registry ou abstração sem consumidor.
 
 - [ ] **64. Migrar cupom da Shopify de REST para GraphQL** `[proposto]` · *(descoberto no item 35)*
   `connectors/shopify.py` cria e busca cupom por três chamadas REST: `POST /price_rules.json`
@@ -4721,7 +4729,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   *(Nota de correção: a citação original apontava `agent_core/pre_send.py`; o arquivo real é
   `judges/pre_send.py` — corrigido acima.)*
 
-- [ ] **66. Paridade da regra de guard entre TS e Python** `[relatado]` · *(descoberto no item 37)*
+- [x] **66. Paridade da regra de guard entre TS e Python** `[relatado]` · *(descoberto no item 37)*
   A mesma regra de guard existe em **três** cópias para os quatro motivos comportamentais
   (`stop_on_human_reply`, teto de mensagens, cooldown de transferência, ativação manual):
   `src/lib/ai/cloud-runner.ts` (decisão real, org legacy), o badge em
@@ -4737,6 +4745,10 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   a mentir por outro caminho, sem ninguém perceber. Esta auditoria já corrigiu cinco vezes o defeito
   de "duas cópias da mesma regra que divergem"; vale um teste de paridade (fixture compartilhada)
   antes que aconteça de novo aqui.
+
+  **Fechado na Onda 3 (`f9bb5e8a` + `ecc292ea`).** Uma fixture comum, lida diretamente por
+  Vitest e pytest, cobre 20 horários e 12 estados. Os dois achados da revisão final — chave herdada
+  de `Object.prototype` e dígito Unicode — também falham fechado nos dois runtimes.
 
 - [ ] **67. Contadores de agente sem escritor no runtime** `[relatado]` · *(descoberto no item 37)*
   `update_agent_stats(p_agent_id, p_tokens, p_response_time)` e
@@ -4791,7 +4803,20 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   do item 49 se aplica: **não promover**, porque não há motor que use. Colateral menor do lado TS:
   `ai_usage_logs.actions_triggered` passa a receber `[]` em todo turno.
 
-- [ ] **68. Teto de TEMPO do turno** `[relatado]` · *(descoberto no item 41)*
+  **Fechamento parcial em `c53ec181` (era `62508bd1`) (W4-TC-02, 2026-09-17).** Inventário exaustivo das 45
+  ocorrências dos quatro contadores achou exatamente UMA superfície que os apresentava como
+  atividade viva: `src/app/api/ai/test/route.ts:212` (endpoint de debug), que devolvia as colunas
+  congeladas cruas no JSON — corrigida (RED com mock que projeta coluna de verdade, GREEN depois de
+  remover o `.select()` das colunas). As demais 44 ocorrências são escritores sem efeito
+  (`engine.ts`, `ai-chatbot-service.ts`, RPC `increment_agent_conversations`) ou campo homônimo de
+  outra entidade (contatos, `agent_status`, `whatsapp_agents`) — fora do escopo desta decisão. **O
+  achado deste item — ausência de escritor no runtime — continua real e aberto**; o que fechou foi
+  só a apresentação como atividade viva. Achado de produto reportado e não implementado, fila
+  adentro: `src/app/api/ai/agents/route.ts:49-53` ainda faz `.select('*')` e devolve as quatro
+  colunas congeladas no payload (nenhum consumidor de frontend as usa — over-fetch, não superfície
+  nova); revisão independente confirmou a mesma classificação.
+
+- [x] **68. Teto de TEMPO do turno** `[relatado]` · *(descoberto no item 41)*
   A recon do item 41 mostrou que só existe teto POR CHAMADA (`DEFAULT_TIMEOUT_SECONDS = 60.0`, os
   dois em `agent_core/openrouter.py:43` e `agent_core/direct_providers.py:81`) — nenhum teto agregado
   cobre o turno inteiro. `respond(job)` é chamado dentro de `_turn`
@@ -4810,6 +4835,10 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   não cobre isto: um turno pode ficar dentro do teto de CHAMADAS e ainda assim demorar minutos numa
   única chamada lenta. Não implementado no item 41 por ruling F explícito do controlador — é achado
   vizinho, não o mesmo item.
+
+  **Fechado na Onda 3 (`3cc07e4d` + `c28e1b9d`).** A baseline aprovada e implementada limita a
+  fase 2 dos dois produtores a 90s, conexão a 3s, statement a 15s, probe a 4s e cleanup a 10s;
+  timeout continua sendo retry transitório. Não mede p95/p99 nem prova drenagem no shutdown de 30s.
 
 - [ ] **69. Decidir o que fazer quando `checkAiBudget` não sabe o gasto real** `[relatado]` · *(descoberto no item 42)*
   `checkAiBudget` (`src/lib/ai/budget.ts`) tem HOJE duas fontes independentes de "não sei o gasto
@@ -4862,8 +4891,8 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `src/lib/ai/budget.ts::checkAiBudget` (os três `catch` e o bloco que loga `hasUnknownCost` sem agir
   sobre ele); `task-42-report.md`, seção "Fix round 1", tem o raciocínio completo.
 
-- [ ] **70. `search_agent_knowledge` em `sql/` sem escopo de organização, uma com `GRANT` para
-  `authenticated`** `[confirmado]` · *(descoberto no item 43)*
+- [x] **70. `search_agent_knowledge` em `sql/` sem escopo de organização, uma com `GRANT` para
+  `authenticated`** `[corrigido na Onda 2]` · *(descoberto no item 43)*
   As quatro definições de `search_agent_knowledge` fora do stream versionado
   (`sql/ai-agents-rpc-functions.sql:197`, `sql/ai-agents-functions.sql:9`,
   `sql/ai-agents-stored-procedures.sql:11`, `sql/ai-agents-complete-migration.sql:364`) filtram só por
@@ -4927,6 +4956,19 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   lá. A pergunta que fecha isso em um segundo, com Postgres na mão:
   `select count(*), count(*) filter (where is_active) from ai_agent_actions group by
   organization_id`. Mesmo YAGNI de sempre: sem dono, não se inventa script de reconciliação.
+
+  **Correção da Onda 2:** os quatro scripts históricos deixaram de definir ou conceder as RPCs
+  `search_agent_knowledge`, `get_active_agent_for_conversation`, `increment_action_trigger` e
+  `update_agent_stats`. Busca e resolução de agente apontam para as migrations canônicas; a
+  substituta atômica de estatísticas continua pertencendo ao item 67. A compensação
+  `20260910020800_restrict_legacy_agent_rpc_grants.sql` revoga `PUBLIC`, `anon` e `authenticated`
+  de todos os overloads encontrados e também retira `service_role` de `increment_action_trigger`
+  e da busca sem `p_organization_id`, sem apagar função, tabela ou dado. A revisão final corrigiu uma
+  premissa do plano: `update_agent_stats` ainda é chamada por `src/lib/ai/engine.ts:331`, portanto seu
+  grant de `service_role` é preservado; a promoção de uma substituta atômica continua no item 67.
+  Prova descartável: 4/4,
+  incluindo fixture contaminado e tentativa cross-tenant com duas organizações reais. Isso comprova
+  o stream local; o estado do banco remoto continua dependente da aplicação autorizada da migration.
 
 - [ ] **71. `/api/debug` — a décima terceira rota de debug, com o mesmo fail-open que o item 43
   fechou nas outras doze, e leitura cross-tenant sem sessão** `[confirmado]` ·
@@ -5006,8 +5048,10 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   no CI. Não quantificado: com que frequência uma missão de toque tem tools ligadas na prática (não
   foram inspecionados dados nem seeds).
 
-- [ ] **74. `ruff check .` está VERMELHO na branch, e é o passo de lint do CI** `[confirmado]` ·
+- [x] **74. `ruff check .` está VERMELHO na branch, e é o passo de lint do CI** `[confirmado]` ·
   *(descoberto no item 44)*
+  **RESOLVIDO NA INTEGRAÇÃO 08/09.** O script de medição declara `T201` como exceção intencional,
+  os imports e as duas linhas longas foram formatados, e `ruff check .` passou sem erros.
   Medido nesta máquina em `e2d1f38a`, antes de qualquer mudança do item 44: `uv run --directory
   runtime ruff check .` (exatamente o comando de `.github/workflows/runtime.yml:51`) devolve
   **10 erros**, todos pré-existentes e alheios ao item 44 — a contagem é idêntica antes e depois dos
@@ -5096,7 +5140,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   (`# AGENTE`, `# MISSÃO` — `prompt_compiler.py:143`, `:171`). Uma linha de mapa ou parar de apagar
   o cabeçalho resolve. Ambos são diff de TSX, sem runtime.
 
-- [ ] **78. Todo o housekeeping do banco vive dentro da task do canal — sem `AGENTS_CHANNEL`, os
+- [x] **78. Todo o housekeeping do banco vive dentro da task do canal — sem `AGENTS_CHANNEL`, os
   três passos morrem juntos** `[relatado]` · *(descoberto no item 46)*
   `app.py:230` — `if channel is not None:` é o que cria a task `sender`, e é dentro dela que roda o
   bloco de housekeeping inteiro (`queueing/sender.py:216-218`): `sweep_outbox_unknown`,
@@ -5129,7 +5173,13 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   canal, se é aceitar o acoplamento e documentá-lo no `.env.bancada.example`, ou se a bancada
   simplesmente não deve se importar. É decisão de quem é dono do runtime, não conserto mecânico.
 
-- [ ] **79. Uma linha entregue pode ficar presa em `manual_review` para sempre — `manual_review` é
+  **Fechado em `632619aa` (W2-T2b, 2026-09-17).** `app.run` agora abre uma task `housekeeping()`
+  própria, com conexão `sender_role` independente do adapter de canal; `sweep_outbox_unknown`,
+  `review_stale_unknown` e `expire_incentive_grants` rodam mesmo sem `AGENTS_CHANNEL`. Prova:
+  `runtime/tests/pipeline/test_housekeeping_without_channel.py` (canal `None` e canal fake, ambos
+  GREEN) e revisão independente limpa (`review-fcc16f2d..632619aa.diff`, 0 Critical/0 Important).
+
+- [x] **79. Uma linha entregue pode ficar presa em `manual_review` para sempre — `manual_review` é
   terminal de propósito e a correlação não o alcança** `[confirmado]` · *(descoberto no item 47)*
   Linhas na numeração da base `93af12eb`.
   **A janela de duas instâncias vivas é default CONFIGURADO, não suposição de plataforma.**
@@ -5190,9 +5240,20 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   verificável daqui. Crash-loop produz a mesma janela e **acontece** nesta casa. A frequência real é desconhecida: `select status, count(*) from
   internal.message_outbox group by status` num banco vivo mede isto direto.
 
+  **Fechado em `632619aa` (W2-T2b, decisão M2=A, 2026-09-17), pela saída (c).** Nova função
+  `internal.confirm_sender_delivery(p_outbox_id, p_claim_token, p_provider_message_id)`, restrita a
+  `sender_role`, chamada só quando o sender recebeu sucesso do provedor e `mark_outbox_sent` voltou
+  `false` — "eu entreguei isto, tire da revisão". M2=A soma escopo de tenant: token correto de uma
+  organização não confirma linha de outra (`test_confirmation_requires_matching_tenant`, prova
+  cruzada A/B com o mesmo token). O webhook genérico continua sem tocar `manual_review` — nenhum
+  estado terminal reabre por via lateral.
+
 - [ ] **80. `send-batch` lê `shopify_orders` E `shopify_checkouts` sem escopo de tenant, por
   `supabaseAdmin`, e manda o resultado por e-mail — pedido e carrinho da loja B saem pelo canal da
   loja A** `[confirmado]` · *(descoberto no item 50)*
+  **REAVALIADO APÓS O SYNC 08/09: CONTINUA ABERTO.** O remoto passou a conferir a campanha por
+  `(id, organization_id)`, mas as duas consultas que escolhem pedido/carrinho por e-mail continuam
+  sem `organization_id` ou `store_id`; portanto o vazamento descrito abaixo permanece possível.
   Citações ancoradas em `a6d6332d`.
   **São DUAS consultas, não uma.** Em
   `src/app/api/email/campaigns/send-batch/route.ts`, dentro do laço que monta o `mergeData` de cada
@@ -5262,6 +5323,16 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   é de quatro linhas, mas muda o que os e-mails já enviados renderizavam, e por isso é decisão, não
   rodapé.
 
+  **Fechamento parcial em `252951ab` (2026-09-17).** A superfície citada acima — o `X-Internal`
+  client-settable em `send-batch/route.ts:58-61` — foi fechada: a rota (e os outros quatro
+  chamadores dos endpoints internos citados pelo mesmo commit) agora exige `isInternalAuthorized`
+  com bearer real, não mais um cabeçalho que qualquer cliente define. Isto fecha a família do
+  **item 71** (citada aqui como superfície, nunca como o achado). **O achado deste item — a fuga
+  cross-tenant nas duas consultas por e-mail em `shopify_orders`/`shopify_checkouts`, sem
+  `.eq('organization_id', …)` — continua aberto.** Ninguém tocou `send-batch/route.ts:337-343,366-374`;
+  é decisão de produto adiada, não engenharia pendente, e a fila (pacote F do dossiê) já a reporta
+  como tal.
+
 - [ ] **81. A DLQ não tem dreno, e escrever o dreno antes de trocar a chave de idempotência do toque
   faz o cliente receber a mesma mensagem duas vezes** `[confirmado]` · *(descoberto no item 51)*
   Citações ancoradas em `0c675e0d`. **A ordem dos dois passos é obrigatória: primeiro a chave, depois
@@ -5325,7 +5396,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   mensagem nova). **O que não se sabe sem o banco é o que está lá**, e portanto se o conserto é uma
   linha no housekeeping do sender ou item próprio — queries 2 e 3 do item 51.
 
-- [ ] **82. `incentive_grants.coupon_code` sem `unique (organization_id, upper(coupon_code))` — e
+- [x] **82. `incentive_grants.coupon_code` sem `unique (organization_id, upper(coupon_code))` — e
   criá-lo não é uma linha** `[confirmado]` · *(descoberto no item 51)*
   Citações ancoradas em `0c675e0d`. **NÃO criado no item 51 por uma razão que basta sozinha: `create
   unique index` FALHA se já houver duplicata no vivo, e o repositório não sabe se há.**
@@ -5365,6 +5436,19 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   o unique criado, a colisão vira um par de falhas encadeadas — o `ShopifyError` do guard levanta
   antes de `record_coupon_code`, e a `UniqueViolation` nem chega a ser alcançada.
 
+  **Fechado em `a189070e` (W2-T4, 2026-09-17), passos 1–3 na ordem prevista.** `coupon_code_for`
+  usa o UUID completo do grant (`WD-<32 hex>`), fechando também a colisão de prefixo do item 51(b).
+  A migration `20260917030000_unique_coupon_codes.sql` faz o preflight obrigatório primeiro — um
+  bloco `DO` que levanta `coupon duplicates require approved ledger reconciliation` se já houver
+  duplicata em `(organization_id, upper(coupon_code))` no banco vivo, **antes** de tentar o índice —
+  e só então cria `incentive_grants_org_coupon_unique`, sem reconciliar nada em silêncio; a decisão
+  de dados existentes continua com o dono, como este item exigia. `repository/incentives.py` trata
+  a `UniqueViolation` com savepoint (`conn.transaction()` aninhada), suspende a tentativa e não
+  devolve sucesso para cupom de outro contato; a contagem de chamadas ao provedor fake prova que o
+  retry não emite cupom órfão de novo. Diagnóstico direto em Postgres descartável confirmou o ramo
+  `raise` realmente dispara (índice derrubado, duas linhas colidindo só na caixa, nonce
+  `321e42479a02e154c5f36e4293409c4d`) — não é guarda morta.
+
 - [ ] **83. `shadow_until` é carregado e não tem UM leitor — e o modo shadow do S9b não existe no
   runtime** `[confirmado]` · *(descoberto no item 53)*
   **REANCORADO em `59540569` + `ea5cbb35` pelo item 56.** As citações abaixo estavam ancoradas em
@@ -5401,7 +5485,10 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   campo, a projeção `null::timestamptz` e os dois asserts saem juntos. **Não apagar sem decidir:**
   apagar é a saída barata que fecha a porta do RF-006 sem que ninguém tenha dito que quer fechá-la.
 
-- [ ] **86. Organização vinda do CORPO da requisição governando escrita com chave de serviço** `[confirmado]` · *(descoberto no item 58)*
+- [x] **86. Organização vinda do CORPO da requisição governando escrita com chave de serviço** `[confirmado]` · *(descoberto no item 58)*
+  **RESOLVIDO PELO REMOTO (`dec756bf`) E REVALIDADO NA INTEGRAÇÃO 08/09.** `queue/settings`,
+  `queue/assign` e `queue/items` agora chamam `requireOrgFromAuth`, derivam a organização do token e
+  escopam as consultas/escritas com esse valor. A suíte `multi-tenant-invariants` passou (5/5).
   Citações ancoradas em `3c4bcad6`. O item 58 apagou uma rota em que o `organizationId` chegava **no
   corpo** e mandava em `upsert`/`update` feitos com `supabaseAdmin` — que **não passa por RLS** —,
   contida só pelo segredo de debug. Antes de fechar o achado como "morreu com a deleção", a revisão
@@ -5623,7 +5710,7 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   inventário de DLQs e o item 57 cita RNF-022 pela metade do `q_evals` — nenhum dos dois é dono da
   decisão; os hits de "arbitragem" são sobre `mission_resolver.arbitrate()`, mecanismo diferente.
 
-- [ ] **90. O nó "IA Responder" já é no-op para org no canal Cloud** `[confirmado]` · *(descoberto no item 61)*
+- [x] **90. O nó "IA Responder" já é no-op para org no canal Cloud** `[corrigido na Onda 2]` · *(descoberto no item 61)*
   Citações ancoradas em `b87992f1`. **Destinatário: o dono do cutover D8, não a limpeza.**
   O executor `action_whatsapp_ai` (`src/lib/automation/node-executors.ts:1857`) escreve
   `whatsapp_conversations.bot_active` (`:1868-1871`, com `supabaseAdmin`) — **tabela legada e coluna
@@ -5649,6 +5736,11 @@ Pré-requisito de qualquer novo `insert into ai_runtime_rollout`. Itens 1–6 va
   `tabela legada`): os hits de "no-op" são de outros mecanismos, e `whatsapp_conversations` só
   aparece no item 58 num contexto que é *"esta deleção não libera tabela nenhuma"*. **Território sem
   dono.**
+  **Correção:** o executor agora resolve a organização confiável da execução, valida que o agente
+  pertence a ela, limita o `UPDATE` da conversa legada pelo mesmo tenant e exige que uma linha seja
+  retornada. Conversa Cloud, conversa de outro tenant ou agente alheio devolvem erro explícito sem
+  anunciar `ai_activated:true`; fluxos legados válidos continuam funcionando. Prova focal em
+  `src/lib/automation/__tests__/flow-fixes.test.ts` (26 casos verdes).
 
 - [ ] **91. `src/lib/route-permissions.ts` é arquivo morto com cara de configuração viva** `[confirmado]` · *(descoberto no item 61)*
   Citações ancoradas em `b87992f1`. **77 linhas**, `reachable=false` pelo grafo do CI e
@@ -5968,13 +6060,19 @@ você decidir se entram na fila.
   (`src/tests/reports-utils.test.ts`) está CERTO e falha localmente; passa no CI só porque o runner é
   UTC. O fuso dos usuários do produto é o mesmo da máquina de dev. *(descoberto na Fase 0)*
 
+  Revalidado na Onda 0: comportamento de data em America/Sao_Paulo e ignores confirmados;
+  guardas diretas presentes. Prova dinâmica de RLS vinculada ao gate descartável W0-T3.
+
 - [ ] **`pnpm test` não roda sem `pnpm approve-builds` (esbuild, unrs-resolver).**
   O deps-check do pnpm aborta antes do script e a suíte Node não executa. Bloqueou o reviewer de 28/08,
   que fez só revisão estática dos itens 2–4. Contorno usado aqui: chamar `node_modules/.bin/vitest`
   direto. Aprovar os builds muda política local de execução — decisão do dono da máquina, não minha.
   *(descoberto no review do item 1)*
 
-- [ ] **Depois de um takeover humano o agente volta amnésico (org migrada).**
+  Política efetiva adicionada em `pnpm-workspace.yaml` via `allowBuilds`; somente os dois builds
+  nativos são aprovados.
+
+- [x] **Depois de um takeover humano o agente volta amnésico (org migrada).**
   A fala do atendente vai para `whatsapp_cloud_messages` e para o espelho do inbox, mas
   `public.messages` — o transcript que o runtime lê — **não tem escritor de outbound humano**:
   no repositório inteiro há 7 `insert into public.messages` e `author_type='human'` aparece uma
@@ -5982,6 +6080,15 @@ você decidir se entram na fila.
   o preço, o prazo ou a exceção que o atendente acabou de dar, sem saber que alguém falou. Sem
   dono na fila de 63 — nenhum item de 30 a 55 se compromete a devolver essa escrita.
   *(descoberto no item 29, confirmado no review e no re-review)*
+
+  **Fechado em `fcc16f2d` (W2-T2a, 2026-09-17).** Trigger novo
+  `internal.record_human_outbound_transcript()` em `whatsapp_cloud_messages`, que insere em
+  `public.messages` com `author_type='human'` toda fala humana de saída (`direction='outbound'`,
+  `sender='human'`, `not sent_by_bot`); reentrega pelo mesmo `provider_message_id` não duplica
+  (`on conflict … do nothing`). Fix round 1 fechou os dois Important da review: identidade de
+  canal vence o fallback por telefone (contato/conversa distintos provados) e a cláusula de
+  conflito do próprio trigger é alcançável de verdade (pré-inserir a linha canônica com o mesmo
+  `provider_message_id` e ver o `AFTER INSERT` disparar). Re-review PASS, 0 Critical/0 Important.
 
 - [ ] **Texto do cliente entra no system prompt do runtime sem sanitização — e o delimitador é imitável.**
   `agent_core/prompt_compiler.py:241,244` interpola `f"{author}: {text}"` do transcript e da janela
@@ -5993,35 +6100,64 @@ você decidir se entram na fila.
   transcript ir duas vezes; este é sobre o que o transcript pode conter).
   *(descoberto no item 29)*
 
-- [ ] **A leitura do estado dos guards paga duas varreduras do espelho em TODO turno.**
+- [x] **A leitura do estado dos guards paga duas varreduras do espelho em TODO turno.**
   `internal.legacy_conversation_guard_state` roda as duas laterais (contagem de outbound do bot
   e existência de resposta humana) sempre, enquanto o TS só conta mensagens quando o knob está
   ligado — e não há índice por `conversation_id` em `whatsapp_cloud_messages` no shape do repo.
   Agora o toque paga a mesma leitura. O índice é do item 50; o "só pague o que o knob pede" é
   desta linha. *(descoberto no review do item 30)*
 
-- [ ] **`settings.schedule.hours` presente e incompleto diverge entre os motores.**
+  **Fechado em `c48cc09e` (W3-T6a, 2026-09-17).** A dependência de W2-T5 foi satisfeita pela
+  migration `20260915010000_account_scoped_conversation_bridge.sql`. `20260917040000_guard_state_contract.sql`
+  acrescenta `p_count_bot`/`p_check_human` (default `true`, preserva chamadores antigos) e separa a
+  lateral de contagem do bot da lateral do último timestamp; com `false,false` nenhuma das duas
+  varre `whatsapp_cloud_messages` (`EXPLAIN` mostra `One-Time Filter: false` nas duas), enquanto a
+  lateral do último bot continua devolvendo o timestamp para o cooldown. RED provado contra uma
+  migration ingênua que gateasse a lateral combinada (o caso do cooldown com os dois knobs
+  desligados falhava). Review PASS, zero achados.
+
+- [x] **`settings.schedule.hours` presente e incompleto diverge entre os motores.**
   Com o bloco `hours` gravado sem uma das pontas, o TS cala 24×7 e o Python responde. Idem hora
   sem zero à esquerda e `days` com maiúscula. O teste do item 30 usa justamente o formato em que
   os dois concordam — nenhum é forma que a UI de hoje produza, mas jsonb editado à mão produz.
   *(descoberto no review do item 30)*
 
-- [ ] **O fail-open do fuso engole também tzdb ausente, e `tzdata` não é dependência declarada.**
+  **Fechado na Onda 3 (`f9bb5e8a` + `ecc292ea`).** Horário parcial ou não canônico, dia inválido,
+  chave herdada e dígito Unicode agora falham fechado igualmente em TS e Python, presos pelos 20
+  casos comuns.
+
+- [x] **O fail-open do fuso engole também tzdb ausente, e `tzdata` não é dependência declarada.**
   Fuso que o `zoneinfo` não conhece faz o guard de horário abrir mão e deixar responder — decisão
   deliberada para não calar a loja por um typo na tela. Mas a mesma porta cobre "a imagem não tem
   banco de fusos": uma troca de base desligaria o horário de TODAS as lojas em silêncio. A imagem
   viva tem tzdb (verificado); a garantia é que não está escrita. *(descoberto no review do item 30)*
 
-- [ ] **Três divergências degeneradas de matching entre os guards TS e Python.**
+  **Fechado na Onda 3 (`1f7c7107`).** `tzdata` virou dependência direta e o fallback sem tzdb do
+  sistema tem teste. A imagem será revalidada na Onda 6.
+
+- [x] **Três divergências degeneradas de matching entre os guards TS e Python.**
   Confirmação de handoff que não passa por `blocked_topics`, item não-string dentro da lista de
   keywords, e `cooldown_after_transfer: true`. Nenhuma é forma que a UI produza; todas são jsonb
   editado à mão. *(descoberto no review do item 30)*
 
-- [ ] **Guard que cala apaga o alerta de fluxo quebrado que viria depois.**
+  **Fechado na Onda 3 (`f9bb5e8a`).** Os três casos têm semântica comum e cobertura nos
+  consumidores reais.
+
+- [x] **Guard que cala apaga o alerta de fluxo quebrado que viria depois.**
   Os guards de comportamento rodam ANTES da arbitragem de missão — que é a ordem do TS e o certo
   para não pagar trabalho caro. Efeito colateral: conversa em que um guard cala nunca abre o
   `no_active_mission`, então uma órbita quebrada fica invisível enquanto o guard estiver valendo.
   *(descoberto no re-review do item 30)*
+
+  **Fechado em `00ec603b` (era `d6b49b36`) (W3-GD-05, 2026-09-17).** A checagem de missão (`arbitrate()` no
+  responder, `if mission is None` no toucher) foi duplicada para ANTES de qualquer guard de
+  comportamento, com `dedup_key=f"no-active-mission:{job.conversation_id}"` no `open_alert` — o
+  diagnóstico agora abre mesmo quando outro guard cala o turno depois. A decisão de silêncio em si
+  não mudou: o primeiro guard que disparar continua vencendo a corrida e sendo o motivo do
+  `note_step`; o alerta é só efeito colateral, sem mover LLM/RAG para antes dos guards. RED provado
+  revertendo os dois arquivos em memória contra banco vivo (`(0,0) == (1,0)` nos dois produtores).
+  Review PASS, zero achados; içamento não move trabalho caro (`arbitrate()` é Python puro, leituras
+  de missão já eram incondicionais na mesma transação).
 
 - [ ] **Estado de guard não encontrado é fail-open, e o toque frio é o caminho mais exposto.**
   Conversa sem linha no espelho legado devolve estado zerado — "ninguém transferiu, o bot não
@@ -6029,10 +6165,41 @@ você decidir se entram na fila.
   cuja ponte canônica → espelho não resolveu. Quando a ponte não resolve, o passo `skipped` também
   não espelha: no toque, o único registro que sobrevive é o alerta. *(descoberto no re-review do item 30)*
 
-- [ ] **`activate_on: manual` no toque só funciona porque o runtime tem um agente por org.**
+  **Parcial em `00ec603b` (era `d6b49b36`) (W3-GD-06, 2026-09-17) — a dependência de migration multi-WABA foi
+  satisfeita, o sinal autoritativo não.** A metade que bloqueia já era verdade e ganhou teste:
+  `internal.resolve_whatsapp_account` levanta erro real (SQLSTATE `22023`) quando a conta do job
+  não pertence à organização da conversa, e essa exceção propaga sem ser engolida — nunca degrada
+  para `GuardState()` permissivo (`test_a_mismatched_channel_account_raises_instead_of_answering_emptily`).
+  **A metade positiva — distinguir conversa nova de ponte quebrada — não foi implementada.**
+  Investigação exaustiva (três candidatos: ausência de `channel_identities`, `job.channel_account_id`
+  não-nulo, cruzar espelho de outra WABA) não achou sinal persistido autoritativo implementável sem
+  regredir dois testes já aceitos ou sem uma migration fora do escopo da task. `load_legacy_guard_state`
+  **não** mudou para `GuardState | None`; continua devolvendo `GuardState()` default quando a RPC
+  não acha linha, exatamente como antes. **Dependência nomeada, registrada como parked:** uma
+  coluna/sinal persistido novo, escrito uma vez por `ingest_inbound_message` na criação da
+  conversa, registrando se havia espelho legado para aquele contato+conta naquele momento. Não
+  inferir por ausência, recência ou telefone.
+
+- [x] **`activate_on: manual` no toque só funciona porque o runtime tem um agente por org.**
   O guard compara o `ai_agent_id` da conversa com o agente do turno; no runtime esse agente vem de
   `load_active_version`, que não filtra por canal (ausência 3 do `FORK.md`). Org com dois agentes
   ativos torna a comparação uma coincidência. *(descoberto no re-review do item 30)*
+
+  **Fechado em `00ec603b` (W3-GD-07, 2026-09-17).** Migration
+  `20260917050000_single_active_agent.sql` cria índice único parcial
+  `(organization_id) where is_active` sobre `ai_agents`, com preflight fail-loud (recusa a
+  migration se já houver duplicata ativa, não escolhe sobrevivente em silêncio); teste
+  `test_one_active_agent_per_organization` prova a ativação explícita. **A bateria completa de
+  Task 8 (2026-09-17) achou uma regressão real neste índice** — colidia com
+  `tests/db/factories.py::create_agent`/`create_agent_version`, que criava agente novo já
+  `is_active=true` por default, quebrando dois arquivos de teste pré-existentes
+  (`test_agent_loaders.py`, `test_toucher.py::TestKnowledgeContext`) em replay e upgrade — **e a
+  Task 6 foi reaberta para corrigir**: `create_agent` agora nasce `is_active=False` (mesmo default
+  do POST do app) e `create_agent_version(status="active")` ativa pela mesma porta que a produção
+  usa. Bateria completa re-executada verde nos dois lanes (DB 950/950, RLS 145/145, pipeline 45/45)
+  em `00ec603b`. Revisão independente confirmou que nenhum chamador real precisa de dois agentes
+  ativos — a decisão em si não mudou. Ver `docs/audits/2026-09-17-fechamento-waves-0-4.md` para o
+  histórico completo (achado → correção → re-verificação).
 
 - [ ] **Resposta de botão carrega palavras do cliente e cai em `unsupported`.**
   A classe pior não é mídia: `interactive`/`button` são a resposta que o cliente DÁ a um botão da
@@ -6041,10 +6208,13 @@ você decidir se entram na fila.
   `src/` (régua de tipos do webhook), fora do escopo do item 31.
   *(descoberto no review do item 31)*
 
-- [ ] **O download de mídia continua gravando storage para org migrada, e ninguém lê o resultado.**
-  O pipeline de download roda ANTES da bifurcação de rollout — confirmado no review —, então a
-  loja migrada paga bytes e storage por áudio e imagem que o runtime nunca vai abrir enquanto o
-  porte de STT/visão não vier. Custo por mensagem sem contrapartida.
+- [x] **O download de mídia continua gravando storage para org migrada, e ninguém lê o resultado.**
+  `[reclassificado na Onda 2: há consumidor humano]`
+  Reavaliado na Onda 2: o runtime não consome bytes de mídia, mas o inbox humano consome
+  `media_storage_path` e renova URLs assinadas. Manter download preserva atendimento humano após
+  takeover; otimização de armazenamento depende de política de produto, não de desligar o pipeline
+  por rollout. A prova cobre enqueue e fallback inline no webhook, além da URL assinada devolvida ao
+  atendente autenticado com filtros de organização, conversa e mensagem.
   *(descoberto no item 31)*
 
 - [ ] **`supabase/.branches/` e `supabase/.temp/` não estão no `.gitignore`.**
@@ -6099,7 +6269,7 @@ você decidir se entram na fila.
   copia na hora de configurar — estão desatualizadas, e o modo de falha é um DSN que não resolve, na
   partida, no lugar mais caro para descobrir. *(descoberto no item 48, conferido no fix round 1)*
 
-- [ ] **Nenhuma conexão do runtime tem timeout — nem de conexão, nem de statement.**
+- [x] **Nenhuma conexão do runtime tem timeout — nem de conexão, nem de statement.**
   **Nenhum código de `runtime/src` pede teto**, e a afirmação vai escrita assim de propósito: um
   `grep` cru por `connect_timeout`/`statement_timeout` em `runtime/src` **não** dá mais zero, porque a
   docstring de `HealthConnection` cita as duas palavras — o que se sustenta é o fato, não o comando.
@@ -6125,6 +6295,9 @@ você decidir se entram na fila.
   `connect_timeout` no DSN mais um `statement_timeout` por role — o mesmo desenho do `grafana_ro` —,
   com os valores decididos com a cadência de probe do Render na mão, que ninguém mediu.
   *(descoberto no item 48; precedente e contagem corrigidos no fix round 2)*
+
+  **Fechado na Onda 3 (`3cc07e4d` + `c28e1b9d`).** As quatro portas do runtime aplicam timeout de
+  conexão e de statement, e os dois produtores têm teto e cleanup. Não mede latência implantada.
 
 - [ ] **Numa org multi-WABA, as cinco funções escolhem a conversa MAIS RECENTE em vez da conversa do
   NÚMERO certo** `[confirmado]` · *(descoberto no item 50)*

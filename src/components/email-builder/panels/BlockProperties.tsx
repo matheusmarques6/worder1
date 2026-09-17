@@ -262,6 +262,7 @@ export function BlockProperties({ block, onChange, onSaveAsReusable, selectedSub
                 {showMediaLib && <MediaLibraryModal onSelect={(url) => { onChange('src', url); setShowMediaLib(false) }} onClose={() => setShowMediaLib(false)} />}
                 {p.src ? (
                   <div className="space-y-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element -- Email block URL is user-provided and cannot be safely optimized or allowlisted. */}
                     <img src={p.src} alt={p.alt || ''} className="w-full h-32 object-contain bg-gray-50 rounded-lg border border-gray-200" />
                     <div className="flex gap-2">
                       <button onClick={() => setShowMediaLib(true)} className="flex-1 py-2 text-xs font-medium text-white bg-zinc-900 rounded-lg hover:bg-zinc-800">Biblioteca</button>
@@ -634,6 +635,7 @@ export function BlockProperties({ block, onChange, onSaveAsReusable, selectedSub
           {p.logoSrc && !p.logoSrc.includes('placehold.co') ? (
             <div className="space-y-2">
               <div className="relative bg-zinc-50 border border-zinc-200 rounded-lg p-3 flex items-center justify-center min-h-[60px]">
+                {/* eslint-disable-next-line @next/next/no-img-element -- Email logo URL is user-provided and cannot be safely optimized or allowlisted. */}
                 <img src={p.logoSrc} alt="Logo" style={{ maxWidth: p.logoWidth || 160, maxHeight: p.logoMaxHeight || 80, objectFit: 'contain' }} />
               </div>
               <div className="flex gap-2">
@@ -763,6 +765,24 @@ export function BlockProperties({ block, onChange, onSaveAsReusable, selectedSub
             </Field>
             <p className="text-[10px] text-zinc-400 mt-1">Empilha todos os produtos do gatilho. Use 0 para não limitar.</p>
           </div>
+
+          {/* Tamanho da imagem — a foto encaixa nesta caixa mantendo a
+              proporção. Sem isto a altura ia livre e um produto alto
+              (um frasco, um tubo) esticava a linha inteira. */}
+          {p.showImage !== false && (
+            <div>
+              <p className="text-[12px] font-medium text-zinc-700 mb-2">Imagem do produto</p>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Largura (px)">
+                  <NumberInput value={p.imageWidth || 200} onChange={v => onChange('imageWidth', v)} min={60} max={400} />
+                </Field>
+                <Field label="Altura (px)">
+                  <NumberInput value={p.imageHeight || p.imageWidth || 200} onChange={v => onChange('imageHeight', v)} min={60} max={400} />
+                </Field>
+              </div>
+              <p className="text-[11px] text-zinc-500 mt-1.5">A foto encaixa dentro da caixa sem cortar nem esticar.</p>
+            </div>
+          )}
 
           {/* Product details checkboxes */}
           <div>
@@ -1180,6 +1200,7 @@ export function BlockProperties({ block, onChange, onSaveAsReusable, selectedSub
           <span className="text-[10px] font-semibold text-gray-400 uppercase">Imagem</span>
           {p.imageSrc ? (
             <div className="border border-gray-200 rounded-lg overflow-hidden bg-gray-50">
+              {/* eslint-disable-next-line @next/next/no-img-element -- Email block URL is user-provided and cannot be safely optimized or allowlisted. */}
               <img src={p.imageSrc} alt={p.imageAlt || ''} className="w-full h-24 object-contain" />
               <div className="flex gap-1 p-2 border-t border-gray-100">
                 <label className="flex-1 py-1 text-[10px] font-medium text-gray-600 bg-white border border-gray-200 rounded text-center cursor-pointer hover:bg-gray-50">
@@ -1530,6 +1551,8 @@ function ProductBlockProperties({ p, onChange, commonTail, selectedSubElement, o
   const [showViewFeeds, setShowViewFeeds] = useState(false)
   const [showCreateFeed, setShowCreateFeed] = useState(false)
   const [showBrowseProducts, setShowBrowseProducts] = useState(false)
+  // Feed aberto para edição (ex.: mexer nos produtos excluídos). null = criar novo.
+  const [editingFeed, setEditingFeed] = useState<any>(null)
 
   const subElementLabels: Record<string, string> = {
     title: 'Titulo',
@@ -1951,10 +1974,12 @@ function ProductBlockProperties({ p, onChange, commonTail, selectedSubElement, o
         onClose={() => setShowViewFeeds(false)}
         currentFeedId={p.feedId}
         onSelect={(feed) => { onChange('feedId', feed.id); onChange('feedName', feed.name); onChange('feedType', feed.feed_type) }}
+        onEdit={(feed) => { setEditingFeed(feed); setShowCreateFeed(true) }}
       />
       <CreateFeedModal
         isOpen={showCreateFeed}
-        onClose={() => setShowCreateFeed(false)}
+        onClose={() => { setShowCreateFeed(false); setEditingFeed(null) }}
+        editFeed={editingFeed}
         onCreate={(feed) => { onChange('feedId', feed.id); onChange('feedName', feed.name); onChange('feedType', feed.feed_type) }}
       />
       <BrowseProductsModal

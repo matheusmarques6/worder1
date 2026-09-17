@@ -169,6 +169,7 @@ class GuardedOutcome:
     #: O último rascunho gerado, MESMO bloqueado ("quero ver o que ela iria
     #: mandar", 17/08): o veto segura o envio, não a evidência.
     last_draft: str | None = None
+    selected_attempt: int | None = None
 
 
 def judge_verdicts(
@@ -337,7 +338,7 @@ async def guarded_reply(
 ) -> GuardedOutcome:
     """Generate, judge, and decide what — if anything — may be sent."""
     judgements: list[Judgement] = []
-    best: tuple[str, Judgement] | None = None
+    best: tuple[str, Judgement, int] | None = None
     feedback: tuple[str, ...] = ()
     draft: str | None = None
     #: Item 41: o teto do turno cortou a escalada NO MEIO de uma tentativa.
@@ -394,10 +395,11 @@ async def guarded_reply(
                 attempts=attempt + 1,
                 judgements=tuple(judgements),
                 last_draft=draft,
+                selected_attempt=attempt,
             )
 
         if judgement.usable and (best is None or judgement.score > best[1].score):
-            best = (draft, judgement)
+            best = (draft, judgement, attempt)
         feedback = judgement.failed_criteria
 
     if best is None:
@@ -415,11 +417,12 @@ async def guarded_reply(
             last_draft=draft,
         )
 
-    draft, judgement = best
+    best_draft, judgement, selected_attempt = best
     return GuardedOutcome(
-        draft=draft,
+        draft=best_draft,
         judgement=judgement,
         attempts=len(judgements),
         judgements=tuple(judgements),
         last_draft=draft,
+        selected_attempt=selected_attempt,
     )

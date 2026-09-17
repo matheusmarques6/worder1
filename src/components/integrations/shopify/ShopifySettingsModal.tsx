@@ -11,7 +11,7 @@
 // - Importação de clientes
 // =============================================
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   X,
@@ -98,13 +98,7 @@ export function ShopifySettingsModal({
   // Load pipelines on mount
   // =============================================
   
-  useEffect(() => {
-    if (isOpen) {
-      loadPipelines()
-    }
-  }, [isOpen, organizationId])
-
-  const loadPipelines = async () => {
+  const loadPipelines = useCallback(async () => {
     setLoadingPipelines(true)
     try {
       // ✅ CORRIGIDO: Passar storeId para filtrar pipelines da loja
@@ -121,7 +115,13 @@ export function ShopifySettingsModal({
     } finally {
       setLoadingPipelines(false)
     }
-  }
+  }, [organizationId, store.id])
+
+  useEffect(() => {
+    if (isOpen) {
+      loadPipelines()
+    }
+  }, [isOpen, loadPipelines])
 
   // =============================================
   // Handlers

@@ -4,16 +4,15 @@
  *
  * GET /api/cron/auto-process
  *
- * Autenticação:
- *  - Vercel Cron envia header `x-vercel-cron: 1`
- *  - OU header `Authorization: Bearer <CRON_SECRET>`
- *  - Sem nenhum deles → 401
+ * Autenticação: `Authorization: Bearer <CRON_SECRET>` obrigatório.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { executeWorkflow, Workflow } from '@/lib/automation/execution-engine';
 import { claimRun, releaseRun, withHeartbeat } from '@/lib/automation/run-lock';
+import { mergeNodeResults } from '@/lib/automation/node-results';
+import { authorizeCronRequest } from '@/lib/cron-auth';
 export const dynamic = 'force-dynamic';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -22,22 +21,8 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 // Permitir execução mais longa
 export const maxDuration = 60;
 
-function isAuthorizedCron(request: NextRequest): boolean {
-  // Vercel Cron identifier
-  if (request.headers.get('x-vercel-cron')) return true;
-
-  const secret = process.env.CRON_SECRET;
-  if (!secret) {
-    // Em dev sem CRON_SECRET definido, aceitamos (evita bloqueio local)
-    return process.env.NODE_ENV !== 'production';
-  }
-
-  const auth = request.headers.get('authorization');
-  return auth === `Bearer ${secret}`;
-}
-
 export async function GET(request: NextRequest) {
-  if (!isAuthorizedCron(request)) {
+  if (!authorizeCronRequest(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -52,7 +37,7 @@ export async function GET(request: NextRequest) {
     
     const { data: pendingRuns, error: runsError } = await supabase
       .from('automation_runs')
-      .select('id, automation_id, contact_id, created_at, metadata')
+      .select('id, automation_id, contact_id, created_at, metadata, trigger_type')
       .eq('status', 'pending')
       .lt('created_at', threeSecondsAgo)
       .order('created_at', { ascending: true })
@@ -194,9 +179,27 @@ export async function GET(request: NextRequest) {
                 customFields: contact.custom_fields || {},
                 createdAt: contact.created_at,
                 updatedAt: contact.updated_at,
+                totalOrders: contact.total_orders ?? 0,
+                totalSpent: contact.total_spent ?? 0,
+                timezone: contact.timezone ?? null,
+                country: contact.country ?? null,
               } : undefined,
               deal,
-              trigger: metadata.trigger_data || {},
+              // Mesma correção já aplicada no process-runs: o motor de
+              // variáveis espera {type, data, timestamp}. Passar o
+              // trigger_data cru aqui apagava todo {{event.*}} e
+              // {{trigger.data.*}} nos runs que caíam neste cron.
+              trigger: {
+                type: (metadata as any).trigger_type || (run as any).trigger_type || 'unknown',
+                data: metadata.trigger_data || {},
+                timestamp: run.created_at || new Date().toISOString(),
+              },
+              workflow: {
+                id: automation.id,
+                name: automation.name,
+                executionId: run.id,
+                startedAt: run.created_at || new Date().toISOString(),
+              },
             },
           })
         );
@@ -208,12 +211,20 @@ export async function GET(request: NextRequest) {
           result.status === 'cancelled' ? 'cancelled' :
           'failed';
 
+        // Merge with the previous segments: a resumed run only executes
+        // the nodes after the pause, so overwriting the snapshot erased
+        // Email 1 the moment the run reached Email 2.
+        const mergedNodeResults = mergeNodeResults(
+          (metadata as any)?.result?.nodeResults,
+          result.nodeResults
+        );
+
         await releaseRun(
           run.id,
           lock.token,
           finalStatus as any,
           result.error || null,
-          { nodeResults: result.nodeResults } as any
+          { nodeResults: mergedNodeResults } as any
         );
 
         // CRITICAL: releaseRun's RPC doesn't write waiting_until /
@@ -232,7 +243,7 @@ export async function GET(request: NextRequest) {
                   current_node_id: waitingAt.nodeId,
                   metadata: {
                     ...metadata,
-                    result: { duration: result.duration, nodeResults: result.nodeResults },
+                    result: { duration: result.duration, nodeResults: mergedNodeResults },
                     waiting_at: {
                       nodeId: waitingAt.nodeId,
                       resumeAt: waitingAt.resumeAt,

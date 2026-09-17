@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { getAuthClient } from '@/lib/api-utils';
 import { snapshotIfChanged } from '@/lib/ai/versions';
 import { hasActiveProviderKey, providerKeyMissingResponse } from '@/lib/ai/provider-key-check';
+import { hasBooleanTransferCooldown } from '@/lib/ai/guards';
 export const dynamic = 'force-dynamic';
 
 // =====================================================
@@ -76,9 +77,13 @@ export async function PUT(
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
-    const supabase = getSupabase()
     const agentId = params.id
     const body = await request.json()
+
+    if (hasBooleanTransferCooldown(body.settings)) {
+      return NextResponse.json({ error: 'cooldown_after_transfer deve ser numérico' }, { status: 400 })
+    }
+    const supabase = getSupabase()
 
     // ✅ CORREÇÃO: Usar organization_id do usuário autenticado
     const organization_id = auth.user.organization_id
@@ -159,6 +164,19 @@ export async function PUT(
       }
     }
 
+    // 10.1 — um agente ativo por organização (ai_agents_single_active_per_org).
+    // Mesma semântica do canônico (api/ai/agents/canonical/route.ts): arquiva
+    // os demais ANTES de ativar este, ou a ativação vira 500 (unique
+    // violation) em vez de trocar qual agente é o ativo.
+    if (body.is_active === true) {
+      const { error: archiveError } = await supabase
+        .from('ai_agents')
+        .update({ is_active: false })
+        .eq('organization_id', organization_id)
+        .neq('id', agentId)
+      if (archiveError) throw new Error(archiveError.message)
+    }
+
     // Atualizar
     const { data: agent, error } = await supabase
       .from('ai_agents')
@@ -196,9 +214,13 @@ export async function PATCH(
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
-    const supabase = getSupabase()
     const agentId = params.id
     const body = await request.json()
+
+    if (hasBooleanTransferCooldown(body.settings)) {
+      return NextResponse.json({ error: 'cooldown_after_transfer deve ser numérico' }, { status: 400 })
+    }
+    const supabase = getSupabase()
 
     // ✅ CORREÇÃO: Usar organization_id do usuário autenticado
     const organization_id = auth.user.organization_id
@@ -286,6 +308,18 @@ export async function PATCH(
       }
     } catch (snapshotError) {
       console.error('Error snapshotting agent version (non-fatal):', snapshotError)
+    }
+
+    // 10.1 — um agente ativo por organização (ai_agents_single_active_per_org).
+    // Mesma semântica do canônico e do PUT: arquiva os demais ANTES de
+    // ativar este, ou a ativação vira 500 (unique violation).
+    if (body.is_active === true) {
+      const { error: archiveError } = await supabase
+        .from('ai_agents')
+        .update({ is_active: false })
+        .eq('organization_id', organization_id)
+        .neq('id', agentId)
+      if (archiveError) throw new Error(archiveError.message)
     }
 
     // Atualizar

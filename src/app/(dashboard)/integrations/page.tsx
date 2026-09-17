@@ -5,7 +5,7 @@ import { useToast } from '@/components/ui/Toast'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
-import { Loader2, ExternalLink, RefreshCw, Trash2, Settings, ShoppingBag, CheckCircle, AlertCircle, Wifi, WifiOff } from 'lucide-react'
+import { Loader2, ExternalLink, RefreshCw, Trash2, Settings, ShoppingBag, CheckCircle, AlertCircle, Wifi, WifiOff, Variable, ChevronRight } from 'lucide-react'
 import { useStoreStore, useAuthStore } from '@/stores'
 
 interface ConnectedStore {
@@ -236,6 +236,26 @@ export default function IntegrationsPage() {
           <p className="text-sm text-gray-500 mt-0.5">Conecte suas ferramentas e plataformas</p>
         </div>
       </div>
+
+      {/* Mapeamento de variáveis. Fica aqui, e não dentro de uma loja,
+          porque vale para toda integração que produz evento — é onde se
+          decide de qual campo do payload sai cada {{ variável }}. */}
+      <button
+        onClick={() => router.push('/integrations/variaveis')}
+        className="w-full flex items-center gap-4 px-6 py-4 bg-white rounded-xl border border-gray-200 shadow-sm hover:border-gray-300 transition-colors text-left"
+      >
+        <div className="w-10 h-10 rounded-lg bg-violet-50 flex items-center justify-center shrink-0">
+          <Variable className="w-5 h-5 text-violet-500" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="text-sm font-semibold text-gray-900">Mapeamento de variáveis</h3>
+          <p className="text-sm text-gray-500 mt-0.5">
+            De qual campo do evento sai cada variável do e-mail. Já vem configurado —
+            ajuste quando sua integração mandar os dados em outro formato.
+          </p>
+        </div>
+        <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />
+      </button>
 
       {loading ? (
         <div className="flex items-center justify-center py-20">

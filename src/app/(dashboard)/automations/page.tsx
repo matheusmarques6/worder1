@@ -328,6 +328,14 @@ export default function AutomationsPage() {
       name: flowData.name,
       trigger_type: triggerType,
       trigger_config: triggerNode?.data.config || {},
+      // Sem estas 4 colunas o caminho principal de save DESCARTAVA os
+      // filtros de gatilho/audiência, condições de saída e limite de
+      // frequência que a UI configura — o motor lia sempre o default.
+      // A rota /automations/[id]/builder já enviava; aqui faltava.
+      trigger_filters: flowData.trigger_filters,
+      audience_filters: flowData.audience_filters,
+      exit_conditions: flowData.exit_conditions,
+      frequency_config: flowData.frequency_config,
       nodes: flowData.nodes,
       edges: flowData.edges,
       status: flowData.status,

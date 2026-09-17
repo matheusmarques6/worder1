@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Users, Plus, Trash2, Loader2 } from 'lucide-react'
 
 interface Queue {
@@ -24,16 +24,16 @@ export function QueuesTab({ organizationId }: QueuesTabProps) {
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({ name: '', color: '#6366f1', greeting_message: '', out_of_hours_message: '' })
 
-  useEffect(() => { loadQueues() }, [organizationId])
-
-  async function loadQueues() {
+  const loadQueues = useCallback(async () => {
     setLoading(true)
     try {
       const res = await fetch(`/api/whatsapp/queues?organizationId=${organizationId}`)
       if (res.ok) { const { data } = await res.json(); setQueues(data || []) }
     } catch { /* */ }
     setLoading(false)
-  }
+  }, [organizationId])
+
+  useEffect(() => { loadQueues() }, [loadQueues])
 
   async function createQueue() {
     if (!form.name) return
@@ -43,7 +43,7 @@ export function QueuesTab({ organizationId }: QueuesTabProps) {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
       })
-      if (res.ok) { const { data } = await res.json(); setQueues([...queues, data]); setShowForm(false); setForm({ name: '', color: '#6366f1', greeting_message: '', out_of_hours_message: '' }) }
+      if (res.ok) { setShowForm(false); setForm({ name: '', color: '#6366f1', greeting_message: '', out_of_hours_message: '' }); await loadQueues() }
     } catch { /* */ }
     setSaving(false)
   }
@@ -51,7 +51,7 @@ export function QueuesTab({ organizationId }: QueuesTabProps) {
   async function deleteQueue(id: string) {
     if (!confirm('Excluir esta fila?')) return
     await fetch(`/api/whatsapp/queues/${id}?organizationId=${organizationId}`, { method: 'DELETE' })
-    setQueues(queues.filter(q => q.id !== id))
+    await loadQueues()
   }
 
   async function toggleActive(q: Queue) {
@@ -59,7 +59,7 @@ export function QueuesTab({ organizationId }: QueuesTabProps) {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ is_active: !q.is_active }),
     })
-    setQueues(queues.map(x => x.id === q.id ? { ...x, is_active: !x.is_active } : x))
+    await loadQueues()
   }
 
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>

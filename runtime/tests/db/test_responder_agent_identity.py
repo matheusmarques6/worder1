@@ -8,13 +8,17 @@ continua presente em QUALQUER modo — ela é do compilador, não da config.
 """
 
 import uuid
+from dataclasses import replace
 
 import psycopg
 import pytest
 
+from agents_runtime.agent_core import responder as responder_module
 from agents_runtime.agent_core.prompt_compiler import AI_DISCLOSURE_LINE
 from agents_runtime.agent_core.responder import build_responder
+from agents_runtime.judges.pre_send import JudgeContext as RealJudgeContext
 from agents_runtime.queueing.jobs import InboundJob
+from agents_runtime.repository import agent as agent_repo
 from tests.db.factories import (
     create_agent_version,
     create_message,
@@ -47,8 +51,38 @@ async def _system_prompt(dsn: str, admin: psycopg.Connection, tenant: uuid.UUID)
             organization_id=tenant,
         )
     )
-    assert result is not None
+    assert result.content is not None
     return llm.asked[0].messages[0].content
+
+
+@pytest.mark.parametrize("configured", [True, False])
+async def test_responder_never_say_ai_reaches_judge(
+    dsn: str,
+    admin: psycopg.Connection,
+    tenant: uuid.UUID,
+    monkeypatch: pytest.MonkeyPatch,
+    configured: bool,
+) -> None:
+    real_load = agent_repo.load_tenant_policy
+    seen: list[bool] = []
+
+    async def load_policy(conn, *, organization_id):
+        policy = await real_load(conn, organization_id=organization_id)
+        assert policy.never_say_ai is True
+        return replace(policy, policy=replace(policy.policy, never_say_ai=configured))
+
+    def capture_context(**kwargs):
+        context = RealJudgeContext(**kwargs)
+        seen.append(context.never_say_ai)
+        return context
+
+    monkeypatch.setattr(agent_repo, "load_tenant_policy", load_policy)
+    monkeypatch.setattr(responder_module, "JudgeContext", capture_context)
+    create_agent_version(admin, tenant, status="active")
+
+    await _system_prompt(dsn, admin, tenant)
+
+    assert seen == [configured]
 
 
 async def test_the_chosen_presentation_reaches_the_prompt(
@@ -82,3 +116,34 @@ async def test_the_default_stays_nome_funcao_with_no_adaptation(
     assert "Apresente-se pelo nome e pelo time" in system
     assert "Espelhe o tom do cliente" not in system
     assert AI_DISCLOSURE_LINE in system
+
+
+async def test_byo_without_org_keys_stays_silent_and_alerts(
+    dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+) -> None:
+    create_agent_version(admin, tenant, status="active")
+    thread = create_thread(admin, tenant)
+    create_message(admin, tenant, thread, direction="inbound", seq=1, text="oi")
+    llm = ScriptedLlm()
+    respond = build_responder(
+        dsn,
+        llm=llm,
+        set_role="worker_role",
+        agent_llm_from_org_keys=True,
+    )
+    job = InboundJob(
+        conversation_id=thread.conversation_id,
+        organization_id=tenant,
+        generation=1,
+        target_seq=1,
+    )
+
+    draft = await respond(job)
+    assert draft.content is None
+    assert draft.trace is None
+    assert llm.asked == []
+    row = admin.execute(
+        "select count(*) from public.alerts where organization_id=%s and type=%s",
+        (tenant, "no_org_llm_key"),
+    ).fetchone()
+    assert row == (1,)

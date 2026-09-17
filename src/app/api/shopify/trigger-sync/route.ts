@@ -4,11 +4,13 @@
 //
 // Called internally by the OAuth callback to start
 // the initial historical data import after store connection.
-// Authenticated via CRON_SECRET or X-Internal-Request header.
+// Authenticated via a bearer token matching INTERNAL_API_SECRET or
+// CRON_SECRET (see isInternalAuthorized in lib/internal-auth.ts).
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { isInternalAuthorized } from '@/lib/internal-auth';
 import { runFullSyncGraphQL } from '@/lib/services/shopify/full-sync-graphql';
 
 export const dynamic = 'force-dynamic';
@@ -16,16 +18,7 @@ export const maxDuration = 300;
 
 export async function POST(request: NextRequest) {
   try {
-    // Auth: internal request or CRON_SECRET
-    const isInternal = request.headers.get('X-Internal-Request') === 'true';
-    const authHeader = request.headers.get('authorization');
-    const cronSecret = process.env.CRON_SECRET;
-
-    const isAuthorized =
-      isInternal ||
-      (cronSecret && authHeader === `Bearer ${cronSecret}`);
-
-    if (!isAuthorized) {
+    if (!isInternalAuthorized(request)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

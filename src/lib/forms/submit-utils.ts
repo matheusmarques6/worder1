@@ -99,6 +99,9 @@ export function validateSubmitPayloadCaps(
     return `Payload inválido: máximo de ${MAX_ANSWER_KEYS} campos por envio.`
   }
   for (const key of keys) {
+    if (key.length > 128) {
+      return 'Payload inválido: nome de campo excede 128 caracteres.'
+    }
     if (answerValueToString(answers[key]).length > MAX_ANSWER_VALUE_LENGTH) {
       return `Payload inválido: valor do campo "${key}" excede ${MAX_ANSWER_VALUE_LENGTH} caracteres.`
     }

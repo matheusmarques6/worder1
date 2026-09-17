@@ -60,11 +60,29 @@ export interface EvalCase {
   tags: string[]
 }
 
+export interface TraceAnnotation {
+  id: string
+  rating: 'good' | 'bad' | 'fix'
+  correction_text: string | null
+  annotated_by?: string | null
+  updated_at: string
+}
+
+export interface EvalTrace {
+  id: string
+  input: string | null
+  output: string | null
+  created_at: string
+  annotation?: TraceAnnotation | null
+}
+
 export interface EvalPayload {
   versions: Version[]
   criteria: Criterion[]
   kappa: KappaRow[]
   cases: EvalCase[]
+  acceptedTraces: EvalTrace[]
+  legacyTraces: EvalTrace[]
 }
 
 // =============================================
@@ -236,33 +254,21 @@ export async function syncCases(
   // rótulo humano sempre = fail, degenerando a concordância).
   const { data: anns, error: annErr } = await supabase
     .from('agent_trace_annotations')
-    .select('trace_id, rating, correction_text')
+    .select('trace_id, rating, correction_text, trace:agent_traces!inner(input)')
     .eq('agent_id', agentId)
     .eq('organization_id', orgId)
     .in('rating', ['good', 'bad', 'fix'])
+    .eq('trace.agent_id', agentId)
+    .eq('trace.organization_id', orgId)
+    .eq('trace.trace_source', 'runtime_accepted')
   if (annErr) throw annErr
 
-  const traceIds = (anns ?? []).map((a) => a.trace_id as string)
-  const tracesById = new Map<string, { input: string }>()
-  if (traceIds.length > 0) {
-    const { data: traces, error: trErr } = await supabase
-      .from('agent_traces')
-      .select('id, input')
-      .eq('agent_id', agentId)
-      .eq('organization_id', orgId)
-      .in('id', traceIds)
-    if (trErr) throw trErr
-    for (const t of traces ?? []) {
-      tracesById.set(t.id as string, { input: (t.input as string | null) ?? '' })
-    }
-  }
-
   for (const a of anns ?? []) {
-    const trace = tracesById.get(a.trace_id as string)
+    const trace = Array.isArray(a.trace) ? a.trace[0] : a.trace
     if (!trace) continue
     const expected =
       a.rating === 'fix' && typeof a.correction_text === 'string' ? a.correction_text : ''
-    const input = trace.input || ''
+    const input = (trace.input as string | null) ?? ''
     rows.push({
       organization_id: orgId,
       agent_id: agentId,
@@ -393,20 +399,18 @@ export async function runEvaluation(
   }))
   if (criteria.length === 0) return
 
-  const { data: caseRows, error: caseErr } = await supabase
-    .from('ai_eval_cases')
-    .select('id, title, input, expected, source, source_id, tags')
-    .eq('agent_id', agent.id)
-    .eq('organization_id', orgId)
-    .order('created_at', { ascending: false })
-    .limit(MAX_CASES_PER_RUN)
+  const { data: caseRows, error: caseErr } = await supabase.rpc(
+    'list_eligible_eval_cases',
+    {
+      p_organization_id: orgId,
+      p_agent_id: agent.id,
+      p_limit: MAX_CASES_PER_RUN,
+    }
+  )
   if (caseErr) throw caseErr
 
-  const cases = (caseRows ?? []) as CaseRow[]
+  const cases = ((caseRows ?? []) as CaseRow[]).slice(0, MAX_CASES_PER_RUN)
   if (cases.length === 0) return
-
-  // Budget check: 402 via AiBudgetExceededError (caller/rota captura)
-  await checkAiBudget(orgId, { throwOnExceeded: true })
 
   const judge = await resolveJudgeKey(supabase, orgId, agent.provider)
   if (!judge) return
@@ -419,6 +423,7 @@ export async function runEvaluation(
     const output = await resolveJudgedOutput(supabase, agent.id, orgId, c)
     if (output === null) continue // sem resposta armazenada → não há o que julgar
 
+    await checkAiBudget(orgId, { throwOnExceeded: true })
     let verdict
     try {
       verdict = await judgeCase({
@@ -441,8 +446,19 @@ export async function runEvaluation(
         completionTokens: verdict.usage?.completionTokens,
         costUsdOverride: verdict.usage?.costUsd,
         success: true,
+        metadata: { billable: true },
       })
     } catch {
+      await trackAiUsage({
+        organizationId: orgId,
+        provider,
+        model: judgeModel,
+        feature: 'eval_judge',
+        agentId: agent.id,
+        costUsdOverride: null,
+        success: false,
+        metadata: { billable: true },
+      })
       verdict = {
         score: 0,
         verdict: 'fail' as const,
@@ -482,6 +498,33 @@ export async function listEval(
   agentId: string,
   orgId: string
 ): Promise<EvalPayload> {
+  const [acceptedResult, legacyResult] = await Promise.all([
+    supabase
+      .from('agent_traces')
+      .select(
+        'id, input, output, created_at, annotation:agent_trace_annotations(id, rating, correction_text, annotated_by, updated_at)'
+      )
+      .eq('agent_id', agentId)
+      .eq('organization_id', orgId)
+      .eq('trace_source', 'runtime_accepted')
+      .order('created_at', { ascending: false })
+      .limit(20),
+    supabase
+      .from('agent_traces')
+      .select('id, input, output, created_at')
+      .eq('agent_id', agentId)
+      .eq('organization_id', orgId)
+      .eq('trace_source', 'legacy_generated')
+      .order('created_at', { ascending: false })
+      .limit(20),
+  ])
+  if (acceptedResult.error) throw acceptedResult.error
+  if (legacyResult.error) throw legacyResult.error
+  const acceptedRows = acceptedResult.data
+  const legacyRows = legacyResult.data
+  const acceptedTraces = (acceptedRows ?? []) as unknown as EvalTrace[]
+  const legacyTraces = (legacyRows ?? []) as unknown as EvalTrace[]
+
   // Critérios
   const { data: critRows } = await supabase
     .from('ai_eval_criteria')
@@ -563,7 +606,7 @@ export async function listEval(
   // ---- kappa (concordância juiz×humano sobre anotações) ----
   const kappa = await buildKappa(supabase, agentId, orgId, cases, latestByCase)
 
-  return { versions, criteria, kappa, cases: evalCases }
+  return { versions, criteria, kappa, cases: evalCases, acceptedTraces, legacyTraces }
 }
 
 /**

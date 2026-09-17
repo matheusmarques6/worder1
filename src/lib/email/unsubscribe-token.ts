@@ -39,6 +39,13 @@ export interface UnsubscribePayload {
   orgId: string
   /** campaignId opcional para tracking */
   campaignId?: string
+  /**
+   * Loja do envio. A página de preferências mostra o NOME e o remetente
+   * desta loja — não os da organização, que numa organização com várias
+   * lojas é a identidade de outra loja. Opcional: tokens antigos seguem
+   * válidos.
+   */
+  storeId?: string
   /** timestamp expiração (ms). Default: nunca expira (unsub é perene) */
   exp?: number
 }
@@ -49,6 +56,7 @@ export function signUnsubscribeToken(payload: UnsubscribePayload): string {
     c: payload.contactId,
     o: payload.orgId,
     cm: payload.campaignId,
+    s: payload.storeId,
     e: payload.exp,
   })
   const bodyEnc = b64urlEncode(body)
@@ -85,6 +93,7 @@ export function verifyUnsubscribeToken(token: string): UnsubscribePayload | null
       contactId: String(body.c),
       orgId: String(body.o),
       campaignId: body.cm ? String(body.cm) : undefined,
+      storeId: body.s ? String(body.s) : undefined,
       exp: body.e ? Number(body.e) : undefined,
     }
   } catch {

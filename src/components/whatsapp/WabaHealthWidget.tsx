@@ -120,7 +120,7 @@ export function WabaHealthWidget({
     } finally {
       setLoading(false)
     }
-  }, [organizationId])
+  }, [])
 
   useEffect(() => {
     if (!externalData) fetchHealth()

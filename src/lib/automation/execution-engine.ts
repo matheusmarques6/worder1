@@ -145,6 +145,17 @@ export class ExecutionEngine {
       (context as any).organizationId = options.organizationId;
     }
 
+    // Sending thresholds (modelo Omnisend): quão longe cada canal alcança
+    // nesta automação. Fica no nó de gatilho (é uma decisão do FLUXO, não
+    // de uma mensagem isolada) e é hasteado para o contexto uma vez, do
+    // mesmo jeito que o storeId — os executores de e-mail e SMS leem daqui.
+    if (!(context as any).sendingThresholds) {
+      const th = (triggerNode?.data?.config as any)?.sendingThresholds;
+      if (th && typeof th === 'object') {
+        (context as any).sendingThresholds = th;
+      }
+    }
+
     // Backfill storeId onto the context so EVERY downstream reader sees it —
     // most importantly the email node, which resolves the STORE's sender
     // identity (getEmailProviderForOrg(org, storeId)) from context.storeId.
@@ -160,13 +171,27 @@ export class ExecutionEngine {
     // the app domain). Single choke point for EVERY runner — some context
     // builders only set storeId, not store.domain. variableEngine +
     // node-executors + resolveCartBlocks all read context.store?.domain.
-    if (!(context as any)?.store?.domain) {
+    // Antes só o domínio era anexado, então {{store_name}} lia
+    // context.store.name — que nunca existia — e saía VAZIO em todo
+    // e-mail de automação; {{store_email}} e {{store_phone}} nem
+    // chegavam ao mergeData. As três eram oferecidas no editor e
+    // nenhuma funcionava. Agora vem a identidade inteira, uma vez por
+    // execução.
+    if (!(context as any)?.store?.domain || !(context as any)?.store?.name) {
       const storeId = (context as any)?.storeId || (options as any)?.storeId;
       if (storeId) {
         try {
-          const { resolveStoreShopDomain } = await import('./store-host');
-          const domain = await resolveStoreShopDomain(this.supabase, storeId);
-          if (domain) (context as any).store = { ...((context as any).store || {}), domain };
+          const { resolveStoreIdentity } = await import('./store-host');
+          const identity = await resolveStoreIdentity(this.supabase, storeId);
+          if (identity.domain || identity.name) {
+            (context as any).store = {
+              ...((context as any).store || {}),
+              domain: identity.domain || (context as any).store?.domain,
+              name: identity.name || (context as any).store?.name,
+              email: identity.email || (context as any).store?.email,
+              phone: identity.phone || (context as any).store?.phone,
+            };
+          }
         } catch { /* non-fatal: falls back to event-derived host */ }
       }
     }
@@ -393,10 +418,15 @@ export class ExecutionEngine {
             }
           }
 
-          // Get credentials if needed
-          let credentials = options.credentials?.[node.data.credentialId || ''];
-          if (!credentials && node.data.credentialId) {
-            credentials = await this.getCredentials(node.data.credentialId);
+          // Get credentials if needed. A UI grava o credentialId dentro de
+          // node.data.config (PropertiesPanel → updateNodeConfig); ler só
+          // node.data.credentialId deixava TODO executor sem credencial
+          // (WhatsApp, SMS, webhook auth, cupom Shopify).
+          const credentialId =
+            (node.data.config as any)?.credentialId || node.data.credentialId || '';
+          let credentials = options.credentials?.[credentialId];
+          if (!credentials && credentialId) {
+            credentials = await this.getCredentials(credentialId);
           }
 
           // Execute the node com timeout + circuit breaker por automação
@@ -603,21 +633,42 @@ export class ExecutionEngine {
     nodeResults: Record<string, NodeExecutionResult>
   ): void {
     const nodeEdges = workflow.edges.filter(e => e.source === nodeId);
-    const skippedTargets = new Set<string>();
-    
-    for (const edge of nodeEdges) {
-      // Check if this edge matches the selected branch
+    const matchesBranch = (edge: { sourceHandle?: string | null }): boolean => {
       const edgeHandle = edge.sourceHandle || 'default';
-      const matches = edgeHandle === selectedBranch || 
-                     edgeHandle === `output-${selectedBranch}` ||
-                     (selectedBranch === 'true' && edgeHandle === 'yes') ||
-                     (selectedBranch === 'false' && edgeHandle === 'no');
-      
-      if (!matches) {
+      return edgeHandle === selectedBranch ||
+        edgeHandle === `output-${selectedBranch}` ||
+        (selectedBranch === 'true' && edgeHandle === 'yes') ||
+        (selectedBranch === 'false' && edgeHandle === 'no');
+    };
+
+    // Fluxo legado: condição cujas saídas foram salvas SEM sourceHandle.
+    // Nenhuma aresta casaria o ramo e o fluxo inteiro seria pulado —
+    // pior que executar os dois lados. Sem handles, não há o que rotear.
+    const hasAnyHandle = nodeEdges.some(e => !!e.sourceHandle);
+    if (!hasAnyHandle) {
+      console.warn(`[ExecutionEngine] Condição "${nodeId}" tem saídas sem handle (fluxo legado) — nenhum ramo será pulado. Reconecte os ramos Sim/Não no editor.`);
+      return;
+    }
+
+    const skippedTargets = new Set<string>();
+    const keptTargets = new Set<string>();
+
+    for (const edge of nodeEdges) {
+      if (matchesBranch(edge)) {
+        keptTargets.add(edge.target);
+        this.collectDescendants(workflow, edge.target, keptTargets);
+      } else {
         skippedTargets.add(edge.target);
         this.collectDescendants(workflow, edge.target, skippedTargets);
       }
     }
+
+    // Um nó alcançado pelo ramo VENCEDOR nunca é pulado, mesmo que o ramo
+    // perdedor também chegue nele. Sem esta subtração, todo fluxo em que
+    // os dois lados de uma condição voltam a se encontrar (padrão de
+    // convergência: "sim"/"não" → mesmo e-mail final) tinha o nó de
+    // reencontro — e tudo depois dele — marcado como pulado.
+    for (const kept of keptTargets) skippedTargets.delete(kept);
 
     // Mark as skipped
     for (const targetId of skippedTargets) {

@@ -360,37 +360,9 @@ CREATE POLICY "Users can view own org usage logs" ON ai_agent_usage_logs
 -- PASSO 10: FUNÇÕES ÚTEIS
 -- =====================================================
 
--- Função para busca semântica (RAG)
-CREATE OR REPLACE FUNCTION search_agent_knowledge(
-    p_agent_id UUID,
-    p_query_embedding vector(1536),
-    p_match_threshold FLOAT DEFAULT 0.7,
-    p_match_count INT DEFAULT 5
-)
-RETURNS TABLE (
-    chunk_id UUID,
-    source_id UUID,
-    content TEXT,
-    metadata JSONB,
-    similarity FLOAT
-)
-LANGUAGE plpgsql
-AS $$
-BEGIN
-    RETURN QUERY
-    SELECT 
-        c.id as chunk_id,
-        c.source_id,
-        c.content,
-        c.metadata,
-        1 - (c.embedding <=> p_query_embedding) as similarity
-    FROM ai_agent_chunks c
-    WHERE c.agent_id = p_agent_id
-    AND 1 - (c.embedding <=> p_query_embedding) > p_match_threshold
-    ORDER BY c.embedding <=> p_query_embedding
-    LIMIT p_match_count;
-END;
-$$;
+-- Definição canônica da busca semântica:
+-- supabase/migrations/20260902000004_search_agent_knowledge_org_scoped.sql
+-- Este arquivo histórico não cria overload sem organização.
 
 -- Função para atualizar métricas do agente
 CREATE OR REPLACE FUNCTION update_agent_metrics()

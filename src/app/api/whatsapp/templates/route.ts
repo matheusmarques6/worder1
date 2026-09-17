@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 import { getTemplates } from '@/lib/whatsapp/meta-api'
 import { requireOrgFromAuth } from '@/lib/auth/require-org';
+import { sanitizeSearchTerm } from '@/lib/db/search-term'
 export const dynamic = 'force-dynamic';
 
 // GET /api/whatsapp/templates
@@ -16,6 +17,9 @@ export async function GET(request: NextRequest) {
     const category = searchParams.get('category')
     const status = searchParams.get('status')
     const search = searchParams.get('search')
+    // O termo vai para dentro de um filtro do PostgREST: vírgula e
+    // parêntese deixariam de ser texto e passariam a ser consulta.
+    const buscaSegura = sanitizeSearchTerm(search)
 
     let query = supabase
       .from('whatsapp_templates')
@@ -27,7 +31,7 @@ export async function GET(request: NextRequest) {
 
     if (category) query = query.eq('category', category)
     if (status) query = query.eq('status', status)
-    if (search) query = query.ilike('name', `%${search}%`)
+    if (buscaSegura) query = query.ilike('name', `%${buscaSegura}%`)
 
     const { data, error } = await query
     if (error) throw error

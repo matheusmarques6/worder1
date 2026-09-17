@@ -224,6 +224,77 @@ describe('sendHumanizedReply — moderacao blocked_topics', () => {
     expect(mockSendText).toHaveBeenCalledTimes(1)
   })
 
+  it('envia a confirmação configurada e marcada pelo caminho de handoff', async () => {
+    mockRequireOptIn.mockResolvedValue({ allowed: true })
+    mockSendText.mockResolvedValue({ messages: [{ id: 'wamid.handoff' }] })
+
+    const r = await sendHumanizedReply({
+      account,
+      conversation,
+      text: 'Vou chamar um humano.',
+      handoffConfirmation: true,
+      agent: {
+        id: 'agent-1',
+        settings: { safety: { blocked_topics: ['humano'], handoff_confirmation_message: 'Vou chamar um humano.' } },
+      },
+      skipDelays: true,
+    })
+
+    expect(r.sent).toBe(true)
+    expect(mockSendText).toHaveBeenCalledTimes(1)
+  })
+
+  it('bloqueia texto arbitrário mesmo com marcador de handoff', async () => {
+    mockRequireOptIn.mockResolvedValue({ allowed: true })
+    mockSendText.mockResolvedValue({ messages: [{ id: 'wamid.arbitrary' }] })
+    const r = await sendHumanizedReply({
+      account,
+      conversation,
+      text: 'Humano proibido fora da confirmação.',
+      handoffConfirmation: true,
+      agent: {
+        id: 'agent-1',
+        settings: { safety: { blocked_topics: ['humano'], handoff_confirmation_message: 'Vou chamar um humano.' } },
+      },
+      skipDelays: true,
+    })
+
+    expect(r).toMatchObject({ sent: false, reason: 'blocked_topic' })
+    expect(mockSendText).not.toHaveBeenCalled()
+  })
+
+  it('bloqueia marcador sem confirmação configurada', async () => {
+    mockRequireOptIn.mockResolvedValue({ allowed: true })
+    mockSendText.mockResolvedValue({ messages: [{ id: 'wamid.unconfigured' }] })
+    const r = await sendHumanizedReply({
+      account,
+      conversation,
+      text: 'Vou chamar um humano.',
+      handoffConfirmation: true,
+      agent: { id: 'agent-1', settings: { safety: { blocked_topics: ['humano'] } } },
+      skipDelays: true,
+    })
+
+    expect(r).toMatchObject({ sent: false, reason: 'blocked_topic' })
+    expect(mockSendText).not.toHaveBeenCalled()
+  })
+
+  it('não libera resposta comum idêntica à confirmação', async () => {
+    const r = await sendHumanizedReply({
+      account,
+      conversation,
+      text: 'Vou chamar um humano.',
+      agent: {
+        id: 'agent-1',
+        settings: { safety: { blocked_topics: ['humano'], handoff_confirmation_message: 'Vou chamar um humano.' } },
+      },
+      skipDelays: true,
+    })
+
+    expect(r).toMatchObject({ sent: false, reason: 'blocked_topic' })
+    expect(mockSendText).not.toHaveBeenCalled()
+  })
+
   it('agente sem settings.safety segue funcionando (retrocompatibilidade)', async () => {
     mockRequireOptIn.mockResolvedValue({ allowed: true })
     mockSendText.mockResolvedValue({ messages: [{ id: 'wamid.10' }] })

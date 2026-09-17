@@ -113,7 +113,7 @@ ajustados nos testes.
 |---|---|---|
 | PENDENTE-1 (default de chave LLM) | resolvido: BYO-only | degrau plataforma atrás de `AGENTS_PLATFORM_LLM_ENABLED` (off) |
 | PENDENTE-2 (copy final dos seeds) | aberto | seeds v0 draft `origin='worder_default'`; aprovar com Bruno |
-| PENDENTE-3 (números de caps/arbitragem) | aberto | constantes em `pending_defaults.py` |
+| PENDENTE-3 (números de caps/arbitragem) | depende de consumidor/plano aprovados | reserva sem uso retirada na Wave 4; q_scheduled/DLQ preservadas sem consumidor |
 | Emissão de `whatsapp.received` no EventBus | adiado | missão descoberta é engajada pelo coalescer |
 | Humanização do sender (typing, ≤4 bolhas) + send-guard tiers | roadmap | divergência v1 registrada (Adendo §A.4.2) |
 | Canais instagram/email como adapters | roadmap | `channel_identities.channel` já os prevê |
@@ -171,13 +171,13 @@ botão); (6) criar missão DENTRO do builder, integrada por construção.
 
 | Passo | Estado | Nota |
 |---|---|---|
-| 8.1 Deploy runtime | **Apply feito 12/08 — deploy NÃO conectou** | sonda (12/08 ~02:00Z): zero batidas em runtime_heartbeats e zero conexões novas em pg_stat_activity ~30min pós-Apply. Causa está no log do Render (build em andamento, env vazia, DSN errada ou senha) — checklist entregue ao usuário; egress daqui bloqueia onrender.com, a sonda é pelo banco |
-| 8.2 Vercel envs | aguardando 8.1 | URL + AGENTS_PREVIEW_TOKEN |
+| 8.1 Deploy runtime | **ainda não conectou — Apply de 12/08 continua sendo a única tentativa no Render** | sonda de 12/08 (~02:00Z): zero batidas em runtime_heartbeats e zero conexões novas em pg_stat_activity ~30min pós-Apply. Causa nunca saiu do log do Render (egress daqui bloqueia onrender.com). A branch `fix/ai-engine-schema-baseline` nunca foi empurrada (355+ commits presos na worktree, CI nunca viu as migrations) — sem push não há Apply novo para tentar. Caminho agora é `docs/runbooks/2026-09-17-piloto-runtime.md` (Passos 1–4): `piloto_check.py env` valida o contrato do DEPLOY.md offline ANTES do console (rejeita porta 6543 e host fora de `pooler.supabase.com` por parsing de DSN, não substring), `piloto_check.py probe` lê heartbeat+filas pelo banco com o mesmo limiar do `/healthz` (180s) em vez de inspeção manual |
+| 8.2 Vercel envs | aguardando 8.1 | URL + AGENTS_PREVIEW_TOKEN; passo 5 do runbook novo — sem as duas, `/api/ai/preview-prompt` responde "runtime não configurado" e o preview mostra fantasmas MISSÃO/ESTADO/CANAL |
 | 8.3 Humanização do sender (D10) | **feito** (código+fixtures; falta o "visivelmente humano" na loja de teste, que depende de 8.1) | split portado com paridade PROVADA (10 vetores gerados pelo TS real); ritmo proporcional c/ teto por bolha e orçamento agregado; 1ª bolha falhou = retry, bolha do meio = o que saiu vale (ADR-8); espelho por bolha; wamid da linha = 1ª bolha |
-| 8.4 Sonda healthz | aguardando 8.1 | |
+| 8.4 Sonda healthz | aguardando 8.1 | substituída por `piloto_check.py probe` (runbook, Passo 4): lê `internal.runtime_heartbeats` e profundidades de fila pelo banco, não pelo Render; sem beat, a sonda diz que o motivo está no log do Render em vez de deixar a dúvida no ar — a mesma ambiguidade que custou o Apply de 12/08. Heartbeat fresco prova processo vivo, não fila drenando (heartbeat e workers são tasks independentes em `app.py`) |
 | 8.5 Seeds rodada 2 | **[GATE-Bruno]** | CORREÇÃO (12/08): a nota anterior "drafts já no banco" estava ERRADA — ai_missions estava vazia no vivo (os seeds só tinham sido provados no stack local). Consertado: rota POST /api/ai/missions/seed + CTA na aba Missões quando a org tem zero missões (self-service p/ toda org nova); seeds rodados 12/08 para a org piloto 425db1ba (6 rascunhos). Ativar segue ato explícito por missão, gate do Bruno |
-| 8.6 Rollout + smoke | aguardando 8.5 | runbook abaixo |
-| 8.7 Rollback provado | aguardando 8.6 | registrar horário aqui |
+| 8.6 Rollout + smoke | aguardando 8.1 (formal, via Render) — **não confundir com o rollout já feito em 17/08 pelo caminho local** | a Fase 3 do Cutover 17/08 abaixo já inseriu a org piloto em `ai_runtime_rollout` mode=`runtime`, mas contra o runtime rodando no PC do usuário (Docker `runtime-pc-piloto`), não contra um deploy no Render — 8.6 formal (a fatia vertical deste plano de Etapas 8–10, contra o serviço do Render) segue sem execução. Veredito passa a ser `piloto_check.py smoke --organization <org> --phone <telefone>` (runbook, Passo 8): uma linha por expectativa (mensagem canônica, resposta, outbox, espelho), saída 0/1; chips são só aviso, nunca reprovam |
+| 8.7 Rollback provado | aguardando 8.6 | mecanismo documentado (`update ai_runtime_rollout set mode='legacy'`, efeito no próximo inbound — runbook Passo 6) mas nunca exercitado como teste; horário fica para quando 8.6 formal rodar |
 | 9.2 Ciclo do grant | **feito** | consume RPC (dedup por pedido no UNIQUE) + expire no housekeeping do sender + wire no webhook orders/paid; migration 0011 no vivo |
 | 9.3 Dinheiro no inbound | **feito** | 9.3a: StateBlock com cupom vigente + ledger. 9.3b: porta LLM com tools (ToolSpec/ToolCall; OpenRouter + OpenAI-compat + Anthropic nativo traduzem o MESMO contrato) + tool-loop no responder (teto de 3 rodadas; esgotou = chamada final sem tools); create_coupon oferecida só se missão∩agente permitir. DoD provado em teste db: concessão none + grant do momento → `reused` na trilha, resposta com o cupom existente, zero grant novo |
 | 9.1 Logfire (D13) | **feito no código** — DoD "conversa navegável no Logfire" confere no smoke pós-deploy (depende de 8.1/8.2 + token) | 9.1a: `configure_logfire()` token-gated + instrument httpx/psycopg/system_metrics + scrubbing (conteúdo GenAI fora em 3 linhas de defesa). 9.1b: traceparent viaja — passe do coalescer carimba o payload pgmq (turno retoma como LINK), conclude grava o carrier do turno na outbox (migration 0012) e o sender retoma como PARENT (turno+envio = um trace); spans coalesce_pass/turn/mission_touch/send com outcome; responder/toucher anotam mission_version_id/moment_ids/grant_id/node_ref; cinto de PII provado em teste p/ o vocabulário novo |
@@ -254,10 +254,19 @@ token) e 9.5 (roadmap, não bloqueia).
   (seed draft → active, sem anterior para arquivar).
 - **Fase 3 ✓** — org `425db1ba-…` em `ai_runtime_rollout` mode=`runtime`
   (14:03 UTC). Rollback = delete da linha.
-- **Fase 4 em curso** — smoke com mensagem real. Suspeita aberta: chave
-  OpenRouter da org falha em 1–2s no caminho legado (modelo
-  `google/gemini-3.5-flash` existe no catálogo; hipótese = conta sem créditos);
-  o runtime registra o erro exato em `internal.llm_calls` quando testar.
+- **Fase 4 aberta, sem veredito** (registro em curso desde 17/08; nada avançou
+  desde então — sem push da branch, sem Apply novo no Render, sem smoke
+  rodado) — falta o smoke com mensagem real. Suspeita aberta, nunca confirmada
+  nem derrubada: chave OpenRouter da org falha em 1–2s no caminho legado
+  (modelo `google/gemini-3.5-flash` existe no catálogo; hipótese = conta sem
+  créditos). Se for isso, o sintoma no runtime é SILÊNCIO, não um erro visível
+  — o agente não responde e o motivo fica em `internal.llm_calls` ou num
+  alerta `type="no_org_llm_key"` (`responder.py`/`toucher.py`); silêncio é o
+  comportamento correto quando a org não tem chave utilizável (BYO-only, sem
+  fallback de sistema), e é exatamente por isso que é fácil de confundir com
+  "deploy quebrado". `piloto_check.py smoke` (runbook
+  `docs/runbooks/2026-09-17-piloto-runtime.md`, Passo 8) é o veredito que fecha
+  esta fase — ainda não rodado.
 - **UI 17/08** — aba WhatsApp ganhou o child **"Agente IA"**
   (`/whatsapp/agente`): `AgentPowerSwitch` + `DiscoveryMissionArea` exportados
   de `ai-hub/AreaFields` (um dado, N portas — mesma missão da órbita).
@@ -466,7 +475,7 @@ Auditoria completa e fila de 63 correções: `docs/AUDITORIA-IA-2026-08-28-CHECK
 ### Pendências conhecidas (fora do plano de 30)
 
 - PENDENTE-2: copy final dos seeds com Bruno (drafts já no banco por org via função).
-- PENDENTE-3: números de caps/arbitragem em `pending_defaults.py`.
+- PENDENTE-3: novos números de caps/arbitragem dependem de consumidor e plano aprovados, sem reserva de código.
 - Loop de tool escolhida pelo modelo (E3): create_coupon já existe e é chamado
   pelo toucher; o responder conversacional ganha o loop depois.
 - Consumo de grant (uses++/consumed) via webhook de pedido correlacionando coupon_code.

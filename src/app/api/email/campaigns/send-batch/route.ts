@@ -8,7 +8,9 @@
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
+import { isInternalAuthorized } from '@/lib/internal-auth';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { publicStoreUrl } from '@/lib/shopify/store-url';
 import { sendBatchEmails } from '@/lib/email/resend';
 import { isEmailBlocked } from '@/lib/email/consent';
 import {
@@ -16,9 +18,11 @@ import {
   resolveProductBlocks,
   resolveCartBlocks,
   resolveSavedBlocks,
+  hasUniversalContent,
   renderMergeTags,
 } from '@/lib/email/render';
 import { renderDocumentToHtml } from '@/lib/email/render-html';
+import { loadCampaignCommerceContext } from './commerce-context';
 
 export const maxDuration = 300; // 5 minutes for batch processing
 
@@ -54,9 +58,9 @@ function detectISP(email: string): string {
 
 export async function POST(req: NextRequest) {
   try {
-    // Verify internal caller
-    const internalHeader = req.headers.get('X-Internal');
-    if (internalHeader !== 'true') {
+    // Item 80: `X-Internal` é um cabeçalho que qualquer cliente escreve.
+    // Autorização real é bearer com segredo configurado, fail-closed.
+    if (!isInternalAuthorized(req)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -81,11 +85,15 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Get campaign with template
+    // A organização vem no corpo e a campanha vinha só pelo id: nada
+    // conferia se uma é da outra. A rota é interna, mas quem chama
+    // monta as duas coisas separado — e um lote com a organização de um
+    // e a campanha de outro enviaria conteúdo alheio no nome errado.
     const { data: campaign, error: campaignError } = await supabaseAdmin
       .from('email_campaigns')
       .select('*, email_templates(*)')
       .eq('id', campaign_id)
+      .eq('organization_id', organizationId)
       .single();
 
     if (campaignError || !campaign) {
@@ -102,8 +110,9 @@ export async function POST(req: NextRequest) {
     // Resolve universal/saved blocks — re-render HTML if design_json has linked blocks
     if (template.design_json) {
       try {
-        const hasLinkedBlocks = JSON.stringify(template.design_json).includes('_savedBlockId')
-        if (hasLinkedBlocks) {
+        // Seção conta tanto quanto bloco: na prática todo universal em
+        // uso é uma seção, e a checagem antiga só via `_savedBlockId`.
+        if (hasUniversalContent(template.design_json)) {
           const resolvedDoc = await resolveSavedBlocks(template.design_json, organizationId)
           template.html = renderDocumentToHtml(resolvedDoc)
         }
@@ -141,16 +150,27 @@ export async function POST(req: NextRequest) {
     let storeEmail = '';
     let storePhone = '';
     if (campaign.store_id) {
-      const { data: store } = await supabaseAdmin
+      // As colunas são shop_*, não name/domain/email/phone. Pedir os
+      // nomes errados fazia o PostgREST devolver erro, store vinha
+      // null e as QUATRO variáveis de loja saíam vazias em toda
+      // campanha — {{store_name}}, {{store_url}}, {{store_email}} e
+      // {{store_phone}} eram oferecidas no editor e nunca resolviam.
+      const { data: store, error: storeErr } = await supabaseAdmin
         .from('shopify_stores')
-        .select('name, domain, email, phone')
+        .select('shop_name, shop_domain, primary_domain, shop_email, shop_phone')
         .eq('id', campaign.store_id)
-        .single();
+        .maybeSingle();
+      if (storeErr) {
+        console.error('[SendBatch] falha ao ler a loja para as merge tags:', storeErr);
+      }
       if (store) {
-        storeName = store.name || '';
-        storeUrl = store.domain ? `https://${store.domain}` : '';
-        storeEmail = store.email || '';
-        storePhone = store.phone || '';
+        storeName = store.shop_name || '';
+        // O domínio PRINCIPAL (drgroot.com), não o *.myshopify.com da
+        // API. Se o lojista trocar o domínio, a sincronização atualiza a
+        // coluna e a variável acompanha sem ninguém editar template.
+        storeUrl = publicStoreUrl(store);
+        storeEmail = store.shop_email || '';
+        storePhone = store.shop_phone || '';
       }
     }
 
@@ -158,6 +178,14 @@ export async function POST(req: NextRequest) {
     // quando configurado (host alinhado ao remetente), senão o app.
     const { getTrackingBaseUrl } = await import('@/lib/email/tracking-url');
     const baseUrl = await getTrackingBaseUrl(organizationId, campaign.store_id || null);
+
+    // UTM + identificação de todo link: configuração da LOJA da campanha,
+    // carregada uma vez por lote e resolvida por destinatário abaixo.
+    const { getUtmSettings } = await import('@/lib/tracking/utm-settings');
+    const { makeLinkParamsResolver, normalizeMessageUtmConfig } = await import('@/lib/tracking/link-params');
+    const { settings: utmSettings } = await getUtmSettings(organizationId, campaign.store_id || null);
+    // Sobrescrita desta campanha (etapa de configurações), como na Omnisend.
+    const campaignUtm = normalizeMessageUtmConfig((campaign as any).settings?.utm);
 
     // ──────────────────────────────────────────
     // Suppression list
@@ -202,6 +230,8 @@ export async function POST(req: NextRequest) {
     // ISP-aware: group by ISP, apply per-ISP throttle
     // ──────────────────────────────────────────
     let sent = 0;
+    // Envios que saíram e não conseguiram ser registrados no banco.
+    let naoRegistrados = 0;
     let failed = 0;
 
     // Group contacts by ISP for throttling
@@ -235,10 +265,13 @@ export async function POST(req: NextRequest) {
     // the campaign + organization (both constant per request), so computing
     // it per-contact meant getOrgSender() hit the organizations table N times
     // for a single batch. Hoisted out to a single lookup.
-    let batchFromAddress = campaign.from_email
-      ? (campaign.sender_name ? `${campaign.sender_name} <${campaign.from_email}>` : campaign.from_email)
-      : null;
-    if (!batchFromAddress && campaign.store_id) {
+    // O endereço guardado na campanha vence — a não ser que ele seja o do
+    // domínio compartilhado e a loja já tenha domínio próprio verificado.
+    // Esse endereço é um marcador de lugar que toda loja recebe ao nascer,
+    // não uma escolha; sem esta regra o lojista verifica o domínio dele e
+    // as campanhas continuam saindo como worder.email para sempre.
+    let batchFromAddress: string | null = null;
+    if (campaign.store_id) {
       // Store-aware sender: a multi-store org must send each store's
       // campaigns under THAT store's identity, not the org default.
       // getEmailProviderForOrg layers store email_settings (and the
@@ -247,13 +280,17 @@ export async function POST(req: NextRequest) {
       // getOrgSender() and arrived as the org name ("Based").
       try {
         const { getEmailProviderForOrg } = await import('@/lib/email/providers');
+        const { chooseSender, formatSender } = await import('@/lib/email/sender-preference');
         const { config } = await getEmailProviderForOrg(organizationId, campaign.store_id);
-        if (config.defaultFrom) {
-          batchFromAddress = config.defaultSenderName
-            ? `${config.defaultSenderName} <${config.defaultFrom}>`
-            : config.defaultFrom;
-        }
+        const chosen = chooseSender(
+          { email: campaign.from_email, name: campaign.sender_name },
+          { email: config.defaultFrom, name: config.defaultSenderName },
+        );
+        batchFromAddress = formatSender(chosen);
       } catch { /* fall through to org-level */ }
+    }
+    if (!batchFromAddress && campaign.from_email) {
+      batchFromAddress = campaign.sender_name ? `${campaign.sender_name} <${campaign.from_email}>` : campaign.from_email;
     }
     if (!batchFromAddress) {
       try {
@@ -332,15 +369,14 @@ export async function POST(req: NextRequest) {
           }
         }
 
+        const { order: lastOrder, cart } = await loadCampaignCommerceContext(
+          supabaseAdmin,
+          organizationId,
+          campaign.store_id || null,
+          { id: contact.id, email: contact.email },
+        ) as { order: any; cart: any };
+
         // Resolve last order data (best-effort)
-        try {
-          const { data: lastOrder } = await supabaseAdmin
-            .from('shopify_orders')
-            .select('order_number, total_price, created_at, tracking_url, tracking_number, currency, line_items, financial_status')
-            .or(`email.ilike.${contact.email},contact_id.eq.${contact.id}`)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
           if (lastOrder) {
             mergeData.order_number = String(lastOrder.order_number || '');
             mergeData['order.number'] = mergeData.order_number;
@@ -360,18 +396,8 @@ export async function POST(req: NextRequest) {
             mergeData['order.tracking_number'] = mergeData.tracking_number;
             mergeData.order_currency = lastOrder.currency || 'BRL';
           }
-        } catch {}
 
         // Resolve checkout_url from latest abandoned cart (best-effort)
-        try {
-          const { data: cart } = await supabaseAdmin
-            .from('shopify_checkouts')
-            .select('recovery_url, total_price, currency, line_items')
-            .eq('status', 'abandoned')
-            .or(`email.eq.${contact.email},contact_id.eq.${contact.id}`)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
           if (cart) {
             if (cart.recovery_url) {
               mergeData.checkout_url = cart.recovery_url;
@@ -390,7 +416,6 @@ export async function POST(req: NextRequest) {
               mergeData.cart_item_count = String(items.length);
             }
           }
-        } catch {}
 
         // System tags
         mergeData.current_date = new Date().toLocaleDateString('pt-BR');
@@ -409,12 +434,18 @@ export async function POST(req: NextRequest) {
             contact_id: contact.id,
             email: contact.email,
             to_email: contact.email,
-            from_email: campaign.sender_email || null,
+            // A coluna gravada na campanha é from_email; sender_email nunca
+            // é escrita, então o registro do envio saía sem remetente — e
+            // era por isso que este problema não aparecia nos dados.
+            from_email: campaign.from_email || null,
             sender_email: campaign.sender_email || null,
             subject: campaign.subject || null,
             provider: 'resend',
             status: 'queued',
             organization_id: organizationId,
+            // Loja da campanha (senão a do contato): é o que o rastreador
+            // de clique e os relatórios por loja leem.
+            store_id: campaign.store_id || contact.store_id || null,
             isp_domain: contactIsp,
           })
           .select('id')
@@ -466,14 +497,40 @@ export async function POST(req: NextRequest) {
         }
 
         // Persistir variant no email_sends (pro relatório A/B)
-        await supabaseAdmin
+        const { error: variantError } = await supabaseAdmin
           .from('email_sends')
           .update({ ab_variant: variant })
           .eq('id', emailSend.id)
+          .eq('organization_id', organizationId)
+        // Sem a variante gravada, este envio some do relatório A/B e o
+        // teste decide com meia amostra.
+        if (variantError) console.error('[SendBatch] variante do A/B não gravada:', variantError.message)
 
-        // Resolve dynamic product/cart blocks per contact
-        let htmlResolved = await resolveProductBlocks(htmlSource, organizationId, contact.id);
-        htmlResolved = await resolveCartBlocks(htmlResolved, organizationId, contact.id);
+        // Resolve dynamic product/cart blocks per contact — com a loja da
+        // campanha, para que o catálogo e os links sejam DESTA loja e não
+        // da loja ativa mais nova da organização.
+        let htmlResolved = await resolveProductBlocks(htmlSource, organizationId, contact.id, undefined, campaign.store_id || null);
+        htmlResolved = await resolveCartBlocks(htmlResolved, organizationId, contact.id, undefined, null, storeUrl, campaign.store_id || null);
+
+        // escape:false — subject is text/plain (no &amp; in the inbox).
+        // Antes do HTML: o assunto também alimenta as UTMs ({{email_subject}}).
+        let finalSubject = renderMergeTags(subjectSource, mergeData, { escape: false });
+
+        // UTM + identificação em TODO link deste destinatário.
+        const linkParams = makeLinkParamsResolver(utmSettings, {
+          channel: 'email',
+          messageType: 'campaign',
+          campaignName: campaign.name || '',
+          campaignId: campaign_id,
+          emailSubject: finalSubject,
+          abVariant: campaign.ab_test_enabled ? variant : '',
+          sendId: emailSend.id,
+          contactId: contact.id,
+          storeName,
+          storeDomain: storeUrl,
+          sentAt: new Date(),
+          extra: mergeData,
+        }, { utmOverrides: campaignUtm?.overrides || null, utmDisabled: campaignUtm?.disabled === true });
 
         // Prep final HTML (merge tags + tracking pixel + click tracking + unsubscribe)
         let finalHtml = prepareEmailHtml({
@@ -484,9 +541,9 @@ export async function POST(req: NextRequest) {
           contactId: contact.id,
           orgId: organizationId,
           campaignId: campaign_id,
+          storeId: campaign.store_id || undefined,
+          linkParams,
         });
-        // escape:false — subject is text/plain (no &amp; in the inbox).
-        let finalSubject = renderMergeTags(subjectSource, mergeData, { escape: false });
 
         // Strip any unresolved merge tags so customers never see raw
         // {{template_syntax}} in their inbox. Log a warning so the
@@ -519,7 +576,7 @@ export async function POST(req: NextRequest) {
         // contact — the placeholder '?token=unsub' was a no-op that
         // wouldn't have processed any clicks.
         const { buildUnsubscribeUrl, buildListUnsubscribeHeaders } = await import('@/lib/email/render');
-        const unsubUrl = buildUnsubscribeUrl(emailSend.id, baseUrl, contact.id, organizationId, campaign_id || undefined);
+        const unsubUrl = buildUnsubscribeUrl(emailSend.id, baseUrl, contact.id, organizationId, campaign_id || undefined, campaign.store_id || undefined);
         const antiSpamHeaders: Record<string, string> = {
           ...buildListUnsubscribeHeaders(unsubUrl),
           'Precedence': 'bulk',
@@ -593,7 +650,7 @@ export async function POST(req: NextRequest) {
         for (let i = 0; i < prepped.length; i++) {
           const p = prepped[i];
           const resendId = resendIds[i] || null;
-          await supabaseAdmin
+          const { error: markError } = await supabaseAdmin
             .from('email_sends')
             .update({
               status: 'sent',
@@ -601,7 +658,16 @@ export async function POST(req: NextRequest) {
               resend_id: resendId,
               provider_message_id: resendId,
             })
-            .eq('id', p.emailSendId);
+            .eq('id', p.emailSendId)
+            .eq('organization_id', organizationId);
+          // A mensagem SAIU — isso é fato, e o contador reflete o fato.
+          // O que pode ter falhado é o registro dela. Sem essa linha
+          // atualizada, o relatório da campanha, a franquia e a régua de
+          // frequência passam a contar menos do que aconteceu de verdade.
+          if (markError) {
+            naoRegistrados++;
+            console.error(`[SendBatch] envio ${p.emailSendId} saiu mas não foi registrado:`, markError.message);
+          }
           sent++;
         }
       } catch (batchErr: any) {
@@ -609,10 +675,15 @@ export async function POST(req: NextRequest) {
         // Mark everything in this chunk as failed
         const err = batchErr?.message || 'Batch send error';
         for (const p of prepped) {
-          await supabaseAdmin
+          const { error: failError } = await supabaseAdmin
             .from('email_sends')
             .update({ status: 'failed', error_message: err })
-            .eq('id', p.emailSendId);
+            .eq('id', p.emailSendId)
+            .eq('organization_id', organizationId);
+          if (failError) {
+            naoRegistrados++;
+            console.error(`[SendBatch] envio ${p.emailSendId} falhou e a falha não foi registrada:`, failError.message);
+          }
           failed++;
         }
       }
@@ -657,11 +728,18 @@ export async function POST(req: NextRequest) {
 
     // If last batch, mark campaign as 'sent'
     if (batch_number === total_batches) {
-      await supabaseAdmin
+      const { error: finalError } = await supabaseAdmin
         .from('email_campaigns')
         .update({ status: 'sent' })
-        .eq('id', campaign_id);
-      console.log(`[SendBatch] Campaign ${campaign_id} marked as sent (final batch ${batch_number})`);
+        .eq('id', campaign_id)
+        .eq('organization_id', organizationId);
+      if (finalError) {
+        // A campanha fica presa em "sending" para sempre, com todos os
+        // e-mails já entregues. Quem olhar a tela vai achar que travou.
+        console.error(`[SendBatch] campanha ${campaign_id} presa em "sending": último lote saiu mas o status não foi gravado:`, finalError.message);
+      } else {
+        console.log(`[SendBatch] Campaign ${campaign_id} marked as sent (final batch ${batch_number})`);
+      }
     }
 
     return NextResponse.json({
@@ -669,6 +747,9 @@ export async function POST(req: NextRequest) {
       total_batches,
       sent,
       failed,
+      // Saíram, mas o registro no banco falhou. Zero é o esperado; qualquer
+      // outro número quer dizer que o relatório desta campanha está por baixo.
+      unrecorded: naoRegistrados,
     });
   } catch (error: any) {
     console.error('[SendBatch] Error:', error);

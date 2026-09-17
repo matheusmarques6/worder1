@@ -33,10 +33,11 @@ const PHONE_NUMBER_ID = '555000111';
 
 interface Recorded {
   rpcs: Array<{ name: string; args: any }>;
+  inserts: Array<{ table: string; row: any }>;
   updates: Array<{ table: string; patch: any }>;
 }
 
-const rec: Recorded = { rpcs: [], updates: [] };
+const rec: Recorded = { rpcs: [], inserts: [], updates: [] };
 
 const state = {
   conversationAiEnabled: true as boolean | null,
@@ -101,6 +102,7 @@ function from(table: string) {
         }
         return (...a: any[]) => {
           calls.push({ m: prop, a });
+          if (prop === 'insert') rec.inserts.push({ table, row: a[0] });
           if (prop === 'update') rec.updates.push({ table, patch: a[0] });
           return chain;
         };
@@ -137,9 +139,15 @@ vi.mock('@/lib/observability/whatsapp-logger', () => ({
 }));
 
 const enqueueWhatsAppAiRespond = vi.fn(async (..._a: any[]) => 'qstash-msg-1');
+const enqueueWhatsAppInboundMedia = vi.fn(async (..._a: any[]) => 'qstash-media-1');
 vi.mock('@/lib/queue', () => ({
   enqueueWhatsAppAiRespond: (...a: any[]) => enqueueWhatsAppAiRespond(...a),
-  enqueueWhatsAppInboundMedia: vi.fn(async () => 'qstash-media-1'),
+  enqueueWhatsAppInboundMedia: (...a: any[]) => enqueueWhatsAppInboundMedia(...a),
+}));
+
+const processInboundMedia = vi.fn(async (..._a: any[]) => ({ ok: true }));
+vi.mock('../inbound-media', () => ({
+  processInboundMedia: (...a: any[]) => processInboundMedia(...a),
 }));
 
 const recordAiStep = vi.fn(async (_input: any) => undefined);
@@ -158,7 +166,6 @@ const getRuntimeMode = vi.fn(
 );
 vi.mock('@/lib/ai/runtime-rollout', () => ({
   getRuntimeMode: (client: any, org: string) => getRuntimeMode(client, org),
-  clearRuntimeModeCache: vi.fn(),
 }));
 
 vi.mock('@/lib/ai/cloud-runner', () => ({
@@ -240,6 +247,20 @@ function inboundImagePayload(overrides: { caption?: string } = {}) {
   });
 }
 
+function inboundReplyPayload(type: 'button' | 'interactive', text: string) {
+  return inboundMediaPayload(
+    type === 'button'
+      ? { type, button: { payload: 'buy', text } }
+      : {
+          type,
+          interactive: {
+            type: 'button_reply',
+            button_reply: { id: 'buy', title: text },
+          },
+        },
+  );
+}
+
 const UNSUPPORTED_MESSAGES: Record<string, any> = {
   sticker: { type: 'sticker', sticker: { id: 'media-sticker-1', mime_type: 'image/webp', sha256: 'x' } },
   document: {
@@ -261,11 +282,15 @@ const legacyDebounceUpdates = () =>
 
 beforeEach(() => {
   rec.rpcs = [];
+  rec.inserts = [];
   rec.updates = [];
   state.conversationAiEnabled = true;
   state.messageAlreadySeen = false;
   rpc.mockClear();
   enqueueWhatsAppAiRespond.mockClear();
+  enqueueWhatsAppInboundMedia.mockReset();
+  enqueueWhatsAppInboundMedia.mockResolvedValue('qstash-media-1');
+  processInboundMedia.mockClear();
   recordAiStep.mockClear();
   getDeliveryDebounceSeconds.mockClear();
   getRuntimeMode.mockReset();
@@ -302,6 +327,22 @@ describe('org NÃO migrada (legacy) — o cinto de segurança', () => {
     expect(enqueueWhatsAppAiRespond).not.toHaveBeenCalled();
   });
 
+  it.each(['button', 'interactive'] as const)(
+    '%s com texto agenda o worker legado',
+    async (type) => {
+      await processWebhookPayload(inboundReplyPayload(type, 'Quero comprar'));
+      expect(enqueueWhatsAppAiRespond).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each(['button', 'interactive'] as const)(
+    '%s sem texto útil não agenda o worker legado',
+    async (type) => {
+      await processWebhookPayload(inboundReplyPayload(type, '   '));
+      expect(enqueueWhatsAppAiRespond).not.toHaveBeenCalled();
+    },
+  );
+
   it('sticker não agenda no legado — paridade com o filtro do runtime (item 07)', async () => {
     await processWebhookPayload(inboundUnsupportedPayload('sticker'));
     expect(enqueueWhatsAppAiRespond).not.toHaveBeenCalled();
@@ -316,6 +357,7 @@ describe('org migrada (runtime) — o caminho canônico', () => {
 
     expect(ingestCalls()).toHaveLength(1);
     expect(ingestCalls()[0].args).toMatchObject({
+      p_waba_id: ACCOUNT_ID,
       p_organization_id: ORG,
       p_channel: 'whatsapp',
       p_provider_message_id: 'wamid.TESTE1',
@@ -329,6 +371,24 @@ describe('org migrada (runtime) — o caminho canônico', () => {
 
     expect(ingestCalls()[0].args.p_content).toEqual({ type: 'text', text: 'boa tarde' });
   });
+
+  it.each(['button', 'interactive'] as const)(
+    '%s com texto é ingerido e mantém o turno agendado',
+    async (type) => {
+      await processWebhookPayload(inboundReplyPayload(type, 'Quero comprar'));
+      expect(ingestCalls()[0].args.p_content.text).toBe('Quero comprar');
+      expect(cancelCalls()).toHaveLength(0);
+    },
+  );
+
+  it.each(['button', 'interactive'] as const)(
+    '%s sem texto útil é ingerido mas cancela o turno',
+    async (type) => {
+      await processWebhookPayload(inboundReplyPayload(type, '   '));
+      expect(ingestCalls()).toHaveLength(1);
+      expect(cancelCalls()).toHaveLength(1);
+    },
+  );
 
   it('áudio leva media_id e mime_type conhecidos no ingest (item 06)', async () => {
     await processWebhookPayload(inboundAudioPayload());
@@ -349,6 +409,32 @@ describe('org migrada (runtime) — o caminho canônico', () => {
       media_id: 'media-img-1',
       mime_type: 'image/jpeg',
       caption: 'olha isso',
+    });
+  });
+
+  it('enfileira o download da mídia também para organização no runtime', async () => {
+    await processWebhookPayload(inboundAudioPayload());
+
+    expect(rec.inserts[0]).toMatchObject({
+      table: 'whatsapp_cloud_messages',
+      row: { media_id: 'media-audio-1', media_download_status: 'pending' },
+    });
+    expect(enqueueWhatsAppInboundMedia).toHaveBeenCalledWith({
+      cloudMessageId: 'msg-row-1',
+      accountId: ACCOUNT_ID,
+      organizationId: ORG,
+    });
+  });
+
+  it('processa a mídia inline quando a fila não está disponível', async () => {
+    enqueueWhatsAppInboundMedia.mockResolvedValueOnce(null as any);
+
+    await processWebhookPayload(inboundImagePayload());
+
+    expect(processInboundMedia).toHaveBeenCalledWith({
+      cloudMessageId: 'msg-row-1',
+      accountId: ACCOUNT_ID,
+      organizationId: ORG,
     });
   });
 
@@ -414,7 +500,7 @@ describe('org migrada (runtime) — o caminho canônico', () => {
   });
 });
 
-describe('fail-closed — o rollout na dúvida é legacy', () => {
+describe('rollout sem estado stale', () => {
   it('org sem linha em ai_runtime_rollout usa o legado', async () => {
     // getRuntimeMode já devolve 'legacy' por ausência (contrato provado em
     // runtime-rollout.test.ts); aqui o que se prova é que o processor OBEDECE.
@@ -430,6 +516,21 @@ describe('fail-closed — o rollout na dúvida é legacy', () => {
 
     expect(getRuntimeMode).toHaveBeenCalledTimes(1);
     expect(getRuntimeMode.mock.calls[0][1]).toBe(ORG);
+  });
+
+  it('erro após persistir pede retry e a reentrega deduplicada ainda agenda', async () => {
+    const error = new Error('rollout indisponível');
+    getRuntimeMode.mockRejectedValueOnce(error).mockResolvedValueOnce('legacy');
+    const payload = inboundTextPayload();
+
+    await expect(processWebhookPayload(payload)).rejects.toThrow('rollout indisponível');
+
+    state.messageAlreadySeen = true;
+    await processWebhookPayload(payload, { resumeExistingMessages: true });
+
+    expect(rec.inserts.filter((entry) => entry.table === 'whatsapp_cloud_messages')).toHaveLength(1);
+    expect(getRuntimeMode).toHaveBeenCalledTimes(2);
+    expect(enqueueWhatsAppAiRespond).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import React, { useState } from 'react'
 import {
   Smile, Target, SlidersHorizontal, BookOpen, Wand2, Shield, Users, Star, Cpu,
   Check, Eye, X,
@@ -38,7 +38,16 @@ export interface RadialViewProps {
   runtimeMode: RuntimeMode
 }
 
-interface PreviewBlock { kind: string; text: string }
+interface PreviewBlock { kind: string; text: string; ghost: boolean }
+
+export function PromptPreviewBlock({ block }: { block: PreviewBlock }) {
+  return (
+    <div className={block.ghost ? 'preview-ghost' : undefined}>
+      {block.ghost && <span>Não disponível neste preview{'\n'}</span>}
+      {block.text}{'\n\n'}
+    </div>
+  )
+}
 
 export default function RadialView({ hub, onChange, organizationId, agentId, runtimeMode }: RadialViewProps) {
   const [selected, setSelected] = useState<HubAreaId | null>(null)
@@ -149,31 +158,20 @@ export default function RadialView({ hub, onChange, organizationId, agentId, run
               <button type="button" className="close-x" onClick={() => setShowPrompt(false)}><X size={16} /></button>
             </div>
             <div className="prompt-box" style={{ borderRadius: 0, maxHeight: 240 }}>
-              {preview ? (
-                preview.map((block, i) => (
-                  <div key={`${block.kind}-${i}`}>
-                    <span className="h"># {block.kind}</span>{'\n'}
-                    {block.text.replace(/^#[^\n]*\n?/, '')}{'\n\n'}
-                  </div>
-                ))
-              ) : (
-                <>
-                  {previewNote && <div><span className="ghost">{previewNote}</span>{'\n\n'}</div>}
-                  <div><span className="ghost">· MISSÃO — entra a cada conversa</span>{'\n\n'}</div>
-                  <div><span className="ghost">· ESTADO — momento ativo e promessas</span>{'\n\n'}</div>
-                  <div><span className="ghost">· CANAL — janela e restrições do WhatsApp</span>{'\n\n'}</div>
-                </>
-              )}
-              {/* Item 45: o bloco CONHECIMENTO não sai da compile_prompt() — o
-                  responder o anexa ao frame no turno, depois de uma busca
-                  vetorial feita com a pergunta do cliente. Aqui não há
-                  pergunta, então ele não entra. Declarar a ausência é o mesmo
-                  desenho dos fantasmas do compilador; sem esta linha o rótulo
-                  "O que {nome} sabe" mente por silêncio justamente sobre a
-                  base de conhecimento. */}
-              <div><span className="ghost">
-                · CONHECIMENTO — buscado na hora da conversa, com a pergunta do cliente; não entra neste preview
-              </span></div>
+              {previewNote && <div>{previewNote}{'\n\n'}</div>}
+              {(preview ?? [
+                { kind: 'MISSION', text: '# MISSÃO\nEntra a cada conversa', ghost: true },
+                { kind: 'STATE', text: '# ESTADO\nMomento ativo e promessas', ghost: true },
+                { kind: 'CHANNEL', text: '# CANAL\nJanela e restrições do WhatsApp', ghost: true },
+              ]).map((block, i) => (
+                <PromptPreviewBlock key={`${block.kind}-${i}`} block={block} />
+              ))}
+              {/* O compilador inclui conhecimento recuperado nos turnos;
+                  este preview não executa busca e declara essa ausência. */}
+              <PromptPreviewBlock block={{
+                kind: 'KNOWLEDGE', ghost: true,
+                text: '# CONHECIMENTO\nBuscado na hora da conversa; não entra neste preview',
+              }} />
             </div>
             {/* Juízes e Motor FORA do box (§4.4-6): não são prompt, são regime */}
             <div style={{ display: 'flex', gap: 8, padding: '10px 14px', borderTop: '1px solid var(--border)', flexWrap: 'wrap' }}>

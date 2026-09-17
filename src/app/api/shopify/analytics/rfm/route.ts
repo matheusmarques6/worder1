@@ -31,19 +31,16 @@ export async function POST(request: NextRequest) {
     }
 
     if (!storeId) {
-      const { data: stores } = await supabase
-        .from('shopify_stores')
-        .select('id')
-        .eq('is_active', true)
-        .limit(1);
-      
-      if (!stores || stores.length === 0) {
-        return NextResponse.json(
-          { success: false, error: 'Nenhuma loja conectada' },
-          { status: 404 }
-        );
+      // Sem storeId só serve a ÚNICA loja ativa da organização. A busca
+      // antiga nem filtrava por organização — pegava a primeira loja
+      // ativa que a sessão enxergasse.
+      const { pickStore, pickStoreError } = await import('@/lib/stores/pick-store');
+      const picked = await pickStore<{ id: string }>(supabase, { orgIds: [organizationId], select: 'id' });
+      if (!picked.store) {
+        const err = pickStoreError(picked.reason);
+        return NextResponse.json({ success: false, error: err.error, code: err.code }, { status: err.status });
       }
-      storeId = stores[0].id;
+      storeId = picked.store.id;
     }
 
     // TypeScript guard
@@ -111,19 +108,14 @@ export async function GET(request: NextRequest) {
 
     let resolvedStoreId = storeId;
     if (!resolvedStoreId) {
-      const { data: stores } = await supabase
-        .from('shopify_stores')
-        .select('id')
-        .eq('is_active', true)
-        .limit(1);
-      
-      if (!stores || stores.length === 0) {
-        return NextResponse.json(
-          { success: false, error: 'Nenhuma loja conectada' },
-          { status: 404 }
-        );
+      // Sem storeId só serve a ÚNICA loja ativa da organização.
+      const { pickStore, pickStoreError } = await import('@/lib/stores/pick-store');
+      const picked = await pickStore<{ id: string }>(supabase, { orgIds: [organizationId], select: 'id' });
+      if (!picked.store) {
+        const err = pickStoreError(picked.reason);
+        return NextResponse.json({ success: false, error: err.error, code: err.code }, { status: err.status });
       }
-      resolvedStoreId = stores[0].id;
+      resolvedStoreId = picked.store.id;
     }
 
     // TypeScript guard

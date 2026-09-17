@@ -34,9 +34,13 @@ export async function GET(
       return NextResponse.json({ error: 'Automação não encontrada' }, { status: 404 });
     }
 
-    // Buscar execuções
+    // Buscar execuções.
+    // O motor (fila, workers e crons) grava em `automation_runs`, que tem
+    // organization_id e as contagens de passos. `automation_executions`
+    // não tem `trigger_type` nem `duration_ms`, então a consulta antiga
+    // era recusada inteira: a tela de histórico só sabia dar erro.
     let query = supabase
-      .from('automation_executions')
+      .from('automation_runs')
       .select(`
         id,
         status,
@@ -50,7 +54,10 @@ export async function GET(
         error_message,
         error_node_id,
         node_results,
-        final_context
+        total_steps,
+        completed_steps,
+        failed_steps,
+        result
       `, { count: 'exact' })
       .eq('automation_id', automationId)
       .order('started_at', { ascending: false });
@@ -93,9 +100,13 @@ export async function GET(
     // Formatar resposta
     const formattedExecutions = executions?.map((exec: any) => {
       const nodeResults = exec.node_results || {};
-      const totalSteps = Object.keys(nodeResults).length;
-      const completedSteps = Object.values(nodeResults).filter((r: any) => r.status === 'success').length;
-      const failedSteps = Object.values(nodeResults).filter((r: any) => r.status === 'error').length;
+      // As contagens são colunas do run; o node_results só entra quando
+      // a execução é antiga e ainda não gravava os totais.
+      const totalSteps = exec.total_steps ?? Object.keys(nodeResults).length;
+      const completedSteps = exec.completed_steps
+        ?? Object.values(nodeResults).filter((r: any) => r.status === 'success').length;
+      const failedSteps = exec.failed_steps
+        ?? Object.values(nodeResults).filter((r: any) => r.status === 'error').length;
 
       return {
         id: exec.id,
@@ -172,12 +183,12 @@ export async function DELETE(
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - olderThanDays);
 
-    // Deletar execuções
+    // Deletar execuções (mesma tabela que o histórico lê)
     let query = supabase
-      .from('automation_executions')
-      .delete()
+      .from('automation_runs')
+      .delete({ count: 'exact' })
       .eq('automation_id', automationId)
-      .lt('started_at', cutoffDate.toISOString());
+      .lt('created_at', cutoffDate.toISOString());
 
     if (status) {
       query = query.eq('status', status);

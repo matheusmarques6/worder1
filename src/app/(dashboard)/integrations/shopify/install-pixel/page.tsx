@@ -239,7 +239,7 @@ export default function InstallPixelWizardPage() {
           </li>
           <li className="flex gap-2.5">
             <span className="text-gray-400 font-mono text-[11px] flex-shrink-0 mt-0.5">b.</span>
-            <span>Clique em <strong>"Adicionar pixel personalizado"</strong></span>
+            <span>Clique em <strong>&quot;Adicionar pixel personalizado&quot;</strong></span>
           </li>
           <li className="flex gap-2.5">
             <span className="text-gray-400 font-mono text-[11px] flex-shrink-0 mt-0.5">c.</span>
@@ -251,11 +251,11 @@ export default function InstallPixelWizardPage() {
           </li>
           <li className="flex gap-2.5">
             <span className="text-gray-400 font-mono text-[11px] flex-shrink-0 mt-0.5">e.</span>
-            <span>Em <strong>"Privacidade do cliente"</strong>, escolha <strong>"Não obrigatório"</strong></span>
+            <span>Em <strong>&quot;Privacidade do cliente&quot;</strong>, escolha <strong>&quot;Não obrigatório&quot;</strong></span>
           </li>
           <li className="flex gap-2.5">
             <span className="text-gray-400 font-mono text-[11px] flex-shrink-0 mt-0.5">f.</span>
-            <span>Clique <strong>"Salvar"</strong> e depois <strong>"Conectar"</strong> (canto superior direito)</span>
+            <span>Clique <strong>&quot;Salvar&quot;</strong> e depois <strong>&quot;Conectar&quot;</strong> (canto superior direito)</span>
           </li>
         </ol>
       </Step>

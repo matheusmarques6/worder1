@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
   try {
     const { data: contact } = await supabaseAdmin
       .from('contacts')
-      .select('id, email, first_name, last_name, is_subscribed_email, is_subscribed_sms, is_subscribed_whatsapp, email_consent, status, custom_fields')
+      .select('id, email, first_name, last_name, is_subscribed_email, is_subscribed_sms, is_subscribed_whatsapp, email_consent, suppressed, custom_fields')
       .eq('id', verified.contactId)
       .eq('organization_id', verified.orgId)
       .maybeSingle();
@@ -49,25 +49,69 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Contato não encontrado' }, { status: 404, headers: CORS });
     }
 
-    const { data: org } = await supabaseAdmin
-      .from('organizations')
-      .select('name, settings, email_settings')
-      .eq('id', verified.orgId)
-      .single();
+    // A marca da página é a da LOJA do envio (token novo carrega storeId).
+    // Sem loja no token: a do contato; só então a organização — que numa
+    // organização com várias lojas é a identidade de outra loja.
+    let brandName: string | null = null;
+    let brandFrom: string | null = null;
+    try {
+      const storeId = verified.storeId || null;
+      let storeRow: any = null;
+      if (storeId) {
+        const { data } = await supabaseAdmin
+          .from('shopify_stores')
+          .select('shop_name, shop_email, settings')
+          .eq('id', storeId)
+          .eq('organization_id', verified.orgId)
+          .maybeSingle();
+        storeRow = data;
+      }
+      if (!storeRow) {
+        const { data: c } = await supabaseAdmin
+          .from('contacts')
+          .select('store_id')
+          .eq('id', verified.contactId)
+          .maybeSingle();
+        if (c?.store_id) {
+          const { data } = await supabaseAdmin
+            .from('shopify_stores')
+            .select('shop_name, shop_email, settings')
+            .eq('id', c.store_id)
+            .eq('organization_id', verified.orgId)
+            .maybeSingle();
+          storeRow = data;
+        }
+      }
+      if (storeRow) {
+        const es = (storeRow.settings as any)?.email_settings || {};
+        brandName = es.default_sender_name || storeRow.shop_name || null;
+        brandFrom = es.default_sender_email || storeRow.shop_email || null;
+      }
+    } catch { /* cai na organização */ }
+
+    if (!brandName) {
+      const { data: org } = await supabaseAdmin
+        .from('organizations')
+        .select('name, settings, email_settings')
+        .eq('id', verified.orgId)
+        .maybeSingle();
+      brandName = org?.name || null;
+      brandFrom = brandFrom || org?.email_settings?.default_sender_email || org?.email_settings?.default_from_email || null;
+    }
 
     return NextResponse.json({
       contact: {
         email: contact.email,
         first_name: contact.first_name,
         last_name: contact.last_name,
-        email_subscribed: contact.is_subscribed_email !== false && contact.email_consent !== false && !['bounced', 'complained', 'unsubscribed', 'invalid'].includes(String(contact.status || '').toLowerCase()),
+        email_subscribed: contact.is_subscribed_email !== false && contact.email_consent !== false && contact.suppressed !== true,
         sms_subscribed: !!contact.is_subscribed_sms,
         whatsapp_subscribed: !!contact.is_subscribed_whatsapp,
         topics: contact.custom_fields?.email_topics || [],
       },
       organization: {
-        name: org?.name || 'Loja',
-        from_email: org?.email_settings?.default_from_email || null,
+        name: brandName || 'Loja',
+        from_email: brandFrom,
       },
     }, { headers: CORS });
   } catch (error: any) {
@@ -92,7 +136,7 @@ export async function POST(request: NextRequest) {
 
     const { data: contact } = await supabaseAdmin
       .from('contacts')
-      .select('id, custom_fields, status')
+      .select('id, custom_fields, suppressed, email_consent')
       .eq('id', verified.contactId)
       .eq('organization_id', verified.orgId)
       .maybeSingle();
@@ -112,17 +156,16 @@ export async function POST(request: NextRequest) {
       // which writes email_consent_at on the contacts table (the canonical
       // column — contacts has no unsubscribed_at, only email_sends does).
       updatePayload.email_consent_at = new Date().toISOString();
-      // If re-subscribing, clear recoverable block statuses (unsubscribed /
-      // bounced / invalid) so the contact can receive again. Keep 'complained'
-      // blocked — a spam complaint is a legal/reputation hard signal we never
-      // override via self-service.
-      const curStatus = String(contact.status || '').toLowerCase();
-      if (email_subscribed && ['unsubscribed', 'bounced', 'invalid'].includes(curStatus)) {
-        updatePayload.status = 'active';
-      }
-      if (!email_subscribed) {
-        updatePayload.status = 'unsubscribed';
-      }
+      // Reinscrever tira a supressão; descadastrar coloca. A coluna é
+      // `suppressed` (booleana) — `status` não existe em contacts, e o
+      // PostgREST recusava a linha inteira: salvar preferências não
+      // salvava NADA, nem os canais que a pessoa desmarcou.
+      //
+      // O que se perde ao usar um booleano: não dá para separar "voltou
+      // atrás de um descadastro" de "estava com bounce". Fica registrado
+      // aqui como decisão consciente — o motivo continua em email_sends,
+      // que é quem guarda bounce e denúncia com data.
+      updatePayload.suppressed = !email_subscribed;
     }
 
     if (typeof sms_subscribed === 'boolean') {

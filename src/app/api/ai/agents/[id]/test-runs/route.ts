@@ -7,7 +7,7 @@ import {
   generateScenarios,
 } from '@/lib/ai/test-runner'
 import type { AIAgent } from '@/lib/ai/types'
-import { AiBudgetExceededError } from '@/lib/ai/budget'
+import { AiBudgetExceededError, AiBudgetUnavailableError } from '@/lib/ai/budget'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -64,6 +64,12 @@ export async function GET(
     console.error('Error in GET /api/ai/agents/[id]/test-runs:', error)
     if (error instanceof AiBudgetExceededError) {
       return NextResponse.json({ error: error.message, code: 'AI_BUDGET_EXCEEDED' }, { status: 402 })
+    }
+    if (error instanceof AiBudgetUnavailableError) {
+      return NextResponse.json(
+        { error: error.message, code: 'AI_BUDGET_UNAVAILABLE', unknownReason: error.unknownReason },
+        { status: 503 },
+      )
     }
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
@@ -125,6 +131,12 @@ export async function POST(
     console.error('Error in POST /api/ai/agents/[id]/test-runs:', error)
     if (error instanceof AiBudgetExceededError) {
       return NextResponse.json({ error: error.message, code: 'AI_BUDGET_EXCEEDED' }, { status: 402 })
+    }
+    if (error instanceof AiBudgetUnavailableError) {
+      return NextResponse.json(
+        { error: error.message, code: 'AI_BUDGET_UNAVAILABLE', unknownReason: error.unknownReason },
+        { status: 503 },
+      )
     }
     return NextResponse.json({ error: error.message }, { status: 500 })
   }

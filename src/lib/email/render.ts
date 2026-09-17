@@ -8,16 +8,26 @@
 
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { rewriteImagesForEmail } from './image-rewrite'
+import { fitProductImage, fitProductImageStyle } from './product-image'
+import { getAppBaseUrl } from '@/lib/app-url'
+import { stampHtmlLinks, type LinkParamsResolver } from '@/lib/tracking/link-params'
 
 /**
- * Resolve saved/universal blocks in an EmailDocument.
- * For each block with _savedBlockId, fetches the latest version from saved_blocks
- * and merges its props (keeping the local block's id and _savedBlockId).
+ * Põe o conteúdo universal em dia dentro de um documento de e-mail.
+ *
+ * O e-mail guarda uma cópia do universal; salvar o universal reescreve
+ * essa cópia em cada e-mail que o usa. Isto aqui é a rede de proteção
+ * para quando aquela escrita não chegou — uma falha no meio do caminho,
+ * um template restaurado de uma versão antiga. Custa uma consulta por
+ * envio de campanha e evita mandar o rodapé errado.
+ *
+ * Trata seção E bloco. Antes só olhava `_savedBlockId`, e como todo
+ * universal em uso é uma seção, na prática não resolvia nada.
  */
 export async function resolveSavedBlocks(doc: any, orgId: string): Promise<any> {
-  // Collect all unique savedBlockIds
   const ids = new Set<string>()
   for (const section of doc.sections || []) {
+    if (section._savedSectionId) ids.add(section._savedSectionId)
     for (const col of section.columns || []) {
       for (const block of col.blocks || []) {
         if (block._savedBlockId) ids.add(block._savedBlockId)
@@ -26,7 +36,6 @@ export async function resolveSavedBlocks(doc: any, orgId: string): Promise<any> 
   }
   if (ids.size === 0) return doc
 
-  // Fetch all saved blocks in one query
   const { data: savedBlocks } = await supabaseAdmin
     .from('saved_blocks')
     .select('id, block_json')
@@ -37,29 +46,56 @@ export async function resolveSavedBlocks(doc: any, orgId: string): Promise<any> 
 
   const savedMap = new Map(savedBlocks.map(sb => [sb.id, sb.block_json]))
 
-  // Replace block props with latest saved version
   const resolved = JSON.parse(JSON.stringify(doc))
-  for (const section of resolved.sections || []) {
-    for (const col of section.columns || []) {
-      for (let i = 0; i < (col.blocks || []).length; i++) {
-        const block = col.blocks[i]
-        if (block._savedBlockId && savedMap.has(block._savedBlockId)) {
-          const savedJson = savedMap.get(block._savedBlockId)
-          if (savedJson && savedJson.props) {
-            // Merge: saved props override, keep local id + meta
-            col.blocks[i] = {
-              ...block,
-              type: savedJson.type || block.type,
-              props: { ...savedJson.props },
-              _savedBlockId: block._savedBlockId,
-              _savedBlockName: block._savedBlockName,
-            }
-          }
+  resolved.sections = (resolved.sections || []).map((section: any) => {
+    // Seção universal: o conteúdo inteiro vem da biblioteca — colunas,
+    // blocos, cor, espaçamento. Só o id da seção neste e-mail fica.
+    if (section._savedSectionId && savedMap.has(section._savedSectionId)) {
+      const saved: any = savedMap.get(section._savedSectionId)
+      if (saved?._kind === 'section' && saved.section) {
+        return {
+          ...JSON.parse(JSON.stringify(saved.section)),
+          id: section.id,
+          _savedSectionId: section._savedSectionId,
+          _savedSectionName: section._savedSectionName,
         }
       }
     }
-  }
+    // Bloco universal solto dentro de uma seção comum.
+    return {
+      ...section,
+      columns: (section.columns || []).map((col: any) => ({
+        ...col,
+        blocks: (col.blocks || []).map((block: any) => {
+          if (!block._savedBlockId || !savedMap.has(block._savedBlockId)) return block
+          const savedJson: any = savedMap.get(block._savedBlockId)
+          if (!savedJson?.props) return block
+          return {
+            ...block,
+            type: savedJson.type || block.type,
+            props: { ...savedJson.props },
+            _savedBlockId: block._savedBlockId,
+            _savedBlockName: block._savedBlockName,
+          }
+        }),
+      })),
+    }
+  })
   return resolved
+}
+
+/** O documento tem algum conteúdo vindo da biblioteca? */
+export function hasUniversalContent(design: any): boolean {
+  if (!design) return false
+  for (const section of design.sections || []) {
+    if (section?._savedSectionId) return true
+    for (const col of section?.columns || []) {
+      for (const block of col?.blocks || []) {
+        if (block?._savedBlockId) return true
+      }
+    }
+  }
+  return false
 }
 
 /**
@@ -108,6 +144,15 @@ export function evaluateBlockCondition(
  * Escapa caracteres HTML para evitar XSS ao interpolar merge tags.
  * Converter < > & " ' / impede que user-provided content vire tag HTML no email.
  */
+/** decodeURIComponent que não explode com `%` solto vindo do template. */
+function decodeUriSeguro(value: string): string {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
 function escapeHtml(value: unknown): string {
   if (value === null || value === undefined) return ''
   // Standard HTML attribute escape set. We intentionally do NOT escape
@@ -139,6 +184,26 @@ export interface RenderMergeTagsOptions {
  * Para injetar HTML confiável use a prefix tag `raw.`, ex: `{{raw.html_block}}`.
  * Para contexto de TEXTO (assunto/preheader) use options.escape = false.
  */
+function formatMoneyTag(raw: string, currency: string): string {
+  const n = Number(String(raw).replace(/[^\d.,-]/g, '').replace(/\.(?=\d{3}(?:\D|$))/g, '').replace(',', '.'))
+  if (!Number.isFinite(n)) return raw
+  try { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: currency.toUpperCase() }).format(n) } catch { return `${currency} ${n.toFixed(2)}` }
+}
+
+function formatDateTag(raw: string, pattern: string): string {
+  let d = new Date(raw)
+  if (Number.isNaN(d.getTime())) {
+    const br = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+    if (br) d = new Date(Number(br[3]), Number(br[2]) - 1, Number(br[1]))
+  }
+  if (Number.isNaN(d.getTime())) return raw
+  const pad = (v: number) => String(v).padStart(2, '0')
+  const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
+  return pattern
+    .replace(/%d/g, pad(d.getDate())).replace(/%m/g, pad(d.getMonth() + 1)).replace(/%Y/g, String(d.getFullYear())).replace(/%y/g, String(d.getFullYear()).slice(-2))
+    .replace(/%H/g, pad(d.getHours())).replace(/%M/g, pad(d.getMinutes())).replace(/%B/g, MESES[d.getMonth()]).replace(/%b/g, MESES[d.getMonth()].slice(0, 3))
+}
+
 export function renderMergeTags(
   html: string,
   data: Record<string, string>,
@@ -213,9 +278,25 @@ export function renderMergeTags(
   // {{ checkout_url | loja.com }} work — matches Klaviyo/Omnisend
   // tolerance and lines up with how the variable picker generates
   // tags ({{ trigger.path }} format).
+  //
+  // Filtros nomeados (Configurações → Variáveis → "Filtros e padrões"):
+  //   {{ first_name | default: "cliente" }}
+  //   {{ order_total | money: "BRL" }}      → R$ 74,20
+  //   {{ last_order_at | date: "%d/%m/%Y" }} → 27/08/2026
+  // Sem filtro nomeado, o texto depois do | continua sendo o fallback.
   let result = html.replace(
     /\{\{\s*([a-zA-Z0-9_.\[\]]+)\s*\|\s*([^}]*?)\s*\}\}/g,
-    (_, tag: string, fallback: string) => resolve(tag, fallback)
+    (_, tag: string, expr: string) => {
+      const m = expr.match(/^(default|money|date)\s*:\s*(?:"([^"]*)"|'([^']*)'|([^\s]+))?\s*$/i)
+      if (!m) return resolve(tag, expr)
+      const filter = m[1].toLowerCase()
+      const arg = m[2] ?? m[3] ?? m[4] ?? ''
+      const raw = resolve(tag, '')
+      if (filter === 'default') return raw || (shouldEscape ? escapeHtml(arg) : arg)
+      if (filter === 'money') return raw ? formatMoneyTag(raw, arg || 'BRL') : ''
+      if (filter === 'date') return raw ? formatDateTag(raw, arg || '%d/%m/%Y') : ''
+      return raw
+    }
   )
 
   // Replace {{tag}} (no fallback) — same whitespace tolerance.
@@ -321,12 +402,14 @@ export function buildUnsubscribeUrl(
   baseUrl: string,
   contactId?: string,
   orgId?: string,
-  campaignId?: string
+  campaignId?: string,
+  /** Loja do envio — a página de preferências mostra a marca DELA. */
+  storeId?: string
 ): string {
   if (contactId && orgId) {
     try {
       const { signUnsubscribeToken } = require('@/lib/email/unsubscribe-token');
-      const token = signUnsubscribeToken({ contactId, orgId, campaignId });
+      const token = signUnsubscribeToken({ contactId, orgId, campaignId, storeId });
       return `${baseUrl}/unsubscribe?token=${token}`;
     } catch {
       return `${baseUrl}/api/unsubscribe/${emailSendId}`;
@@ -343,12 +426,13 @@ export function buildPreferencesUrl(
   baseUrl: string,
   contactId?: string,
   orgId?: string,
-  campaignId?: string
+  campaignId?: string,
+  storeId?: string
 ): string | null {
   if (!contactId || !orgId) return null;
   try {
     const { signUnsubscribeToken } = require('@/lib/email/unsubscribe-token');
-    const token = signUnsubscribeToken({ contactId, orgId, campaignId });
+    const token = signUnsubscribeToken({ contactId, orgId, campaignId, storeId });
     return `${baseUrl}/preferencias?token=${token}`;
   } catch {
     return null;
@@ -381,10 +465,11 @@ export function addUnsubscribeLink(
   baseUrl: string,
   contactId?: string,
   orgId?: string,
-  campaignId?: string
+  campaignId?: string,
+  storeId?: string
 ): string {
-  const unsubUrl = buildUnsubscribeUrl(emailSendId, baseUrl, contactId, orgId, campaignId);
-  const prefsUrl = buildPreferencesUrl(baseUrl, contactId, orgId, campaignId);
+  const unsubUrl = buildUnsubscribeUrl(emailSendId, baseUrl, contactId, orgId, campaignId, storeId);
+  const prefsUrl = buildPreferencesUrl(baseUrl, contactId, orgId, campaignId, storeId);
 
   // If the template already has a footer with an unsubscribe link (custom
   // footer block, custom CAN-SPAM section), avoid double-appending. Detect
@@ -435,9 +520,20 @@ export async function resolveProductBlocks(
   html: string,
   orgId: string,
   contactId?: string,
-  eventData?: Record<string, any>
+  eventData?: Record<string, any>,
+  /**
+   * Loja do e-mail (campaign.store_id / automation.store_id). É o que
+   * garante que os produtos e os links saem da loja certa numa
+   * organização com várias lojas. Sem ela o feed cai no evento, no
+   * contato e, por fim, na única loja ativa — nunca em "qualquer uma".
+   */
+  storeId?: string | null
 ): Promise<string> {
-  const regex = /<!-- WORDER_PRODUCT_BLOCK:(\w+):(\d+):(\d+):(true|false):(true|false):(true|false):([^-]*?) -->/g
+  // O texto do botão viaja codificado (encodeURIComponent), então não tem
+  // espaço — mas TEM hífen quando o lojista escreve "Compre-agora", e o
+  // `[^-]` antigo fazia o marcador inteiro não casar: o bloco de produtos
+  // sumia do e-mail e sobrava um comentário HTML no lugar.
+  const regex = /<!-- WORDER_PRODUCT_BLOCK:(\w+):(\d+):(\d+):(true|false):(true|false):(true|false):(\S*) -->/g
   let result = html
   const matches: RegExpExecArray[] = []
   let m: RegExpExecArray | null
@@ -447,7 +543,10 @@ export async function resolveProductBlocks(
   }
 
   for (const match of matches) {
-    const [fullMatch, feedType, maxStr, colsStr, showPrice, showComparePrice, showButton, buttonText] = match
+    const [fullMatch, feedType, maxStr, colsStr, showPrice, showComparePrice, showButton, buttonTextRaw] = match
+    // Sem o decode, "Comprar agora" chegava no e-mail como "Comprar%20agora"
+    // — era o que o destinatário lia no botão.
+    const buttonText = escapeHtml(decodeUriSeguro(buttonTextRaw).trim() || 'Comprar')
     const maxProducts = parseInt(maxStr) || 4
     const cols = parseInt(colsStr) || 2
 
@@ -458,7 +557,7 @@ export async function resolveProductBlocks(
       // 50-200ms/call adds up across a batch.
       const { resolveProductFeed } = await import('@/lib/email/product-feeds')
       products = await resolveProductFeed({
-        orgId, feedType, contactId, maxProducts, eventData,
+        orgId, storeId, feedType, contactId, maxProducts, eventData,
       })
     } catch {
       // No products available
@@ -467,7 +566,7 @@ export async function resolveProductBlocks(
     if (products.length === 0 && feedType.startsWith('trigger_')) {
       try {
         const { resolveProductFeed } = await import('@/lib/email/product-feeds')
-        products = await resolveProductFeed({ orgId, feedType: 'bestsellers', maxProducts })
+        products = await resolveProductFeed({ orgId, storeId, feedType: 'bestsellers', maxProducts, contactId, eventData })
       } catch {}
     }
 
@@ -485,11 +584,15 @@ export async function resolveProductBlocks(
         const p = products[r * cols + c]
         if (!p) { productHtml += `<td width="${100 / cols}%"></td>`; continue }
 
-        const title = p.title || p.name || 'Produto'
-        const price = p.price || '0'
-        const comparePrice = p.compare_at_price || p.compare_price || ''
-        const imgUrl = p.image_url || p.images?.[0]?.src || ''
-        const url = p.url || (p.handle ? `https://loja.com/products/${p.handle}` : '#')
+        // Título e preço vêm da loja e entram em atributo HTML: uma aspa
+        // no nome do produto quebrava a tag inteira.
+        const title = escapeHtml(p.title || p.name || 'Produto')
+        const price = escapeHtml(p.price || '0')
+        const comparePrice = escapeHtml(p.compare_at_price || p.compare_price || '')
+        const imgUrl = escapeHtml(p.image_url || p.images?.[0]?.src || '')
+        // O feed já monta a URL com o domínio da loja do e-mail. Sem URL,
+        // melhor um link morto do que um domínio inventado.
+        const url = escapeHtml(p.url || '#')
 
         productHtml += `<td width="${100 / cols}%" style="padding:8px;vertical-align:top;text-align:center;">
           <a href="${url}" style="text-decoration:none;color:inherit;display:block;">
@@ -498,7 +601,7 @@ export async function resolveProductBlocks(
               <div style="padding:12px;">
                 <p style="margin:0;font-size:14px;font-weight:600;color:#111827;">${title}</p>
                 ${showPrice === 'true' ? `${showComparePrice === 'true' && comparePrice ? `<p style="margin:4px 0 0;font-size:12px;color:#9CA3AF;text-decoration:line-through;">R$ ${comparePrice}</p>` : ''}<p style="margin:2px 0 0;font-size:16px;font-weight:700;color:#F97316;">R$ ${price}</p>` : ''}
-                ${showButton === 'true' ? `<a href="${url}" style="display:inline-block;margin-top:10px;padding:10px 24px;background:#F97316;color:white;border-radius:6px;font-size:13px;font-weight:600;text-decoration:none;">${buttonText.trim() || 'Comprar'}</a>` : ''}
+                ${showButton === 'true' ? `<a href="${url}" style="display:inline-block;margin-top:10px;padding:10px 24px;background:#F97316;color:white;border-radius:6px;font-size:13px;font-weight:600;text-decoration:none;">${buttonText}</a>` : ''}
               </div>
             </div>
           </a>
@@ -529,7 +632,10 @@ export async function resolveCartBlocks(
   triggerType?: string | null,
   /** The store's public URL (e.g. https://drgroot.com.br) used to absolutize
    *  site-relative product URLs so links never 404 on the app domain. */
-  storeUrl?: string | null
+  storeUrl?: string | null,
+  /** Loja do e-mail — escopa o catálogo usado para enriquecer os itens e
+   *  é a fonte do host quando storeUrl não veio. */
+  storeId?: string | null
 ): Promise<string> {
   const { triggerFamily, resolveTriggerCtaUrl, getShopDomain, isManualCtaOverride, absolutizeSiteUrl, normalizeHost } =
     await import('@/lib/email/trigger-cta')
@@ -538,6 +644,18 @@ export async function resolveCartBlocks(
   const matches: RegExpExecArray[] = []
   let m: RegExpExecArray | null
   while ((m = regex.exec(html)) !== null) matches.push(m)
+  if (matches.length === 0) return html
+
+  // Host da loja do e-mail, resolvido uma vez para todos os blocos. Só
+  // consulta o banco quando quem chamou não mandou a URL da loja.
+  let resolvedStoreHost = normalizeHost(storeUrl)
+  if (!resolvedStoreHost) {
+    try {
+      const { resolveFeedStore } = await import('@/lib/email/product-feeds')
+      const feedStore = await resolveFeedStore(orgId, storeId, contactId, eventData)
+      resolvedStoreHost = normalizeHost(feedStore.host)
+    } catch { /* cai no host do evento */ }
+  }
 
   for (const match of matches) {
     let cfg: any = {}
@@ -635,6 +753,7 @@ export async function resolveCartBlocks(
       const { resolveProductFeed } = await import('@/lib/email/product-feeds')
       products = await resolveProductFeed({
         orgId,
+        storeId,
         feedType,
         contactId,
         maxProducts: itemCap,
@@ -714,6 +833,9 @@ export async function resolveCartBlocks(
     const isRight = cfg.layoutType === 'image-right'
     const font = cfg.font || 'Arial, sans-serif'
     const imgW = cfg.imageWidth || 200
+    // Sem altura configurada, a caixa é quadrada — que é o que o editor
+    // sempre desenhou.
+    const imgH = cfg.imageHeight || imgW
     const imgR = cfg.imageBorderRadius || 0
     const btnAlign = cfg.buttonAlign || 'left'
     const btnDisplay = btnAlign === 'full' ? 'display:block;width:100%;text-align:center;' : `display:inline-block;`
@@ -725,7 +847,9 @@ export async function resolveCartBlocks(
     //   permalink with ALL the items (/cart/variant:qty…); viewed/browse →
     //   the product page; order → order status. A manual buttonHref (that
     //   isn't one of the legacy auto placeholders) still wins as an override.
-    const shopDomain = normalizeHost(storeUrl) || getShopDomain(eventData)
+    // A loja do e-mail manda; o host que o evento carrega é o último
+    // recurso (um pixel de outra loja não pode redirecionar este link).
+    const shopDomain = resolvedStoreHost || getShopDomain(eventData)
     const family = triggerFamily(triggerType)
     const permalinkItems = products.map((p: any) => ({ variant_id: p.variant_id, quantity: p.quantity }))
     const orderStatusUrl: string = props.OrderStatusURL || props.order_status_url || raw.order_status_url || ''
@@ -782,11 +906,18 @@ export async function resolveCartBlocks(
       // `object-fit: cover` so the image fills without distortion.
       // Fallback (no URL) renders a soft neutral placeholder instead of a
       // jarring gray box.
+      // A caixa da imagem. Antes só a largura era fixa e a altura ia
+      // livre: um frasco alto virava 600px de imagem ao lado de duas
+      // linhas de texto, enquanto o editor desenhava um quadrado. Agora
+      // a foto encaixa na caixa — reduzida na CDN da Shopify quando dá,
+      // e segurada pelo CSS quando não dá.
       const imgSize = isVert ? '100%' : `${imgW}px`
+      const boxW: number | '100%' = isVert ? '100%' : imgW
+      const fitted = fitProductImage(imgUrl, { width: imgW, height: imgH })
       const imgCell = cfg.showImage ? `<td width="${isVert ? '100%' : imgW}" style="vertical-align:middle;${isVert ? 'padding:0 0 12px 0;' : 'padding:0;'}">
         <a href="${prodUrl}" style="display:block;text-decoration:none;">${imgUrl
-          ? `<img src="${imgUrl}" alt="${title}" width="${isVert ? '100%' : imgW}" style="display:block;width:${imgSize};height:auto;max-width:100%;border-radius:${imgR}px;border:0;outline:none;" />`
-          : `<div style="width:${imgSize};${isVert ? 'aspect-ratio:1/1;min-height:160px;' : `height:${imgW}px;`}background:#F3F4F6;border-radius:${imgR}px;display:flex;align-items:center;justify-content:center;color:#9CA3AF;font-size:11px;">imagem</div>`
+          ? `<img src="${fitted}" alt="${title}" style="${fitProductImageStyle({ width: boxW, height: imgH })}border-radius:${imgR}px;border:0;outline:none;" />`
+          : `<div style="width:${imgSize};height:${imgH}px;background:#F3F4F6;border-radius:${imgR}px;display:flex;align-items:center;justify-content:center;color:#9CA3AF;font-size:11px;">imagem</div>`
         }</a>
       </td>` : ''
 
@@ -1158,6 +1289,8 @@ export function prepareEmailHtml({
   contactId,
   orgId,
   campaignId,
+  storeId,
+  linkParams,
 }: {
   html: string;
   mergeData: Record<string, string>;
@@ -1166,6 +1299,16 @@ export function prepareEmailHtml({
   contactId?: string;
   orgId?: string;
   campaignId?: string;
+  /** Loja do envio — vai no token de descadastro/preferências. */
+  storeId?: string;
+  /**
+   * Parâmetros de rastreamento (UTM + identificação) para TODO link do
+   * e-mail — ver src/lib/tracking/link-params.ts. Recebe o link (url,
+   * texto, posição) e devolve os parâmetros; é aplicado ao destino antes
+   * de o link ser embrulhado no rastreador de clique, então o cliente
+   * chega na loja com tudo mesmo que o redirect falhe.
+   */
+  linkParams?: LinkParamsResolver | null;
 }): string {
   let result = html;
 
@@ -1213,7 +1356,17 @@ export function prepareEmailHtml({
   result = rewriteImagesForEmail(result, { width: 600, quality: 80 });
 
   // 2. Add unsubscribe link with HMAC token (before tracking rewrites)
-  result = addUnsubscribeLink(result, emailSendId, baseUrl, contactId, orgId, campaignId);
+  result = addUnsubscribeLink(result, emailSendId, baseUrl, contactId, orgId, campaignId, storeId);
+
+  // 2b. UTM + identificação em todo link de destino (links do próprio
+  // app/tracking ficam de fora). Antes do rastreador de clique, para
+  // que o destino embrulhado já carregue os parâmetros.
+  if (linkParams) {
+    const skipHosts: string[] = [];
+    try { skipHosts.push(new URL(baseUrl).host); } catch { /* baseUrl inválido já foi logado acima */ }
+    try { skipHosts.push(new URL(getAppBaseUrl()).host); } catch { /* sem app url */ }
+    result = stampHtmlLinks(result, linkParams, { skipHosts });
+  }
 
   // 3. Rewrite URLs for click tracking
   result = rewriteUrlsForTracking(result, emailSendId, baseUrl);

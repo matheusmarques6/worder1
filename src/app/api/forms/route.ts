@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
       submissions_count, views_count,
       pipeline_id, stage_id, store_id,
       facebook_pixel_id, google_ads_id,
-      theme, logo_url,
+      theme, logo_url, design_json,
       created_at, updated_at
     `
 
@@ -46,6 +46,8 @@ export async function GET(request: NextRequest) {
       .from('crm_forms')
       .select(baseSelect)
       .eq('organization_id', user.organization_id)
+      // Variantes de A/B vivem dentro do popup principal, não na lista.
+      .is('ab_parent_id', null)
       .order('created_at', { ascending: false })
 
     if (status) {
@@ -59,7 +61,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    console.log(`[Forms] Found ${forms?.length || 0} forms for org ${user.organization_id}, storeId=${storeId || 'none'}`)
 
     // Multi-store isolation. When a storeId is provided, ONLY return
     // popups that belong to that store (or are unbound, store_id IS NULL
@@ -79,7 +80,14 @@ export async function GET(request: NextRequest) {
       result = result.filter(f => !f.store_id)
     }
 
-    return NextResponse.json({ forms: result })
+    // O design inteiro não vai para a lista — só o suficiente para a tela
+    // saber se abre o editor visual ou o de campos clássicos.
+    const slim = result.map(({ design_json, ...rest }: any) => ({
+      ...rest,
+      has_design: isVisualPopupForm(rest.form_type, design_json) || !!(design_json?.steps?.length),
+    }))
+
+    return NextResponse.json({ forms: slim })
   } catch (error: any) {
     console.error('[Forms] GET error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
@@ -100,14 +108,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Nome é obrigatório' }, { status: 400 })
     }
 
-    console.log('[Forms] POST', {
-      name,
-      form_type,
-      store_id,
-      design_json_keys: design_json ? Object.keys(design_json) : null,
-      design_json_steps: design_json?.steps?.length,
-      design_json_blocks: design_json?.steps?.[0]?.blocks?.length,
-    })
 
     // Gerar slug único
     const baseSlug = name
@@ -163,6 +163,29 @@ export async function POST(request: NextRequest) {
         )
       }
     }
+    // Funil e etapa: o negócio criado a partir de uma inscrição não pode
+    // cair no pipeline de outro cliente. `pipelines` pertence a uma loja,
+    // e a loja à organização.
+    if (pipeline_id || stage_id) {
+      const { data: orgStores } = await admin.from('shopify_stores').select('id').eq('organization_id', user.organization_id)
+      const storeIds = (orgStores || []).map((r: any) => r.id as string)
+      let pipeId: string | null = pipeline_id || null
+      if (stage_id) {
+        const { data: stageRow } = await admin.from('pipeline_stages').select('id, pipeline_id').eq('id', stage_id).maybeSingle()
+        if (!stageRow) return NextResponse.json({ error: 'Etapa inválida: escolha uma etapa da sua organização.' }, { status: 400 })
+        if (pipeId && stageRow.pipeline_id !== pipeId) {
+          return NextResponse.json({ error: 'A etapa escolhida não pertence a esse funil.' }, { status: 400 })
+        }
+        pipeId = pipeId || (stageRow.pipeline_id as string)
+      }
+      if (pipeId) {
+        const { data: pipeRow } = await admin.from('pipelines').select('id, store_id').eq('id', pipeId).maybeSingle()
+        if (!pipeRow || !pipeRow.store_id || !storeIds.includes(pipeRow.store_id as string)) {
+          return NextResponse.json({ error: 'Funil inválido: escolha um funil da sua organização.' }, { status: 400 })
+        }
+      }
+    }
+
     const { data: form, error } = await admin
       .from('crm_forms')
       .insert({
@@ -190,11 +213,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    console.log('[Forms] POST saved', {
-      id: form.id,
-      design_json_keys: form.design_json ? Object.keys(form.design_json) : null,
-      design_json_steps: form.design_json?.steps?.length,
-    })
 
     // Criar campos padrão — SOMENTE para formulários clássicos (embed
     // sem design visual). Popups visuais (popup/flyout/banner/fullpage)
@@ -210,13 +228,16 @@ export async function POST(request: NextRequest) {
         { field_type: 'phone', label: 'Telefone', placeholder: '(11) 99999-9999', required: true, position: 2, map_to_contact_field: 'phone' },
       ]
 
-      await admin
+      const { error: fieldsError } = await admin
         .from('crm_form_fields')
         .insert(defaultFields.map(f => ({ ...f, form_id: form.id })))
+      // O formulário existe; os campos, não. Sem isto ele abriria vazio e
+      // o lojista não teria como saber por quê.
+      if (fieldsError) console.error('[Forms] campos padrão não criados para', form.id, fieldsError.message)
     }
 
     // Criar evento padrão de Lead
-    await admin
+    const { error: eventError } = await admin
       .from('crm_form_events')
       .insert({
         form_id: form.id,
@@ -228,6 +249,7 @@ export async function POST(request: NextRequest) {
         is_active: true,
         position: 0,
       })
+    if (eventError) console.error('[Forms] evento Lead não criado para', form.id, eventError.message)
 
     return NextResponse.json({ form }, { status: 201 })
   } catch (error: any) {

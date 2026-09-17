@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError, validateStoreAccess } from '@/lib/api-utils';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { EventBus, EventType } from '@/lib/events';
+import { sanitizeSearchTerm } from '@/lib/db/search-term'
 export const dynamic = 'force-dynamic';
 
 // GET - List contacts or get single contact
@@ -28,6 +29,9 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const contactId = searchParams.get('id');
   const search = searchParams.get('search');
+  // O termo vai para dentro de um filtro do PostgREST: vírgula e
+  // parêntese deixariam de ser texto e passariam a ser consulta.
+  const buscaSegura = sanitizeSearchTerm(search)
   const tags = searchParams.get('tags');
   const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
   // Cap the page size so a crafted ?limit=1000000 can't pull the whole table
@@ -80,13 +84,19 @@ export async function GET(request: NextRequest) {
       query = query.order('created_at', { ascending: false });
     }
 
-    // Se storeId fornecido, filtrar por store
+    // Se storeId fornecido, filtrar por store — depois de conferir que a
+    // loja é de uma organização do usuário. Um id de outra organização
+    // não devolve nada, em vez de virar filtro válido.
     if (storeId) {
+      const access = await validateStoreAccess(supabase, user.organization_id, storeId, user.id);
+      if (!access.valid) {
+        return NextResponse.json({ error: access.error }, { status: access.status || 403 });
+      }
       query = query.eq('store_id', storeId);
     }
 
-    if (search) {
-      query = query.or(`email.ilike.%${search}%,first_name.ilike.%${search}%,last_name.ilike.%${search}%,phone.ilike.%${search}%`);
+    if (buscaSegura) {
+      query = query.or(`email.ilike.%${buscaSegura}%,first_name.ilike.%${buscaSegura}%,last_name.ilike.%${buscaSegura}%,phone.ilike.%${buscaSegura}%`);
     }
 
     if (tags) {
@@ -134,6 +144,15 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { email, phone, first_name, last_name, tags, source, store_id } = body;
+
+    // Configurações → Entregabilidade → "Validar e-mails na entrada"
+    if (email) {
+      const { checkEmail, emailCheckMessage, shouldValidateOnEntry } = await import('@/lib/email/email-hygiene');
+      if (await shouldValidateOnEntry(organizationId)) {
+        const c = checkEmail(email);
+        if (!c.ok) return NextResponse.json({ error: emailCheckMessage(c), suggestion: c.suggestion }, { status: 400 });
+      }
+    }
 
     // Check for existing contact
     if (email) {

@@ -196,7 +196,17 @@ class CreateCoupon:
             # --- transação curta 2: o código comita depois do provedor ------
             async with conn.transaction():
                 await scope_to_organization(conn, context.organization_id)
-                await incentives_repo.record_coupon_code(conn, grant.id, code)
+                recorded = await incentives_repo.record_coupon_code(
+                    conn, grant.id, code, organization_id=context.organization_id
+                )
+            if not recorded:
+                # Outro grant desta org já é dono deste código — nunca devolver
+                # sucesso com o cupom de outro contato. O alerta já foi aberto
+                # e o grant já está suspenso; o provedor não é chamado de novo.
+                return self._error(
+                    f"cupom {code} colide com outro grant desta organização; "
+                    f"grant {grant.id} suspenso, alerta aberto para reconciliação humana"
+                )
 
         return ToolResult(
             tool=self.name,

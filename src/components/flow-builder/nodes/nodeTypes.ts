@@ -97,6 +97,25 @@ export const triggerTypes: NodeTypeDefinition[] = [
     category: 'trigger',
     color: '#10b981',
   },
+  // Ambos disparam via webhook de pedido Shopify. Estavam no dropdown do
+  // Sidebar mas sem definição aqui — o painel de propriedades abria com
+  // header cinza e ícone de engrenagem, como se o gatilho não existisse.
+  {
+    type: 'trigger_first_purchase',
+    label: 'Primeira Compra',
+    description: 'Dispara no primeiro pedido do contato (welcome buyer)',
+    icon: ShoppingCart,
+    category: 'trigger',
+    color: '#10b981',
+  },
+  {
+    type: 'trigger_repeat_purchase',
+    label: 'Compra Recorrente',
+    description: 'Dispara do segundo pedido em diante (loyalty)',
+    icon: ShoppingCart,
+    category: 'trigger',
+    color: '#10b981',
+  },
   {
     type: 'trigger_signup',
     label: 'Novo Cadastro',
@@ -286,6 +305,14 @@ export const triggerTypes: NodeTypeDefinition[] = [
     label: 'Inscrito via Popup',
     description: 'Dispara quando alguém se inscreve em um popup — ideal para welcome flows',
     icon: FileText,
+    category: 'trigger',
+    color: '#10b981',
+  },
+  {
+    type: 'trigger_whatsapp_optin',
+    label: 'Confirmou WhatsApp via Popup',
+    description: 'Dispara quando a pessoa confirma o opt-in de WhatsApp pedido por um popup — a régua no WhatsApp começa aqui',
+    icon: MessageSquare,
     category: 'trigger',
     color: '#10b981',
   },
@@ -676,11 +703,13 @@ export const nodeTypes: Record<string, any> = {
   trigger_added_to_cart: TriggerNode,
   trigger_first_purchase: TriggerNode,
   trigger_repeat_purchase: TriggerNode,
-  trigger_birthday: TriggerNode,
+  // trigger_birthday removido: era um registro órfão (sem definição, sem
+  // produtor, inalcançável pela UI). Aniversário é o trigger_date.
   // Triggers - Contato
   trigger_signup: TriggerNode,
   trigger_form_submitted: TriggerNode,
   trigger_popup_subscribed: TriggerNode,
+  trigger_whatsapp_optin: TriggerNode,
   trigger_tag: TriggerNode,
   trigger_segment: TriggerNode,
   // Triggers - Especiais

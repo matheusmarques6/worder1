@@ -376,7 +376,7 @@ export function ChatTemplates({
     createTemplate,
     updateTemplate,
     deleteTemplate,
-    useTemplate,
+    applyTemplate,
     toggleFavorite,
   } = useChatTemplates({
     organizationId,
@@ -401,7 +401,7 @@ export function ChatTemplates({
   const others = filteredTemplates.filter((t) => !t.is_favorite)
 
   const handleSelect = async (template: ChatTemplate) => {
-    const content = await useTemplate(template.id)
+    const content = await applyTemplate(template.id)
     if (content && onSelectTemplate) {
       onSelectTemplate(content, template)
     }

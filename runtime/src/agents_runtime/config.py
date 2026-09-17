@@ -13,22 +13,32 @@ dez segundos de verdade, sem que a regra saiba que está sendo testada.
 from dataclasses import dataclass, field
 from datetime import timedelta
 
-from agents_runtime.queueing import DOMAIN_EVENTS, EVALS, INBOUND, SCHEDULED
+from agents_runtime.queueing import DOMAIN_EVENTS, EVALS, INBOUND
+
+_PG_INT_MAX = 2_147_483_647
 
 
 def _weights() -> dict[str, int]:
-    """8 : 4 : 2 : 1 — a proporção do weighted polling (arquitetura §ADR-5)."""
-    return {INBOUND: 8, DOMAIN_EVENTS: 4, SCHEDULED: 2, EVALS: 1}
+    """8 : 4 : 1 — sem slots para a fila scheduled reservada (Wave 4)."""
+    return {INBOUND: 8, DOMAIN_EVENTS: 4, EVALS: 1}
 
 
 def _retry_limits() -> dict[str, int]:
     """Quantas vezes cada fila insiste antes da DLQ."""
-    return {INBOUND: 5, DOMAIN_EVENTS: 5, SCHEDULED: 3, EVALS: 2}
+    return {INBOUND: 5, DOMAIN_EVENTS: 5, EVALS: 2}
 
 
 @dataclass(frozen=True)
 class QueueingConfig:
     """Filas, esperas e prazos."""
+
+    # Limites operacionais (Wave 3): o turno cobre só a fase 2; cleanup,
+    # conexão, statements e health têm orçamentos próprios.
+    turn_timeout: timedelta = timedelta(seconds=90)
+    connect_timeout_seconds: int = 3
+    statement_timeout_ms: int = 15_000
+    probe_timeout: timedelta = timedelta(seconds=4)
+    cleanup_timeout: timedelta = timedelta(seconds=10)
 
     # Visibilidade e sinal de vida: o heartbeat renova antes do VT vencer, com
     # folga de 15s para uma rede ruim não custar uma reentrega.
@@ -59,7 +69,6 @@ class QueueingConfig:
 
     # Promoção por idade: o custo de um evento atrasado cresce com o atraso.
     promote_domain_after: timedelta = timedelta(minutes=2)
-    promote_scheduled_after: timedelta = timedelta(minutes=10)
 
     # Válido SÓ enquanto o runtime for um processo asyncio único (ADR-2). Ir a
     # multi-processo exige migrar isto para uma lease distribuída antes.
@@ -87,6 +96,20 @@ class QueueingConfig:
     # in seconds); the canonical table should absorb or veto it (pendência).
     unknown_review_after: timedelta = timedelta(minutes=5)
 
+    def __post_init__(self) -> None:
+        for name in ("turn_timeout", "probe_timeout", "cleanup_timeout"):
+            value = getattr(self, name)
+            if not isinstance(value, timedelta) or value <= timedelta(0):
+                raise ValueError(f"{name} must be a positive duration")
+        for name in ("connect_timeout_seconds", "statement_timeout_ms"):
+            value = getattr(self, name)
+            if (
+                not isinstance(value, int)
+                or isinstance(value, bool)
+                or not 0 < value <= _PG_INT_MAX
+            ):
+                raise ValueError(f"{name} must be a positive PostgreSQL integer")
+
 
 def config_from_env(environ: "dict[str, str]") -> QueueingConfig:
     """The canonical defaults, overridable per environment.
@@ -101,8 +124,22 @@ def config_from_env(environ: "dict[str, str]") -> QueueingConfig:
         raw = environ.get(name)
         return timedelta(milliseconds=int(raw)) if raw else fallback
 
+    def _turn_ms() -> timedelta:
+        if "AGENTS_TURN_TIMEOUT_MS" not in environ:
+            return base.turn_timeout
+        raw = environ["AGENTS_TURN_TIMEOUT_MS"]
+        if (
+            not isinstance(raw, str)
+            or not raw.isascii()
+            or not raw.isdecimal()
+            or int(raw) <= 0
+        ):
+            raise ValueError("AGENTS_TURN_TIMEOUT_MS must be a positive integer")
+        return timedelta(milliseconds=int(raw))
+
     base = QueueingConfig()
     return QueueingConfig(
+        turn_timeout=_turn_ms(),
         visibility_timeout=_ms("AGENTS_VT_MS", base.visibility_timeout),
         heartbeat_every=_ms("AGENTS_WORK_HEARTBEAT_MS", base.heartbeat_every),
         conversation_lease=_ms("AGENTS_LEASE_MS", base.conversation_lease),

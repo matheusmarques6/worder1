@@ -63,7 +63,6 @@ def _producers() -> list[str]:
 def _settings(language: str = "pt-BR") -> TenantSettings:
     return TenantSettings(
         policy=TenantPolicy(primary_language=language, never_say_ai=True),
-        shadow_until=None,
     )
 
 
@@ -74,6 +73,15 @@ def _version(**overrides) -> ActiveVersion:
         "name": "Bia",
     }
     return ActiveVersion(**{**base, **overrides})
+
+
+def test_tenant_settings_only_carries_policy() -> None:
+    settings = _settings()
+
+    assert settings.primary_language == "pt-BR"
+    assert settings.never_say_ai is True
+    with pytest.raises(AttributeError):
+        _ = settings.shadow_until
 
 
 class TestTheAgentBlockIsBuiltInOnePlace:

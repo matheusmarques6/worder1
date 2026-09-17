@@ -74,27 +74,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ received: true, matched: false }, { headers });
     }
 
-    // Exact match first, then suffix match (custom domains / www.
-    // prefixes). Sanitized value can't contain %/_/, so no wildcard or
-    // filter injection is possible.
-    let { data: store } = await supabaseAdmin
-      .from('shopify_stores')
-      .select('id, embed_installed, embed_installed_at')
-      .eq('shop_domain', domain)
-      .eq('is_active', true)
-      .limit(1)
-      .maybeSingle();
-
-    if (!store) {
-      const { data: suffixStore } = await supabaseAdmin
-        .from('shopify_stores')
-        .select('id, embed_installed, embed_installed_at')
-        .ilike('shop_domain', `%${domain}`)
-        .eq('is_active', true)
-        .limit(1)
-        .maybeSingle();
-      store = suffixStore;
-    }
+    // Exact, alias-aware match: shop_domain, primary_domain (the public
+    // storefront host) or any alias. The old suffix fallback
+    // (ilike '%domain') let "groot.com" match "drgroot.com" — a lookalike
+    // host could stamp embed_installed on another tenant's store.
+    const { resolveStoreByDomain } = await import('@/lib/shopify/resolve-store-by-domain');
+    const store = await resolveStoreByDomain<{ id: string; embed_installed: boolean | null; embed_installed_at: string | null }>(
+      supabaseAdmin,
+      domain,
+      { select: 'id, embed_installed, embed_installed_at', activeOnly: true }
+    );
 
     if (!store) {
       return NextResponse.json({ received: true, matched: false }, { headers });

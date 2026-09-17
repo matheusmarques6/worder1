@@ -47,6 +47,7 @@ export function ReportHeader({
 }: ReportHeaderProps) {
   return (
     <View style={styles.header}>
+      {/* eslint-disable-next-line jsx-a11y/alt-text -- @react-pdf/renderer Image is not a DOM img element. */}
       <Image style={styles.logo} src={WORDER_LOGO_BASE64} />
       <View style={styles.titleSection}>
         <Text style={styles.title}>{title}</Text>

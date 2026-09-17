@@ -9,10 +9,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError } from '@/lib/api-utils';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { buildMediaUrl, EMAIL_IMAGES_BUCKET } from '@/lib/media/public-url';
 
 export const dynamic = 'force-dynamic';
 
-const BUCKET = 'email-images';
+const BUCKET = EMAIL_IMAGES_BUCKET;
+
+// A URL que a biblioteca mostra, o lojista copia e o editor salva no
+// template é a da CDN (cdn.worder.email), nunca a do Supabase. Antes
+// esta rota devolvia getPublicUrl() cru — <projeto>.supabase.co — e a
+// troca para a CDN só acontecia no envio, invisível para quem via a
+// URL no editor. Ver src/lib/media/public-url.ts.
+function publicUrlFor(storagePath: string): string {
+  const url = buildMediaUrl(storagePath);
+  // Sem host nenhum configurado (ambiente local sem .env), cai no
+  // Supabase para a tela não ficar sem imagem.
+  return url || supabaseAdmin.storage.from(BUCKET).getPublicUrl(storagePath).data.publicUrl;
+}
 
 export async function GET(request: NextRequest) {
   const auth = await getAuthClient();
@@ -53,12 +66,11 @@ export async function GET(request: NextRequest) {
           if (file.id === null && !file.metadata) continue;
 
           const filePath = `${folder}/${file.name}`;
-          const { data: urlData } = supabaseAdmin.storage.from(BUCKET).getPublicUrl(filePath);
 
           allFiles.push({
             id: file.id || filePath,
             name: file.name,
-            url: urlData.publicUrl,
+            url: publicUrlFor(filePath),
             size: file.metadata?.size || 0,
             type: file.metadata?.mimetype || 'image/png',
             created_at: file.created_at || new Date().toISOString(),
@@ -112,21 +124,27 @@ export async function POST(request: NextRequest) {
 
     const buffer = Buffer.from(await file.arrayBuffer());
 
+    // Cache de um ano: o nome do arquivo é único por upload, então
+    // nunca precisa invalidar. O proxy de imagens do Gmail respeita o
+    // Cache-Control da primeira busca e serve as aberturas seguintes
+    // da própria borda — sem isto o padrão do Storage é ~1h.
     const { error: uploadError } = await supabaseAdmin.storage
       .from(BUCKET)
-      .upload(storagePath, buffer, { contentType: file.type, upsert: false });
+      .upload(storagePath, buffer, {
+        contentType: file.type,
+        upsert: false,
+        cacheControl: '31536000, immutable',
+      });
 
     if (uploadError) {
       console.error('[Media] Upload error:', uploadError);
       return NextResponse.json({ error: uploadError.message }, { status: 500 });
     }
 
-    const { data: urlData } = supabaseAdmin.storage.from(BUCKET).getPublicUrl(storagePath);
-
     const result = {
       id: storagePath,
       name: file.name,
-      url: urlData.publicUrl,
+      url: publicUrlFor(storagePath),
       size: file.size,
       type: file.type,
       created_at: new Date().toISOString(),
@@ -149,26 +167,43 @@ export async function DELETE(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { storage_path, id } = body;
+    const { storage_path, storage_paths, id } = body;
 
-    const path = storage_path || id;
-    if (!path || typeof path !== 'string') {
+    // Um ou vários: `storage_paths` (lista) ou o `storage_path`/`id`
+    // antigo. A seleção múltipla da biblioteca manda a lista.
+    const pedidos: string[] = Array.isArray(storage_paths)
+      ? storage_paths
+      : [storage_path || id];
+    const paths = pedidos.filter((p): p is string => typeof p === 'string' && p.length > 0);
+    if (paths.length === 0) {
       return NextResponse.json({ error: 'storage_path required' }, { status: 400 });
     }
+    if (paths.length > 200) {
+      return NextResponse.json({ error: 'Máximo de 200 arquivos por vez' }, { status: 400 });
+    }
 
-    // Security: ensure the path belongs to the user's org
-    if (!path.startsWith(orgId + '/')) {
+    // Segurança: TODOS os caminhos precisam ser da organização. Um
+    // único caminho de fora derruba o pedido inteiro — nada de apagar
+    // os "bons" e ignorar o intruso em silêncio.
+    const fora = paths.find((p) => !p.startsWith(orgId + '/') || p.includes('..'));
+    if (fora) {
       return NextResponse.json({ error: 'Sem permissão' }, { status: 403 });
     }
 
-    const { error } = await supabaseAdmin.storage.from(BUCKET).remove([path]);
+    const { data, error } = await supabaseAdmin.storage.from(BUCKET).remove(paths);
 
     if (error) {
       console.error('[Media] Delete error:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true });
+    // O storage devolve o que de fato removeu; o resto (já apagado,
+    // caminho errado) volta como falha para a tela não fingir sucesso.
+    const removidos = new Set((data || []).map((f: any) => f?.name).filter(Boolean));
+    const deleted = paths.filter((p) => removidos.has(p));
+    const failed = paths.filter((p) => !removidos.has(p));
+
+    return NextResponse.json({ success: failed.length === 0, deleted, failed });
   } catch (e: any) {
     console.error('[Media] DELETE Error:', e);
     return NextResponse.json({ error: e.message }, { status: 500 });

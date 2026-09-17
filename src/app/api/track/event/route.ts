@@ -15,6 +15,7 @@ import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import type { WorderShopifyEventType } from '@/lib/shopify/event-types';
 import { EVENT_SOURCES } from '@/lib/shopify/event-types';
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
+import { normalizeTimezoneInput } from '@/lib/scheduling/timezone';
 
 export const dynamic = 'force-dynamic';
 
@@ -180,38 +181,16 @@ export async function POST(request: NextRequest) {
     const supabase = getSupabaseAdmin();
 
     // ---- Resolve store ----
-    let store: { id: string; organization_id: string } | null = null;
-
-    if (storeId) {
-      const { data } = await supabase
-        .from('shopify_stores')
-        .select('id, organization_id')
-        .eq('id', storeId)
-        .maybeSingle();
-      store = data;
-    }
-
-    if (!store && accountId) {
-      const { data } = await supabase
-        .from('shopify_stores')
-        .select('id, organization_id')
-        .eq('organization_id', accountId)
-        .limit(1)
-        .maybeSingle();
-      store = data;
-    }
-
-    if (!store && storeDomain) {
-      // Alias-aware: matches shop_domain OR shop_domain_aliases so a
-      // pixel sending the canonical myshopifyDomain still resolves
-      // even when the merchant connected with a renamed domain.
-      const { resolveStoreByDomain } = await import('@/lib/shopify/resolve-store-by-domain');
-      store = await resolveStoreByDomain<{ id: string; organization_id: string }>(
-        supabase,
-        storeDomain,
-        { select: 'id, organization_id', activeOnly: false }
-      );
-    }
+    // storeId → storeDomain → accountId (só com uma loja na organização).
+    // A ordem antiga tentava accountId antes do domínio e pegava
+    // "qualquer loja da organização": eventos da loja B carimbados na
+    // loja A. Ver resolveTrackingStore.
+    const { resolveTrackingStore } = await import('@/lib/shopify/resolve-store-by-domain');
+    const store = await resolveTrackingStore<{ id: string; organization_id: string }>(
+      supabase,
+      { storeId, storeDomain, accountId },
+      'id, organization_id'
+    );
 
     if (!store) {
       return NextResponse.json(
@@ -578,7 +557,8 @@ export async function POST(request: NextRequest) {
     // — the worderContactID alone (which the click redirect stamps)
     // means this visit came from a Worder email and should anchor
     // last-touch attribution to that send/campaign.
-    const hasEmailAttribution = attribution && (attribution.sendId || attribution.campaignId);
+    const hasEmailAttribution =
+      attribution && (attribution.sendId || attribution.campaignId || attribution.automationId);
     if (hasUtm || hasClickIds || hasEmailAttribution) {
       const touchpointBase = {
         organization_id: organizationId,
@@ -587,9 +567,10 @@ export async function POST(request: NextRequest) {
         session_id: sessionId || null,
         utm_source: utmParams?.utm_source || (hasEmailAttribution ? 'worder' : null),
         utm_medium: utmParams?.utm_medium || (hasEmailAttribution ? 'email' : null),
-        utm_campaign: utmParams?.utm_campaign || attribution?.campaignId || null,
+        utm_campaign:
+          utmParams?.utm_campaign || attribution?.campaignId || attribution?.automationId || null,
         utm_term: utmParams?.utm_term || null,
-        utm_content: utmParams?.utm_content || attribution?.sendId || null,
+        utm_content: utmParams?.utm_content || attribution?.messageId || attribution?.sendId || null,
         gclid: clickIds?.gclid || null,
         fbclid: clickIds?.fbclid || null,
         ttclid: clickIds?.ttclid || null,
@@ -720,6 +701,18 @@ export async function POST(request: NextRequest) {
         const pageUrl = enrichedProperties.page_url || enrichedProperties.url || 'unknown';
         const dayBucket = new Date().toISOString().slice(0, 10);
         triggerIdempotencyKey = `trigger:viewed_page:${contactId}:${pageUrl}:${dayBucket}`;
+      } else if (triggerType === 'trigger_order') {
+        // Mesma chave do webhook Shopify (`trigger:placed_order:<id>`) e do
+        // EventBus: o pedido chega por três caminhos e só o primeiro cria
+        // run — antes o contato entrava três vezes no mesmo fluxo.
+        const pixelOrderId =
+          enrichedProperties.order_id ||
+          enrichedProperties.orderId ||
+          enrichedProperties.checkout_id ||
+          enrichedProperties.checkoutId;
+        if (pixelOrderId) {
+          triggerIdempotencyKey = `trigger:placed_order:${pixelOrderId}`;
+        }
       } else if (triggerType === 'trigger_active_on_site' && contactId) {
         // Klaviyo Active on Site: 1x per session per contact. Without
         // session-level dedup the same browsing session re-triggers on
@@ -775,6 +768,20 @@ export async function POST(request: NextRequest) {
       if (device_type) contactUpdate.device_type = device_type;
       if (browser) contactUpdate.browser = browser;
       if (os) contactUpdate.os = os;
+
+      // Fuso do próprio navegador do contato — a informação mais
+      // confiável que existe para "que horas são para ele". O pixel já
+      // calculava isso, mas só jogava dentro do hash de fingerprint;
+      // agora vira o dado que a campanha e o delay usam. Sobrescreve o
+      // palpite por país, nunca o contrário (o país só preenche quando
+      // timezone está vazio).
+      const tzInformado = normalizeTimezoneInput(
+        (body as any)?.tz ?? (body as any)?.timezone ?? (body as any)?.properties?.tz
+      );
+      if (tzInformado) {
+        contactUpdate.timezone = tzInformado;
+        contactUpdate.timezone_source = 'browser';
+      }
 
       // UTM attribution
       if (utmParams) {

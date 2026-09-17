@@ -188,6 +188,8 @@ function MessageBubble({ message, contactName, onRetry }: { message: InboxMessag
 
           {/* ✅ CORREÇÃO: Imagem com tamanho limitado + object-contain */}
           {message.message_type === 'image' && message.media_url && (
+            <>
+            {/* eslint-disable-next-line @next/next/no-img-element -- WhatsApp media URL is third-party and cannot be safely optimized or allowlisted. */}
             <img 
               src={message.media_url} 
               alt="Imagem" 
@@ -195,14 +197,18 @@ function MessageBubble({ message, contactName, onRetry }: { message: InboxMessag
               className="rounded-lg mb-2 cursor-pointer hover:opacity-90 w-full max-w-[320px] max-h-[360px] object-contain bg-white/30"
               onClick={() => window.open(message.media_url, '_blank')} 
             />
+            </>
           )}
           {message.message_type === 'sticker' && message.media_url && (
+            <>
+            {/* eslint-disable-next-line @next/next/no-img-element -- WhatsApp media URL is third-party and cannot be safely optimized or allowlisted. */}
             <img
               src={message.media_url}
               alt="Figurinha"
               loading="lazy"
               className="rounded-lg mb-2 w-32 h-32 object-contain"
             />
+            </>
           )}
           {/* ✅ CORREÇÃO: Vídeo com preload, playsInline e tamanho limitado */}
           {message.message_type === 'video' && message.media_url && (
@@ -350,7 +356,10 @@ function MediaPreviewModal({ file, onClose, onSend, isSending }: {
             </div>
           ) : (
             <>
-              {isImage && preview && <img src={preview} alt="Preview" className="max-h-64 mx-auto rounded-lg object-contain" />}
+              {isImage && preview && <>
+                {/* eslint-disable-next-line @next/next/no-img-element -- Local blob preview cannot be safely optimized or allowlisted. */}
+                <img src={preview} alt="Preview" className="max-h-64 mx-auto rounded-lg object-contain" />
+              </>}
               {isVideo && preview && <video src={preview} controls className="max-h-64 mx-auto rounded-lg" />}
               {!isImage && !isVideo && (
                 <div className="flex items-center gap-3 p-4 bg-gray-100 rounded-lg">
@@ -700,6 +709,7 @@ export function ChatPanel({
           </button>
 
           {conversation.contact_avatar ? (
+            /* eslint-disable-next-line @next/next/no-img-element -- Persisted contact avatar URL cannot be safely optimized or allowlisted. */
             <img src={conversation.contact_avatar} alt={contactName} className="w-10 h-10 rounded-full object-cover" />
           ) : (
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center">

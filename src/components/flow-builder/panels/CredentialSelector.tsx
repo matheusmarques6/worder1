@@ -101,28 +101,27 @@ export function CredentialSelector({
   // ============================================
 
   useEffect(() => {
+    async function loadConnections() {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const params = new URLSearchParams();
+        if (connectionType) params.set('type', connectionType);
+
+        const res = await fetch(`/api/automations/connections?${params}`);
+        const data = await res.json();
+
+        if (!res.ok) throw new Error(data.error);
+
+        setConnections(data.connections || []);
+      } catch (e: any) {
+        setError(e.message);
+      } finally {
+        setIsLoading(false);
+      }
+    }
     loadConnections();
   }, [connectionType]);
-
-  const loadConnections = async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const params = new URLSearchParams();
-      if (connectionType) params.set('type', connectionType);
-
-      const res = await fetch(`/api/automations/connections?${params}`);
-      const data = await res.json();
-
-      if (!res.ok) throw new Error(data.error);
-
-      setConnections(data.connections || []);
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   // ============================================
   // CLICK OUTSIDE

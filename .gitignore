@@ -55,3 +55,8 @@ package-lock.json
 # supabase cli (stack local) — .temp/start-secrets guarda credenciais do stack
 supabase/.branches
 supabase/.temp
+
+# Testes de ponta a ponta (Playwright)
+/test-results/
+/playwright-report/
+/e2e/.auth/

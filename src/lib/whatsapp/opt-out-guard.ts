@@ -67,6 +67,20 @@ export async function requireOptIn(
   // Ausencia = permite (decisao 3 do plano)
   if (!record) return { allowed: true }
 
+  // Pendente de confirmação (double opt-in do popup): ainda não disse "sim".
+  // Marketing e texto livre esperam; UTILITY/AUTHENTICATION passam — é por
+  // aí que o próprio pedido de confirmação sai.
+  if (record.status === 'pending') {
+    if (templateCategory === 'UTILITY' || templateCategory === 'AUTHENTICATION') return { allowed: true, record }
+    wlog.info('whatsapp.optin.pending_blocked', {
+      organization_id: organizationId,
+      phone: normalized,
+      template_category: templateCategory ?? null,
+      sender: opts.sender,
+    })
+    return { allowed: false, reason: 'OPTED_OUT', record }
+  }
+
   // Nao esta opted_out → passa
   if (record.status !== 'opted_out') return { allowed: true }
 

@@ -14,7 +14,6 @@ import {
 } from '@phosphor-icons/react'
 import { motion } from 'framer-motion'
 import Link from 'next/link'
-import { createBrowserClient } from '@/lib/supabase'
 
 interface Template {
   id: string
@@ -41,18 +40,17 @@ export default function ContentPage() {
   const fetchTemplates = useCallback(async () => {
     try {
       setLoading(true)
-      const supabase = createBrowserClient()
-      const { data, error } = await supabase
-        .from('email_templates')
-        .select('id, name, category, thumbnail_url, updated_at, created_at')
-        .order('updated_at', { ascending: false })
-
-      if (error) {
-        console.error('Error fetching templates:', error.message)
+      // Pela API, que tem a sessão. A consulta daqui ia como anônima
+      // (o token vive num cookie httpOnly) e vinha sem recorte nenhum:
+      // listava os modelos de todas as organizações.
+      const res = await fetch('/api/email/templates')
+      if (!res.ok) {
+        console.error('Error fetching templates:', res.status)
         setTemplates([])
         return
       }
-      setTemplates(data || [])
+      const data = await res.json()
+      setTemplates(data.templates || [])
     } catch (err) {
       console.error('Failed to fetch templates:', err)
       setTemplates([])
@@ -159,6 +157,7 @@ export default function ContentPage() {
               {/* Thumbnail placeholder */}
               <div className="h-40 bg-gray-50 flex items-center justify-center group-hover:bg-gray-100 transition-colors">
                 {template.thumbnail_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- template thumbnails are API-editable URLs with no contracted hostname.
                   <img src={template.thumbnail_url} alt={template.name} className="w-full h-full object-cover" />
                 ) : (
                   <EnvelopeSimple className="w-12 h-12 text-gray-300" weight="duotone" />

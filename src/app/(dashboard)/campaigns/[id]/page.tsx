@@ -39,7 +39,6 @@ import {
   BarChart,
   Bar,
 } from 'recharts'
-import { createBrowserClient } from '@/lib/supabase'
 
 interface CampaignData {
   id: string
@@ -61,6 +60,15 @@ interface CampaignData {
   total_spam?: number
   attributed_revenue?: number
   created_at: string
+  settings?: { utm?: { disabled?: boolean; overrides?: Record<string, string> } } | null
+}
+
+function utmSummary(settings: CampaignData['settings']): string {
+  const utm = settings?.utm
+  if (utm?.disabled) return 'Desligada nesta campanha (só identificação)'
+  const keys = Object.keys(utm?.overrides || {})
+  if (keys.length > 0) return `Personalizada: ${keys.join(', ')}`
+  return 'Padrão da loja'
 }
 
 const statusConfig: Record<string, { label: string; color: string }> = {
@@ -88,19 +96,17 @@ export default function CampaignDetailPage() {
     if (!params.id) return
     try {
       setLoading(true)
-      const supabase = createBrowserClient()
-      const { data, error } = await supabase
-        .from('email_campaigns')
-        .select('*')
-        .eq('id', params.id)
-        .single()
-
-      if (error) {
-        console.error('Error fetching campaign:', error.message)
+      // Pela API, que tem a sessão e cerca por organização. Direto do
+      // browser a consulta ia anônima e trazia a campanha de qualquer
+      // organização, bastando o id.
+      const res = await fetch(`/api/email/campaigns/${params.id}`)
+      if (!res.ok) {
+        console.error('Error fetching campaign:', res.status)
         setCampaign(null)
         return
       }
-      setCampaign(data)
+      const data = await res.json()
+      setCampaign(data.campaign ?? data)
     } catch (err) {
       console.error('Failed to fetch campaign:', err)
       setCampaign(null)
@@ -302,6 +308,10 @@ export default function CampaignDetailPage() {
           <div>
             <p className="text-xs text-gray-500 mb-1">Criada em</p>
             <p className="text-sm text-gray-700">{new Date(campaign.created_at).toLocaleDateString('pt-BR')}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500 mb-1">UTM dos links</p>
+            <p className="text-sm text-gray-700">{utmSummary(campaign.settings)}</p>
           </div>
           <div>
             <p className="text-xs text-gray-500 mb-1">ID da Campanha</p>

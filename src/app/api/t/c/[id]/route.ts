@@ -20,12 +20,18 @@
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
+import { publicStoreUrl } from '@/lib/shopify/store-url';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   const emailSendId = params.id;
+  // Por qual host o clique entrou. É o que responde, meses depois, "os
+  // links deste e-mail saíram pelo domínio certo?" — a pergunta que a
+  // gente não conseguiu responder quando t.worder.email/click.worder.email
+  // se confundiram e todo clique virou página de erro.
+  const hostDoClique = request.headers.get('host') || request.nextUrl.host || null;
   const url = request.nextUrl.searchParams.get('url');
   if (!url) return NextResponse.json({ error: 'Missing url' }, { status: 400 });
 
@@ -53,12 +59,12 @@ export async function GET(
     console.warn(
       `[ClickTracker] destino invalido send=${emailSendId} url="${decodedUrl.slice(0, 80)}" -> fallback=${fallback}`
     );
-    recordClick(emailSendId, decodedUrl, attribution).catch(() => {});
+    recordClick(emailSendId, decodedUrl, attribution, hostDoClique).catch(() => {});
     return NextResponse.redirect(fallback, 302);
   }
 
   // Fire-and-forget the rest (event row, counters, touchpoint).
-  recordClick(emailSendId, decodedUrl, attribution).catch(() => {});
+  recordClick(emailSendId, decodedUrl, attribution, hostDoClique).catch(() => {});
 
   const stamped = stampDestination(decodedUrl, emailSendId, attribution);
   return NextResponse.redirect(stamped, 302);
@@ -66,44 +72,89 @@ export async function GET(
 
 /**
  * Resolve a URL "casa" pra qual mandar o contato quando o destino do
- * email esta quebrado (merge tag vazia, template malformado). Caminho:
- * email_sends -> email_campaigns.store_id -> shopify_stores.domain.
- * Fallback final: app.worder.com.br.
+ * email esta quebrado (merge tag vazia, template malformado).
+ *
+ * A loja tem de ser a DO ENVIO. Antes, sem loja na campanha, caía na
+ * "loja ativa mais nova da organização" — e um clique num e-mail da
+ * Dr. Groot levava para a Medicube, cadastrada no dia. A ordem agora:
+ *   email_sends.store_id → campanha → automação → contato → única loja
+ *   ativa da organização → worder.com.br.
+ * Nunca "qualquer loja da organização".
  */
 async function resolveStoreFallback(emailSendId: string): Promise<string> {
   try {
     const { supabaseAdmin } = await import('@/lib/supabase-admin');
     const { data: send } = await supabaseAdmin
       .from('email_sends')
-      .select('campaign_id, organization_id')
+      .select('campaign_id, organization_id, store_id, contact_id, flow_id, automation_id')
       .eq('id', emailSendId)
       .maybeSingle();
-    if (send?.campaign_id) {
+    if (!send) return 'https://worder.com.br';
+
+    const storeUrlById = async (storeId: string | null | undefined): Promise<string> => {
+      if (!storeId) return '';
+      const { data: store } = await supabaseAdmin
+        .from('shopify_stores')
+        .select('shop_domain, primary_domain, organization_id')
+        .eq('id', storeId)
+        .maybeSingle();
+      // A loja de outra organização não serve, venha de onde vier o id.
+      if (!store || (send.organization_id && store.organization_id !== send.organization_id)) return '';
+      // A coluna é shop_domain — pedir `domain` fazia o PostgREST devolver
+      // erro e este fallback NUNCA funcionava. E o host certo para o
+      // cliente é o principal.
+      return publicStoreUrl(store);
+    };
+
+    // 1. O envio sabe a sua loja.
+    { const url = await storeUrlById(send.store_id); if (url) return url; }
+
+    // 2. A campanha.
+    if (send.campaign_id) {
       const { data: campaign } = await supabaseAdmin
         .from('email_campaigns')
         .select('store_id')
         .eq('id', send.campaign_id)
         .maybeSingle();
-      if (campaign?.store_id) {
-        const { data: store } = await supabaseAdmin
-          .from('shopify_stores')
-          .select('domain')
-          .eq('id', campaign.store_id)
-          .maybeSingle();
-        if (store?.domain) return `https://${store.domain}`;
-      }
+      const url = await storeUrlById(campaign?.store_id);
+      if (url) return url;
     }
-    // Sem store na campanha — tenta primeira loja ativa da org.
-    if (send?.organization_id) {
-      const { data: store } = await supabaseAdmin
-        .from('shopify_stores')
-        .select('domain')
-        .eq('organization_id', send.organization_id)
-        .eq('is_active', true)
-        .order('created_at', { ascending: false })
-        .limit(1)
+
+    // 3. A automação (envios de fluxo gravam flow_id / automation_id).
+    const automationId = send.automation_id || send.flow_id || null;
+    if (automationId && /^[0-9a-f-]{36}$/i.test(String(automationId))) {
+      const { data: automation } = await supabaseAdmin
+        .from('automations')
+        .select('store_id')
+        .eq('id', automationId)
         .maybeSingle();
-      if (store?.domain) return `https://${store.domain}`;
+      const url = await storeUrlById(automation?.store_id);
+      if (url) return url;
+    }
+
+    // 4. O contato é de UMA loja.
+    if (send.contact_id) {
+      const { data: contact } = await supabaseAdmin
+        .from('contacts')
+        .select('store_id')
+        .eq('id', send.contact_id)
+        .maybeSingle();
+      const url = await storeUrlById(contact?.store_id);
+      if (url) return url;
+    }
+
+    // 5. Só quando a organização tem UMA loja ativa não há o que errar.
+    if (send.organization_id) {
+      const { data: stores } = await supabaseAdmin
+        .from('shopify_stores')
+        .select('shop_domain, primary_domain')
+        .eq('organization_id', send.organization_id)
+        .eq('is_active', true);
+      const reais = (stores || []).filter((s: any) => !String(s.shop_domain || '').endsWith('.worder.local'));
+      if (reais.length === 1) {
+        const url = publicStoreUrl(reais[0]);
+        if (url) return url;
+      }
     }
   } catch (err) {
     console.error('[ClickTracker] resolveStoreFallback failed:', err);
@@ -116,18 +167,26 @@ interface ClickAttribution {
   campaignId: string | null;
   organizationId: string | null;
   abVariant: string | null;
+  /** Fluxo (automation_id / flow_id) quando o envio veio de uma automação. */
+  automationId: string | null;
+  /** Nó do fluxo que enviou (email_sends.metadata.node_id). */
+  messageId: string | null;
 }
+
+const EMPTY_ATTRIBUTION: ClickAttribution = {
+  contactId: null, campaignId: null, organizationId: null, abVariant: null, automationId: null, messageId: null,
+};
 
 async function resolveAttribution(emailSendId: string): Promise<ClickAttribution> {
   try {
     const { supabaseAdmin } = await import('@/lib/supabase-admin');
     const { data: send } = await supabaseAdmin
       .from('email_sends')
-      .select('id, campaign_id, contact_id, organization_id, ab_variant')
+      .select('id, campaign_id, contact_id, organization_id, ab_variant, automation_id, flow_id, metadata')
       .eq('id', emailSendId)
       .maybeSingle();
     if (!send) {
-      return { contactId: null, campaignId: null, organizationId: null, abVariant: null };
+      return EMPTY_ATTRIBUTION;
     }
 
     // email_sends.organization_id is populated on every new send via
@@ -143,15 +202,20 @@ async function resolveAttribution(emailSendId: string): Promise<ClickAttribution
       organizationId = campaign?.organization_id || null;
     }
 
+    const automationId = (send as any).automation_id || (send as any).flow_id || null;
     return {
       contactId: send.contact_id || null,
-      campaignId: send.campaign_id || null,
+      // Num envio de automação, campaign_id é só o id do fluxo como
+      // substituto — não é campanha.
+      campaignId: automationId ? null : send.campaign_id || null,
       organizationId,
       abVariant: send.ab_variant || null,
+      automationId,
+      messageId: (send as any).metadata?.node_id || null,
     };
   } catch (err) {
     console.error('[ClickTracker] resolveAttribution failed:', err);
-    return { contactId: null, campaignId: null, organizationId: null, abVariant: null };
+    return EMPTY_ATTRIBUTION;
   }
 }
 
@@ -173,9 +237,14 @@ function stampDestination(
 
   const sp = target.searchParams;
 
-  // Worder identifiers — always stamp when present, never duplicate.
-  // These are what the theme app embed reads on page load to attach
-  // the visitor's identity to this exact contact.
+  // O destino normalmente JÁ chega completo: o render do e-mail carimba
+  // UTM + identificação em todo link (src/lib/tracking/link-params.ts).
+  // Este passo é a rede de segurança — e-mails antigos, links que o
+  // render não conseguiu tocar — e só preenche o que falta, nunca
+  // sobrescreve (uma UTM colocada à mão pelo lojista vence).
+  //
+  // Identificação: o que o pixel da loja lê para amarrar o visitante a
+  // este contato/envio, mesmo em outro dispositivo.
   if (attribution.contactId && !sp.has('worderContactID')) {
     sp.set('worderContactID', attribution.contactId);
   }
@@ -185,13 +254,24 @@ function stampDestination(
   if (attribution.campaignId && !sp.has('worderCampaignID')) {
     sp.set('worderCampaignID', attribution.campaignId);
   }
+  if (attribution.automationId && !sp.has('worderAutomationID')) {
+    sp.set('worderAutomationID', attribution.automationId);
+  }
+  const messageId = attribution.messageId || attribution.campaignId;
+  if (messageId && !sp.has('worderMessageID')) {
+    sp.set('worderMessageID', messageId);
+  }
 
-  // UTM params — respect anything the merchant hand-placed on their
-  // links (e.g. ?utm_source=instagram on a co-promo). Only fill blanks.
+  // UTM mínimas de fallback (legado sem carimbo no render).
   if (!sp.has('utm_source')) sp.set('utm_source', 'worder');
   if (!sp.has('utm_medium')) sp.set('utm_medium', 'email');
-  if (attribution.campaignId && !sp.has('utm_campaign')) {
-    sp.set('utm_campaign', attribution.campaignId);
+  if (!sp.has('utm_campaign')) {
+    if (attribution.campaignId) sp.set('utm_campaign', `campaign: (${attribution.campaignId})`);
+    else if (attribution.automationId) sp.set('utm_campaign', `automation: (${attribution.automationId})`);
+  }
+  if (!sp.has('utm_id')) {
+    const id = attribution.campaignId || attribution.automationId;
+    if (id) sp.set('utm_id', id);
   }
 
   target.search = sp.toString();
@@ -201,16 +281,24 @@ function stampDestination(
 async function recordClick(
   emailSendId: string,
   url: string,
-  attribution: ClickAttribution
+  attribution: ClickAttribution,
+  trackingHost: string | null = null
 ) {
   try {
     const { supabaseAdmin } = await import('@/lib/supabase-admin');
 
     const now = new Date().toISOString();
 
-    // email_sends.clicked_at — only the first click flips it.
-    await supabaseAdmin.from('email_sends')
-      .update({ clicked_at: now }).eq('id', emailSendId).is('clicked_at', null);
+    // Primeiro clique marca a data; todo clique soma no contador. A
+    // soma vai no banco porque dois cliques simultâneos lidos daqui
+    // virariam um.
+    const { error: bumpErr } = await supabaseAdmin.rpc('bump_email_send_click', {
+      p_send_id: emailSendId,
+    });
+    if (bumpErr) {
+      await supabaseAdmin.from('email_sends')
+        .update({ clicked_at: now }).eq('id', emailSendId).is('clicked_at', null);
+    }
 
     // CDP: contact_events
     if (attribution.organizationId && attribution.contactId) {
@@ -225,6 +313,7 @@ async function recordClick(
           SendId: emailSendId,
           ClickedURL: url,
           ab_variant: attribution.abVariant,
+          TrackingHost: trackingHost,
         },
         occurred_at: now,
         idempotency_key: `email_clicked:${attribution.campaignId}:${attribution.contactId}:${day}:${url.slice(0, 100)}`,

@@ -120,6 +120,7 @@ export function BlockPreview({
             }}
           >
             <div style={{ position: 'relative', maxWidth: '100%', lineHeight: 0, fontSize: 0 }}>
+              {/* eslint-disable-next-line @next/next/no-img-element -- Email block URL is user-provided and cannot be safely optimized or allowlisted. */}
               <img
                 src={p.src}
                 alt={p.alt || ''}
@@ -278,6 +279,7 @@ export function BlockPreview({
         return (
           <div style={pad}>
             <div style={{ position: 'relative', textAlign: 'center' }}>
+              {/* eslint-disable-next-line @next/next/no-img-element -- Video thumbnail URL is user-provided and cannot be safely optimized or allowlisted. */}
               <img
                 src={
                   p.thumbnailUrl ||
@@ -372,6 +374,7 @@ export function BlockPreview({
               textAlign: 'center',
             }}
           >
+            {/* eslint-disable-next-line @next/next/no-img-element -- Email logo URL is user-provided and cannot be safely optimized or allowlisted. */}
             <img
               src={p.logoSrc}
               alt="Logo"
@@ -568,7 +571,10 @@ export function BlockPreview({
                     }}
                   >
                     {staticProd?.image_url ? (
+                      <>
+                      {/* eslint-disable-next-line @next/next/no-img-element -- Product image URL is third-party and cannot be safely optimized or allowlisted. */}
                       <img src={staticProd.image_url} alt={staticProd.title || ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      </>
                     ) : (
                       `Produto ${i + 1}`
                     )}
@@ -656,6 +662,10 @@ export function BlockPreview({
         const layout = p.layoutType || 'image-left'
         const isVertical = layout === 'vertical'
         const imgW = p.imageWidth || 200
+        // A mesma caixa que o envio usa: quadrada quando ninguém
+        // escolheu altura. O editor já desenhava assim; quem discordava
+        // era o HTML enviado.
+        const imgH = p.imageHeight || imgW
         const imgR = p.imageBorderRadius ?? 0
         const sampleProducts = [
           { name: 'Product name', desc: 'Product description', price: 'R$0.00', oldPrice: 'R$0.00' },
@@ -690,7 +700,7 @@ export function BlockPreview({
                       {p.showImage !== false && (
                         <div onClick={subClick('image')} className={subRing('image')} style={{
                           width: isVertical ? '100%' : imgW,
-                          height: isVertical ? imgW * 0.8 : imgW,
+                          height: imgH,
                           flexShrink: 0, background: '#F3F4F6', borderRadius: imgR,
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           color: '#9CA3AF', fontSize: 12, transition: 'outline-color 0.15s',
@@ -952,6 +962,7 @@ export function BlockPreview({
         const ratio = p.splitRatio || 50
         const imageSide = (
           <div style={{ flex: `0 0 ${ratio}%`, minWidth: 0 }}>
+            {/* eslint-disable-next-line @next/next/no-img-element -- Email block URL is user-provided and cannot be safely optimized or allowlisted. */}
             <img
               src={p.imageSrc}
               alt={p.imageAlt || ''}

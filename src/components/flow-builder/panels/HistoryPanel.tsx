@@ -275,7 +275,7 @@ export function HistoryPanel({ automationId, organizationId, onClose }: HistoryP
     return () => {
       resetNodeStatuses();
     };
-  }, []);
+  }, [resetNodeStatuses]);
 
   // ============================================
   // HELPERS

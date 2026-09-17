@@ -55,7 +55,7 @@ export class RAGService {
     }
 
     // Gerar embedding da query — erro aqui já subia antes e continua subindo.
-    const queryEmbedding = await generateEmbedding(query, this.openaiKey)
+    const queryEmbedding = await generateEmbedding(query, this.openaiKey, this.organizationId)
 
     // Única fonte de resultados: a RPC search_agent_knowledge (promovida ao
     // stream versionado no item 43, escopada por organização — ver

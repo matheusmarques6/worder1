@@ -131,7 +131,7 @@ export default function PopupBuilderPage() {
       {/* Toolbar */}
       <div className="flex items-center justify-between px-4 h-[52px] bg-white border-b border-gray-200 flex-shrink-0 z-20">
         <div className="flex items-center gap-3">
-          <button onClick={() => router.push('/forms')} className="p-2 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100"><ArrowLeft size={18} /></button>
+          <button onClick={() => router.push('/site/forms')} className="p-2 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100"><ArrowLeft size={18} /></button>
           <input value={c.name} onChange={e => update('name', e.target.value)}
             className="text-sm font-semibold text-gray-900 border-0 bg-transparent focus:outline-none focus:ring-0 w-48" />
         </div>
@@ -302,7 +302,10 @@ export default function PopupBuilderPage() {
               </button>
             )}
             {c.image.show && c.image.src && c.image.position === 'top' && (
+              <>
+              {/* eslint-disable-next-line @next/next/no-img-element -- Form author supplied URL cannot be safely optimized or allowlisted. */}
               <img src={c.image.src} alt="" style={{ width: '100%', borderRadius: c.style.borderRadius > 4 ? c.style.borderRadius - 4 : 0, marginBottom: 16, display: 'block' }} />
+              </>
             )}
             <h2 style={{ fontSize: c.headline.fontSize, color: c.headline.color, fontWeight: c.headline.fontWeight as any, textAlign: c.headline.align as any, margin: '0 0 8px', lineHeight: 1.2 }}>
               {c.headline.text}

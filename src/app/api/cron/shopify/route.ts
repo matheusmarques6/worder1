@@ -55,7 +55,6 @@ function getSupabaseAdmin() {
 // JOB HANDLERS
 // =============================================
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function runSyncJob(supabase: any) {
   const { data: stores, error } = await supabase
     .from('shopify_stores')
@@ -68,7 +67,6 @@ async function runSyncJob(supabase: any) {
 
   const { runFullSync } = await import('@/lib/services/shopify/full-sync');
   
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const results: any[] = [];
   for (const store of stores) {
     try {
@@ -89,7 +87,6 @@ async function runSyncJob(supabase: any) {
   return { storesProcessed: stores.length, results };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function runRFMJob(supabase: any) {
   const { data: stores, error } = await supabase
     .from('shopify_stores')
@@ -102,7 +99,6 @@ async function runRFMJob(supabase: any) {
 
   const { calculateRFMScores } = await import('@/lib/services/shopify/analytics/rfm');
   
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const results: any[] = [];
   for (const store of stores) {
     try {
@@ -122,7 +118,6 @@ async function runRFMJob(supabase: any) {
   return { storesProcessed: stores.length, results };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function runCohortJob(supabase: any) {
   const { data: stores, error } = await supabase
     .from('shopify_stores')
@@ -135,7 +130,6 @@ async function runCohortJob(supabase: any) {
 
   const { calculateCohortAnalysis } = await import('@/lib/services/shopify/analytics/cohort');
   
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const results: any[] = [];
   for (const store of stores) {
     try {
@@ -155,7 +149,6 @@ async function runCohortJob(supabase: any) {
   return { storesProcessed: stores.length, results };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function runCleanupJob(supabase: any) {
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -214,7 +207,6 @@ export async function GET(request: NextRequest) {
 
   try {
     const supabase = getSupabaseAdmin();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let result: any;
 
     console.log(`[Cron] Starting job: ${job}`);

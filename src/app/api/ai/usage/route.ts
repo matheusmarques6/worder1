@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await supabaseAdmin
     .from('ai_usage_logs')
-    .select('provider, model, feature, prompt_tokens, completion_tokens, total_tokens, cost_usd, duration_ms, success, created_at')
+    .select('provider, model, feature, prompt_tokens, completion_tokens, total_tokens, cost_usd, duration_ms, success, created_at, metadata')
     .eq('organization_id', orgId)
     .gte('created_at', since)
     .limit(100000)
@@ -37,6 +37,8 @@ export async function GET(req: NextRequest) {
   }
 
   const rows = data || []
+  const billableRows = rows.filter((r) => r.metadata?.billable !== false)
+  const platformRows = rows.filter((r) => r.metadata?.billable === false)
 
   const totals = {
     calls: rows.length,
@@ -46,11 +48,13 @@ export async function GET(req: NextRequest) {
     completionTokens: rows.reduce((s, r) => s + (r.completion_tokens || 0), 0),
     totalTokens: rows.reduce((s, r) => s + (r.total_tokens || 0), 0),
     // Soma só o custo conhecido (cost_usd NULL = modelo fora da tabela de
-    // preços, item 42) — nunca inventa 0 pra ele. unknownCostCalls conta
-    // quantas chamadas ficaram de fora dessa soma, pra costUsd não passar
+    // preços, item 42) — nunca inventa 0 pra ele. billableUnknownCostCalls conta
+    // quantas chamadas ficaram de fora dessa soma, pra billableCostUsd não passar
     // por "gasto total" quando é só "gasto do que sabemos precificar".
-    costUsd: rows.reduce((s, r) => s + (r.cost_usd == null ? 0 : Number(r.cost_usd)), 0),
-    unknownCostCalls: rows.filter((r) => r.cost_usd == null).length,
+    billableCostUsd: billableRows.reduce((s, r) => s + (r.cost_usd == null ? 0 : Number(r.cost_usd)), 0),
+    billableUnknownCostCalls: billableRows.filter((r) => r.cost_usd == null).length,
+    platformCostUsd: platformRows.reduce((s, r) => s + (r.cost_usd == null ? 0 : Number(r.cost_usd)), 0),
+    platformUnknownCostCalls: platformRows.filter((r) => r.cost_usd == null).length,
     avgDurationMs: rows.length ? Math.round(rows.reduce((s, r) => s + (r.duration_ms || 0), 0) / rows.length) : 0,
   }
 
@@ -63,15 +67,23 @@ export async function GET(req: NextRequest) {
   const grouped = new Map<string, any>()
   for (const r of rows) {
     const key = groupKey(r)
-    const g = grouped.get(key) || { key, calls: 0, tokens: 0, costUsd: 0 }
+    const g = grouped.get(key) || {
+      key,
+      calls: 0,
+      tokens: 0,
+      billableCostUsd: 0,
+      platformCostUsd: 0,
+    }
     g.calls++
     g.tokens += r.total_tokens || 0
-    g.costUsd += r.cost_usd == null ? 0 : Number(r.cost_usd)
+    const costUsd = r.cost_usd == null ? 0 : Number(r.cost_usd)
+    if (r.metadata?.billable === false) g.platformCostUsd += costUsd
+    else g.billableCostUsd += costUsd
     grouped.set(key, g)
   }
 
   // Budget status (skipCache=true para refletir gasto atual)
-  let budget: { allowed: boolean; budgetUsd: number | null; spentUsd: number; hasUnknownCost: boolean } | null = null
+  let budget: Awaited<ReturnType<typeof checkAiBudget>> | null = null
   try {
     budget = await checkAiBudget(orgId, { skipCache: true })
   } catch {
@@ -83,11 +95,20 @@ export async function GET(req: NextRequest) {
     period,
     totals: {
       ...totals,
-      costUsd: Math.round(totals.costUsd * 10000) / 10000,
+      billableCostUsd: Math.round(totals.billableCostUsd * 10000) / 10000,
+      platformCostUsd: Math.round(totals.platformCostUsd * 10000) / 10000,
     },
     grouped: Array.from(grouped.values())
-      .map((g) => ({ ...g, costUsd: Math.round(g.costUsd * 10000) / 10000 }))
-      .sort((a, b) => b.costUsd - a.costUsd),
+      .map((g) => ({
+        ...g,
+        billableCostUsd: Math.round(g.billableCostUsd * 10000) / 10000,
+        platformCostUsd: Math.round(g.platformCostUsd * 10000) / 10000,
+      }))
+      .sort(
+        (a, b) =>
+          b.billableCostUsd + b.platformCostUsd -
+          (a.billableCostUsd + a.platformCostUsd),
+      ),
     budget: budget
       ? {
           allowed: budget.allowed,
@@ -99,6 +120,7 @@ export async function GET(req: NextRequest) {
           // Item 42: spentUsd acima é PARCIAL quando true — teve chamada de
           // modelo sem preço na tabela este mês, fora da soma.
           hasUnknownCost: budget.hasUnknownCost,
+          unknownReason: budget.unknownReason,
         }
       : null,
   })

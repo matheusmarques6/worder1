@@ -17,8 +17,9 @@ what is in hand, return. Nothing here checks the stop event mid-job.
 """
 
 import asyncio
+import contextlib
 import logging
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 
 import psycopg
 
@@ -38,13 +39,23 @@ from agents_runtime.queueing.worker import TurnResult, run_touch, run_turn
 from agents_runtime.randomness import Randomness, SystemRandomness
 from agents_runtime.repository import engine
 from agents_runtime.repository.queue import PgmqQueue
-from agents_runtime.repository.scope import SENDER_ROLE, WORKER_ROLE, assert_rls_enforced
+from agents_runtime.repository.scope import (
+    SENDER_ROLE,
+    WORKER_ROLE,
+    assert_rls_enforced,
+    set_statement_timeout,
+)
 
 APPLICATION_NAME = "agents-runtime"
 
 
 async def _connect(
-    dsn: str, set_role: str | None, expected_role: str
+    dsn: str,
+    set_role: str | None,
+    expected_role: str,
+    *,
+    config: QueueingConfig | None = None,
+    on_open: Callable[[psycopg.AsyncConnection], None] | None = None,
 ) -> psycopg.AsyncConnection:
     """Abre uma conexão de pool e prova que ela é o role que o pool exige.
 
@@ -54,24 +65,36 @@ async def _connect(
     `AGENTS_WORKER_SET_ROLE=sender_role` subia aprovado, para morrer de
     `permission denied` no meio do primeiro turno.
     """
+    config = config or QueueingConfig()
     conn = await psycopg.AsyncConnection.connect(
-        dsn, autocommit=True, application_name=APPLICATION_NAME
+        dsn,
+        autocommit=True,
+        application_name=APPLICATION_NAME,
+        connect_timeout=config.connect_timeout_seconds,
     )
-    if set_role:
-        # SET ROLE é o ÚNICO caminho, aqui e em produção: worker_role e
-        # sender_role são NOLOGIN de propósito (20260812000002) — senha em
-        # migration seria segredo em git —, então "logar COMO o role" não
-        # existe. O `if` não é mais uma porta aberta: sem role a guarda abaixo
-        # recusa a conexão — ele só existe porque `set role None` não é SQL.
-        await conn.execute("set role " + set_role)
+    try:
+        if on_open is not None:
+            on_open(conn)
+        if set_role:
+            # SET ROLE é o ÚNICO caminho, aqui e em produção: worker_role e
+            # sender_role são NOLOGIN de propósito (20260812000002) — senha em
+            # migration seria segredo em git —, então "logar COMO o role" não
+            # existe. O `if` não é mais uma porta aberta: sem role a guarda abaixo
+            # recusa a conexão — ele só existe porque `set role None` não é SQL.
+            await conn.execute("set role " + set_role)
+        await set_statement_timeout(conn, config.statement_timeout_ms)
 
-    # Toda conexão de pool nasce aqui — pulse, workers e sender. A guarda recebe
-    # o role esperado e cobra as três coisas: que a env exista, que o role não
-    # ignore a RLS, e que a env seja a do pool certo. Sem ela o processo
-    # ficava sendo o dono do DSN (BYPASSRLS no Supabase mesmo sem superuser) e a
-    # camada de repositório — escrita sem `where organization_id` porque "a RLS
-    # escopa" — lia cross-org calada. Falha alta na partida, antes do trabalho.
-    await assert_rls_enforced(conn, expected_role)
+        # Toda conexão de pool nasce aqui — pulse, workers e sender. A guarda recebe
+        # o role esperado e cobra as três coisas: que a env exista, que o role não
+        # ignore a RLS, e que a env seja a do pool certo. Sem ela o processo
+        # ficava sendo o dono do DSN (BYPASSRLS no Supabase mesmo sem superuser) e a
+        # camada de repositório — escrita sem `where organization_id` porque "a RLS
+        # escopa" — lia cross-org calada. Falha alta na partida, antes do trabalho.
+        await assert_rls_enforced(conn, expected_role)
+    except BaseException:
+        with contextlib.suppress(Exception):
+            await conn.close()
+        raise
     return conn
 
 
@@ -168,7 +191,7 @@ async def run(
     try:
         # -- coalescer + heartbeat share one connection: both are one-statement
         # ticks, and neither may starve the other for longer than a statement.
-        pulse = await _connect(dsn, worker_set_role, WORKER_ROLE)
+        pulse = await _connect(dsn, worker_set_role, WORKER_ROLE, config=config)
         connections.append(pulse)
 
         async def coalescer() -> None:
@@ -199,10 +222,28 @@ async def run(
         tasks.append(asyncio.create_task(coalescer(), name="coalescer"))
         tasks.append(asyncio.create_task(heartbeat(), name="heartbeat"))
 
+        # Replays only queues this process can consume. Scheduled/evals stay
+        # manual until they have handlers, otherwise replay would just move a
+        # dead letter into a queue nobody drains.
+        replay_conn = await _connect(dsn, worker_set_role, WORKER_ROLE, config=config)
+        connections.append(replay_conn)
+
+        async def replay_dead_letters() -> None:
+            while not stop.is_set():
+                for queue_name in (INBOUND, DOMAIN_EVENTS):
+                    await engine.reprocess_dead_letters(
+                        replay_conn, f"{queue_name}_dlq", queue_name
+                    )
+                await _sleep_or_stop(
+                    clock, stop, config.process_heartbeat_every.total_seconds()
+                )
+
+        tasks.append(asyncio.create_task(replay_dead_letters(), name="dlq-replayer"))
+
         # -- workers: one connection and one loop each, so a slow turn on one
         # never blocks a claim on another (and cenários B get real concurrency).
         for index in range(workers):
-            conn = await _connect(dsn, worker_set_role, WORKER_ROLE)
+            conn = await _connect(dsn, worker_set_role, WORKER_ROLE, config=config)
             connections.append(conn)
 
             queue_names = {INBOUND, DOMAIN_EVENTS, *(extra_handlers or {})}
@@ -224,11 +265,40 @@ async def run(
             )
             tasks.append(asyncio.create_task(loop.run(), name=f"worker-{index}"))
 
+        # -- housekeeping: sweeps expired outbox leases and expires incentive
+        # grants. It NEEDS the sender_role connection to run — that is not
+        # new: housekeeping needed the exact same connection back when it
+        # lived inside `sender_pass`, which only ran on a `sender_role`
+        # connection too. What changed (W2-T2b) is that it no longer depends
+        # on a CHANNEL being wired — an instance with nowhere to send still
+        # owns cleanup. `sender_set_role is None` means the caller never
+        # provisioned that connection at all (most of the pipeline suite:
+        # worker-only smoke tests with no opinion about the sender) — the
+        # same precondition the sender itself gates on below, not a new
+        # escape hatch. Housekeeping is not optional; it simply cannot exist
+        # without the connection it has always required. Its own connection,
+        # separate from delivery, so its transactions never interleave with
+        # a send's.
+        if sender_set_role is not None:
+            housekeeping_conn = await _connect(dsn, sender_set_role, SENDER_ROLE, config=config)
+            connections.append(housekeeping_conn)
+
+            async def housekeeping():
+                while not stop.is_set():
+                    await engine.sweep_outbox_unknown(housekeeping_conn)
+                    await engine.review_stale_unknown(
+                        housekeeping_conn, review_after=config.unknown_review_after
+                    )
+                    await engine.expire_incentive_grants(housekeeping_conn)
+                    await _sleep_or_stop(clock, stop, config.sender_poll.total_seconds())
+
+            tasks.append(asyncio.create_task(housekeeping(), name="housekeeping"))
+
         # -- sender: only when a channel exists. There is no real adapter until
         # E1's final stretch, and a sender with nowhere to send would either
         # spin or lie.
         if channel is not None:
-            sender_conn = await _connect(dsn, sender_set_role, SENDER_ROLE)
+            sender_conn = await _connect(dsn, sender_set_role, SENDER_ROLE, config=config)
             connections.append(sender_conn)
 
             async def sender() -> None:
@@ -245,5 +315,7 @@ async def run(
         for task in tasks:
             if not task.done():
                 task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
         for conn in connections:
             await conn.close()

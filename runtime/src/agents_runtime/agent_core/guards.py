@@ -21,10 +21,11 @@ Divergência entre os dois motores é a doença, não o remédio — se uma regr
 TS parecer errada, ela continua sendo a regra até que alguém a mude nos dois.
 """
 
+import re
 import unicodedata
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime, time
+from datetime import datetime
 from typing import Any
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -210,14 +211,11 @@ def is_transfer_cooldown_active(
     return (now - transferred_at).total_seconds() < seconds
 
 
-def _hhmm(value: Any, default: str) -> time | None:
-    if not isinstance(value, str):
-        value = default
-    try:
-        hours, _, minutes = value.partition(":")
-        return time(int(hours), int(minutes))
-    except (TypeError, ValueError):
-        return None
+def _is_hhmm(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and re.fullmatch(r"(?:[01][0-9]|2[0-3]):[0-5][0-9]", value) is not None
+    )
 
 
 def is_within_schedule(settings: Any, *, now: datetime) -> bool:
@@ -243,20 +241,27 @@ def is_within_schedule(settings: Any, *, now: datetime) -> bool:
 
     local = now.astimezone(zone)
 
-    hours = schedule.get("hours") if isinstance(schedule.get("hours"), Mapping) else {}
-    start = _hhmm(hours.get("start"), DEFAULT_SCHEDULE_START)
-    end = _hhmm(hours.get("end"), DEFAULT_SCHEDULE_END)
-    if start is None or end is None:
-        return True
-    if not (start <= local.time().replace(second=0, microsecond=0) <= end):
+    hours = schedule.get("hours")
+    if hours is None and "hours" not in schedule:
+        start, end = DEFAULT_SCHEDULE_START, DEFAULT_SCHEDULE_END
+    elif isinstance(hours, Mapping):
+        start, end = hours.get("start"), hours.get("end")
+    else:
+        return False
+    if not _is_hhmm(start) or not _is_hhmm(end):
+        return False
+    if not (start <= local.strftime("%H:%M") <= end):
         return False
 
     raw_days = schedule.get("days")
-    days = (
-        tuple(day.lower() for day in raw_days if isinstance(day, str))
-        if isinstance(raw_days, list)
-        else DEFAULT_SCHEDULE_DAYS
-    )
+    if raw_days is None and "days" not in schedule:
+        days = DEFAULT_SCHEDULE_DAYS
+    elif isinstance(raw_days, list):
+        days = tuple(raw_days)
+    else:
+        return False
+    if any(not isinstance(day, str) or day not in _WEEKDAY_NAMES for day in days):
+        return False
     return _WEEKDAY_NAMES[local.weekday()] in days
 
 

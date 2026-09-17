@@ -52,14 +52,13 @@ export async function POST(
             name: `${tpl.name} (cópia)`,
             subject: tpl.subject,
             preview_text: tpl.preview_text,
-            from_name: tpl.from_name,
-            from_email: tpl.from_email,
-            reply_to: tpl.reply_to,
+            // from_name/from_email/reply_to não existem em email_templates
+            // (o remetente é resolvido por loja no envio); com eles no
+            // payload, duplicar a automação falhava sempre.
             html: tpl.html,
             design: tpl.design,
             design_json: tpl.design_json,
             category: tpl.category,
-            tags: tpl.tags,
             thumbnail_url: tpl.thumbnail_url,
             created_by: user.id,
           })

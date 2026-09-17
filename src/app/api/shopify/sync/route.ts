@@ -4,7 +4,8 @@
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthClient, authError, validateStoreAccess, getSupabaseClient } from '@/lib/api-utils';
+import { getAuthClient, authError, validateStoreAccess } from '@/lib/api-utils';
+import { getSupabaseAdmin } from '@/lib/supabase-admin';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -15,9 +16,7 @@ const SHOPIFY_API_VERSION = '2026-04';
 // FETCH HELPERS
 // =============================================
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function fetchAllOrders(shopDomain: string, accessToken: string): Promise<any[]> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const allOrders: any[] = [];
   let nextPageUrl: string | null = `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/orders.json?status=any&limit=250`;
   
@@ -61,7 +60,6 @@ async function fetchAllOrders(shopDomain: string, accessToken: string): Promise<
   return allOrders;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function fetchCustomers(shopDomain: string, accessToken: string): Promise<any[]> {
   const response: Response = await fetch(
     `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/customers.json?limit=250`,
@@ -82,7 +80,6 @@ async function fetchCustomers(shopDomain: string, accessToken: string): Promise<
 // METRICS CALCULATION
 // =============================================
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function calculateMetrics(orders: any[]) {
   const paidOrders = orders.filter(o => 
     ['paid', 'partially_paid', 'refunded', 'partially_refunded'].includes(o.financial_status)
@@ -98,9 +95,7 @@ function calculateMetrics(orders: any[]) {
     totalDescontos += parseFloat(order.total_discounts || '0');
     
     if (order.refunds?.length > 0) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       order.refunds.forEach((refund: any) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         refund.refund_line_items?.forEach((item: any) => {
           totalRefunds += parseFloat(item.subtotal || '0');
         });
@@ -161,7 +156,9 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    const validation = await validateStoreAccess(supabase, organizationId, storeId);
+    const validation = await validateStoreAccess(
+      supabase, organizationId, storeId, auth.user.id,
+    );
     if (!validation.valid) {
       return NextResponse.json(
         { error: validation.error },
@@ -169,10 +166,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { data: store, error: storeError } = await supabase
+    const storeOrganizationId = validation.storeOrganizationId!;
+    const supabaseAdmin = getSupabaseAdmin();
+    const { data: store, error: storeError } = await supabaseAdmin
       .from('shopify_stores')
       .select('id, shop_domain, access_token, shop_name, organization_id')
       .eq('id', storeId)
+      .eq('organization_id', storeOrganizationId)
       .single();
 
     if (storeError || !store) {
@@ -193,21 +193,16 @@ export async function POST(request: NextRequest) {
     const customers = await fetchCustomers(store.shop_domain, store.access_token);
     const metrics = calculateMetrics(orders);
     
-    const supabaseAdmin = getSupabaseClient();
-    if (!supabaseAdmin) {
-      return NextResponse.json({ error: 'Database not configured' }, { status: 503 });
-    }
-
     await supabaseAdmin
       .from('shopify_orders')
       .delete()
-      .eq('store_id', store.id);
+      .eq('store_id', store.id)
+      .eq('organization_id', storeOrganizationId);
 
     if (orders.length > 0) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ordersToInsert = orders.map((order: any) => ({
         store_id: store.id,
-        organization_id: organizationId,
+        organization_id: storeOrganizationId,
         shopify_order_id: order.id.toString(),
         order_number: order.order_number || 0,
         name: order.name || `#${order.order_number}`,
@@ -252,7 +247,8 @@ export async function POST(request: NextRequest) {
         last_sync_at: new Date().toISOString(),
         metrics: metrics,
       })
-      .eq('id', store.id);
+      .eq('id', store.id)
+      .eq('organization_id', storeOrganizationId);
 
     const timeSeconds = ((Date.now() - startTime) / 1000).toFixed(1);
 
@@ -289,11 +285,13 @@ export async function GET(request: NextRequest) {
     const auth = await getAuthClient();
     if (!auth) return authError();
 
-    const { supabase } = auth;
+    const { user } = auth;
 
-    const { data: stores } = await supabase
+    const supabaseAdmin = getSupabaseAdmin();
+    const { data: stores } = await supabaseAdmin
       .from('shopify_stores')
       .select('id, shop_name, shop_domain, total_orders, total_revenue, last_sync_at, metrics, is_active')
+      .eq('organization_id', user.organization_id)
       .order('created_at', { ascending: false });
 
     return NextResponse.json({ 

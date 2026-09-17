@@ -18,6 +18,7 @@
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
+import { normalizePublicHost, normalizePhone } from '@/lib/shopify/store-url';
 import { getAuthClient, authError } from '@/lib/api-utils';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { getAccessTokenViaClientCredentials } from '@/lib/shopify/client-credentials';
@@ -60,7 +61,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { domain, clientId, clientSecret, storeId: targetStoreId } = body || {};
+    const { domain, clientId, clientSecret, storeId: targetStoreId, allowCreate } = body || {};
 
     if (!domain || !clientId || !clientSecret) {
       return NextResponse.json(
@@ -143,6 +144,8 @@ export async function POST(request: NextRequest) {
     // renamed the admin slug. We persist this as an alias so webhooks
     // for either domain resolve to the same store row.
     let permanentDomain: string | null = null;
+    let publicPrimaryDomain: string | null = null;
+    let shopPhone: string | null = null;
     // Shopify Shop GID — the ONE identifier that never changes. We use
     // this to deduplicate reconnections: same shop_id = same store row,
     // even if the merchant typed a different domain. Without this,
@@ -161,7 +164,7 @@ export async function POST(request: NextRequest) {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            query: `{ shop { id name email currencyCode timezoneAbbreviation myshopifyDomain plan { displayName } } }`,
+            query: `{ shop { id name email currencyCode timezoneAbbreviation myshopifyDomain primaryDomain { host } billingAddress { phone } plan { displayName } } }`,
           }),
         }
       );
@@ -176,6 +179,9 @@ export async function POST(request: NextRequest) {
           planName = s.plan?.displayName || '';
           timezone = s.timezoneAbbreviation || '';
           permanentDomain = (s.myshopifyDomain || '').toLowerCase() || null;
+          // Domínio principal público — a fonte de {{store_url}}.
+          publicPrimaryDomain = normalizePublicHost(s.primaryDomain?.host) || null;
+          shopPhone = normalizePhone(s.billingAddress?.phone) || null;
           // Strip the gid:// prefix so we store just the numeric ID,
           // which is the format Shopify uses everywhere outside GraphQL.
           if (s.id) {
@@ -304,6 +310,9 @@ export async function POST(request: NextRequest) {
       shopify_shop_id: shopifyShopId,
       shop_name: shopName,
       shop_email: shopEmail,
+      primary_domain: publicPrimaryDomain,
+      primary_domain_checked_at: new Date().toISOString(),
+      shop_phone: shopPhone,
       access_token: accessToken,
       // api_secret holds the Client Secret — used to:
       //  (a) verify HMAC on inbound webhooks, and
@@ -342,7 +351,7 @@ export async function POST(request: NextRequest) {
     if (shopifyShopId) {
       const { data: shopIdRows } = await supabase
         .from('shopify_stores')
-        .select('id, is_active')
+        .select('id, is_active, shop_name, shop_domain')
         .eq('organization_id', organizationId)
         .eq('shopify_shop_id', shopifyShopId)
         .neq('id', existingStore?.id || '00000000-0000-0000-0000-000000000000');
@@ -352,6 +361,8 @@ export async function POST(request: NextRequest) {
             {
               error: 'Esta Shopify já está conectada em outra loja ativa desta organização. Desative ou troque a integração daquela loja antes.',
               collidingStoreId: r.id,
+              collidingStoreName: r.shop_name ?? null,
+              collidingStoreDomain: r.shop_domain ?? null,
             },
             { status: 409 }
           );
@@ -367,7 +378,7 @@ export async function POST(request: NextRequest) {
     {
       const { data: blockers } = await supabase
         .from('shopify_stores')
-        .select('id, shop_domain, is_active')
+        .select('id, shop_domain, shop_name, is_active')
         .eq('organization_id', organizationId)
         .eq('shop_domain', primaryDomain)
         .neq('id', existingStore?.id || '00000000-0000-0000-0000-000000000000');
@@ -376,6 +387,8 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({
             error: `Outra loja ATIVA já usa ${primaryDomain}. Mescle ou exclua antes de prosseguir.`,
             collidingStoreId: b.id,
+            collidingStoreName: b.shop_name ?? null,
+            collidingStoreDomain: b.shop_domain ?? null,
           }, { status: 409 });
         }
         // Inactive — free the domain by renaming to a placeholder so
@@ -385,6 +398,23 @@ export async function POST(request: NextRequest) {
           .from('shopify_stores')
           .update({ shop_domain: placeholder, updated_at: new Date().toISOString() })
           .eq('id', b.id);
+      }
+    }
+
+    // Alterar integração NUNCA cria loja nova. Sem linha alvo (nem
+    // storeId nem dedup), o INSERT só é permitido no fluxo explícito
+    // "Adicionar loja" (allowCreate) ou quando a org ainda não tem
+    // nenhuma loja (primeiro connect).
+    if (!existingStore && allowCreate !== true) {
+      const { count } = await supabase
+        .from('shopify_stores')
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', organizationId);
+      if ((count || 0) > 0) {
+        return NextResponse.json({
+          error: 'Nenhuma loja alvo para esta integração. Selecione a loja cuja integração quer alterar, reative uma loja desativada, ou use "Adicionar loja" para criar uma nova.',
+          code: 'no_target_store',
+        }, { status: 409 });
       }
     }
 
@@ -430,6 +460,14 @@ export async function POST(request: NextRequest) {
       storeId = result!.id;
     } catch (writeErr: any) {
       throw writeErr;
+    }
+    // A loja nasce com remetente próprio: <nome-da-loja>@worder.email.
+    // Idempotente para uma loja existente que já tem o seu.
+    try {
+      const { ensureStoreSharedSender } = await import('@/lib/email/shared-sender');
+      await ensureStoreSharedSender(storeId);
+    } catch (e) {
+      console.warn('[ShopifyManual] remetente compartilhado não alocado:', (e as Error).message);
     }
 
     // ──────────────────────────────────────────
@@ -578,7 +616,10 @@ export async function POST(request: NextRequest) {
     try {
       fetch(`${APP_URL}/api/shopify/trigger-sync`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Internal-Request': 'true' },
+        headers: {
+          'Content-Type': 'application/json',
+          authorization: `Bearer ${process.env.INTERNAL_API_SECRET || process.env.CRON_SECRET || ''}`,
+        },
         body: JSON.stringify({ storeId }),
       }).catch(() => { /* best-effort */ });
       syncTriggered = true;

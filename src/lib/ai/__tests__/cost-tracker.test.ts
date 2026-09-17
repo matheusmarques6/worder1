@@ -46,6 +46,10 @@ describe('estimateCostUsd', () => {
     expect(estimateCostUsd('groq', 'llama-3.1-8b-instant', 100, 100)).toBeNull()
   })
 
+  it('estima text-embedding-3-small em USD 0.02 por 1M tokens de entrada', () => {
+    expect(estimateCostUsd('openai', 'text-embedding-3-small', 1_000_000, 0)).toBeCloseTo(0.02)
+  })
+
 })
 
 describe('trackAiUsage', () => {
@@ -148,5 +152,35 @@ describe('trackAiUsage', () => {
   it('uma contagem ausente grava custo desconhecido', async () => {
     await trackAiUsage({ organizationId: 'org-1', provider: 'openai', model: 'gpt-4o-mini', feature: 'eval_judge', promptTokens: 1000 })
     expect(insertMock.mock.calls[0][0].cost_usd).toBeNull()
+  })
+
+  it('grava custo numerico para usage conhecido de text-embedding-3-small', async () => {
+    await trackAiUsage({
+      organizationId: 'org-a',
+      provider: 'openai',
+      model: 'text-embedding-3-small',
+      feature: 'embedding',
+      promptTokens: 1_000_000,
+      completionTokens: 0,
+      metadata: { billable: true },
+    })
+
+    expect(insertMock.mock.calls[0][0].cost_usd).toBeCloseTo(0.02)
+    expect(insertMock.mock.calls[0][0].cost_usd).not.toBeNull()
+  })
+
+  it('avisa quando o PostgREST recusa a escrita sem bloquear o fluxo', async () => {
+    insertMock.mockResolvedValueOnce({ data: null, error: { message: 'write refused' } })
+
+    await expect(trackAiUsage({
+      organizationId: 'org-a',
+      provider: 'openai',
+      model: 'gpt-4o-mini',
+      feature: 'copilot',
+      promptTokens: 10,
+      completionTokens: 5,
+    })).resolves.toBeUndefined()
+
+    expect(warnSpy).toHaveBeenCalledWith('[trackAiUsage]', 'write refused')
   })
 })

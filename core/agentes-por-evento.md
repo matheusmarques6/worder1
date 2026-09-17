@@ -109,7 +109,7 @@ Pode: **somar fatos** (todo mundo passa a saber), **somar restrições**, e **vi
 │ grants/ledger · evals · traces                                          │
 └──────────────────────────────┬──────────────────────────────────────────┘
 ┌─ RUNTIME (worder/runtime — fork Python, Docker) ▼───────────────────────┐
-│ coalescer 2s · weighted polling 8:4:2:1 · lease + CAS                   │
+│ coalescer 2s · weighted polling 8:4:1 · lease + CAS                     │
 │ mission_resolver → offer_engine → prompt_compiler → agent_core          │
 │ → Judge 1 pré-envio (100%) → message_outbox                             │
 └──────────────────────────────┬──────────────────────────────────────────┘
@@ -254,7 +254,7 @@ Grants = estado vigente que a tool valida; ledger = história que entra no bloco
 
 ## 3.4 Invariantes de runtime
 
-**Herdados do motor:** transação curta jamais atravessa LLM · lease + CAS · mensagem durante geração invalida draft · inbound não enfileira (só coalescer) · nada chama API de canal exceto senders · Judge 1 pré-envio 100% (2 regenerações) · weighted polling 8:4:2:1 com promoção por idade · PII nunca sai do Postgres para telemetria · relógio injetável.
+**Herdados do motor:** transação curta jamais atravessa LLM · lease + CAS · mensagem durante geração invalida draft · inbound não enfileira (só coalescer) · nada chama API de canal exceto senders · Judge 1 pré-envio 100% (2 regenerações) · weighted polling 8:4:1 com promoção por idade de domain events · PII nunca sai do Postgres para telemetria · relógio injetável. `q_scheduled` e sua DLQ permanecem no inventário físico, sem consumidor ou política de polling/retry/promoção.
 
 **Novos:** (1) offer_engine único emissor; concession limita emissão; tool valida o grant. (2) Momento por relógio, nunca gravado. (3) Adaptação nunca mexe em dinheiro. (4) Uma missão por turno. (5) Restrição acumula, permissão estreita, só delegação amplia. (6) Agente nunca nega ser IA quando perguntado — linha fixa do compilador, fora do alcance do lojista. (7) Judge 1 e embeddings sempre pela chave da plataforma. (8) Toque sem missão ativa não sai (alerta). (9) Escrita+fila = RPC `emit_*`, nunca duas chamadas.
 
@@ -377,7 +377,7 @@ Registra as decisões de implementação, correções de referência e divergên
 
 - **[PENDENTE-1] → BYO-only por ora** (decisão do usuário, 11/ago): sem chave da org (direta ou OpenRouter) o agente não ativa (alerta `no_org_llm_key`; toque morre); tela Budget é informativa; o degrau (3) da cascata fica implementado atrás de `AGENTS_PLATFORM_LLM_ENABLED` (default off). Judge 1 e embeddings sempre pela chave da plataforma (`AGENTS_OPENROUTER_API_KEY`).
 - **[PENDENTE-2]**: seeds v0 entram como `status='draft'`, `origin='worder_default'` — 6 linhas (uma por event_type; cart/checkout compartilham copy, pix/boleto idem). Ativação por org é ato explícito (fatia vertical ativa `cart.abandoned` para a loja piloto).
-- **[PENDENTE-3]**: números de arbitragem/caps viram constantes nomeadas em `runtime/src/agents_runtime/agent_core/pending_defaults.py` com comentário de pendência.
+- **[PENDENTE-3]**: novos números de arbitragem/caps dependem de consumidor e plano aprovados; a reserva sem uso foi retirada na Wave 4.
 
 ## A.2 Correções de referência (o repo real vs. este doc)
 

@@ -57,7 +57,7 @@ interface UseChatTemplatesReturn {
   createTemplate: (params: CreateTemplateParams) => Promise<ChatTemplate | null>
   updateTemplate: (id: string, updates: Partial<ChatTemplate>) => Promise<boolean>
   deleteTemplate: (id: string) => Promise<boolean>
-  useTemplate: (id: string, variables?: Record<string, string>) => Promise<string | null>
+  applyTemplate: (id: string, variables?: Record<string, string>) => Promise<string | null>
   toggleFavorite: (id: string) => Promise<boolean>
 }
 
@@ -213,7 +213,7 @@ export function useChatTemplates({
   // =============================================
   // Use Template (apply variables)
   // =============================================
-  const useTemplate = useCallback(async (
+  const applyTemplate = useCallback(async (
     id: string,
     variables?: Record<string, string>
   ): Promise<string | null> => {
@@ -286,7 +286,7 @@ export function useChatTemplates({
     createTemplate,
     updateTemplate,
     deleteTemplate,
-    useTemplate,
+    applyTemplate,
     toggleFavorite,
   }
 }

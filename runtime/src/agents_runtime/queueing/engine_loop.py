@@ -14,14 +14,16 @@ expiry, a sustained inbound burst would starve a queue once marked quiet for
 the burst's whole duration (an order_paid waiting an hour to cancel a funnel —
 the exact case ADR-5 exists to prevent). The cost of the expiry is at most one
 empty read per queue per window; the guarantee is that no served queue goes
-unprobed for longer than one window, which is the 8:4:2:1 promise kept under
+unprobed for longer than one window, which is the 8:4:1 promise kept under
 load, not only at rest.
 """
 
 import asyncio
+import logging
 import math
 from collections.abc import Awaitable, Callable
 from enum import Enum
+from uuid import UUID
 
 from agents_runtime.clock import Clock
 from agents_runtime.config import QueueingConfig
@@ -29,8 +31,12 @@ from agents_runtime.queueing.failures import classify
 from agents_runtime.queueing.polling import next_queue
 from agents_runtime.queueing.retries import DeadLetter, Retry, decide
 from agents_runtime.randomness import Randomness
+from agents_runtime.repository import alerts as alerts_repo
 from agents_runtime.repository import engine
 from agents_runtime.repository.queue import PgmqQueue, QueueMessage
+from agents_runtime.repository.scope import scope_to_organization
+
+LOGGER = logging.getLogger(__name__)
 
 
 class Ack(Enum):
@@ -101,10 +107,11 @@ class EngineLoop:
         try:
             ack = await self._handlers[queue_name](queue_name, message)
         except Exception as error:  # the retry rules are the policy
+            failure = classify(error)
             decision = decide(
                 queue_name,
                 attempt=message.read_count,
-                failure=classify(error),
+                failure=failure,
                 config=self._config,
                 randomness=self._randomness,
             )
@@ -113,13 +120,20 @@ class EngineLoop:
                     queue.connection, queue_name, message.id, decision.delay
                 )
             elif isinstance(decision, DeadLetter):
+                dead_letter = {
+                    **message.payload,
+                    "error_class": type(error).__name__,
+                    "failure_kind": failure.value,
+                    "replay_count": message.payload.get("replay_count", 0),
+                    "last_error": str(error)[:500],
+                }
                 await engine.send_to_queue(
                     queue.connection,
                     decision.queue,
-                    {**message.payload, "error_class": type(error).__name__,
-                     "last_error": str(error)[:500]},
+                    dead_letter,
                 )
                 await queue.archive(message.id)
+                await _alert_dead_letter(queue.connection, queue_name, dead_letter)
             return
 
         if ack is Ack.RETRY_SHORT:
@@ -140,3 +154,54 @@ class EngineLoop:
         )
         for task in pending:
             task.cancel()
+
+
+async def _alert_dead_letter(
+    conn, queue_name: str, payload: dict
+) -> None:
+    try:
+        organization_id = UUID(str(payload["organization_id"]))
+    except (KeyError, TypeError, ValueError):
+        LOGGER.warning("dead-letter alert skipped: malformed organization_id")
+        return
+
+    is_touch = payload.get("kind") == "mission_touch"
+    if is_touch:
+        alert_type = "mission_touch_failed"
+        touch_id = payload.get("touch_id")
+        dedup_key = f"dlq:{queue_name}:{touch_id}" if touch_id else None
+        alert_payload = {
+            "queue": queue_name,
+            "error_class": payload.get("error_class"),
+            "touch_id": touch_id,
+        }
+    else:
+        alert_type = "send_failed"
+        conversation_id = payload.get("conversation_id")
+        generation = payload.get("generation")
+        dedup_key = (
+            f"dlq:{queue_name}:{conversation_id}:{generation}"
+            if conversation_id is not None and generation is not None
+            else None
+        )
+        alert_payload = {
+            "queue": queue_name,
+            "error_class": payload.get("error_class"),
+            "conversation_id": conversation_id,
+            "generation": generation,
+        }
+
+    try:
+        async with conn.transaction():
+            await scope_to_organization(conn, organization_id)
+            await alerts_repo.open_alert(
+                conn,
+                organization_id=organization_id,
+                type=alert_type,
+                severity="warning",
+                title="Falha no processamento de IA",
+                payload=alert_payload,
+                dedup_key=dedup_key,
+            )
+    except Exception:
+        LOGGER.exception("dead-letter alert failed", extra={"queue": queue_name})

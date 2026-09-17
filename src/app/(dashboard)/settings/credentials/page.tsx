@@ -1,710 +1,124 @@
-'use client';
+'use client'
 
-import { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Key,
-  Plus,
-  MoreVertical,
-  Trash2,
-  RefreshCw,
-  CheckCircle2,
-  XCircle,
-  AlertTriangle,
-  Loader2,
-  Eye,
-  EyeOff,
-  Copy,
-  Edit2,
-  MessageSquare,
-  Mail,
-  ShoppingBag,
-  Globe,
-  Webhook,
-  Database,
-} from 'lucide-react';
-import { cn } from '@/lib/utils';
+// Configurações → Credenciais: chaves de serviços externos usadas pelas
+// automações (WhatsApp, e-mail, Shopify, HTTP). Guardadas criptografadas.
 
-// ============================================
-// TYPES
-// ============================================
+import { useState } from 'react'
+import { useToast } from '@/components/ui/Toast'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
+import { Card, Title, LoadingCard, Modal, Field, IconBtn, Badge, Pill } from '@/components/settings/ui'
+import { I } from '@/components/settings/icons'
+import { api, timeAgo } from '@/components/settings/format'
+import { useApi, useAction } from '@/components/settings/hooks'
+import { CREDENTIAL_TYPES, credentialType, type CredentialType } from '@/lib/settings/credential-types'
 
-interface Credential {
-  id: string;
-  name: string;
-  type: string;
-  last_used_at?: string;
-  last_test_at?: string;
-  last_test_success?: boolean;
-  automations_using?: string[];
-  created_at: string;
-  masked_fields?: Record<string, string>;
-}
+interface Cred { id: string; name: string; type: string; created_at: string; last_used_at: string | null; last_test_at: string | null; last_test_success: boolean | null; automations_using: string[] | null }
 
-interface CredentialType {
-  type: string;
-  name: string;
-  icon: string;
-  description: string;
-  fields: CredentialField[];
-}
+export default function CredentialsSettingsPage() {
+  const { data, loading, error, reload } = useApi<{ credentials: Cred[] }>('/api/credentials')
+  const toast = useToast()
+  const confirm = useConfirm()
+  const { busy, run } = useAction()
+  const [modal, setModal] = useState<{ mode: 'new' } | { mode: 'edit'; cred: Cred } | null>(null)
 
-interface CredentialField {
-  name: string;
-  label: string;
-  type: 'text' | 'password' | 'url' | 'email';
-  required: boolean;
-  placeholder?: string;
-  help?: string;
-}
-
-// ============================================
-// CREDENTIAL TYPES CONFIG
-// ============================================
-
-const CREDENTIAL_TYPES: CredentialType[] = [
-  {
-    type: 'whatsappBusiness',
-    name: 'WhatsApp Business Cloud',
-    icon: 'MessageSquare',
-    description: 'API oficial do WhatsApp Business via Meta',
-    fields: [
-      { name: 'phoneNumberId', label: 'Phone Number ID', type: 'text', required: true, placeholder: 'Ex: 123456789012345' },
-      { name: 'accessToken', label: 'Access Token', type: 'password', required: true, placeholder: 'Token de acesso permanente' },
-      { name: 'businessAccountId', label: 'Business Account ID', type: 'text', required: false, placeholder: 'WABA ID (opcional)' },
-    ],
-  },
-  {
-    type: 'emailResend',
-    name: 'Email (Resend)',
-    icon: 'Mail',
-    description: 'Envio de emails via Resend.com',
-    fields: [
-      { name: 'apiKey', label: 'API Key', type: 'password', required: true, placeholder: 're_xxx...' },
-      { name: 'defaultFrom', label: 'Email Padrão', type: 'email', required: true, placeholder: 'noreply@seudominio.com' },
-    ],
-  },
-  {
-    type: 'emailSendgrid',
-    name: 'Email (SendGrid)',
-    icon: 'Mail',
-    description: 'Envio de emails via SendGrid',
-    fields: [
-      { name: 'apiKey', label: 'API Key', type: 'password', required: true, placeholder: 'SG.xxx...' },
-      { name: 'defaultFrom', label: 'Email Padrão', type: 'email', required: true, placeholder: 'noreply@seudominio.com' },
-    ],
-  },
-  {
-    type: 'shopifyOAuth2',
-    name: 'Shopify',
-    icon: 'ShoppingBag',
-    description: 'Integração com lojas Shopify',
-    fields: [
-      { name: 'shopDomain', label: 'Domínio da Loja', type: 'text', required: true, placeholder: 'sua-loja.myshopify.com' },
-      { name: 'accessToken', label: 'Access Token', type: 'password', required: true, placeholder: 'shpat_xxx...' },
-    ],
-  },
-  {
-    type: 'httpBasicAuth',
-    name: 'HTTP Basic Auth',
-    icon: 'Globe',
-    description: 'Autenticação básica para APIs REST',
-    fields: [
-      { name: 'username', label: 'Usuário', type: 'text', required: true, placeholder: 'Seu usuário' },
-      { name: 'password', label: 'Senha', type: 'password', required: true, placeholder: 'Sua senha' },
-    ],
-  },
-  {
-    type: 'httpApiKey',
-    name: 'HTTP API Key',
-    icon: 'Key',
-    description: 'Autenticação via header ou query param',
-    fields: [
-      { name: 'apiKey', label: 'API Key', type: 'password', required: true, placeholder: 'Sua chave de API' },
-      { name: 'headerName', label: 'Nome do Header', type: 'text', required: false, placeholder: 'X-API-Key (padrão)' },
-    ],
-  },
-  {
-    type: 'webhook',
-    name: 'Webhook Customizado',
-    icon: 'Webhook',
-    description: 'Configuração para webhooks externos',
-    fields: [
-      { name: 'url', label: 'URL do Webhook', type: 'url', required: true, placeholder: 'https://api.exemplo.com/webhook' },
-      { name: 'secret', label: 'Secret (opcional)', type: 'password', required: false, placeholder: 'Para validação de assinatura' },
-      { name: 'headers', label: 'Headers Adicionais (JSON)', type: 'text', required: false, placeholder: '{"X-Custom": "value"}' },
-    ],
-  },
-  {
-    type: 'database',
-    name: 'Banco de Dados',
-    icon: 'Database',
-    description: 'Conexão com banco de dados externo',
-    fields: [
-      { name: 'connectionString', label: 'Connection String', type: 'password', required: true, placeholder: 'postgres://user:pass@host:5432/db' },
-    ],
-  },
-];
-
-// ============================================
-// ICON MAPPING
-// ============================================
-
-const IconMap: Record<string, React.FC<{ className?: string }>> = {
-  MessageSquare,
-  Mail,
-  ShoppingBag,
-  Globe,
-  Key,
-  Webhook,
-  Database,
-};
-
-// ============================================
-// CREDENTIALS PAGE COMPONENT
-// ============================================
-
-export default function CredentialsPage() {
-  // State
-  const [credentials, setCredentials] = useState<Credential[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [showModal, setShowModal] = useState(false);
-  const [editingCredential, setEditingCredential] = useState<Credential | null>(null);
-  const [selectedType, setSelectedType] = useState<CredentialType | null>(null);
-  const [formData, setFormData] = useState<Record<string, string>>({});
-  const [credentialName, setCredentialName] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
-  const [testingId, setTestingId] = useState<string | null>(null);
-  const [showPasswords, setShowPasswords] = useState<Set<string>>(new Set());
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-  const menuContainerRef = useRef<HTMLDivElement | null>(null);
-
-  // Fechar o menu de ações ao clicar fora ou pressionar Escape
-  useEffect(() => {
-    if (!openMenuId) return;
-    const handlePointer = (e: MouseEvent) => {
-      if (menuContainerRef.current && !menuContainerRef.current.contains(e.target as Node)) {
-        setOpenMenuId(null);
-      }
-    };
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpenMenuId(null);
-    };
-    document.addEventListener('mousedown', handlePointer);
-    document.addEventListener('keydown', handleKey);
-    return () => {
-      document.removeEventListener('mousedown', handlePointer);
-      document.removeEventListener('keydown', handleKey);
-    };
-  }, [openMenuId]);
-
-  // ============================================
-  // FETCH CREDENTIALS
-  // ============================================
-
-  const fetchCredentials = async () => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetch('/api/credentials');
-      if (!response.ok) throw new Error('Falha ao carregar credenciais');
-      
-      const data = await response.json();
-      setCredentials(data.credentials || []);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchCredentials();
-  }, []);
-
-  // ============================================
-  // CREATE/UPDATE CREDENTIAL
-  // ============================================
-
-  const handleSave = async () => {
-    if (!selectedType || !credentialName.trim()) return;
-
-    // Validate required fields
-    const missingFields = selectedType.fields
-      .filter((f) => f.required && !formData[f.name]?.trim())
-      .map((f) => f.label);
-
-    if (missingFields.length > 0) {
-      setError(`Campos obrigatórios faltando: ${missingFields.join(', ')}`);
-      return;
-    }
-
-    setIsSaving(true);
-    setError(null);
-
-    try {
-      const response = await fetch('/api/credentials', {
-        method: editingCredential ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: editingCredential?.id,
-          name: credentialName,
-          type: selectedType.type,
-          data: formData,
-        }),
-      });
-
-      if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.error || 'Falha ao salvar');
-      }
-
-      await fetchCredentials();
-      closeModal();
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  // ============================================
-  // DELETE CREDENTIAL
-  // ============================================
-
-  const handleDelete = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir esta credencial?')) return;
-
-    try {
-      const response = await fetch(`/api/credentials/${id}`, {
-        method: 'DELETE',
-      });
-
-      if (!response.ok) throw new Error('Falha ao excluir');
-
-      await fetchCredentials();
-    } catch (err: any) {
-      setError(err.message);
-    }
-  };
-
-  // ============================================
-  // TEST CREDENTIAL
-  // ============================================
-
-  const handleTest = async (id: string) => {
-    setTestingId(id);
-
-    try {
-      const response = await fetch('/api/credentials/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ credentialId: id }),
-      });
-
-      const data = await response.json();
-      
-      // Update credential status locally
-      setCredentials((prev) =>
-        prev.map((c) =>
-          c.id === id
-            ? { ...c, last_test_at: new Date().toISOString(), last_test_success: data.success }
-            : c
-        )
-      );
-
-      if (!data.success) {
-        setError(`Teste falhou: ${data.error || 'Conexão não estabelecida'}`);
-      }
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setTestingId(null);
-    }
-  };
-
-  // ============================================
-  // MODAL HELPERS
-  // ============================================
-
-  const openCreateModal = () => {
-    setEditingCredential(null);
-    setSelectedType(null);
-    setFormData({});
-    setCredentialName('');
-    setShowModal(true);
-  };
-
-  const openEditModal = (credential: Credential) => {
-    setEditingCredential(credential);
-    const type = CREDENTIAL_TYPES.find((t) => t.type === credential.type);
-    setSelectedType(type || null);
-    setCredentialName(credential.name);
-    setFormData(credential.masked_fields || {});
-    setShowModal(true);
-  };
-
-  const closeModal = () => {
-    setShowModal(false);
-    setEditingCredential(null);
-    setSelectedType(null);
-    setFormData({});
-    setCredentialName('');
-    setError(null);
-  };
-
-  const toggleShowPassword = (fieldName: string) => {
-    const newSet = new Set(showPasswords);
-    if (newSet.has(fieldName)) {
-      newSet.delete(fieldName);
-    } else {
-      newSet.add(fieldName);
-    }
-    setShowPasswords(newSet);
-  };
-
-  // ============================================
-  // RENDER
-  // ============================================
+  const test = (c: Cred) => run(`t-${c.id}`, async () => {
+    const r = await api<{ success: boolean; error?: string }>('/api/credentials/test', { method: 'POST', json: { credentialId: c.id } })
+    await reload(true)
+    if (r.success) toast.success('Conexão OK', `${c.name} respondeu corretamente.`)
+    else toast.error('Falha na conexão', r.error || 'O serviço não aceitou a credencial.')
+  })
+  const remove = async (c: Cred) => {
+    const using = c.automations_using?.length || 0
+    if (!(await confirm.confirm({ title: `Excluir “${c.name}”?`, description: using ? `${using} automaç${using === 1 ? 'ão usa' : 'ões usam'} esta credencial e vão falhar.` : 'A credencial é apagada de forma permanente.', confirmLabel: 'Excluir', destructive: true }))) return
+    await run(`d-${c.id}`, async () => { await api(`/api/credentials/${c.id}`, { method: 'DELETE' }); await reload(true) }, { success: 'Credencial excluída' })
+  }
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Credenciais</h1>
-          <p className="text-gray-500 mt-1">
-            Gerencie as credenciais de integração para suas automações
-          </p>
-        </div>
-        <button
-          onClick={openCreateModal}
-          className={cn(
-            'flex items-center gap-2 px-4 py-2 rounded-lg',
-            'bg-blue-600 hover:bg-blue-500 text-white',
-            'font-medium transition-colors'
+    <>
+      <Title h="Credenciais" p="Chaves e tokens de serviços externos que as automações usam. Ficam criptografadas e nunca aparecem por inteiro." right={<button type="button" className="btn btn-primary" onClick={() => setModal({ mode: 'new' })}><I n="plus" s={15} />Nova credencial</button>} />
+      {loading && !data ? <LoadingCard rows={3} /> : error || !data ? (
+        <Card><div className="empty2"><b>Não foi possível carregar</b>{error}<div><button className="btn" onClick={() => reload()}>Tentar de novo</button></div></div></Card>
+      ) : (
+        <Card flush>
+          {data.credentials.length === 0 ? <div className="empty2"><b>Nenhuma credencial</b>Adicione a primeira para usar em automações (WhatsApp, e-mail, APIs).<div><button type="button" className="btn btn-primary" onClick={() => setModal({ mode: 'new' })}><I n="plus" s={15} />Nova credencial</button></div></div> : (
+            <div className="tw"><table className="stbl">
+              <thead><tr><th>Nome</th><th>Tipo</th><th>Status</th><th className="hm">Em uso</th><th></th></tr></thead>
+              <tbody>
+                {data.credentials.map((c) => {
+                  const t = credentialType(c.type)
+                  return (
+                    <tr key={c.id}>
+                      <td className="fx"><span className="nm">{c.name}</span><span className="mt">{c.last_used_at ? `Usada ${timeAgo(c.last_used_at).toLowerCase()}` : `Criada ${timeAgo(c.created_at).toLowerCase()}`}</span></td>
+                      <td><div style={{ display: 'flex', gap: 8, alignItems: 'center' }}><I n={t?.icon || 'key'} s={16} c="var(--text-3)" />{t?.name || c.type}</div></td>
+                      <td>{c.last_test_success === true ? <Badge k="ok">Conectada</Badge> : c.last_test_success === false ? <Badge k="err">Falhou</Badge> : <Badge k="off">Não testada</Badge>}</td>
+                      <td className="hm" style={{ color: 'var(--text-3)' }}>{c.automations_using?.length ? `${c.automations_using.length} automaç${c.automations_using.length === 1 ? 'ão' : 'ões'}` : '—'}</td>
+                      <td className="r"><div className="acts">
+                        {(t?.testable ?? true) && <IconBtn n="play" s={15} title="Testar conexão" onClick={() => test(c)} disabled={busy === `t-${c.id}`} className={busy === `t-${c.id}` ? 'spin' : ''} />}
+                        <IconBtn n="edit" s={15} title="Editar" onClick={() => setModal({ mode: 'edit', cred: c })} />
+                        <IconBtn n="x" title="Excluir" danger onClick={() => remove(c)} disabled={busy === `d-${c.id}`} />
+                      </div></td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table></div>
           )}
-        >
-          <Plus className="w-4 h-4" />
-          Nova Credencial
-        </button>
-      </div>
-
-      {/* Error Banner */}
-      {error && (
-        <div className="mb-4 p-4 rounded-lg bg-red-500/20 border border-red-500/30 flex items-start gap-3">
-          <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
-          <div className="flex-1">
-            <p className="text-sm text-red-300">{error}</p>
-          </div>
-          <button
-            onClick={() => setError(null)}
-            className="text-red-400 hover:text-red-300"
-          >
-            <XCircle className="w-4 h-4" />
-          </button>
-        </div>
+        </Card>
       )}
+      {modal && <CredModal cred={modal.mode === 'edit' ? modal.cred : null} onClose={() => setModal(null)} onDone={() => { setModal(null); reload(true) }} />}
+    </>
+  )
+}
 
-      {/* Loading */}
-      {isLoading ? (
-        <div className="flex flex-col items-center justify-center py-12">
-          <Loader2 className="w-8 h-8 text-blue-400 animate-spin mb-3" />
-          <p className="text-gray-500">Carregando credenciais...</p>
-        </div>
-      ) : credentials.length === 0 ? (
-        /* Empty State */
-        <div className="flex flex-col items-center justify-center py-12 border border-dashed border-gray-300 rounded-lg">
-          <Key className="w-12 h-12 text-gray-300 mb-3" />
-          <p className="text-gray-500">Nenhuma credencial cadastrada</p>
-          <p className="text-gray-400 text-sm mt-1">
-            Crie uma credencial para conectar suas integrações
-          </p>
-          <button
-            onClick={openCreateModal}
-            className="mt-4 text-blue-400 hover:text-blue-300 text-sm font-medium"
-          >
-            + Criar primeira credencial
-          </button>
+function CredModal({ cred, onClose, onDone }: { cred: Cred | null; onClose: () => void; onDone: () => void }) {
+  const toast = useToast()
+  const [type, setType] = useState<CredentialType | null>(cred ? credentialType(cred.type) || null : null)
+  const [name, setName] = useState(cred?.name || '')
+  const [vals, setVals] = useState<Record<string, string>>({})
+  const [show, setShow] = useState<Record<string, boolean>>({})
+  const [err, setErr] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const detail = useApi<{ credential: { masked_fields?: Record<string, string> } }>(cred ? `/api/credentials/${cred.id}` : null)
+  const masked = detail.data?.credential?.masked_fields || {}
+
+  const ok = !!type && name.trim().length >= 2 && type.fields.filter((f) => f.required).every((f) => (vals[f.name] || '').trim() || (cred && masked[f.name]))
+  const submit = async () => {
+    if (!type) return
+    setBusy(true); setErr(null)
+    try {
+      const data: Record<string, string> = {}
+      for (const f of type.fields) if ((vals[f.name] || '').trim()) data[f.name] = vals[f.name].trim()
+      if (cred) await api(`/api/credentials/${cred.id}`, { method: 'PUT', json: { name: name.trim(), data } })
+      else await api('/api/credentials', { method: 'POST', json: { name: name.trim(), type: type.type, data } })
+      toast.success(cred ? 'Credencial atualizada' : 'Credencial criada')
+      onDone()
+    } catch (e: any) { setErr(e.message) } finally { setBusy(false) }
+  }
+
+  return (
+    <Modal title={cred ? `Editar ${cred.name}` : type ? `Nova credencial · ${type.name}` : 'Nova credencial'} desc={type ? type.description : 'Escolha o serviço.'} onClose={onClose} size={type ? 'md' : 'lg'}
+      footer={type ? <>{!cred && <button type="button" className="btn" onClick={() => setType(null)}>Voltar</button>}<button type="button" className="btn" onClick={onClose}>Cancelar</button><button type="button" className="btn btn-primary" disabled={!ok || busy} onClick={submit}>{busy && <I n="refresh" s={14} className="spin" />}{cred ? 'Salvar' : 'Criar'}</button></> : <button type="button" className="btn" onClick={onClose}>Cancelar</button>}>
+      {!type ? (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(200px,1fr))', gap: 10 }}>
+          {CREDENTIAL_TYPES.map((t) => (
+            <button key={t.type} type="button" className="radio" onClick={() => setType(t)} style={{ alignItems: 'center' }}><I n={t.icon} s={18} c="var(--text-2)" /><div><b>{t.name}</b><span>{t.description}</span></div></button>
+          ))}
         </div>
       ) : (
-        /* Credentials Grid */
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {credentials.map((credential) => {
-            const typeConfig = CREDENTIAL_TYPES.find((t) => t.type === credential.type);
-            const IconComponent = IconMap[typeConfig?.icon || 'Key'] || Key;
-
-            return (
-              <div
-                key={credential.id}
-                className="p-4 rounded-lg bg-white border border-gray-200 hover:border-gray-300 transition-colors"
-              >
-                {/* Header */}
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-gray-50">
-                      <IconComponent className="w-5 h-5 text-gray-500" />
-                    </div>
-                    <div>
-                      <h3 className="font-medium text-gray-900">{credential.name}</h3>
-                      <p className="text-xs text-gray-600">{typeConfig?.name || credential.type}</p>
-                    </div>
-                  </div>
-
-                  {/* Actions Menu */}
-                  <div className="relative" ref={openMenuId === credential.id ? menuContainerRef : undefined}>
-                    <button
-                      type="button"
-                      aria-haspopup="menu"
-                      aria-expanded={openMenuId === credential.id}
-                      aria-label="Ações da credencial"
-                      onClick={() => setOpenMenuId((prev) => (prev === credential.id ? null : credential.id))}
-                      className="p-1 rounded hover:bg-gray-50 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-                    >
-                      <MoreVertical className="w-4 h-4" />
-                    </button>
-                    {openMenuId === credential.id && (
-                      <div role="menu" className="absolute right-0 top-full mt-1 py-1 bg-white rounded-lg border border-gray-200 shadow-xl transition-all z-10 min-w-[140px]">
-                        <button
-                          role="menuitem"
-                          onClick={() => { setOpenMenuId(null); openEditModal(credential); }}
-                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                          Editar
-                        </button>
-                        <button
-                          role="menuitem"
-                          onClick={() => { setOpenMenuId(null); handleTest(credential.id); }}
-                          disabled={testingId === credential.id}
-                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                        >
-                          {testingId === credential.id ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <RefreshCw className="w-4 h-4" />
-                          )}
-                          Testar
-                        </button>
-                        <button
-                          role="menuitem"
-                          onClick={() => { setOpenMenuId(null); handleDelete(credential.id); }}
-                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:text-red-700 hover:bg-red-50"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                          Excluir
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Status */}
-                <div className="flex items-center gap-4 text-xs">
-                  {credential.last_test_at && (
-                    <div className="flex items-center gap-1">
-                      {credential.last_test_success ? (
-                        <CheckCircle2 className="w-3 h-3 text-green-400" />
-                      ) : (
-                        <XCircle className="w-3 h-3 text-red-400" />
-                      )}
-                      <span className={credential.last_test_success ? 'text-green-400' : 'text-red-400'}>
-                        {credential.last_test_success ? 'Conectado' : 'Falhou'}
-                      </span>
-                    </div>
-                  )}
-                  {credential.automations_using && credential.automations_using.length > 0 && (
-                    <span className="text-gray-400">
-                      {credential.automations_using.length} automação(ões)
-                    </span>
-                  )}
-                </div>
-
-                {/* Last Used */}
-                {credential.last_used_at && (
-                  <p className="text-xs text-gray-500 mt-2">
-                    Último uso: {new Date(credential.last_used_at).toLocaleString('pt-BR')}
-                  </p>
-                )}
+        <form onSubmit={(e) => { e.preventDefault(); if (ok && !busy) submit() }} style={{ display: 'grid', gap: 14 }}>
+          <Field label="Nome" error={err}><input className={'in' + (err ? ' err' : '')} autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder={`${type.name} — produção`} /></Field>
+          {type.fields.map((f) => (
+            <Field key={f.name} label={<>{f.label}{!f.required && <span className="muted"> (opcional)</span>}</>}>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input className={'in' + (f.type === 'password' ? ' mono' : '')} type={f.type === 'password' && !show[f.name] ? 'password' : f.type === 'number' ? 'number' : 'text'} value={vals[f.name] || ''} onChange={(e) => setVals((o) => ({ ...o, [f.name]: e.target.value }))} placeholder={cred && masked[f.name] ? `${masked[f.name]} (deixe vazio para manter)` : f.placeholder} autoComplete="off" />
+                {f.type === 'password' && <button type="button" className="ib" title={show[f.name] ? 'Ocultar' : 'Mostrar'} onClick={() => setShow((o) => ({ ...o, [f.name]: !o[f.name] }))}><I n={show[f.name] ? 'eyeOff' : 'eye'} s={16} /></button>}
               </div>
-            );
-          })}
-        </div>
+              {f.help && <div className="hp" style={{ fontSize: 12.5, color: 'var(--text-3)', marginTop: 4 }}>{f.help}</div>}
+            </Field>
+          ))}
+          {cred && detail.loading && <div className="muted" style={{ fontSize: 13 }}>Carregando valores atuais…</div>}
+        </form>
       )}
-
-      {/* Create/Edit Modal */}
-      <AnimatePresence>
-        {showModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-            onClick={closeModal}
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="w-full max-w-lg max-h-[90vh] overflow-hidden rounded-xl bg-gray-50 border border-gray-200 shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Modal Header */}
-              <div className="flex items-center justify-between p-4 border-b border-gray-200">
-                <h2 className="text-lg font-semibold text-gray-900">
-                  {editingCredential ? 'Editar Credencial' : 'Nova Credencial'}
-                </h2>
-                <button
-                  onClick={closeModal}
-                  className="p-2 rounded-lg hover:bg-gray-50 text-gray-500 hover:text-gray-600 transition-colors"
-                >
-                  <XCircle className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* Modal Body */}
-              <div className="p-4 space-y-4 max-h-[calc(90vh-140px)] overflow-y-auto">
-                {!selectedType ? (
-                  /* Type Selection */
-                  <div>
-                    <label className="block text-sm font-medium text-gray-900/70 mb-3">
-                      Selecione o tipo de integração
-                    </label>
-                    <div className="grid gap-2">
-                      {CREDENTIAL_TYPES.map((type) => {
-                        const IconComponent = IconMap[type.icon] || Key;
-                        return (
-                          <button
-                            key={type.type}
-                            onClick={() => setSelectedType(type)}
-                            className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-colors text-left"
-                          >
-                            <div className="p-2 rounded-lg bg-gray-50">
-                              <IconComponent className="w-5 h-5 text-gray-500" />
-                            </div>
-                            <div>
-                              <p className="font-medium text-gray-900">{type.name}</p>
-                              <p className="text-xs text-gray-600">{type.description}</p>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : (
-                  /* Credential Form */
-                  <div className="space-y-4">
-                    {/* Back Button */}
-                    {!editingCredential && (
-                      <button
-                        onClick={() => setSelectedType(null)}
-                        className="text-sm text-gray-700 hover:text-gray-900"
-                      >
-                        ← Voltar
-                      </button>
-                    )}
-
-                    {/* Name Field */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-900/70 mb-1">
-                        Nome da Credencial *
-                      </label>
-                      <input
-                        type="text"
-                        value={credentialName}
-                        onChange={(e) => setCredentialName(e.target.value)}
-                        placeholder={`Ex: ${selectedType.name} - Produção`}
-                        className={cn(
-                          'w-full px-3 py-2 rounded-lg',
-                          'bg-white border border-gray-200 text-gray-900',
-                          'placeholder-gray-400',
-                          'focus:outline-none focus:border-blue-500/50'
-                        )}
-                      />
-                    </div>
-
-                    {/* Dynamic Fields */}
-                    {selectedType.fields.map((field) => (
-                      <div key={field.name}>
-                        <label className="block text-sm font-medium text-gray-900/70 mb-1">
-                          {field.label} {field.required && '*'}
-                        </label>
-                        <div className="relative">
-                          <input
-                            type={field.type === 'password' && !showPasswords.has(field.name) ? 'password' : 'text'}
-                            value={formData[field.name] || ''}
-                            onChange={(e) => setFormData({ ...formData, [field.name]: e.target.value })}
-                            placeholder={field.placeholder}
-                            className={cn(
-                              'w-full px-3 py-2 rounded-lg pr-10',
-                              'bg-white border border-gray-200 text-gray-900',
-                              'placeholder-gray-400',
-                              'focus:outline-none focus:border-blue-500/50'
-                            )}
-                          />
-                          {field.type === 'password' && (
-                            <button
-                              type="button"
-                              onClick={() => toggleShowPassword(field.name)}
-                              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
-                            >
-                              {showPasswords.has(field.name) ? (
-                                <EyeOff className="w-4 h-4" />
-                              ) : (
-                                <Eye className="w-4 h-4" />
-                              )}
-                            </button>
-                          )}
-                        </div>
-                        {field.help && (
-                          <p className="mt-1 text-xs text-gray-600">{field.help}</p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Modal Footer */}
-              {selectedType && (
-                <div className="flex items-center justify-end gap-3 p-4 border-t border-gray-200">
-                  <button
-                    onClick={closeModal}
-                    className="px-4 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={handleSave}
-                    disabled={isSaving || !credentialName.trim()}
-                    className={cn(
-                      'flex items-center gap-2 px-4 py-2 rounded-lg',
-                      'bg-blue-600 hover:bg-blue-500 text-white',
-                      'text-sm font-medium',
-                      'disabled:opacity-50 disabled:cursor-not-allowed',
-                      'transition-colors'
-                    )}
-                  >
-                    {isSaving ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Salvando...
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle2 className="w-4 h-4" />
-                        Salvar
-                      </>
-                    )}
-                  </button>
-                </div>
-              )}
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
+    </Modal>
+  )
 }

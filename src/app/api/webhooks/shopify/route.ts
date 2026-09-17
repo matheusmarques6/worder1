@@ -299,6 +299,17 @@ async function getStoreConfig(shopDomain: string): Promise<ShopifyStoreConfig | 
 // Shopify sends in the header (canonical, alias, custom domain, even
 // a typo'd one), the URL itself unambiguously identifies the store.
 // Adapted from the AdTracked pattern.
+/** O store_id da URL só vale se a loja for mesmo a do domínio assinado. */
+function storeMatchesDomain(store: any, domain: string): boolean {
+  const d = String(domain || '').toLowerCase();
+  if (!d) return false;
+  const aliases: string[] = Array.isArray(store?.shop_domain_aliases) ? store.shop_domain_aliases : [];
+  return [store?.shop_domain, store?.primary_domain, ...aliases]
+    .filter(Boolean)
+    .map((x: string) => String(x).toLowerCase())
+    .includes(d);
+}
+
 async function getStoreConfigById(storeId: string): Promise<ShopifyStoreConfig | null> {
   try {
     const supabase = getSupabase();
@@ -426,13 +437,19 @@ async function processCustomerCreated(store: ShopifyStoreConfig, customer: any) 
     console.error('[Shopify Webhook] CDP event creation failed (customer):', cdpError);
   }
 
-  // Emitir evento para automações
+  // Emitir evento para automações.
+  // store_id é OBRIGATÓRIO aqui: sem ele o match fica org-wide e um
+  // cliente novo da loja A entrava nos welcome flows de TODAS as lojas
+  // da organização (vazamento cross-loja). O CUSTOMER_CREATED logo
+  // abaixo já carregava a loja via _webhook_dispatch_meta; este, que é
+  // o que alimenta as automações, não carregava.
   await EventBus.emit(EventType.CONTACT_CREATED, {
     organization_id: store.organization_id,
     contact_id: contact?.id,
     email: customer.email,
     phone: customer.phone,
     data: {
+      store_id: store.id,
       first_name: customer.first_name,
       last_name: customer.last_name,
       accepts_marketing: customer.accepts_marketing,
@@ -467,14 +484,19 @@ async function processCustomerCreated(store: ShopifyStoreConfig, customer: any) 
 
   // Criar notificação
   const supabase = getSupabase();
-  await supabase.from('notifications').insert({
+  // `data` e `is_read` não existem: as colunas são `metadata` e `read`.
+  // Com os nomes errados, o aviso nunca chegava ao sino do painel.
+  const { error: notifErr } = await supabase.from('notifications').insert({
     organization_id: store.organization_id,
     type: 'contact',
     title: 'Novo cliente do Shopify',
     message: `${customer.first_name || ''} ${customer.last_name || ''} (${customer.email}) foi adicionado.`,
-    data: { contact_id: contact?.id, source: 'shopify' },
-    is_read: false,
+    metadata: { contact_id: contact?.id, source: 'shopify' },
+    reference_type: 'contact',
+    reference_id: contact?.id || null,
+    read: false,
   });
+  if (notifErr) console.error('[Shopify Webhook] aviso de novo cliente não criado:', notifErr.message);
 }
 
 async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
@@ -708,14 +730,21 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
   // engagement on each channel independently. Idempotent on
   // (org, order_id) so the orders/paid call later is a safe no-op.
   // ======================================
-  if (orderValue > 0) {
+  // Pedido de teste (Bogus Gateway) nunca entra na receita: chega com
+  // financial_status 'paid' e inflava campanha, loja e total do contato.
+  if (orderValue > 0 && !order.test) {
     try {
-      const { attributeAcrossChannels } = await import('@/lib/attribution');
-      await attributeAcrossChannels({
+      const { attributeOrder } = await import('@/lib/attribution');
+      await attributeOrder({
         contactId: contact.id,
         organizationId: store.organization_id,
         orderId: String(order.id),
         orderValue,
+        // A janela conta a partir da data REAL do pedido.
+        orderAt: order.created_at || order.processed_at,
+        refunded: parseFloat(order.total_refunded || '0') || 0,
+        currency: order.currency || 'BRL',
+        storeId: store.id,
       });
     } catch (attribErr) {
       console.error('[Shopify Webhook] Attribution failed (orders/create):', attribErr);
@@ -1112,13 +1141,16 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
     type: 'order',
     title: 'Novo pedido do Shopify',
     message: `Pedido #${order.order_number} de ${order.email} - R$ ${orderValue.toFixed(2)}`,
-    data: {
+    // `data` e `is_read` não existem: as colunas são `metadata` e `read`.
+    metadata: {
       order_id: order.id,
       order_number: order.order_number,
       contact_id: contact.id,
       value: orderValue,
     },
-    is_read: false,
+    reference_type: 'order',
+    reference_id: order.id ? String(order.id) : null,
+    read: false,
   });
 }
 
@@ -1127,26 +1159,16 @@ async function processOrderPaid(store: ShopifyStoreConfig, order: any) {
 
   const supabase = getSupabase();
 
-  // Ciclo de vida do grant (9.2): cupom emitido pelo offer_engine que volta
-  // no pedido pago é consumido (uses++ → consumed + ledger). Best-effort e
-  // idempotente no banco — reentrega do webhook recebe 'already'.
-  try {
-    const { consumeGrantsForOrder } = await import('@/lib/ai/grant-consumption');
-    await consumeGrantsForOrder(store.organization_id, order);
-  } catch (grantErr: any) {
-    console.warn('[Shopify] grant consumption failed (best-effort):', grantErr?.message);
-  }
-  
   // Atualizar pedido
   await supabase
     .from('shopify_orders')
-    .update({ 
+    .update({
       financial_status: 'paid',
       updated_at: new Date().toISOString(),
     })
     .eq('store_id', store.id)
     .eq('shopify_order_id', String(order.id));
-  
+
   // Buscar contato
   const { data: contact } = await supabase
     .from('contacts')
@@ -1154,7 +1176,34 @@ async function processOrderPaid(store: ShopifyStoreConfig, order: any) {
     .eq('organization_id', store.organization_id)
     .ilike('email', escapeLike(order.email) as string)
     .maybeSingle();
-  
+
+  // Ciclo de vida do grant (9.2): cupom emitido pelo offer_engine — ou por
+  // um popup — que volta no pedido pago é consumido (uses++ → consumed +
+  // ledger). O contato vai junto: com código estático, é ele que diz qual
+  // grant foi usado. Best-effort e idempotente no banco — reentrega do
+  // webhook recebe 'already'. Um grant de popup consumido vira receita
+  // "por código" do popup que o emitiu.
+  try {
+    const { consumeGrantsForOrder } = await import('@/lib/ai/grant-consumption');
+    const consumed = await consumeGrantsForOrder(store.organization_id, order, contact?.id ?? null, store.id ?? null);
+    const orderRef = String(order.id ?? order.order_number ?? '').trim();
+    const orderValue = parseFloat(order.total_price || '0') || 0;
+    for (const c of consumed) {
+      if (!c.grant_id || (c.status !== 'consumed' && c.status !== 'already') || !orderRef || order.test) continue;
+      const { error } = await supabase.rpc('record_popup_driven_order', {
+        p_organization_id: store.organization_id,
+        p_grant_id: c.grant_id,
+        p_order_ref: orderRef,
+        p_revenue: orderValue,
+        p_currency: order.currency || 'BRL',
+        p_order_at: order.created_at || order.processed_at || new Date().toISOString(),
+      });
+      if (error && error.code !== '42883') console.warn('[Shopify] record_popup_driven_order failed (best-effort):', error.message);
+    }
+  } catch (grantErr: any) {
+    console.warn('[Shopify] grant consumption failed (best-effort):', grantErr?.message);
+  }
+
   if (contact) {
     // Tracking: Registrar atividade
     await trackActivity({
@@ -1177,14 +1226,18 @@ async function processOrderPaid(store: ShopifyStoreConfig, order: any) {
     // entry point for stores that use manual capture / COD where
     // orders/create runs before the order is actually paid.
     const orderValue = parseFloat(order.total_price || '0');
-    if (orderValue > 0) {
+    if (orderValue > 0 && !order.test) {
       try {
-        const { attributeAcrossChannels } = await import('@/lib/attribution');
-        await attributeAcrossChannels({
+        const { attributeOrder } = await import('@/lib/attribution');
+        await attributeOrder({
           contactId: contact.id,
           organizationId: store.organization_id,
           orderId: String(order.id),
           orderValue,
+          orderAt: order.created_at || order.processed_at,
+          refunded: parseFloat(order.total_refunded || '0') || 0,
+          currency: order.currency || 'BRL',
+          storeId: store.id,
         });
       } catch (attribErr) {
         console.error('[Shopify Webhook] Attribution failed (orders/paid):', attribErr);
@@ -1484,7 +1537,21 @@ async function processOrderCancelled(store: ShopifyStoreConfig, order: any) {
     })
     .eq('store_id', store.id)
     .eq('shopify_order_id', String(order.id));
-  
+
+  // Revogar a receita atribuída ANTES de qualquer busca de contato.
+  // Antes isto vivia dentro do `if (contact)`: pedido sem e-mail (PDV,
+  // telefone, balcão) ou com contato duplicado nunca era revogado e a
+  // receita cancelada ficava somada para sempre.
+  try {
+    const { revokeOrderAttribution } = await import('@/lib/attribution');
+    await revokeOrderAttribution({
+      organizationId: store.organization_id,
+      orderId: String(order.id),
+    });
+  } catch (revokeErr) {
+    console.error('[Shopify Webhook] Attribution revoke failed:', revokeErr);
+  }
+
   // Buscar contato e deal
   const { data: contact } = await supabase
     .from('contacts')
@@ -1492,7 +1559,7 @@ async function processOrderCancelled(store: ShopifyStoreConfig, order: any) {
     .eq('organization_id', store.organization_id)
     .ilike('email', escapeLike(order.email) as string)
     .maybeSingle();
-  
+
   if (contact) {
     // Tracking: Registrar atividade
     await trackActivity({
@@ -1510,20 +1577,6 @@ async function processOrderCancelled(store: ShopifyStoreConfig, order: any) {
       source: 'shopify',
       sourceId: String(order.id),
     });
-
-    // Refund / cancellation handling — revoke the attributed revenue
-    // across every channel that previously got credit. Klaviyo fires
-    // a "Refunded Order" event for the same purpose; without this,
-    // cancelled orders inflate every "Sales R$" tile forever.
-    try {
-      const { revokeAttributionAcrossChannels } = await import('@/lib/attribution');
-      await revokeAttributionAcrossChannels({
-        organizationId: store.organization_id,
-        orderId: String(order.id),
-      });
-    } catch (revokeErr) {
-      console.error('[Shopify Webhook] Attribution revoke failed:', revokeErr);
-    }
 
     if (store.default_pipeline_id) {
       // Marcar deal como perdido
@@ -2122,6 +2175,46 @@ async function processRefundCreated(store: ShopifyStoreConfig, refund: any) {
     0
   ) || 0;
 
+  // Ajustar a receita atribuída. Antes só o CANCELAMENTO revogava:
+  // reembolso (total ou parcial) deixava o valor cheio creditado para
+  // sempre — e reembolso é muito mais comum que cancelamento.
+  // O total reembolsado é acumulado na tabela do pedido, então somamos
+  // o histórico e não apenas este reembolso.
+  if (refundAmount > 0) {
+    try {
+      const { data: acumulado } = await supabase
+        .from('shopify_orders')
+        .select('total_refunded')
+        .eq('store_id', store.id)
+        .eq('shopify_order_id', String(refund.order_id))
+        .maybeSingle();
+      // SOMA, não máximo: dois reembolsos parciais de 30 e 40 num pedido
+      // de 100 dão 70. Com Math.max ficava 40, e a receita atribuída (e a
+      // "com cupom" do popup) seguia inflada para sempre.
+      const jaReembolsado = parseFloat((acumulado as any)?.total_refunded || '0') || 0;
+      const totalRefunded = Math.round((jaReembolsado + refundAmount) * 100) / 100;
+      // Mantém a coluna em dia: até aqui só o full sync a escrevia, e o
+      // cálculo líquido do painel depende dela.
+      await supabase
+        .from('shopify_orders')
+        .update({ total_refunded: totalRefunded, updated_at: new Date().toISOString() })
+        .eq('store_id', store.id)
+        .eq('shopify_order_id', String(refund.order_id));
+
+      const { refundOrderAttribution } = await import('@/lib/attribution');
+      await refundOrderAttribution(store.organization_id, String(refund.order_id), totalRefunded);
+      // Receita "com o cupom" do popup também desconta o reembolso.
+      const { error: drivenErr } = await supabase.rpc('refund_popup_driven_order', {
+        p_organization_id: store.organization_id,
+        p_order_ref: String(refund.order_id),
+        p_refunded_total: totalRefunded,
+      });
+      if (drivenErr && drivenErr.code !== '42883') console.warn('[Shopify Webhook] refund_popup_driven_order failed (best-effort):', drivenErr.message);
+    } catch (refundErr) {
+      console.error('[Shopify Webhook] Refund attribution adjust failed:', refundErr);
+    }
+  }
+
   // Tracking: Registrar atividade na timeline do contato
   if (contactId) {
     try {
@@ -2352,6 +2445,57 @@ async function processMarketingConsentUpdate(store: ShopifyStoreConfig, customer
   }
 }
 
+/**
+ * inventory_levels/update — { inventory_item_id, location_id, available }.
+ * Acha a variante pelo inventory_item_id dentro de shopify_products.variants
+ * e atualiza o estoque dela, recomputando a disponibilidade do produto.
+ * Assume um local de estoque (o caso comum); com vários, o products/update
+ * que a Shopify dispara em seguida traz o total certo e prevalece.
+ */
+async function processInventoryLevelUpdate(store: ShopifyStoreConfig, level: any) {
+  const itemId = level?.inventory_item_id;
+  const available = typeof level?.available === 'number' ? level.available : parseInt(String(level?.available ?? ''), 10);
+  if (itemId === null || itemId === undefined || !Number.isFinite(available)) return;
+
+  const supabase = getSupabase();
+  // O id pode estar gravado como número (webhook REST) ou texto (sync GraphQL).
+  const candidates: Array<number | string> = [];
+  const asNum = Number(itemId);
+  if (Number.isFinite(asNum)) candidates.push(asNum);
+  candidates.push(String(itemId));
+
+  let row: { id: string; variants: any[] } | null = null;
+  for (const c of candidates) {
+    const { data } = await supabase
+      .from('shopify_products')
+      .select('id, variants')
+      .eq('store_id', store.id)
+      .contains('variants', [{ inventory_item_id: c }])
+      .limit(1)
+      .maybeSingle();
+    if (data) { row = data as any; break; }
+  }
+  if (!row) {
+    console.log(`[Shopify] inventory_levels/update: nenhum produto com inventory_item_id=${itemId} na loja ${store.id}`);
+    return;
+  }
+
+  const { computeProductAvailability } = await import('@/lib/shopify/product-availability');
+  const variants = (Array.isArray(row.variants) ? row.variants : []).map((v: any) =>
+    String(v?.inventory_item_id) === String(itemId) ? { ...v, inventory_quantity: available } : v
+  );
+  const availability = computeProductAvailability(variants);
+  await supabase
+    .from('shopify_products')
+    .update({
+      variants,
+      inventory_quantity: availability.inventoryQuantity ?? 0,
+      available: availability.available,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', row.id);
+}
+
 async function processProductEvent(store: ShopifyStoreConfig, product: any, topic: string) {
   console.log(`[Shopify] Processing product event: ${topic} - ${product.title}`);
 
@@ -2395,6 +2539,14 @@ async function processProductEvent(store: ShopifyStoreConfig, product: any, topi
   // doesn't carry them, but if a future webhook does we accept it.
   const collections = Array.isArray(product.collections) ? product.collections : [];
 
+  // Disponibilidade e estoque a partir das variantes que a Shopify
+  // mandou: é o que mantém os feeds sem produto esgotado quando o
+  // preço/estoque muda na Shopify (products/update dispara também em
+  // mudanças de inventário). hidden_from_feeds NÃO entra aqui — é uma
+  // decisão da Worder e sobrevive a qualquer webhook.
+  const { computeProductAvailability } = await import('@/lib/shopify/product-availability');
+  const availability = computeProductAvailability(product.variants);
+
   const productRow: Record<string, any> = {
     store_id: store.id,
     organization_id: store.organization_id,
@@ -2411,6 +2563,10 @@ async function processProductEvent(store: ShopifyStoreConfig, product: any, topi
     description: plainDescription,
     collections,
     price: product.variants?.[0]?.price ? parseFloat(product.variants[0].price) : null,
+    compare_at_price: product.variants?.[0]?.compare_at_price ? parseFloat(product.variants[0].compare_at_price) : null,
+    sku: product.variants?.[0]?.sku || null,
+    inventory_quantity: availability.inventoryQuantity ?? 0,
+    available: availability.available,
     updated_at: new Date().toISOString(),
   };
   // Resilient write: drop description/body_html/collections columns on
@@ -2542,6 +2698,14 @@ export async function POST(request: NextRequest) {
     // registered before this URL pattern shipped.
     const queryStoreId = request.nextUrl.searchParams.get('store_id');
     let store = queryStoreId ? await getStoreConfigById(queryStoreId) : null;
+    // O ?store_id= é conveniência, não credencial: com o segredo do app
+    // compartilhado entre lojas, uma entrega legítima da loja B reenviada
+    // com o id da loja A seria processada na organização errada. O domínio
+    // do cabeçalho (que a assinatura cobre) tem de bater.
+    if (store && shopDomain && !storeMatchesDomain(store, shopDomain)) {
+      console.warn('[Shopify Webhook] store_id da URL não corresponde ao domínio assinado — usando o domínio', { shopDomain });
+      store = null;
+    }
     if (!store) store = await getStoreConfig(shopDomain);
     if (!store) {
       // Orphan webhook subscription — typically from a store that was
@@ -2739,11 +2903,10 @@ export async function POST(request: NextRequest) {
           await supabase
             .from('contacts')
             .update({
-              is_active: false,
+              suppressed: true,
               email_consent: false,
               sms_consent: false,
               whatsapp_consent: false,
-              status: 'deleted_in_shopify',
               shopify_customer_id: null,
               updated_at: nowIso,
             })
@@ -2762,12 +2925,16 @@ export async function POST(request: NextRequest) {
           await processProductEvent(store, body, topic);
           break;
 
+        case 'inventory_levels/update':
+          await processInventoryLevelUpdate(store, body);
+          break;
+
         case 'app/uninstalled': {
           const supabase = getSupabase();
           await supabase
             .from('shopify_stores')
             .update({
-              is_active: false,
+              suppressed: true,
               connection_status: 'disconnected',
               uninstalled_at: new Date().toISOString(),
               status: 'uninstalled',

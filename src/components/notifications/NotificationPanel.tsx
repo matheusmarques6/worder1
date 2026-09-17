@@ -1,6 +1,5 @@
 'use client'
 
-import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Bell, Check, CheckCheck, X, Settings, AtSign, UserPlus, Clock, AlertTriangle, CheckCircle, MessageCircle, Briefcase, ArrowRight, MessageSquare, Loader2 } from 'lucide-react'
 import { useNotifications } from '@/hooks/useNotifications'
@@ -20,9 +19,7 @@ const COLORS: Record<NotificationType, string> = { mention: 'text-blue-500 bg-bl
 
 export function NotificationPanel({ organizationId, userId, onClose }: NotificationPanelProps) {
   const router = useRouter()
-  const { notifications, unreadCount, isLoading, hasMore, markAsRead, markAllAsRead, dismiss, loadMore, refresh } = useNotifications({ organizationId, userId })
-  
-  useEffect(() => { refresh() }, [])
+  const { notifications, unreadCount, isLoading, hasMore, markAsRead, markAllAsRead, dismiss, loadMore } = useNotifications({ organizationId, userId })
   
   const handleClick = async (n: Notification) => {
     if (!n.read) await markAsRead(n.id)

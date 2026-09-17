@@ -104,7 +104,8 @@ export function AdsTable({
                     {/* Thumbnail */}
                     <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center overflow-hidden flex-shrink-0">
                       {ad.creative?.thumbnail_url ? (
-                        <img 
+                        // eslint-disable-next-line @next/next/no-img-element -- Meta supplies creative thumbnails from provider-controlled, uncontracted hosts.
+                        <img
                           src={ad.creative.thumbnail_url} 
                           alt={ad.name}
                           className="w-full h-full object-cover"

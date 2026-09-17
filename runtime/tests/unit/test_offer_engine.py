@@ -163,3 +163,8 @@ class TestTheCode:
         assert coupon_code_for(self._grant(uuid.uuid4())) != coupon_code_for(
             self._grant(uuid.uuid4())
         )
+
+    def test_shared_uuid_prefix_does_not_collide(self) -> None:
+        first = self._grant(uuid.UUID("12345678-0000-0000-0000-000000000001"))
+        second = self._grant(uuid.UUID("12345678-0000-0000-0000-000000000002"))
+        assert coupon_code_for(first) != coupon_code_for(second)

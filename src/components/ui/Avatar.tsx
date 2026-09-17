@@ -37,6 +37,7 @@ export const Avatar: React.FC<AvatarProps> = ({
   return (
     <div className={cn('relative inline-flex', className)} {...props}>
       {src ? (
+        // eslint-disable-next-line @next/next/no-img-element -- Avatar src may be user-provided or provider-hosted and is not safely allowlisted.
         <img
           src={src}
           alt={alt}

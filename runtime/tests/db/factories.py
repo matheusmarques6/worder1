@@ -154,8 +154,8 @@ def create_message(
             """
             insert into public.messages
                 (organization_id, conversation_id, direction, seq, channel, author_type,
-                 content, provider_message_id)
-            values (%s, %s, %s, %s, 'whatsapp', %s, %s, %s)
+                 content, provider_message_id, channel_account_id)
+            values (%s, %s, %s, %s, 'whatsapp', %s, %s, %s, %s)
             returning id
             """,
             (
@@ -166,6 +166,7 @@ def create_message(
                 "contact" if direction == "inbound" else "agent",
                 psycopg.types.json.Jsonb(content if content is not None else {"text": text}),
                 provider_message_id,
+                thread.channel_account_id,
             ),
         )
         (message_id,) = cur.fetchone()
@@ -330,10 +331,20 @@ def create_agent(
     *,
     model: str | None = None,
     base_prompt: str = "Você é o atendente da loja.",
+    is_active: bool = False,
 ) -> uuid.UUID:
-    """The org's agent row (Worder: ai_agents). `model` None exercises the default."""
-    columns = ["organization_id", "name", "system_prompt"]
-    values: list[object] = [organization_id, unique_id("agent"), base_prompt]
+    """The org's agent row (Worder: ai_agents). `model` None exercises the default.
+
+    `is_active` defaults to `False` — the same default the application posts
+    (`is_active: body.is_active ?? false`) and the one W3-GD-07
+    (`ai_agents_single_active_per_org`, `20260917050000`) actually enforces: at
+    most one active agent per organization. The table's OWN column default is
+    `true` (`20260812000001:663`), which is exactly the state production never
+    reaches on its own — a caller that genuinely needs THIS agent active passes
+    `is_active=True` explicitly, the same way the app's activation flow does.
+    """
+    columns = ["organization_id", "name", "system_prompt", "is_active"]
+    values: list[object] = [organization_id, unique_id("agent"), base_prompt, is_active]
     if model is not None:
         columns.append("model")
         values.append(model)
@@ -372,7 +383,18 @@ def create_agent_version(
     """
     del origin
     if agent_id is None:
-        agent_id = create_agent(conn, organization_id, model=model, base_prompt=base_prompt)
+        agent_id = create_agent(
+            conn, organization_id, model=model, base_prompt=base_prompt,
+            is_active=(status == "active"),
+        )
+    elif status == "active":
+        # Reusing an agent for a version that goes to produção is the same
+        # "activation" the app performs before flipping a version live —
+        # W3-GD-07 (`ai_agents_single_active_per_org`) is what actually
+        # refuses a SECOND agent active in the same org; this just puts the
+        # fixture through the same door production uses.
+        with conn.cursor() as cur:
+            cur.execute("update public.ai_agents set is_active=true where id=%s", (agent_id,))
 
     settings = (
         psycopg.types.json.Jsonb({"tools": {"enabled": enabled_tools}})

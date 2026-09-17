@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError, getSupabaseClient } from '@/lib/api-utils';
+import { orgStoreIds } from '@/lib/api/guards';
 import { ExecutionEngine } from '@/lib/automation/execution-engine';
 import { decryptCredential } from '@/lib/automation/credential-encryption';
 export const dynamic = 'force-dynamic';
@@ -15,11 +16,12 @@ export async function POST(
   const auth = await getAuthClient();
   if (!auth) return authError();
   const { supabase } = auth;
+  const organizationId = auth.user.organization_id;
 
   try {
     const { id: automationId } = await params;
     const body = await request.json();
-    
+
     const {
       contactId,
       dealId,
@@ -28,11 +30,15 @@ export async function POST(
       isTest = false,
     } = body;
 
-    // Buscar automação - RLS filtra automaticamente
+    // O filtro por organização é explícito, não herdado. O comentário
+    // antigo dizia que a RLS filtrava sozinha, e a RLS está desligada
+    // nestas tabelas: sem o `.eq`, o id de uma automação de outra
+    // organização era suficiente para executá-la.
     const { data: automation, error: automationError } = await supabase
       .from('automations')
       .select('*')
       .eq('id', automationId)
+      .eq('organization_id', organizationId)
       .single();
 
     if (automationError || !automation) {
@@ -58,21 +64,27 @@ export async function POST(
         .from('contacts')
         .select('*')
         .eq('id', contactId)
+        .eq('organization_id', organizationId)
         .single();
-      
+
       contact = contactData;
     }
 
-    // Buscar deal se fornecido
+    // Buscar deal se fornecido. `deals` não tem coluna de organização:
+    // a cerca é a loja.
     let deal: Record<string, any> | null = null;
     if (dealId) {
-      const { data: dealData } = await supabase
-        .from('deals')
-        .select('*')
-        .eq('id', dealId)
-        .single();
-      
-      deal = dealData;
+      const storeIds = await orgStoreIds(supabase, organizationId);
+      if (storeIds.length > 0) {
+        const { data: dealData } = await supabase
+          .from('deals')
+          .select('*')
+          .eq('id', dealId)
+          .in('store_id', storeIds)
+          .single();
+
+        deal = dealData;
+      }
     }
 
     // Buscar credenciais necessárias para os nós
@@ -86,9 +98,13 @@ export async function POST(
 
     const credentials: Record<string, any> = {};
     if (credentialsNeeded.size > 0) {
+      // Sem o filtro de organização aqui, bastava apontar um nó da
+      // própria automação para o id de uma credencial alheia: a rota
+      // decriptava e usava. É o vazamento mais caro desta rota.
       const { data: credentialRecords } = await supabase
         .from('credentials')
         .select('id, type, encrypted_data')
+        .eq('organization_id', organizationId)
         .in('id', Array.from(credentialsNeeded));
 
       for (const cred of credentialRecords || []) {
@@ -180,24 +196,45 @@ export async function POST(
     // Salvar execução no banco (exceto para testes)
     if (!isTest) {
       try {
-        await supabaseAdmin
-          .from('automation_executions')
+        // A execução manual é gravada em `automation_runs` — a mesma
+        // tabela do motor da fila e dos crons, e a que a tela de
+        // histórico lê. `automation_executions` não tem organization_id
+        // (nem trigger_type, nem duration_ms): a linha antiga era
+        // recusada pelo PostgREST e a execução sumia do histórico.
+        // `id` é uuid na tabela e o motor gera "EXEC-<timestamp>-<rand>";
+        // o id do motor vai para o metadata. E o status do motor
+        // (success/error) não passa no CHECK da coluna, que fala
+        // pending/running/waiting/completed/failed/cancelled.
+        const statusDoRun = result.status === 'success'
+          ? 'completed'
+          : result.status === 'error'
+            ? 'failed'
+            : result.status;
+
+        const { error: runError } = await supabaseAdmin
+          .from('automation_runs')
           .insert({
-            id: executionId,
             automation_id: automationId,
-            status: result.status,
+            organization_id: organizationId,
+            status: statusDoRun,
             trigger_type: triggerType || 'manual',
             trigger_data: triggerData,
             contact_id: contactId || null,
             deal_id: dealId || null,
             node_results: result.nodeResults,
-            final_context: result.context,
+            result: result.context,
+            total_steps: nodes.length,
             duration_ms: duration,
             error_message: result.error || null,
             error_node_id: result.errorNodeId || null,
             started_at: initialContext.trigger.timestamp,
             completed_at: new Date().toISOString(),
+            metadata: { engine_execution_id: executionId, source: 'manual' },
           });
+
+        if (runError) {
+          console.error('Erro ao salvar execução:', runError);
+        }
       } catch (saveError) {
         console.error('Erro ao salvar execução:', saveError);
       }

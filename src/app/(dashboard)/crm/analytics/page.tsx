@@ -842,7 +842,7 @@ export default function AnalyticsPage() {
     } finally {
       setLoading(false)
     }
-  }, [organizationId, storeId, period, selectedPipelineIds, currentStore?.id]) // ✅ MODIFICADO
+  }, [organizationId, storeId, period, selectedPipelineIds]) // ✅ MODIFICADO
 
   useEffect(() => {
     fetchData()

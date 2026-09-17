@@ -124,7 +124,8 @@ async function resolveContactId(
         first_name: contact.first_name || null,
         last_name: contact.last_name || null,
         source: 'custom_event_api',
-        metadata: contact.external_id ? { external_id: contact.external_id } : {},
+        // A coluna é custom_fields; `metadata` não existe em contacts.
+        custom_fields: contact.external_id ? { external_id: contact.external_id } : {},
       })
       .select('id')
       .single();
@@ -194,6 +195,16 @@ export async function POST(req: NextRequest) {
       },
       idempotencyKey:
         body.idempotency_key || `custom_event:${organizationId}:${body.event_name}:${contactId}`,
+      // Sem este filtro, TODO fluxo de evento customizado da org disparava
+      // em QUALQUER event_name recebido. Config vazia = qualquer evento
+      // (compat com fluxos existentes).
+      matchConfig: (cfg: any) => {
+        const wanted = cfg?.event_name || cfg?.eventName;
+        if (wanted && String(wanted).trim() && String(wanted).trim() !== String(body.event_name).trim()) {
+          return false;
+        }
+        return true;
+      },
     });
 
     return NextResponse.json({

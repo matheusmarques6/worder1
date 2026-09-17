@@ -91,7 +91,9 @@ class TestTheTenantPolicy:
 
         assert policy.primary_language == "pt-BR"
         assert policy.never_say_ai is True
-        assert policy.shadow_until is None
+        assert policy == agent_repo.TenantSettings(
+            policy=agent_repo.TenantPolicy(primary_language="pt-BR", never_say_ai=True)
+        )
 
 
 class TestTheConversation:
@@ -216,6 +218,30 @@ class TestTheTranscript:
             )
 
         assert [message.text for message in transcript] == ["m4", "m5"]
+
+    async def test_transcript_and_pending_do_not_overlap(
+        self, dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+    ) -> None:
+        thread = create_thread(admin, tenant)
+        create_message(admin, tenant, thread, direction="inbound", seq=1, text="historia-63")
+        create_message(admin, tenant, thread, direction="inbound", seq=2, text="pendente-63")
+
+        async with as_worker(dsn, tenant) as conn:
+            transcript = await agent_repo.load_recent_transcript(
+                conn,
+                conversation_id=thread.conversation_id,
+                exclude_inbound_after_seq=1,
+            )
+            pending = await agent_repo.load_pending_messages(
+                conn,
+                conversation_id=thread.conversation_id,
+                after_seq=1,
+                target_seq=2,
+            )
+
+        texts = [message.text for message in transcript + pending]
+        assert texts.count("pendente-63") == 1
+        assert texts == ["historia-63", "pendente-63"]
 
 
 class TestLegacyShapedHistory:

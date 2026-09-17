@@ -113,18 +113,27 @@ async function handleCheckout(ctx: Ctx, data: any, event_type: string) {
 
   const checkoutId = data.token || data.id?.toString()
 
-  await supabase.from('contact_events').insert({
+  // As colunas de pedido e produto NÃO existem em contact_events: a
+  // tabela guarda o que é específico do evento dentro de `properties`
+  // (jsonb) e usa shopify_resource_id/type para o que veio da Shopify.
+  // Com order_id/order_total/shopify_customer_id no payload, o PostgREST
+  // recusava a linha inteira — nenhum evento de checkout ou de pedido
+  // era registrado por este webhook, e é deles que vivem os segmentos
+  // ("comprou nos últimos 30 dias"), os gatilhos de automação e o RFM.
+  const { error: eventoErr } = await supabase.from('contact_events').insert({
     organization_id: ctx.org_id,
     store_id: ctx.store_id,
     contact_id,
-    shopify_customer_id: customer.id?.toString(),
     event_type,
     event_source: 'shopify',
-    order_id: checkoutId,
-    order_total: parseFloat(data.total_price || 0),
+    shopify_resource_id: checkoutId,
+    shopify_resource_type: event_type.includes('checkout') ? 'checkout' : 'order',
     monetary_value: parseFloat(data.total_price || 0),
     currency: data.currency || 'BRL',
     properties: {
+      order_id: checkoutId,
+      order_total: parseFloat(data.total_price || 0),
+      shopify_customer_id: customer.id?.toString() || null,
       line_items: lineItems.map((item: any) => ({
         product_id: item.product_id,
         variant_id: item.variant_id,
@@ -139,24 +148,33 @@ async function handleCheckout(ctx: Ctx, data: any, event_type: string) {
     occurred_at: new Date().toISOString(),
     idempotency_key: checkoutId ? `${event_type}:${ctx.org_id}:${checkoutId}` : null,
   })
+  if (eventoErr) console.error('[ShopifyWebhook] evento não registrado:', eventoErr.message)
 
   for (const item of lineItems) {
-    await supabase.from('contact_events').insert({
+    // Idem para o item: produto vai em `properties`.
+    const { error: itemErr } = await supabase.from('contact_events').insert({
       organization_id: ctx.org_id,
       store_id: ctx.store_id,
       contact_id,
       event_type: 'added_to_cart',
       event_source: 'shopify',
-      product_id: item.product_id?.toString(),
-      product_name: item.title,
-      product_price: parseFloat(item.price || 0),
-      product_quantity: item.quantity,
+      shopify_resource_id: item.product_id?.toString() || null,
+      shopify_resource_type: 'product',
       monetary_value: parseFloat(item.price || 0) * (item.quantity || 1),
       currency: data.currency || 'BRL',
-      properties: { from_checkout: true, customer_email: data.email },
+      properties: {
+        from_checkout: true,
+        customer_email: data.email,
+        product_id: item.product_id?.toString() || null,
+        product_name: item.title,
+        product_price: parseFloat(item.price || 0),
+        product_quantity: item.quantity,
+        variant_id: item.variant_id?.toString() || null,
+      },
       occurred_at: new Date().toISOString(),
       idempotency_key: `added_to_cart:${ctx.org_id}:${checkoutId}:${item.product_id}:${item.variant_id}`,
-    }).select().maybeSingle()
+    })
+    if (itemErr) console.error('[ShopifyWebhook] item do carrinho não registrado:', itemErr.message)
   }
 }
 
@@ -173,18 +191,23 @@ async function handleOrder(ctx: Ctx, data: any, event_type: string) {
     shopify_customer_id: customer.id?.toString(),
   })
 
+  // Mesmo formato do evento de checkout: pedido e cliente vão em
+  // `properties` (a tabela não tem colunas para eles), e o identificador
+  // da Shopify em shopify_resource_id/type.
   const { error: eventInsertErr } = await supabase.from('contact_events').insert({
     organization_id: ctx.org_id,
     store_id: ctx.store_id,
     contact_id,
-    shopify_customer_id: customer.id?.toString(),
     event_type,
     event_source: 'shopify',
-    order_id: orderId,
-    order_total: orderTotal,
+    shopify_resource_id: orderId ? String(orderId) : null,
+    shopify_resource_type: 'order',
     monetary_value: orderTotal,
     currency: data.currency || 'BRL',
     properties: {
+      order_id: orderId,
+      order_total: orderTotal,
+      shopify_customer_id: customer.id?.toString() || null,
       line_items: lineItems.map((item: any) => ({
         product_id: item.product_id,
         title: item.title,
@@ -222,15 +245,20 @@ async function handleOrder(ctx: Ctx, data: any, event_type: string) {
     })
     if (rpcErr) {
       // Fallback manual se RPC não existir / falhou
+      // As colunas são total_spent e last_order_at — total_revenue e
+      // last_order_date não existem, e o PostgREST recusava tanto o
+      // select quanto o update: o gasto acumulado do contato nunca subia
+      // por este caminho de reserva.
       const { data: c } = await supabase.from('contacts')
-        .select('total_revenue, total_orders').eq('id', contact_id).single()
+        .select('total_spent, total_orders').eq('id', contact_id).single()
       if (c) {
-        await supabase.from('contacts').update({
-          total_revenue: (c.total_revenue || 0) + orderTotal,
+        const { error: upErr } = await supabase.from('contacts').update({
+          total_spent: (Number(c.total_spent) || 0) + orderTotal,
           total_orders: (c.total_orders || 0) + 1,
-          last_order_date: new Date().toISOString(),
+          last_order_at: new Date().toISOString(),
           shopify_customer_id: customer.id?.toString(),
         }).eq('id', contact_id)
+        if (upErr) console.error('[ShopifyWebhook] totais do contato não atualizados:', upErr.message)
       }
     }
   }
@@ -239,22 +267,30 @@ async function handleOrder(ctx: Ctx, data: any, event_type: string) {
 async function handleCart(ctx: Ctx, data: any) {
   const lineItems = data.line_items || []
   for (const item of lineItems) {
-    await supabase.from('contact_events').insert({
+    const { error: cartErr } = await supabase.from('contact_events').insert({
       organization_id: ctx.org_id,
       store_id: ctx.store_id,
       event_type: 'added_to_cart',
       event_source: 'shopify',
-      product_id: item.product_id?.toString(),
-      product_name: item.title,
-      product_price: parseFloat(item.price || 0),
-      product_quantity: item.quantity,
+      shopify_resource_id: item.product_id?.toString() || null,
+      shopify_resource_type: 'product',
       monetary_value: parseFloat(item.price || 0) * (item.quantity || 1),
       currency: data.currency || 'BRL',
       session_id: data.token,
       occurred_at: new Date().toISOString(),
       idempotency_key: `added_to_cart:${ctx.org_id}:${data.token}:${item.product_id}`,
-      properties: {},
-    }).select().maybeSingle()
+      // O produto vive em `properties`: contact_events não tem colunas
+      // de produto, e mandá-las fazia o PostgREST recusar a linha —
+      // nenhum "adicionou ao carrinho" era registrado.
+      properties: {
+        product_id: item.product_id?.toString() || null,
+        product_name: item.title,
+        product_price: parseFloat(item.price || 0),
+        product_quantity: item.quantity,
+        variant_id: item.variant_id?.toString() || null,
+      },
+    })
+    if (cartErr) console.error('[ShopifyWebhook] item do carrinho não registrado:', cartErr.message)
   }
 }
 
@@ -324,7 +360,10 @@ async function findOrCreateContact(
         organization_id,
         email: data.email || null,
         phone: data.phone || null,
-        name: data.name || data.email?.split('@')[0] || 'Cliente',
+        // A coluna é `full_name`; `name` não existe em contacts, e com ela
+        // no payload o PostgREST recusava a linha inteira — nenhum contato
+        // era criado por este caminho.
+        full_name: data.name || data.email?.split('@')[0] || 'Cliente',
         shopify_customer_id: data.shopify_customer_id,
       })
       .select('id')

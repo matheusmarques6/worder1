@@ -44,26 +44,55 @@ export async function POST(req: NextRequest) {
   let finalHtml: string = rawHtml || ''
   let finalSubject: string = subject || ''
   let finalPreheader: string = preheader || ''
-  let baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.worder.com.br'
+  // A prévia mostra o host de rastreamento, que é o que vai no e-mail.
+  const { getTrackingBaseUrl } = await import('@/lib/email/tracking-url')
+  let baseUrl = await getTrackingBaseUrl(auth.user.organization_id, null)
 
   // When campaignId is provided pull the latest saved version.
+  let campaignStoreId: string | null = null
+  let campaignName: string | null = null
+  // Sobrescrita de UTM: a salva na campanha ou a que o assistente ainda
+  // não salvou (body.utm), para o preview refletir o que vai sair.
+  let campaignUtmRaw: unknown = body.utm ?? null
   if (campaignId) {
     const { data: camp } = await supabaseAdmin
       .from('email_campaigns')
-      .select('id, name, subject, preheader, html, organization_id')
+      .select('id, name, subject, preview_text, html_content, organization_id, store_id, settings')
       .eq('id', campaignId)
       .eq('organization_id', auth.user.organization_id)
       .maybeSingle()
     if (!camp) {
       return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
     }
-    finalHtml = camp.html || rawHtml || ''
+    // As colunas são html_content e preview_text; pedir `html` e
+    // `preheader` fazia o PostgREST recusar a consulta inteira, e a
+    // prévia caía no que o corpo da requisição trouxesse.
+    finalHtml = camp.html_content || rawHtml || ''
     finalSubject = camp.subject || subject || ''
-    finalPreheader = camp.preheader || preheader || ''
+    finalPreheader = camp.preview_text || preheader || ''
+    campaignStoreId = camp.store_id || null
+    // Com a loja conhecida, o host dos links é o dela (a loja pode ter um
+    // domínio de rastreamento próprio, diferente do da organização).
+    if (campaignStoreId) {
+      baseUrl = await getTrackingBaseUrl(auth.user.organization_id, campaignStoreId)
+    }
+    campaignName = camp.name || null
+    campaignUtmRaw = (camp as any).settings?.utm ?? null
   }
 
   if (!finalHtml) {
     return NextResponse.json({ error: 'HTML do email é obrigatório' }, { status: 400 })
+  }
+
+  // Blocos dinâmicos de produto com a loja DA CAMPANHA, como no envio
+  // real. Sem loja (HTML solto), o resolvedor só usa a única loja da
+  // organização — nunca adivinha entre várias.
+  try {
+    const { resolveProductBlocks, resolveCartBlocks } = await import('@/lib/email/render')
+    finalHtml = await resolveProductBlocks(finalHtml, auth.user.organization_id, undefined, undefined, campaignStoreId)
+    finalHtml = await resolveCartBlocks(finalHtml, auth.user.organization_id, undefined, undefined, null, undefined, campaignStoreId)
+  } catch (e: any) {
+    console.warn('[inbox-preview] dynamic block resolve failed:', e?.message)
   }
 
   const merge: Record<string, string> = { ...SAMPLE_MERGE, ...(mergeData || {}) }
@@ -72,6 +101,27 @@ export async function POST(req: NextRequest) {
   // recipient actually receives — merge tags, image CDN rewrites,
   // unsubscribe link, tracking pixel.
   const previewSendId = 'preview-' + Math.random().toString(36).slice(2, 9)
+
+  // UTM + identificação como no envio real (configuração da loja da campanha).
+  let linkParams: any = null
+  try {
+    const { getUtmSettings } = await import('@/lib/tracking/utm-settings')
+    const { makeLinkParamsResolver, normalizeMessageUtmConfig } = await import('@/lib/tracking/link-params')
+    const { settings } = await getUtmSettings(auth.user.organization_id, campaignStoreId)
+    const campaignUtm = normalizeMessageUtmConfig(campaignUtmRaw)
+    linkParams = makeLinkParamsResolver(settings, {
+      channel: 'email',
+      messageType: 'campaign',
+      campaignName: campaignName || body.campaignName || 'Campanha',
+      campaignId: campaignId || 'preview',
+      emailSubject: renderMergeTags(finalSubject, merge, { escape: false }),
+      sendId: previewSendId,
+      storeName: merge.store_name,
+      storeDomain: merge.store_url,
+      extra: merge,
+    }, { utmOverrides: campaignUtm?.overrides || null, utmDisabled: campaignUtm?.disabled === true })
+  } catch { /* preview segue sem UTM no href */ }
+
   const processedHtml = prepareEmailHtml({
     html: finalHtml,
     mergeData: merge,
@@ -80,6 +130,7 @@ export async function POST(req: NextRequest) {
     contactId: undefined,
     orgId: auth.user.organization_id,
     campaignId,
+    linkParams,
   })
 
   return NextResponse.json({

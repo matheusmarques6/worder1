@@ -61,18 +61,11 @@ export async function POST(req: NextRequest) {
   const signature = req.headers.get('upstash-signature');
   const receiver = getQstashReceiver();
 
-  if (process.env.NODE_ENV === 'production') {
-    if (!signature || !receiver) {
-      return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-    }
-    const valid = await receiver.verify({ signature, body: rawBody });
-    if (!valid) return NextResponse.json({ error: 'invalid signature' }, { status: 401 });
-  } else if (receiver && signature) {
-    const valid = await receiver.verify({ signature, body: rawBody });
-    if (!valid) return NextResponse.json({ error: 'invalid signature' }, { status: 401 });
-  } else if (req.headers.get('x-internal-request') !== 'true') {
+  if (!signature || !receiver) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
+  const valid = await receiver.verify({ signature, body: rawBody });
+  if (!valid) return NextResponse.json({ error: 'invalid signature' }, { status: 401 });
 
   let eventId: string | undefined;
   try {
@@ -100,7 +93,9 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const result = await processWebhookPayload(claimed.raw_payload);
+    const result = await processWebhookPayload(claimed.raw_payload, {
+      resumeExistingMessages: claimed.attempts > 1,
+    });
     await markDone(eventId);
     return NextResponse.json({ ok: true, eventId, result });
   } catch (err: any) {

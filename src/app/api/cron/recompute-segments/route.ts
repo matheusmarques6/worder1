@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { resolveSegment, loadSegmentAsV2 } from '@/lib/segments';
 import { extractDependencies } from '@/lib/segments/dsl';
+import { authorizeCronRequest } from '@/lib/cron-auth';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -22,15 +23,8 @@ const TIME_BUDGET_MS = 50_000;
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-function isAuthorizedCron(request: NextRequest): boolean {
-  if (request.headers.get('x-vercel-cron')) return true;
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return process.env.NODE_ENV !== 'production';
-  return request.headers.get('authorization') === `Bearer ${secret}`;
-}
-
 export async function GET(request: NextRequest) {
-  if (!isAuthorizedCron(request)) {
+  if (!authorizeCronRequest(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

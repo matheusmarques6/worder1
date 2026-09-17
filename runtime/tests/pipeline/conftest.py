@@ -21,10 +21,17 @@ from psycopg import sql
 from agents_runtime.config import QueueingConfig, config_from_env
 from agents_runtime.queueing import ALL_QUEUES, INBOUND
 from agents_runtime.repository.queue import PgmqQueue
+from tests.support.constant_reply import create_responder, create_toucher
 from tests.support.database import dsn_from_env
 from tests.support.fake_channel import SCHEMA_SQL
 from tests.support.holdable import GATE_SQL
 from tests.support.runtime_process import TINY_INTERVALS
+
+
+@pytest.fixture(autouse=True)
+def explicit_test_producers(dsn, monkeypatch):
+    monkeypatch.setattr("agents_runtime.app.fixed_responder", lambda: create_responder(dsn))
+    monkeypatch.setattr("agents_runtime.app.fixed_toucher", lambda: create_toucher(dsn))
 
 if sys.platform == "win32":
     # psycopg's async connections need a selector loop and Windows defaults to

@@ -33,6 +33,8 @@ Eventos normalizados emitidos pela sua loja Worder para endpoints externos. Payl
 | `customer.created`              | Primeiro contato registrado (via customer ou pedido)  |
 | `shipment.tracking_created`     | Fulfillment ganhou `tracking_number`                  |
 | `browse.abandoned`              | `viewed_product` sem `added_to_cart` nem `placed_order` na janela de 30min–4h |
+| `popup.signup`                  | Inscrição enviada por um popup/formulário do site       |
+| `popup.reward`                  | Popup emitiu um cupom (único ou estático) para o inscrito |
 
 ---
 
@@ -73,6 +75,8 @@ Todos os eventos compartilham a mesma envoltória:
 - **`customer.created`**: `customer_id`, `shopify_customer_id`, `email`, `first_name`, `last_name`, `phone`.
 - **`shipment.tracking_created`**: `order_id`, `fulfillment_id`, `tracking_number`, `tracking_url`, `tracking_company`, `status`.
 - **`browse.abandoned`**: `contact_id`, `product_id`, `view_event_id`, `viewed_at`.
+- **`popup.signup`**: `submission_id`, `form_id`, `form_name`, `contact_id`, `email`, `phone`, `first_name`, `last_name`, `answers` (respostas livres, sem honeypot nem consentimentos), `consent` (`email`/`whatsapp`/`sms`: `granted`, `denied`, `pending` ou `null`), `device`, `country`, `page_url`, `traffic_type`, `page_kind`, `variant_id`, `utm`.
+- **`popup.reward`**: `submission_id`, `form_id`, `contact_id`, `email`, `coupon` (`code`, `kind`, `value`, `ends_at`, `tier`, `source`) e, quando houve jogo, `game` (`type`, `segment`, `label`, `prize`).
 
 ---
 

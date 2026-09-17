@@ -77,10 +77,128 @@ async def _run(dsn, org, thread, tool, arguments):
         )
 
 
+def _create_grant(
+    admin: psycopg.Connection, org: uuid.UUID, thread, **overrides
+) -> uuid.UUID:
+    """Grant 'issued' cru, sem passar pelo offer_engine — usado onde o teste
+    quer o estado do banco direto (validação de grant, unicidade de código).
+
+    Só cria missão nova se o chamador não passou `mission_version_id`: a
+    mesma org não pode ter duas missões 'active' para o mesmo event_type
+    (`ai_missions_one_active_per_family`), e mais de um grant na mesma org
+    é exatamente o caso que os testes de unicidade de cupom precisam."""
+    if "mission_version_id" not in overrides:
+        overrides = {**overrides, "mission_version_id": create_mission(admin, org, status="active")}
+    fields = {
+        "organization_id": org,
+        "contact_id": thread.contact_id,
+        "object_kind": "cart",
+        "object_ref": "cart-55",
+        "validity": datetime.now(UTC) + timedelta(hours=4),
+        "status": "issued",
+        "uses": 0,
+        "coupon_code": None,
+    } | overrides
+    with admin.cursor() as cur:
+        cur.execute(
+            """
+            insert into public.incentive_grants
+                (organization_id, contact_id, object_kind, object_ref, source,
+                 mission_version_id, kind, value, validity_until, max_uses, uses,
+                 status, coupon_code, idempotency_key)
+            values (%(organization_id)s, %(contact_id)s, %(object_kind)s,
+                    %(object_ref)s, 'mission', %(mission_version_id)s, 'percent', 10,
+                    %(validity)s, 1, %(uses)s, %(status)s, %(coupon_code)s, %(key)s)
+            returning id
+            """,
+            {**fields, "key": f"k-{uuid.uuid4().hex}"},
+        )
+        (grant_id,) = cur.fetchone()
+    return grant_id
+
+
+def _create_popup_grant(
+    admin: psycopg.Connection, org: uuid.UUID, thread, coupon_code: str
+) -> uuid.UUID:
+    """Grant 'issued' de popup, cru — mesma tática de _create_grant, mas
+    source='popup': issue_popup_incentive entrega o MESMO coupon_code
+    estático a todo visitante do bloco (20260910130000_popup_steps_v2.sql).
+    form_id substitui mission_version_id como referência obrigatória."""
+    form_id = uuid.uuid4()
+    with admin.cursor() as cur:
+        cur.execute(
+            """
+            insert into public.incentive_grants
+                (organization_id, contact_id, object_kind, object_ref, source,
+                 form_id, kind, value, validity_until, max_uses, uses,
+                 status, coupon_code, idempotency_key)
+            values (%(organization_id)s, %(contact_id)s, 'form', %(object_ref)s, 'popup',
+                    %(form_id)s, 'percent', 10, %(validity)s, 1, 0,
+                    'issued', %(coupon_code)s, %(key)s)
+            returning id
+            """,
+            {
+                "organization_id": org,
+                "contact_id": thread.contact_id,
+                "form_id": form_id,
+                "object_ref": str(form_id),
+                "validity": datetime.now(UTC) + timedelta(hours=4),
+                "coupon_code": coupon_code,
+                "key": f"k-{uuid.uuid4().hex}",
+            },
+        )
+        (grant_id,) = cur.fetchone()
+    return grant_id
+
+
 ARGS = {"object_kind": "cart", "object_ref": "cart-55"}
 
 
 class TestTheHappyPath:
+    async def test_coupon_cannot_read_a_foreign_conversation(
+        self, dsn: str, admin: psycopg.Connection, org: uuid.UUID
+    ) -> None:
+        foreign_org = create_tenant(admin)
+        try:
+            own = create_thread(admin, org)
+            foreign = create_thread(admin, foreign_org)
+            mission_id = create_mission(admin, org, status="active")
+            transport, seen = _shopify_transport()
+            tool = _tool(_mission(mission_id, {"kind": "none"}), transport)
+
+            async with as_runtime_worker(dsn) as conn:
+                rejected = await tool(
+                    conn,
+                    tools.ToolContext(
+                        organization_id=org,
+                        conversation_id=foreign.conversation_id,
+                    ),
+                    ARGS,
+                )
+                accepted = await tool(
+                    conn,
+                    tools.ToolContext(
+                        organization_id=org,
+                        conversation_id=own.conversation_id,
+                    ),
+                    ARGS,
+                )
+
+            assert rejected.success is False
+            assert rejected.error == "conversa não encontrada para este tenant"
+            assert rejected.output == {}
+            assert accepted.success is True
+            assert accepted.output["decision"] == "denied"
+            assert seen == []
+            assert admin.execute(
+                "select count(*) from public.incentive_grants where contact_id = %s",
+                (foreign.contact_id,),
+            ).fetchone() == (0,)
+        finally:
+            admin.execute(
+                "delete from public.organizations where id = %s", (foreign_org,)
+            )
+
     async def test_issue_then_provider_then_code(
         self, dsn: str, admin: psycopg.Connection, org: uuid.UUID
     ) -> None:
@@ -177,33 +295,7 @@ class TestGrantValidation:
     async def _issued_grant(
         self, admin: psycopg.Connection, org: uuid.UUID, thread, **overrides
     ) -> uuid.UUID:
-        mission_id = create_mission(admin, org, status="active")
-        fields = {
-            "organization_id": org,
-            "contact_id": thread.contact_id,
-            "object_kind": "cart",
-            "object_ref": "cart-55",
-            "mission_version_id": mission_id,
-            "validity": datetime.now(UTC) + timedelta(hours=4),
-            "status": "issued",
-            "uses": 0,
-        } | overrides
-        with admin.cursor() as cur:
-            cur.execute(
-                """
-                insert into public.incentive_grants
-                    (organization_id, contact_id, object_kind, object_ref, source,
-                     mission_version_id, kind, value, validity_until, max_uses, uses,
-                     status, idempotency_key)
-                values (%(organization_id)s, %(contact_id)s, %(object_kind)s,
-                        %(object_ref)s, 'mission', %(mission_version_id)s, 'percent', 10,
-                        %(validity)s, 1, %(uses)s, %(status)s, %(key)s)
-                returning id
-                """,
-                {**fields, "key": f"k-{uuid.uuid4().hex}"},
-            )
-            (grant_id,) = cur.fetchone()
-        return grant_id
+        return _create_grant(admin, org, thread, **overrides)
 
     async def test_a_valid_grant_executes(
         self, dsn: str, admin: psycopg.Connection, org: uuid.UUID
@@ -276,6 +368,158 @@ class TestGrantValidation:
         )
         assert result.success is False
         assert "autoriza cart cart-55" in result.error
+
+    async def test_a_legacy_short_code_is_kept_and_the_provider_is_never_called(
+        self, dsn: str, admin: psycopg.Connection, org: uuid.UUID
+    ) -> None:
+        """Grant em voo antes do fix (W2-T4): já tem os 8 hex antigos gravados.
+        O retry tem que ler esse código do banco — nunca recomputar (o cálculo
+        novo usa o UUID inteiro e daria um código DIFERENTE) e nunca chamar o
+        provedor de novo para um grant que já tem cupom."""
+        thread = create_thread(admin, org)
+        create_store(admin, org)
+        legacy_code = f"WD-{uuid.uuid4().hex[:8].upper()}"
+        grant_id = await self._issued_grant(admin, org, thread, coupon_code=legacy_code)
+        transport, seen = _shopify_transport()
+        tool = _tool(_mission(uuid.uuid4(), {"kind": "none"}), transport)
+
+        result = await _run(dsn, org, thread, tool, {**ARGS, "grant_id": str(grant_id)})
+
+        assert result.success is True
+        assert result.output["coupon_code"] == legacy_code
+        assert seen == []  # nenhuma chamada ao provedor — o código já existia
+
+        (stored,) = admin.execute(
+            "select coupon_code from public.incentive_grants where id = %s", (grant_id,)
+        ).fetchone()
+        assert stored == legacy_code  # lido do banco, não recomputado por cima
+
+
+class TestCouponUniqueness:
+    """W2-T4: dois grants RUNTIME-issued (mission/moment) não podem
+    compartilhar código na mesma org; grants de popup (source='popup')
+    ficam fora do escopo — a mesma static code é deliberadamente entregue
+    a todo visitante de um bloco."""
+
+    def test_same_code_twice_in_one_org_is_rejected(
+        self, admin: psycopg.Connection, two_tenants
+    ) -> None:
+        thread_a = create_thread(admin, two_tenants.a.id)
+        thread_b = create_thread(admin, two_tenants.b.id)
+        code = f"WD-{uuid.uuid4().hex.upper()}"
+        # Uma missão só por org: duas 'active' do mesmo event_type na mesma
+        # org violam ai_missions_one_active_per_family — sem relação com o
+        # que este teste prova.
+        mission_a = create_mission(admin, two_tenants.a.id, status="active")
+        first = _create_grant(admin, two_tenants.a.id, thread_a, mission_version_id=mission_a)
+        second = _create_grant(admin, two_tenants.a.id, thread_a, mission_version_id=mission_a)
+        other_org = _create_grant(admin, two_tenants.b.id, thread_b)
+
+        admin.execute(
+            "update public.incentive_grants set coupon_code=%s where id=%s", (code, first)
+        )
+        with pytest.raises(psycopg.errors.UniqueViolation):
+            admin.execute(
+                "update public.incentive_grants set coupon_code=%s where id=%s",
+                (code.lower(), second),
+            )
+        # A organização B prova que a unicidade é por tenant, não global.
+        admin.execute(
+            "update public.incentive_grants set coupon_code=%s where id=%s",
+            (code, other_org),
+        )
+
+    def test_two_popup_grants_in_one_org_can_share_a_code(
+        self, admin: psycopg.Connection, org: uuid.UUID
+    ) -> None:
+        """issue_popup_incentive entrega o MESMO código estático a todo
+        visitante de um bloco popup — não é colisão, é o desenho do produto.
+        O índice de unicidade (20260917030000) precisa ficar fora do escopo
+        de source='popup', senão a segunda submissão do mesmo popup na
+        mesma org morre com 23505 dentro da RPC (que route.ts engole)."""
+        thread_a = create_thread(admin, org)
+        thread_b = create_thread(admin, org)
+        code = f"POPUP-{uuid.uuid4().hex.upper()}"
+
+        first = _create_popup_grant(admin, org, thread_a, code)
+        second = _create_popup_grant(admin, org, thread_b, code)  # não deve levantar
+
+        rows = admin.execute(
+            "select coupon_code from public.incentive_grants where id in (%s, %s)",
+            (first, second),
+        ).fetchall()
+        assert [r[0] for r in rows] == [code, code]
+
+    async def test_a_permanent_conflict_opens_an_alert_and_stops_at_one_call(
+        self, dsn: str, admin: psycopg.Connection, org: uuid.UUID
+    ) -> None:
+        """Outro grant desta org já é dono do código que este grant geraria.
+        A tool nunca devolve sucesso com o cupom de outro contato: abre
+        alerta, suspende o grant, e o provedor não é chamado uma segunda vez
+        quando a mesma tentativa é repetida (o grant suspenso não é 'issued')."""
+        thread = create_thread(admin, org)
+        mission_id = create_mission(admin, org, status="active")
+        transport, seen = _shopify_transport()
+        tool = _tool(_mission(mission_id, {"kind": "percent", "max_value": 15}), transport)
+
+        # 1) Emite um grant real sem loja conectada: fica 'issued', sem código.
+        no_store_result = await _run(dsn, org, thread, tool, ARGS)
+        assert no_store_result.success is False
+        (grant_id, existing_code) = admin.execute(
+            """
+            select id, coupon_code from public.incentive_grants
+             where contact_id = %s and status = 'issued' and coupon_code is null
+            """,
+            (thread.contact_id,),
+        ).fetchone()
+        assert grant_id is not None
+        assert existing_code is None
+
+        # 2) Outra linha da mesma org já é dona do código que ESSE grant
+        #    calcularia de forma determinística — colisão legítima, não
+        #    hipotética (dado legado / corrida fora do processo).
+        other = create_thread(admin, org)
+        colliding_code = f"WD-{grant_id.hex.upper()}"
+        # Reusa a missão já criada: duas 'active' do mesmo event_type nesta
+        # org violariam ai_missions_one_active_per_family.
+        other_grant_id = _create_grant(
+            admin, org, other, mission_version_id=mission_id, coupon_code=colliding_code
+        )
+
+        create_store(admin, org)
+        result = await _run(dsn, org, thread, tool, {**ARGS, "grant_id": str(grant_id)})
+
+        assert result.success is False
+        assert "colide" in result.error
+        assert len(seen) == 2  # price rule + discount code — UMA tentativa só
+
+        (status, code) = admin.execute(
+            "select status, coupon_code from public.incentive_grants where id = %s",
+            (grant_id,),
+        ).fetchone()
+        assert status == "revoked"  # suspenso, nunca reaberto sozinho
+        assert code is None  # nunca herdou o cupom do grant do outro contato
+
+        (alert_type, severity, dedup_key) = admin.execute(
+            "select type, severity, dedup_key from public.alerts where organization_id = %s",
+            (org,),
+        ).fetchone()
+        assert (alert_type, severity, dedup_key) == (
+            "coupon_code_conflict", "critical", f"coupon-conflict:{grant_id}",
+        )
+
+        # 3) Retry: o grant está 'revoked', não 'issued' — a validação recusa
+        #    ANTES do provedor. Um conflito permanente nunca vira laço.
+        retry = await _run(dsn, org, thread, tool, {**ARGS, "grant_id": str(grant_id)})
+        assert retry.success is False
+        assert len(seen) == 2  # nenhuma chamada nova ao provedor
+
+        # o outro grant, dono legítimo do código, nunca foi tocado
+        (other_code,) = admin.execute(
+            "select coupon_code from public.incentive_grants where id = %s",
+            (other_grant_id,),
+        ).fetchone()
+        assert other_code == colliding_code
 
 
 class TestEveryExecutionIsRecorded:

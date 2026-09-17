@@ -8,6 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { reserve, complete, fail, stats, isQueueAvailable } from '@/lib/queue/durable-queue'
+import { authorizeCronRequest } from '@/lib/cron-auth'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -15,15 +16,8 @@ export const maxDuration = 60
 const QUEUE_NAME = 'email-send-batch'
 const BATCH = 20 // até 20 batches por execução (~1000 contatos)
 
-function isAuthorized(req: NextRequest): boolean {
-  if (req.headers.get('x-vercel-cron')) return true
-  const secret = process.env.CRON_SECRET
-  if (!secret) return process.env.NODE_ENV !== 'production'
-  return req.headers.get('authorization') === `Bearer ${secret}`
-}
-
 export async function GET(req: NextRequest) {
-  if (!isAuthorized(req)) {
+  if (!authorizeCronRequest(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
   if (!isQueueAvailable()) {
@@ -57,7 +51,7 @@ export async function GET(req: NextRequest) {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-Internal': 'true',
+            authorization: `Bearer ${process.env.INTERNAL_API_SECRET || process.env.CRON_SECRET || ''}`,
           },
           body: JSON.stringify(job.data),
         })

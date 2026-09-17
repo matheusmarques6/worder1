@@ -8,6 +8,7 @@
 
 import { useState } from 'react'
 import { Loader2 } from 'lucide-react'
+import { BodyPortal } from '@/components/shared/BodyPortal'
 import { FAMILY_LABELS, type Mission } from '@/lib/ai/missions'
 
 const CONCESSION_KINDS = [
@@ -149,8 +150,11 @@ export default function MissionEditorModal({ family, mission, onClose, onSaved }
     }
   }
 
+  // No body: aberto de dentro do painel lateral (que anima com transform)
+  // o `fixed` não cobriria a tela. Ver BodyPortal.
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/30 p-6">
+    <BodyPortal>
+    <div className="fixed inset-0 z-[10000] flex items-start justify-center overflow-y-auto bg-black/30 p-6">
       <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl">
         <h3 className="text-base font-semibold text-gray-900">
           {mission == null
@@ -329,5 +333,6 @@ export default function MissionEditorModal({ family, mission, onClose, onSaved }
         </div>
       </div>
     </div>
+    </BodyPortal>
   )
 }

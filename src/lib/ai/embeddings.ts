@@ -16,6 +16,8 @@
 
 import crypto from 'crypto'
 import { getRedis, isRedisConfigured, CACHE_TTL, CACHE_PREFIX } from '@/lib/redis'
+import { AiBudgetUnavailableError, checkAiBudget } from './budget'
+import { estimateCostUsd, trackAiUsage } from './cost-tracker'
 
 const OPENAI_EMBEDDING_MODEL = 'text-embedding-3-small'
 const OPENAI_EMBEDDING_DIMENSIONS = 1536
@@ -50,7 +52,8 @@ function hashText(text: string): string {
  */
 export async function generateEmbedding(
   text: string,
-  apiKey: string
+  apiKey: string,
+  organizationId: string
 ): Promise<number[]> {
   if (!text || !text.trim()) {
     throw new Error('Texto não pode estar vazio')
@@ -93,6 +96,17 @@ export async function generateEmbedding(
   cacheStats.misses++
   console.log(`[Embeddings] 🔄 Cache MISS - Gerando embedding (${cacheStats.hits} hits, ${cacheStats.misses} misses)`)
 
+  if (!organizationId) {
+    throw new Error('organizationId não informado')
+  }
+
+  const billable = true
+  if (estimateCostUsd('openai', OPENAI_EMBEDDING_MODEL, 1, 0) === null) {
+    throw new AiBudgetUnavailableError('unpriced_model')
+  }
+  await checkAiBudget(organizationId, { throwOnExceeded: true })
+  let usageTracked = false
+
   try {
     const response = await fetch('https://api.openai.com/v1/embeddings', {
       method: 'POST',
@@ -114,6 +128,18 @@ export async function generateEmbedding(
     const data = await response.json()
     const embedding = data.data[0].embedding as number[]
 
+    await trackAiUsage({
+      organizationId,
+      provider: 'openai',
+      model: OPENAI_EMBEDDING_MODEL,
+      feature: 'embedding',
+      promptTokens: data.usage?.prompt_tokens,
+      completionTokens: data.usage ? 0 : undefined,
+      ...(data.usage ? {} : { costUsdOverride: null }),
+      metadata: { billable },
+    })
+    usageTracked = true
+
     // ============================================
     // 3. SALVAR NO CACHE (async, não bloqueia)
     // ============================================
@@ -130,8 +156,19 @@ export async function generateEmbedding(
     return embedding
 
   } catch (error: any) {
+    if (!usageTracked) {
+      await trackAiUsage({
+        organizationId,
+        provider: 'openai',
+        model: OPENAI_EMBEDDING_MODEL,
+        feature: 'embedding',
+        success: false,
+        costUsdOverride: null,
+        metadata: { billable },
+      })
+    }
     console.error('[Embeddings] ❌ Erro ao gerar embedding:', error)
-    throw new Error(`Erro ao gerar embedding: ${error.message}`)
+    throw error
   }
 }
 
@@ -141,7 +178,8 @@ export async function generateEmbedding(
  */
 export async function generateEmbeddingsBatch(
   texts: string[],
-  apiKey: string
+  apiKey: string,
+  organizationId: string
 ): Promise<number[][]> {
   if (!texts || texts.length === 0) {
     return []
@@ -189,11 +227,21 @@ export async function generateEmbeddingsBatch(
   // 2. GERAR EMBEDDINGS PARA TEXTOS NÃO CACHEADOS
   // ============================================
   if (toGenerate.length > 0) {
+    if (!organizationId) {
+      throw new Error('organizationId não informado')
+    }
+
+    const billable = true
     const batchSize = 100 // OpenAI permite até 2048, mas 100 é mais seguro
 
     for (let i = 0; i < toGenerate.length; i += batchSize) {
       const batch = toGenerate.slice(i, i + batchSize)
       const batchTexts = batch.map(b => b.text)
+      if (estimateCostUsd('openai', OPENAI_EMBEDDING_MODEL, 1, 0) === null) {
+        throw new AiBudgetUnavailableError('unpriced_model')
+      }
+      await checkAiBudget(organizationId, { throwOnExceeded: true })
+      let usageTracked = false
 
       try {
         const response = await fetch('https://api.openai.com/v1/embeddings', {
@@ -214,6 +262,19 @@ export async function generateEmbeddingsBatch(
         }
 
         const data = await response.json()
+
+        await trackAiUsage({
+          organizationId,
+          provider: 'openai',
+          model: OPENAI_EMBEDDING_MODEL,
+          feature: 'embedding',
+          promptTokens: data.usage?.prompt_tokens,
+          completionTokens: data.usage ? 0 : undefined,
+          ...(data.usage ? {} : { costUsdOverride: null }),
+          metadata: { billable },
+        })
+        usageTracked = true
+
         const sortedData = data.data.sort((a: any, b: any) => a.index - b.index)
 
         // Processar resultados e salvar no cache
@@ -232,8 +293,19 @@ export async function generateEmbeddingsBatch(
         }
 
       } catch (error: any) {
+        if (!usageTracked) {
+          await trackAiUsage({
+            organizationId,
+            provider: 'openai',
+            model: OPENAI_EMBEDDING_MODEL,
+            feature: 'embedding',
+            success: false,
+            costUsdOverride: null,
+            metadata: { billable },
+          })
+        }
         console.error('[Embeddings Batch] ❌ Erro:', error)
-        throw new Error(`Erro ao gerar embeddings em batch: ${error.message}`)
+        throw error
       }
 
       // Rate limiting entre batches
