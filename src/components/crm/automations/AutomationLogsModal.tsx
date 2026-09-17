@@ -111,6 +111,7 @@ export function AutomationLogsModal({ isOpen, onClose }: AutomationLogsModalProp
   const searchQueryRef = useRef(searchQuery)
   const [searchVersion, setSearchVersion] = useState(0)
   const logsRequestRef = useRef(0)
+  const logsOrganizationRef = useRef(organizationId)
   
   // Expanded log
   const [expandedLog, setExpandedLog] = useState<string | null>(null)
@@ -120,13 +121,21 @@ export function AutomationLogsModal({ isOpen, onClose }: AutomationLogsModalProp
   // =============================================
 
   useEffect(() => {
-    if (!isOpen) {
+    const requestId = ++logsRequestRef.current
+    if (logsOrganizationRef.current !== organizationId) {
+      logsOrganizationRef.current = organizationId
+      setLogs([])
+      setHasMore(true)
+      setPage(1)
+      if (page !== 1) return
+    }
+    if (!isOpen || !organizationId) {
+      setLogs([])
+      setLoading(false)
       setPage(1)
       return
     }
-    if (!organizationId) return
     const orgId = organizationId
-    const requestId = ++logsRequestRef.current
 
     async function fetchLogs() {
       setLoading(true)
@@ -163,6 +172,7 @@ export function AutomationLogsModal({ isOpen, onClose }: AutomationLogsModalProp
     }
 
     fetchLogs()
+    return () => { logsRequestRef.current = requestId + 1 }
   }, [isOpen, organizationId, page, statusFilter, sourceFilter, periodFilter, searchVersion])
 
   const handleSearch = () => {

@@ -209,9 +209,9 @@ it('does not let flow A analytics repopulate state after switching to B', async 
   await vi.waitFor(() => expect(useFlowStore.getState().analyticsData).toEqual({}))
 })
 
-it('renders enriched contact deals whether pipelines or deals arrive first', async () => {
+it.each(['pipeline', 'stage'] as const)('enriches deals in either arrival order and updates only %s color on the same instance', async (colorOwner) => {
   const deals = deferred<any>()
-  const pipeline = { id: 'pipeline-1', name: 'Pipeline real', color: '#123', stages: [{ id: 'stage-1', name: 'Qualificado', color: '#456' }] }
+  const pipeline = { id: 'pipeline-1', name: 'Pipeline real', color: '#ff0000', stages: [{ id: 'stage-1', name: 'Qualificado', color: colorOwner === 'stage' ? '#ff0000' : '' }] }
   vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
     const url = String(input)
     if (url.includes('/api/deals?')) return deals.promise
@@ -238,4 +238,18 @@ it('renders enriched contact deals whether pipelines or deals arrive first', asy
     expect(dealCard?.textContent).toContain('Pipeline real')
     expect(dealCard?.textContent).toContain('Qualificado')
   })
+  const indicator = dealCard!.querySelector<HTMLElement>('div[style]')!
+  expect(indicator.style.backgroundColor).toBe('rgb(255, 0, 0)')
+  const recolored = colorOwner === 'pipeline'
+    ? { ...pipeline, color: '#0000ff' }
+    : { ...pipeline, stages: [{ ...pipeline.stages[0], color: '#0000ff' }] }
+  await act(async () => { root.render(<ContactDrawer key="deals-first" {...props} pipelines={[recolored] as any} />) })
+  expect(container.contains(dealCard!)).toBe(true)
+  expect(dealCard?.textContent).toContain('Pipeline real')
+  expect(dealCard?.textContent).toContain('Qualificado')
+  expect(indicator.style.backgroundColor).toBe('rgb(0, 0, 255)')
+  if (colorOwner === 'stage') {
+    const badge = [...dealCard!.querySelectorAll('span')].find(element => element.textContent === 'Qualificado')!
+    expect(badge.style.color).toBe('rgb(0, 0, 255)')
+  }
 })

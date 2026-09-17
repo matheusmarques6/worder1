@@ -430,3 +430,20 @@ range. `.eslintrc.json` and `package.json` changed only in Task 1 to activate
 the documented `next/core-web-vitals` / `max-warnings=0` gate; they have no
 Task 13 diff. Builds emit only known Browserslist-staleness and webpack cache
 restoration warnings.
+
+## Final independent review fix wave — 2026-09-17
+
+Base: `418b2d670f67d8d0478b01d91199936846789355`. Commit: this consolidated
+fix-wave commit; its SHA is recorded in the ignored final-gates report after
+commit. The prior closure above remains historical gate evidence.
+
+| Finding | Exact production file | Resolution and regression proof |
+| --- | --- | --- |
+| P1 — blocking tenant isolation | `src/components/crm/automations/AutomationLogsModal.tsx` | Reset collection/page on organization change before requesting page 1; invalidate obsolete requests. `src/tests/eslint-crm-flow-loader-lifecycle.test.tsx` reproduces A page 1 → pending A page 2 → B, requires exactly one B page 1 request, and retains only B after late A resolves. RED received page 2; GREEN passes. |
+| P2 — media compatibility | `src/components/shared/MediaLibraryModal.tsx` | Set `unoptimized` only for SVG MIME. `src/tests/media-library-image.test.tsx` renders real Next Image: uppercase `.SVG` uses its direct URL without srcset, while PNG remains optimized. RED sent SVG to the optimizer; GREEN passes. |
+| P3 — visual | `src/components/crm/ContactDrawer.tsx` | Include pipeline/stage colors in the existing equality check. `src/tests/eslint-initialization-lifecycle.test.tsx` preserves arrival-order and same-instance coverage while independently changing each color red → blue with stable names. Both cases fail RED and pass GREEN. |
+
+One consolidated fix wave; one external re-review follows its commit. No
+configuration, package, lockfile, dependency, or image trust expansion.
+Fresh gate outcomes and exact commit SHA are retained in
+`.superpowers/sdd/2026-09-16-eslint-quality-gate/final-gates-report.md`.

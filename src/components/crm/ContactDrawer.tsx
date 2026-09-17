@@ -261,7 +261,7 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
           pipeline: pipeline ? { name: pipeline.name, color: pipeline.color } : deal.pipeline,
           stage: stage ? { name: stage.name, color: stage.color } : deal.stage,
         }
-        changed ||= updated.pipeline?.name !== deal.pipeline?.name || updated.stage?.name !== deal.stage?.name
+        changed ||= updated.pipeline?.name !== deal.pipeline?.name || updated.pipeline?.color !== deal.pipeline?.color || updated.stage?.name !== deal.stage?.name || updated.stage?.color !== deal.stage?.color
         return updated
         })
         return changed ? updatedDeals : currentDeals

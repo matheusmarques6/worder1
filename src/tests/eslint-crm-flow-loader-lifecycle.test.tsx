@@ -8,7 +8,8 @@ import { AutomationLogsModal } from '@/components/crm/automations/AutomationLogs
 import { EmailPreviewMode } from '@/components/flow-builder/panels/EmailPreviewMode'
 import { PropertiesPanel } from '@/components/flow-builder/panels/PropertiesPanel'
 
-vi.mock('@/stores', () => ({ useAuthStore: () => ({ user: { organization_id: 'org-1' } }) }))
+const auth = vi.hoisted(() => ({ organizationId: 'org-1' as string | undefined }))
+vi.mock('@/stores', () => ({ useAuthStore: () => ({ user: { organization_id: auth.organizationId } }) }))
 
 let root: Root
 let container: HTMLDivElement
@@ -22,6 +23,7 @@ const deferred = <T,>() => {
 }
 
 beforeEach(() => {
+  auth.organizationId = 'org-1'
   mounted = false
   attached = false
   vi.stubGlobal('React', React)
@@ -72,6 +74,39 @@ it('ignores a stale log page after a filter reset', async () => {
   await vi.waitFor(() => expect(container.textContent).toContain('current filter'))
   await act(async () => { requests[1].result.resolve(response({ logs: [{ id: 'stale', status: 'success', source_type: 'shopify', event_type: 'placed_order', message: 'stale page', created_at: '2026-01-01' }] })) })
   await vi.waitFor(() => expect(container.textContent).not.toContain('stale page'))
+})
+
+it('resets organization B to page one and rejects pending organization A logs', async () => {
+  const requests: Array<{ url: URL; result: ReturnType<typeof deferred<any>> }> = []
+  vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+    const result = deferred<any>()
+    requests.push({ url: new URL(String(input), 'http://localhost'), result })
+    return result.promise
+  }))
+  const log = (id: string) => ({ id, status: 'success', source_type: 'shopify', event_type: 'placed_order', message: id, created_at: '2026-01-01' })
+  const render = () => root.render(<AutomationLogsModal isOpen onClose={vi.fn()} />)
+
+  await act(async () => { render() })
+  expect(requests).toHaveLength(1)
+  expect(requests[0].url.searchParams.get('organizationId')).toBe('org-1')
+  expect(requests[0].url.searchParams.get('page')).toBe('1')
+  await act(async () => { requests[0].result.resolve(response({ logs: Array.from({ length: 50 }, (_, index) => log(`org-a-${index}`)) })) })
+  await act(async () => { [...container.querySelectorAll('button')].find(button => button.textContent === 'Carregar mais')!.click() })
+  expect(requests).toHaveLength(2)
+  expect(requests[1].url.searchParams.get('organizationId')).toBe('org-1')
+  expect(requests[1].url.searchParams.get('page')).toBe('2')
+
+  await act(async () => { auth.organizationId = 'org-b'; render() })
+  expect(requests).toHaveLength(3)
+  expect(requests[2].url.searchParams.get('organizationId')).toBe('org-b')
+  expect(requests[2].url.searchParams.get('page')).toBe('1')
+  expect(container.textContent).not.toContain('org-a-')
+  await act(async () => { requests[2].result.resolve(response({ logs: [log('org-b-current')] })) })
+  expect(container.textContent).toContain('org-b-current')
+  await act(async () => { requests[1].result.resolve(response({ logs: [log('org-a-stale')] })) })
+  expect(container.textContent).toContain('org-b-current')
+  expect(container.textContent).not.toContain('org-a-')
+  expect(requests).toHaveLength(3)
 })
 
 it('loads one event list and renders its latest preview payload', async () => {
