@@ -220,6 +220,18 @@ git commit -m "fix: retain human replies in the runtime transcript"
 ```
 **Gate:** T5 aprovado antes de multi-WABA. **Rollback:** desabilitar trigger por compensação, preservar mensagens já gravadas e seus ids; não apagar histórico humano.
 
+**Executado em `fcc16f2d` (2026-09-17).** T5 (identidade de conta) já estava satisfeita pela
+migration `20260915010000_account_scoped_conversation_bridge.sql`; a migration real ficou em
+`20260917010000_human_outbound_transcript.sql` (numeração da fila de fechamento, não
+`20260910020200`). Trigger `internal.record_human_outbound_transcript()` grava `author_type='human'`
+em `public.messages` para toda fala humana de saída; `on conflict … do nothing` cobre reentrega pelo
+mesmo `provider_message_id`. Fix round 1 fechou dois Important da review: identidade de canal vence
+fallback por telefone (contato/conversa distintos provados), e a cláusula de conflito do trigger é
+alcançável de verdade (pré-inserir a linha canônica com o mesmo `provider_message_id`, ver o `AFTER
+INSERT` disparar). Review final: 0 Critical/0 Important. Evidência em
+`docs/AUDITORIA-IA-2026-08-28-CHECKLIST.md` (bullet "Depois de um takeover humano...") e
+`.superpowers/sdd/2026-09-17-fechamento-waves-0-4-auditoria-ia/task-2-report.md`.
+
 ### Task 3: W2-T2b — housekeeping sem canal e entrega tardia comprovada
 
 **Papéis:** implementador Sol; revisor Astra; guardião DB Astra.
@@ -370,6 +382,17 @@ git add runtime/src/agents_runtime/app.py runtime/src/agents_runtime/queueing/se
 git commit -m "fix: maintain runtime state independently from message delivery"
 ```
 **Gate:** M2=A ou M2=B registrada, SQL/caller/expectativas correspondem ao mesmo ramo, guardião Astra confere isolamento A/B ou alcance global explicitamente autorizado; nenhum webhook genérico reabre revisão. Sem decisão, Task 3 permanece dependente. **Rollback:** compensação retira chamada/func nova, preserva sent comprovados; retornar housekeeping ao sender em commit conjunto se necessário.
+
+**Executado em `632619aa` (2026-09-17), M2=A.** Migration real
+`20260917020000_confirm_sender_delivery.sql` (numeração da fila de fechamento). `app.run` abre task
+`housekeeping()` própria com conexão `sender_role` fora de `if channel is not None`; os três passos
+(`sweep_outbox_unknown`, `review_stale_unknown`, `expire_incentive_grants`) rodam mesmo sem canal —
+prova em `runtime/tests/pipeline/test_housekeeping_without_channel.py` (canal `None` e canal fake).
+`internal.confirm_sender_delivery` exige token original + wamid não vazio + organização da sessão
+(M2=A); organização B com token válido de A recebe `false` e não altera A
+(`test_confirmation_requires_matching_tenant`). Review PASS, 0 Critical/0 Important. Fecha os itens
+78 e 79 do checklist. Evidência:
+`.superpowers/sdd/2026-09-17-fechamento-waves-0-4-auditoria-ia/task-3-report.md`.
 
 ### Task 4: W2-T3 — idempotência de negócio antes de drenar DLQ
 
@@ -866,6 +889,17 @@ git add runtime/src/agents_runtime/commerce/offer_engine.py runtime/src/agents_r
 git commit -m "fix: prevent coupon collisions without rewriting grant history"
 ```
 **Gate:** reconciliação de dados existentes é externa; contador de chamadas do fake provider prova retry limitado. **Rollback:** preservar códigos emitidos e UNIQUE; reverter lógica por compensação que continua lendo códigos persistidos. Não excluir desconto remoto automaticamente.
+
+**Executado em `a189070e` (2026-09-17).** Migration real `20260917030000_unique_coupon_codes.sql`
+(numeração da fila de fechamento). `coupon_code_for` usa o UUID completo (`WD-<32 hex>`), fechando
+a colisão de prefixo do item 51(b). A migration faz preflight fail-loud (`raise exception 'coupon
+duplicates require approved ledger reconciliation'` se já houver duplicata) antes de criar o índice
+— reconciliação de dados existentes fica com o dono, nunca em silêncio; confirmado por diagnóstico
+direto em Postgres descartável (índice derrubado, duas linhas colidindo só na caixa, nonce
+`321e42479a02e154c5f36e4293409c4d`: o bloco `DO` realmente levanta a exceção esperada).
+`repository/incentives.py` trata `UniqueViolation` com savepoint e não devolve sucesso para cupom de
+outro contato. Review PASS, 0 Critical/0 Important. Fecha o item 82 do checklist. Evidência:
+`.superpowers/sdd/2026-09-17-fechamento-waves-0-4-auditoria-ia/task-4-report.md`.
 
 ### Task 6: W2-T5 — multi-WABA é identidade de conta, não recência
 

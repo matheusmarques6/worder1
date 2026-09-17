@@ -590,3 +590,26 @@ git commit -m "ci: require isolated runtime database gates"
 | Container runtime não-root | W6-T2; não declarar concluído na W0 |
 
 Assinaturas revisadas: `dsn_from_env() -> str` permanece o seam compartilhado; TestTargets é string[]; Upgrade aceita somente sufixo de migrations sobre identidade preservada; Test sempre encerra o projeto. Trigger real e fixture de signup pertencem a W0, antes do gate DB. E0 é conteúdo de implementação ainda necessário para o executor; B0/B1 e o plano filho de schema condicionam T3. Este documento especifica contratos e gates, mas não promete que o executor ou os oito planos estejam integralmente prontos para implementação.
+
+**Atualizado em 2026-09-17 (fechamento das Waves 0–4).** O ledger desta onda
+(`.superpowers/sdd/2026-09-08-auditoria-ia-wave-0-baseline/progress.md`) parou em "Próxima ação:
+executar o plano filho E0 antes de W0-T2" — essa linha está desatualizada e não deve ser lida como
+"W0-T2/T3/T4 ainda não começaram". Os três foram entregues pelos planos filhos que este documento
+previu, não por este ledger diretamente:
+
+- **W0-T2 (executor descartável)** — plano filho `docs/superpowers/plans/2026-09-08-auditoria-ia-disposable-db-executor.md`
+  (ledger E0). `scripts/test-disposable-db.ps1` e `runtime/tests/support/disposable_db.py` estão no
+  branch e em uso desde então por todas as tasks de banco das Waves 1–4, inclusive por este
+  fechamento (Task 8).
+- **W0-T3 (baseline canônico do app)** — plano filho
+  `docs/superpowers/plans/2026-09-08-auditoria-ia-app-schema-baseline.md`. Ledger fechou com commit
+  `f75db83a7d438fc969d8edfdb1f01186c84e30de` (fresh GREEN: DB 799/799, RLS 76/76, pipeline 32
+  PASS/1 skip Windows-only conhecido; auth/ACL/concorrência 17/17) e upgrade lane subsequente.
+- **W0-T4 (gates descartáveis no CI)** — entregue dentro do mesmo plano filho de T3, tasks "7A Linux
+  zero-skip integration" (commits `97d0265a`, `71cf6d51`): `.github/workflows/runtime.yml` já usa
+  `scripts/test-disposable-db.ps1` com Prepare/Replay/Test/Stop sempre, sem `supabase start` cru e
+  sem `continue-on-error`.
+
+Estes três seguem valendo na branch corrente (`fix/ai-engine-schema-baseline`); a reconciliação
+completa de Waves 0–4, incluindo o que a bateria completa de Task 8 achou de novo, está em
+`docs/audits/2026-09-17-fechamento-waves-0-4.md`.

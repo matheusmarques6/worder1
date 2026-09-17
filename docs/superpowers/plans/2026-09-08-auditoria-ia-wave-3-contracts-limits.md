@@ -366,6 +366,29 @@ O parser `_number` já existe em guards e mantém a semântica aprovada na Task 
 - [ ] **Step 5 (3 min): GREEN e prova de plano SQL.** Guardião executa `uv run --directory runtime pytest tests/db/test_legacy_guard_state.py tests/db/test_responder_guards.py -q` e `EXPLAIN (ANALYZE, BUFFERS)` da consulta interna com `false,false` versus `true,true`, dentro do descartável: count/human desligados não varrem mensagens, enquanto a consulta separada do último bot continua retornando timestamp. Repetir casos positivos/negativos de tenant e WABA da Onda 2. Registrar esses resultados após replay do zero e após upgrade sequencial W0→W1→W2→W3, incluindo assinaturas/grants; chamar só a função PL/pgSQL no EXPLAIN não mostra o plano das laterais.
 - [ ] **Step 6 (2 min): Commit e compensação.** Commit `fix: apply guard policy without redundant message scans`, arquivos desta task somente. Sol implementa/Astra revisa. Rollback em código por revert; compensação SQL restaura assinatura/corpo anteriores preservando WABA e remove apenas overload novo após provar zero chamadores. Nada de editar migrations já aplicadas ou apagar dados de mensagens/alertas.
 
+**Executado em `c48cc09e` + `00ec603b` (2026-09-17, `00ec603b` era `d6b49b36` antes da recuperação
+de SHA — ver o fix round no documento de fechamento).** A dependência W2-T5 foi satisfeita por
+`20260915010000_account_scoped_conversation_bridge.sql`; a migration real dos knobs ficou em
+`20260917040000_guard_state_contract.sql` (numeração da fila de fechamento). Steps 1–2 (`c48cc09e`,
+W3-T6a): `p_count_bot`/`p_check_human` separam a lateral de contagem da lateral do último
+timestamp; com `false,false` nenhuma varre `whatsapp_cloud_messages` (`EXPLAIN` confirma `One-Time
+Filter: false`), a do último bot continua devolvendo timestamp. Review PASS, zero achados. Steps
+3–4 (`00ec603b`, W3-GD-05/06/07): diagnóstico de missão içado para antes dos guards nos dois
+produtores (W3-GD-05, fecha); `load_legacy_guard_state` **não** mudou para `GuardState | None` —
+investigação exaustiva não achou sinal persistido autoritativo de conversa nova sem regredir dois
+testes já aceitos ou sem migration fora de escopo (W3-GD-06, **parcial** — metade que bloqueia
+fechada, metade positiva parked, dependência nomeada: coluna nova escrita por
+`ingest_inbound_message` na criação da conversa); índice único parcial sobre `ai_agents.is_active`
+por organização, preflight fail-loud (W3-GD-07, **fechado**). **A bateria completa de Task 8
+(2026-09-17) achou que o índice de W3-GD-07 colidia com `tests/db/factories.py` em dois arquivos de
+teste pré-existentes** (`test_agent_loaders.py`, `test_toucher.py`) fora do escopo original desta
+task — a Task 6 foi reaberta e corrigiu a fábrica (`create_agent` nasce `is_active=False`,
+`create_agent_version(status="active")` ativa pela mesma porta que a produção), com a bateria
+completa re-verificada verde (DB 950/950, RLS 145/145, pipeline 45/45) nos dois lanes. Ver
+`docs/audits/2026-09-17-fechamento-waves-0-4.md` para o histórico completo. Fecha os bullets "duas
+varreduras", "guard que cala apaga o alerta" e `activate_on: manual` do checklist; mantém aberto o
+bullet "estado de guard não encontrado é fail-open" (metade positiva).
+
 ### Task 7: Decidir prazos e consequência de cancelamento (W3-T3, decisão)
 
 **Files:**
@@ -639,4 +662,34 @@ Evidência de 2026-09-14: `57d91304`; as mutações temporárias de identidade e
 
 Evidência final de 2026-09-14 no SHA de código `62b162805e06a5383093caee3224656834fa0a9e`: Vitest `448 passed, 1 skipped` (gerador opcional condicionado a `GEN_BUBBLE_VECTORS`), typecheck, Ruff e quatro contratos de importação verdes; pytest unitário `1833 passed`. O descartável FULL `ad17e5bf2c3245eba71348d12b120552` executou replay integral, DB `871`, RLS `121/121` e pipeline `42`, com zero failures/errors/skips, `state=stopped`, `failure=null`, lock ausente e zero contêineres/volumes residuais. A corrida descoberta no primeiro FULL (`ac37d51f8d904a458d350683b5678db5`) foi reproduzida por mutação no RED `af81fb4a0ba24d76b9427423b1c95657`, corrigida apenas no teste em `62b16280` e validada no GREEN `89f64ff36e8e4e4f95b8da4717e1e0a4`.
 
-Antes/depois: item 63 já fechado; itens 66/68 e quatro dos oito achados adicionais (schedule, `tzdata`, matching e timeouts de conexão) passaram de `[ ]` para `[x]`. Duas varreduras do guard state, alerta suprimido, ausência permissiva de guard state e identidade de `activate_on: manual` permanecem `[ ]`, bloqueados até W2-T5 estar implementada e aceita e existir a migration multi-WABA `20260910020100_account_scoped_conversation_bridge.sql`; para W3-GD-06, falta também um sinal persistido autoritativo de conversa nova. A Onda 3 fecha o escopo executado **sem autorizar promoção**; continuam declarados os limites de cancelamento não cooperativo e de drenagem no shutdown de 30s.
+Antes/depois: item 63 já fechado; itens 66/68 e quatro dos oito achados adicionais (schedule, `tzdata`, matching e timeouts de conexão) passaram de `[ ]` para `[x]`.
+
+**Atualizado em 2026-09-17 (fechamento das Waves 0–4).** A nota acima — os quatro achados de guard
+state bloqueados por W2-T5 ausente — está desatualizada: a dependência foi satisfeita pela migration
+`20260915010000_account_scoped_conversation_bridge.sql` (não `20260910020100`, que nunca existiu com
+esse nome), e a Task 6 deste plano rodou sob os commits `c48cc09e` (W3-T6a) e `00ec603b` (era
+`d6b49b36` antes de uma recuperação de SHA — reset + cherry-pick, verificada pelo controlador, sem
+mudar a ordem nem o conteúdo dos outros commits) (W3-GD-05/06/07). O que aconteceu de fato:
+- **Duas varreduras do guard state** — fechado (`c48cc09e`). Knobs `p_count_bot`/`p_check_human`
+  separam as laterais; `EXPLAIN` prova que `false,false` não varre `whatsapp_cloud_messages`.
+- **Alerta suprimido por guard que cala** — fechado (`00ec603b`). Diagnóstico de missão içado para
+  antes dos guards nos dois produtores, com dedup; a decisão de silêncio não mudou de lugar.
+- **Ausência permissiva de guard state (fail-open)** — parcial (`00ec603b`). A metade que bloqueia
+  (erro de conta incompatível nunca degrada para `GuardState()` permissivo) tem teste. A metade
+  positiva — distinguir conversa nova de ponte quebrada — **continua aberta**: investigação
+  exaustiva de três candidatos não achou sinal persistido autoritativo sem regredir dois testes já
+  aceitos ou sem migration fora de escopo. Dependência nomeada: coluna nova escrita uma vez por
+  `ingest_inbound_message` na criação da conversa, registrando se havia espelho legado.
+- **Identidade de `activate_on: manual`** — **fechado** (`00ec603b`). O índice único parcial existe
+  e o teste focal da task passa; a bateria completa de Task 8 (2026-09-17) achou que ele colidia
+  com `tests/db/factories.py` em dois arquivos de teste pré-existentes fora do escopo original desta
+  task (`test_agent_loaders.py`, `test_toucher.py`) — regressão nova, não pré-existente. A Task 6
+  foi reaberta para corrigir a fábrica (`create_agent` nasce `is_active=False`,
+  `create_agent_version(status="active")` ativa pela mesma porta que a produção); a bateria
+  completa foi re-executada e voltou verde nos dois lanes (DB 950/950, RLS 145/145, pipeline
+  45/45). Ver `docs/audits/2026-09-17-fechamento-waves-0-4.md` para o histórico completo.
+
+A Onda 3 fecha o escopo executado **sem autorizar promoção**; continuam declarados os limites de
+cancelamento não cooperativo e de drenagem no shutdown de 30s. A regressão de `factories.py`
+mencionada em versões anteriores desta nota foi corrigida e re-verificada verde — não é mais
+bloqueio aberto.
