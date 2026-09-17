@@ -46,6 +46,7 @@ packages = ["src/agents_runtime"]
 [tool.pytest.ini_options]
 addopts = "--strict-markers --strict-config -ra"
 testpaths = ["tests"]
+pythonpath = ["scripts"]
 asyncio_mode = "auto"
 markers = [
     "unit: no I/O at all — no Postgres, no network, no filesystem. Whole suite < 60s",
