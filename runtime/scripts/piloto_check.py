@@ -70,14 +70,86 @@ def validate_env(
     return problems
 
 
+# --- health ------------------------------------------------------------------
+
+# Espelha o default de `server.serve(health_max_age_s=...)`: o /healthz real
+# usa 180s, não os 90s do rascunho original desta sonda. O servidor manda.
+DEFAULT_STALE_AFTER = 180.0
+
+
+def describe_health(
+    age_seconds: float | None,
+    depths: Mapping[str, int],
+    *,
+    stale_after: float = DEFAULT_STALE_AFTER,
+) -> tuple[bool, list[str]]:
+    """Saúde do laço em texto. `stale_after` espelha a régua do /healthz.
+
+    Fila `dead_letter` cheia não derruba `healthy`: o processo pode estar
+    perfeitamente vivo com jobs presos ali — mas é exatamente o número que
+    quem está olhando o relatório quer ver de cara, então ela sempre aparece
+    nas linhas junto das demais filas.
+    """
+    lines: list[str] = []
+    if age_seconds is None:
+        lines.append("heartbeat: nunca bateu — o processo não chegou ao banco")
+        healthy = False
+    else:
+        healthy = age_seconds <= stale_after
+        if healthy:
+            # heartbeat e o laço de workers são tasks independentes sob o mesmo
+            # gather (app.py): um worker travado não impede o heartbeat de bater.
+            # Beat fresco prova processo vivo, não fila drenando — a linha não
+            # pode dizer mais do que isso prova.
+            lines.append(
+                f"heartbeat: {age_seconds:.0f}s desde o último beat — processo vivo "
+                "(não prova fila drenando)"
+            )
+        else:
+            lines.append(f"heartbeat: {age_seconds:.0f}s desde o último beat")
+            lines.append(f"heartbeat parado há mais de {stale_after:.0f}s")
+
+    for name in sorted(depths):
+        lines.append(f"fila {name}={depths[name]}")
+
+    return healthy, lines
+
+
+async def _probe(dsn: str, *, stale_after: float) -> tuple[bool, list[str]]:
+    """A sonda de fato: se o banco não responde, isso é um resultado — não um
+    traceback. Ferramenta que existe porque o egress bloqueava o host não pode
+    quebrar ela mesma no cenário de "banco inalcançável"."""
+    import psycopg
+
+    from agents_runtime.repository import engine as engine_repo
+
+    try:
+        conn = await psycopg.AsyncConnection.connect(dsn, autocommit=True)
+    except Exception as exc:
+        return False, [f"banco inalcançável: {exc}"]
+
+    try:
+        age = await engine_repo.heartbeat_age_seconds(conn)
+        depths = await engine_repo.queue_depths(conn)
+    except Exception as exc:
+        return False, [f"banco inalcançável: {exc}"]
+    finally:
+        await conn.close()
+
+    return describe_health(age, depths, stale_after=stale_after)
+
+
 def _main(argv: list[str] | None = None) -> int:
     import argparse
+    import asyncio
     import os
 
     parser = argparse.ArgumentParser(prog="piloto_check")
     sub = parser.add_subparsers(dest="command", required=True)
     env_cmd = sub.add_parser("env", help="valida o contrato do DEPLOY.md")
     env_cmd.add_argument("--app-encryption-key", default=None)
+    probe_cmd = sub.add_parser("probe", help="lê heartbeat e filas pelo banco")
+    probe_cmd.add_argument("--stale-after", type=float, default=DEFAULT_STALE_AFTER)
     args = parser.parse_args(argv)
 
     if args.command == "env":
@@ -86,6 +158,14 @@ def _main(argv: list[str] | None = None) -> int:
             print(f"- {problem}")
         print("ambiente ok" if not problems else f"{len(problems)} problema(s)")
         return 1 if problems else 0
+
+    if args.command == "probe":
+        healthy, lines = asyncio.run(
+            _probe(os.environ["SUPABASE_DB_URL"], stale_after=args.stale_after)
+        )
+        for line in lines:
+            print(f"- {line}")
+        return 0 if healthy else 1
 
     return 2
 
