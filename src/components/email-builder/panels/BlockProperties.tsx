@@ -262,6 +262,7 @@ export function BlockProperties({ block, onChange, onSaveAsReusable, selectedSub
                 {showMediaLib && <MediaLibraryModal onSelect={(url) => { onChange('src', url); setShowMediaLib(false) }} onClose={() => setShowMediaLib(false)} />}
                 {p.src ? (
                   <div className="space-y-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element -- Email block URL is user-provided and cannot be safely optimized or allowlisted. */}
                     <img src={p.src} alt={p.alt || ''} className="w-full h-32 object-contain bg-gray-50 rounded-lg border border-gray-200" />
                     <div className="flex gap-2">
                       <button onClick={() => setShowMediaLib(true)} className="flex-1 py-2 text-xs font-medium text-white bg-zinc-900 rounded-lg hover:bg-zinc-800">Biblioteca</button>
@@ -634,6 +635,7 @@ export function BlockProperties({ block, onChange, onSaveAsReusable, selectedSub
           {p.logoSrc && !p.logoSrc.includes('placehold.co') ? (
             <div className="space-y-2">
               <div className="relative bg-zinc-50 border border-zinc-200 rounded-lg p-3 flex items-center justify-center min-h-[60px]">
+                {/* eslint-disable-next-line @next/next/no-img-element -- Email logo URL is user-provided and cannot be safely optimized or allowlisted. */}
                 <img src={p.logoSrc} alt="Logo" style={{ maxWidth: p.logoWidth || 160, maxHeight: p.logoMaxHeight || 80, objectFit: 'contain' }} />
               </div>
               <div className="flex gap-2">
@@ -1198,6 +1200,7 @@ export function BlockProperties({ block, onChange, onSaveAsReusable, selectedSub
           <span className="text-[10px] font-semibold text-gray-400 uppercase">Imagem</span>
           {p.imageSrc ? (
             <div className="border border-gray-200 rounded-lg overflow-hidden bg-gray-50">
+              {/* eslint-disable-next-line @next/next/no-img-element -- Email block URL is user-provided and cannot be safely optimized or allowlisted. */}
               <img src={p.imageSrc} alt={p.imageAlt || ''} className="w-full h-24 object-contain" />
               <div className="flex gap-1 p-2 border-t border-gray-100">
                 <label className="flex-1 py-1 text-[10px] font-medium text-gray-600 bg-white border border-gray-200 rounded text-center cursor-pointer hover:bg-gray-50">

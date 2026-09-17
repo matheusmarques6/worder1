@@ -54,7 +54,6 @@ export function Tog({ on, set, disabled, label }: { on: boolean; set?: (v: boole
       className={'tog' + (on ? ' on' : '')}
       onClick={() => set && set(!on)}
       disabled={disabled}
-      aria-pressed={on}
       aria-label={label}
       role="switch"
       aria-checked={on}
@@ -207,7 +206,10 @@ export function Avatar({ name, src, sm, square }: { name?: string | null; src?: 
   const ini = (name || '').trim().split(/\s+/).map((w) => w[0]).join('').toUpperCase().slice(0, 2) || '?'
   return (
     <div className={'avatar' + (sm ? ' sm' : '')} style={square ? { borderRadius: 8 } : undefined}>
-      {src ? <img src={src} alt="" /> : ini}
+      {src ? <>
+        {/* eslint-disable-next-line @next/next/no-img-element -- Persisted user avatar URL cannot be safely optimized or allowlisted. */}
+        <img src={src} alt="" />
+      </> : ini}
     </div>
   )
 }

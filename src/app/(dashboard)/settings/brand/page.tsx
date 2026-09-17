@@ -100,7 +100,10 @@ export default function BrandSettingsPage() {
         <div className="brand">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             <div className="bhero">
-              <div className="lg" style={{ background: b.colors.primary }}>{b.icon_url ? <img src={b.icon_url} alt="" /> : ini(b.name)}</div>
+              <div className="lg" style={{ background: b.colors.primary }}>{b.icon_url ? <>
+                {/* eslint-disable-next-line @next/next/no-img-element -- Brand asset URL is user-provided and cannot be safely optimized or allowlisted. */}
+                <img src={b.icon_url} alt="" />
+              </> : ini(b.name)}</div>
               <div>
                 <div className="nm">{b.name || 'Sua marca'}</div>
                 <div className="mt">{[hostOf(b.site) || null, b.fonts.heading, b.updated_at ? `atualizada ${timeAgo(b.updated_at).toLowerCase()}` : 'ainda não salva'].filter(Boolean).join(' · ')}</div>
@@ -112,15 +115,24 @@ export default function BrandSettingsPage() {
             <Card title="Logo" desc="PNG ou SVG com fundo transparente, mínimo 400px de largura.">
               <div className="lgrid" style={{ padding: '16px 0 18px' }}>
                 <LogoSlot filled={!!b.logo_url} busy={uploading === 'logo'} onPick={() => pickFile('logo')} onRemove={() => removeSlot('logo')} canRemove={edit || !!b.logo_url}>
-                  {b.logo_url ? <img src={b.logo_url} alt="Logo principal" /> : <b style={{ fontSize: 20, color: b.colors.primary, fontWeight: 700 }}>{b.name || 'Logo'}</b>}
+                  {b.logo_url ? <>
+                    {/* eslint-disable-next-line @next/next/no-img-element -- Brand asset URL is user-provided and cannot be safely optimized or allowlisted. */}
+                    <img src={b.logo_url} alt="Logo principal" />
+                  </> : <b style={{ fontSize: 20, color: b.colors.primary, fontWeight: 700 }}>{b.name || 'Logo'}</b>}
                   <span>Principal · usado no cabeçalho</span>
                 </LogoSlot>
                 <LogoSlot dark filled={!!b.logo_light_url} busy={uploading === 'logo_light'} onPick={() => pickFile('logo_light')} onRemove={() => removeSlot('logo_light')} canRemove={!!b.logo_light_url}>
-                  {b.logo_light_url ? <img src={b.logo_light_url} alt="Logo versão clara" /> : <><I n="upload" s={18} /><b style={{ color: '#E6E8EC' }}>Versão clara</b></>}
+                  {b.logo_light_url ? <>
+                    {/* eslint-disable-next-line @next/next/no-img-element -- Brand asset URL is user-provided and cannot be safely optimized or allowlisted. */}
+                    <img src={b.logo_light_url} alt="Logo versão clara" />
+                  </> : <><I n="upload" s={18} /><b style={{ color: '#E6E8EC' }}>Versão clara</b></>}
                   <span>Para fundos escuros</span>
                 </LogoSlot>
                 <LogoSlot filled={!!b.icon_url} busy={uploading === 'icon'} onPick={() => pickFile('icon')} onRemove={() => removeSlot('icon')} canRemove={!!b.icon_url}>
-                  {b.icon_url ? <img src={b.icon_url} alt="Ícone" style={{ maxHeight: 48 }} /> : <><I n="upload" s={18} /><b>Ícone / favicon</b></>}
+                  {b.icon_url ? <>
+                    {/* eslint-disable-next-line @next/next/no-img-element -- Brand asset URL is user-provided and cannot be safely optimized or allowlisted. */}
+                    <img src={b.icon_url} alt="Ícone" style={{ maxHeight: 48 }} />
+                  </> : <><I n="upload" s={18} /><b>Ícone / favicon</b></>}
                   <span>Quadrado, 512×512</span>
                 </LogoSlot>
               </div>
@@ -178,7 +190,10 @@ export default function BrandSettingsPage() {
               <div className="prev-h"><span>Pré-visualização</span><div className="seg"><button type="button" className={view === 'desk' ? 'on' : ''} onClick={() => setView('desk')}>Desktop</button><button type="button" className={view === 'mob' ? 'on' : ''} onClick={() => setView('mob')}>Celular</button></div></div>
               <div className="email" style={{ ['--bf' as any]: b.fonts.heading }}>
                 <div className="em" style={{ maxWidth: view === 'mob' ? 300 : '100%', margin: '0 auto', background: b.colors.bg, color: b.colors.text }}>
-                  <div className="eh">{b.logo_url ? <img src={b.logo_url} alt={b.name} /> : <b style={{ color: b.colors.primary }}>{b.name || 'Sua marca'}</b>}</div>
+                  <div className="eh">{b.logo_url ? <>
+                    {/* eslint-disable-next-line @next/next/no-img-element -- Brand asset URL is user-provided and cannot be safely optimized or allowlisted. */}
+                    <img src={b.logo_url} alt={b.name} />
+                  </> : <b style={{ color: b.colors.primary }}>{b.name || 'Sua marca'}</b>}</div>
                   <div className="img">Imagem do produto</div>
                   <div className="eb"><h4>{T.h}</h4><p>{T.p}</p><a className="cta" href="#" onClick={(e) => e.preventDefault()} style={{ background: b.colors.primary, borderRadius: b.radius === 999 ? 999 : b.radius }}>{T.c}</a></div>
                   <div className="ef">
@@ -240,8 +255,14 @@ function ImportModal({ site, onClose, onApply }: { site: string; onClose: () => 
         {sug && (
           <div style={{ display: 'grid', gap: 12 }}>
             <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-              {sug.logo_url ? <img src={sug.logo_url} alt="" style={{ maxHeight: 40, maxWidth: 160, objectFit: 'contain' }} /> : <span className="muted" style={{ fontSize: 13 }}>Logo não encontrado</span>}
-              {sug.icon_url && <img src={sug.icon_url} alt="" style={{ width: 28, height: 28, borderRadius: 6 }} />}
+              {sug.logo_url ? <>
+                {/* eslint-disable-next-line @next/next/no-img-element -- Suggested brand URL is third-party and cannot be safely optimized or allowlisted. */}
+                <img src={sug.logo_url} alt="" style={{ maxHeight: 40, maxWidth: 160, objectFit: 'contain' }} />
+              </> : <span className="muted" style={{ fontSize: 13 }}>Logo não encontrado</span>}
+              {sug.icon_url && <>
+                {/* eslint-disable-next-line @next/next/no-img-element -- Suggested brand URL is third-party and cannot be safely optimized or allowlisted. */}
+                <img src={sug.icon_url} alt="" style={{ width: 28, height: 28, borderRadius: 6 }} />
+              </>}
               <b style={{ marginLeft: 'auto' }}>{sug.name || '—'}</b>
             </div>
             <div>

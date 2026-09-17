@@ -1151,7 +1151,10 @@ function BlockPreview({ block, selected, onContentChange, onSelect, offerLabel, 
     case 'image': {
       const imgStyle: React.CSSProperties = { width: `${p.imgWidth || 100}%`, maxHeight: p.maxHeight || 300, objectFit: (p.objectFit || 'contain') as any, borderRadius: p.borderRadius || 0, display: 'inline-block', boxShadow: p.shadow || undefined }
       const imgEl = p.src
-        ? <img src={p.src} alt={p.alt || ''} style={imgStyle} />
+        ? <>
+          {/* eslint-disable-next-line @next/next/no-img-element -- Popup author supplied URL cannot be safely optimized or allowlisted. */}
+          <img src={p.src} alt={p.alt || ''} style={imgStyle} />
+        </>
         : <div className="w-full h-32 bg-gray-100 rounded-lg flex items-center justify-center text-gray-300"><ImageIcon className="w-10 h-10" /></div>
       return <div style={{ ...blockStyle, boxShadow: undefined, textAlign: (p.align || 'center') as any, padding: p.padding || 0 }}>
         {p.href ? <a href={p.href} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block' }}>{imgEl}</a> : imgEl}
@@ -1819,6 +1822,7 @@ function GameEditor({ type, p, up, hints, onOpenMedia }: { type: string; p: any;
           {p.coverStyle === 'image' ? (
             p.coverImage ? (
               <div className="space-y-2">
+                {/* eslint-disable-next-line @next/next/no-img-element -- Popup author supplied URL cannot be safely optimized or allowlisted. */}
                 <img src={p.coverImage} alt="" className="w-full h-24 object-cover rounded-lg border border-gray-200" />
                 <div className="flex gap-2">
                   <button onClick={() => onOpenMedia?.(url => up('coverImage', url))} className="flex-1 py-2 text-[12px] font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">Trocar</button>
@@ -2491,6 +2495,7 @@ function BlockEditor({ block, onChange, onDelete, onOpenMedia, onApplyToAllInput
               {p.src ? (
                 <div className="space-y-2">
                   <div className="relative rounded-xl overflow-hidden border border-gray-200 bg-[linear-gradient(45deg,#f3f4f6_25%,transparent_25%,transparent_75%,#f3f4f6_75%),linear-gradient(45deg,#f3f4f6_25%,transparent_25%,transparent_75%,#f3f4f6_75%)] bg-[length:16px_16px] bg-[0_0,8px_8px]">
+                    {/* eslint-disable-next-line @next/next/no-img-element -- Popup author supplied URL cannot be safely optimized or allowlisted. */}
                     <img src={p.src} alt="" className="w-full h-36 object-contain" />
                   </div>
                   <div className="flex gap-2">
@@ -3999,6 +4004,7 @@ function ThemePanel({ design, onChange, onOpenMedia }: { design: PopupDesign; on
           <div className="mt-3 space-y-3">
             {bgi.src ? (
               <div className="space-y-2">
+                {/* eslint-disable-next-line @next/next/no-img-element -- Popup author supplied URL cannot be safely optimized or allowlisted. */}
                 <img src={bgi.src} alt="" className="w-full h-28 object-cover rounded-lg border border-gray-200" />
                 <div className="flex gap-2">
                   <button onClick={() => onOpenMedia?.(url => setBgi({ src: url }))}
@@ -4045,6 +4051,7 @@ function ThemePanel({ design, onChange, onOpenMedia }: { design: PopupDesign; on
           <div className="mt-3 space-y-3">
             {s.sideImage.src ? (
               <div className="space-y-2">
+                {/* eslint-disable-next-line @next/next/no-img-element -- Popup author supplied URL cannot be safely optimized or allowlisted. */}
                 <img src={s.sideImage.src} alt="" className="w-full h-28 object-cover rounded-lg border border-gray-200" />
                 <div className="flex gap-2">
                   <button onClick={() => onOpenMedia?.(url => setSi({ src: url }))}
@@ -5104,6 +5111,7 @@ export default function PopupEditorPage() {
               {/* Side image LEFT */}
               {s.sideImage.enabled && s.sideImage.position === 'left' && s.sideImage.src && !(preview === 'mobile') && (
                 <div style={{ flex: 1, flexBasis: 0, minWidth: 0 }} className="overflow-hidden">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- Popup author supplied URL cannot be safely optimized or allowlisted. */}
                   <img src={s.sideImage.src} className="w-full h-full object-cover" alt="" />
                 </div>
               )}
@@ -5211,6 +5219,7 @@ export default function PopupEditorPage() {
               {/* Side image RIGHT */}
               {s.sideImage.enabled && s.sideImage.position === 'right' && s.sideImage.src && !(preview === 'mobile') && (
                 <div style={{ flex: 1, flexBasis: 0, minWidth: 0 }} className="overflow-hidden">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- Popup author supplied URL cannot be safely optimized or allowlisted. */}
                   <img src={s.sideImage.src} className="w-full h-full object-cover" alt="" />
                 </div>
               )}

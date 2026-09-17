@@ -302,7 +302,10 @@ export default function PopupBuilderPage() {
               </button>
             )}
             {c.image.show && c.image.src && c.image.position === 'top' && (
+              <>
+              {/* eslint-disable-next-line @next/next/no-img-element -- Form author supplied URL cannot be safely optimized or allowlisted. */}
               <img src={c.image.src} alt="" style={{ width: '100%', borderRadius: c.style.borderRadius > 4 ? c.style.borderRadius - 4 : 0, marginBottom: 16, display: 'block' }} />
+              </>
             )}
             <h2 style={{ fontSize: c.headline.fontSize, color: c.headline.color, fontWeight: c.headline.fontWeight as any, textAlign: c.headline.align as any, margin: '0 0 8px', lineHeight: 1.2 }}>
               {c.headline.text}

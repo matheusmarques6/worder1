@@ -182,7 +182,10 @@ function EnrollModal({ onClose, onDone }: { onClose: () => void; onDone: () => v
       footer={<><button type="button" className="btn" onClick={onClose}>Cancelar</button><button type="button" className="btn btn-primary" disabled={!enr || code.length !== 6 || busy} onClick={submit}>{busy && <I n="refresh" s={14} className="spin" />}Ativar</button></>}>
       {enrErr ? <div className="field-err">{enrErr}</div> : !enr ? <div style={{ display: 'flex', gap: 8, alignItems: 'center', color: 'var(--text-3)', fontSize: 14 }}><I n="refresh" s={16} className="spin" />Gerando QR code…</div> : (
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,180px) 1fr', gap: 20, alignItems: 'start' }} className="enroll-grid">
-          {qr && <img src={qr} alt="QR code do autenticador" style={{ width: 180, height: 180, borderRadius: 10, border: '1px solid var(--line-2)', background: '#fff' }} />}
+          {qr && <>
+            {/* eslint-disable-next-line @next/next/no-img-element -- Generated QR data URL cannot be safely optimized or allowlisted. */}
+            <img src={qr} alt="QR code do autenticador" style={{ width: 180, height: 180, borderRadius: 10, border: '1px solid var(--line-2)', background: '#fff' }} />
+          </>}
           <div style={{ display: 'grid', gap: 12, minWidth: 0 }}>
             <div>
               <span className="inl">Não consegue escanear? Digite a chave no app</span>

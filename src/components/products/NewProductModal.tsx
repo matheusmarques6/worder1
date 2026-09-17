@@ -199,6 +199,7 @@ export function NewProductModal({ storeId, currency, onClose, onCreated }: NewPr
             <div className="flex flex-wrap gap-2">
               {imageUrls.map((url, i) => (
                 <div key={url + i} className="relative w-20 h-20 rounded-lg overflow-hidden border border-gray-200 group">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- Product image URL is user-provided and cannot be safely optimized or allowlisted. */}
                   <img src={url} alt="" className="w-full h-full object-cover" />
                   <button
                     type="button"

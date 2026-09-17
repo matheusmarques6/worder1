@@ -17,6 +17,7 @@
 // =============================================================
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import Image from 'next/image'
 import {
   X, Upload, Loader2, Image as ImageIcon, Link, Search, Check,
   Trash2, CheckSquare, Square, AlertCircle,
@@ -379,7 +380,7 @@ export function MediaLibraryModal({ onSelect, onClose }: MediaLibraryModalProps)
                             : 'border-gray-200 hover:border-brand-400'
                         }`}
                       >
-                        <img src={img.url} alt={img.name || ''} className="w-full h-full object-cover" loading="lazy" />
+                        <Image src={img.url} alt={img.name || ''} fill sizes="(max-width: 640px) 50vw, (max-width: 1024px) 25vw, 16vw" className="object-cover" loading="lazy" />
                         <div className={`absolute inset-0 transition-colors ${isSel ? 'bg-brand-500/15' : 'bg-black/0 group-hover:bg-black/20'}`} />
 
                         {/* Rodapé com nome/tamanho */}
@@ -477,6 +478,7 @@ export function MediaLibraryModal({ onSelect, onClose }: MediaLibraryModalProps)
               </div>
               {urlInput && (
                 <div className="border border-gray-200 rounded-lg overflow-hidden bg-gray-50">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- URL input is user-provided and cannot be safely optimized or allowlisted. */}
                   <img
                     src={urlInput}
                     alt="Preview"
