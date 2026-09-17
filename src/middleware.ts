@@ -147,6 +147,12 @@ function isAdminOnlyApi(pathname: string): boolean {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  if (pathname === '/auditoria-motor-ia.html') {
+    return process.env.NODE_ENV === 'production'
+      ? new NextResponse(null, { status: 404 })
+      : NextResponse.next();
+  }
+
   // Internal document producers use Bearer auth and do not have browser
   // session cookies. The route handler owns that exact-path authorization.
   if (pathname === '/api/ai/process/document') {
