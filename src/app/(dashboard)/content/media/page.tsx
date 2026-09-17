@@ -189,6 +189,9 @@ export default function MediaPage() {
   );
 
   const semLoja = hasHydrated && !currentStore?.id;
+  const gridImageSizes = selectedFile && !selectMode
+    ? '(min-width: 1280px) calc((100vw - 540px) / 6), (min-width: 1024px) calc((100vw - 528px) / 5), (min-width: 768px) calc((100vw - 428px) / 4), (min-width: 640px) calc((100vw - 416px) / 3), 64px'
+    : '(min-width: 1280px) calc((100vw - 228px) / 6), (min-width: 1024px) calc((100vw - 216px) / 5), (min-width: 768px) calc((100vw - 116px) / 4), (min-width: 640px) calc((100vw - 104px) / 3), calc((100vw - 92px) / 2)';
 
   return (
     <div
@@ -391,7 +394,7 @@ export default function MediaPage() {
                       >
                         <div className="relative aspect-square bg-gray-50 flex items-center justify-center overflow-hidden">
                           {file.type?.startsWith('image') ? (
-                            <Image src={file.url} alt={file.name} fill sizes="(min-width: 1280px) 16.667vw, (min-width: 1024px) 20vw, (min-width: 768px) 25vw, (min-width: 640px) 33.333vw, 50vw" className="w-full h-full object-cover" loading="lazy" />
+                            <Image src={file.url} alt={file.name} fill sizes={gridImageSizes} className="w-full h-full object-cover" loading="lazy" unoptimized={file.type === 'image/svg+xml'} />
                           ) : (
                             <ImageIcon className="w-8 h-8 text-gray-300" />
                           )}
@@ -453,7 +456,7 @@ export default function MediaPage() {
                   </div>
                   {selectedFile.type?.startsWith('image') && (
                     <div className="relative aspect-video bg-gray-50 rounded-lg overflow-hidden mb-4 border border-gray-100">
-                      <Image src={selectedFile.url} alt={selectedFile.name} fill sizes="256px" className="w-full h-full object-contain" loading="eager" />
+                      <Image src={selectedFile.url} alt={selectedFile.name} fill sizes="256px" className="w-full h-full object-contain" loading="eager" unoptimized={selectedFile.type === 'image/svg+xml'} />
                     </div>
                   )}
                   <div className="space-y-3">
