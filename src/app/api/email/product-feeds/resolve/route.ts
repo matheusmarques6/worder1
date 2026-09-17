@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthClient, validateStoreAccess } from '@/lib/api-utils'
+import { isInternalAuthorized } from '@/lib/internal-auth'
 import { resolveProductFeed } from '@/lib/email/product-feeds'
 
 // Thin HTTP wrapper around resolveProductFeed(). The email render pipeline
@@ -11,7 +12,7 @@ import { resolveProductFeed } from '@/lib/email/product-feeds'
 // da sessão.
 export async function POST(request: NextRequest) {
   try {
-    const isInternal = request.headers.get('X-Internal') === 'true'
+    const isInternal = isInternalAuthorized(request)
     const body = await request.json()
 
     let orgId: string | null = null

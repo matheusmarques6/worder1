@@ -168,7 +168,10 @@ export async function GET(req: NextRequest) {
           try {
             const resp = await fetch(`${baseUrl}/api/email/campaigns/send-batch`, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'X-Internal': 'true' },
+              headers: {
+                'Content-Type': 'application/json',
+                authorization: `Bearer ${process.env.INTERNAL_API_SECRET || process.env.CRON_SECRET || ''}`,
+              },
               body: JSON.stringify({
                 campaign_id: camp.id,
                 contact_ids: batches[i],

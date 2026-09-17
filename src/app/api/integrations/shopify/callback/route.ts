@@ -371,7 +371,7 @@ export async function GET(request: NextRequest) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Internal-Request': 'true',
+          authorization: `Bearer ${process.env.INTERNAL_API_SECRET || process.env.CRON_SECRET || ''}`,
         },
         body: JSON.stringify({ storeId }),
       }).catch(() => {});

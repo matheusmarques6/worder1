@@ -516,7 +516,7 @@ export async function POST(request: NextRequest) {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'X-Internal': 'true',
+                authorization: `Bearer ${process.env.INTERNAL_API_SECRET || process.env.CRON_SECRET || ''}`,
               },
               body: JSON.stringify({
                 campaign_id,

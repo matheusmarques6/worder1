@@ -8,6 +8,7 @@
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
+import { isInternalAuthorized } from '@/lib/internal-auth';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { publicStoreUrl } from '@/lib/shopify/store-url';
 import { sendBatchEmails } from '@/lib/email/resend';
@@ -57,9 +58,9 @@ function detectISP(email: string): string {
 
 export async function POST(req: NextRequest) {
   try {
-    // Verify internal caller
-    const internalHeader = req.headers.get('X-Internal');
-    if (internalHeader !== 'true') {
+    // Item 80: `X-Internal` é um cabeçalho que qualquer cliente escreve.
+    // Autorização real é bearer com segredo configurado, fail-closed.
+    if (!isInternalAuthorized(req)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

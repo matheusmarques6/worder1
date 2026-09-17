@@ -478,7 +478,10 @@ export async function GET(request: NextRequest) {
     try {
       fetch(`${APP_URL}/api/shopify/trigger-sync`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Internal-Request': 'true' },
+        headers: {
+          'Content-Type': 'application/json',
+          authorization: `Bearer ${process.env.INTERNAL_API_SECRET || process.env.CRON_SECRET || ''}`,
+        },
         body: JSON.stringify({ storeId }),
       }).catch(() => {});
     } catch { /* ignore */ }
