@@ -41,9 +41,10 @@ PAGAMENTO = "Aceitamos pix, boleto e cartão em até doze vezes."
 @pytest.fixture
 def tenant(admin: psycopg.Connection) -> uuid.UUID:
     # FORK: ingest_chunk pendura em ai_agent_sources/ai_agent_chunks, que
-    # exigem um agente ativo na org.
+    # exigem um agente ativo na org. `create_agent` nasce inativo por padrão
+    # (W3-GD-07) — este agente precisa da ativação explícita.
     organization_id = create_tenant(admin)
-    create_agent(admin, organization_id)
+    create_agent(admin, organization_id, is_active=True)
     yield organization_id
     with admin.cursor() as cur:
         cur.execute("delete from public.organizations where id = %s", (organization_id,))
@@ -213,7 +214,7 @@ class TestTheBoundary:
         `organization_id = current_app_organization_id()` EXPLÍCITO da query
         (FORK.md item 6) — e esta é a asserção que o vigia."""
         stranger = create_tenant(admin)
-        create_agent(admin, stranger)
+        create_agent(admin, stranger, is_active=True)
         try:
             await _ingest_faq(dsn, tenant, texts=(FRETE,))
             await _ingest_faq(dsn, stranger, texts=(FRETE,))

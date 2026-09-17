@@ -41,6 +41,7 @@ from agents_runtime.agent_core.toucher import build_toucher
 from agents_runtime.queueing.jobs import InboundJob, MissionTouchJob
 from tests.db.factories import (
     contact_phone,
+    create_agent,
     create_agent_version,
     create_cloud_mirror,
     create_message,
@@ -182,6 +183,43 @@ async def test_a_conversation_of_another_tenant_is_a_bug_not_an_answer(
             cur.execute("delete from public.organizations where id = %s", (stranger,))
 
 
+async def test_a_mismatched_channel_account_raises_instead_of_answering_emptily(
+    dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+) -> None:
+    """W3-GD-06: conta/conversa incompatíveis é a metade da decisão que JÁ
+    funciona hoje — `internal.resolve_whatsapp_account` levanta quando o
+    `channel_account_id` do job não pertence a esta organização, e
+    `load_legacy_guard_state` (agent.py:333) não engole isso num
+    `GuardState()` permissivo: a exceção sobe. Este teste prende essa
+    garantia (mensagem da exceção, zero LLM, zero outbox) — sem ela, um erro
+    de resolução de conta se disfarçaria de "conversa nova" e o turno
+    seguiria em silêncio como se nada tivesse acontecido.
+    """
+    create_agent_version(admin, tenant, status="active")
+    thread = create_thread(admin, tenant)
+    create_message(admin, tenant, thread, direction="inbound", seq=1, text="oi")
+    llm = ScriptedLlm()
+    job = InboundJob(
+        conversation_id=thread.conversation_id,
+        generation=1,
+        target_seq=1,
+        organization_id=tenant,
+        channel_account_id=uuid.uuid4(),
+    )
+
+    with pytest.raises(psycopg.Error, match="invalid WhatsApp account"):
+        await responder(dsn, llm)(job)
+
+    assert llm.asked == []
+    with admin.cursor() as cur:
+        cur.execute(
+            "select count(*) from internal.message_outbox where conversation_id = %s",
+            (thread.conversation_id,),
+        )
+        (outbox,) = cur.fetchone()
+    assert outbox == 0
+
+
 async def test_an_inbound_without_any_active_mission_alerts_and_stays_silent(
     dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
 ) -> None:
@@ -201,6 +239,77 @@ async def test_an_inbound_without_any_active_mission_alerts_and_stays_silent(
         )
         (alerts,) = cur.fetchone()
     assert alerts == 1
+
+
+async def test_missing_mission_alerts_once_even_when_another_guard_silences(
+    dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+) -> None:
+    """W3-GD-05: um guard que cala o turno primeiro (aqui, `ai_disabled` no
+    espelho) não pode engolir o diagnóstico de missão ausente. Duas execuções
+    na mesma conversa abrem um alerta só (dedup_key), zero LLM e zero outbox."""
+    create_agent_version(admin, tenant, status="active")
+    thread = create_thread(admin, tenant)
+    mirror = mirrored(admin, tenant, thread)
+    admin.execute(
+        "update public.whatsapp_cloud_conversations set ai_enabled = false where id = %s",
+        (mirror.conversation_id,),
+    )
+    create_message(admin, tenant, thread, direction="inbound", seq=1, text="oi")
+    llm = ScriptedLlm()
+
+    for _ in range(2):
+        assert (await responder(dsn, llm)(a_job(tenant, thread.conversation_id))).content is None
+
+    assert llm.asked == []
+    with admin.cursor() as cur:
+        cur.execute(
+            "select count(*) from public.alerts"
+            " where organization_id = %s and type = 'no_active_mission'"
+            "   and dedup_key = %s",
+            (tenant, f"no-active-mission:{thread.conversation_id}"),
+        )
+        (alerts,) = cur.fetchone()
+        cur.execute(
+            "select count(*) from internal.message_outbox where conversation_id = %s",
+            (thread.conversation_id,),
+        )
+        (outbox,) = cur.fetchone()
+    assert (alerts, outbox) == (1, 0)
+
+
+async def test_a_missing_mission_touch_alerts_once_even_when_another_guard_silences(
+    dsn: str, admin: psycopg.Connection, tenant: uuid.UUID
+) -> None:
+    """O mesmo diagnóstico do W3-GD-05, no outro produtor: o toque calado por
+    `ai_disabled` continua abrindo o alerta de missão ausente, uma vez só."""
+    create_agent_version(admin, tenant, status="active")
+    thread = create_thread(admin, tenant)
+    mirror = mirrored(admin, tenant, thread)
+    admin.execute(
+        "update public.whatsapp_cloud_conversations set ai_enabled = false where id = %s",
+        (mirror.conversation_id,),
+    )
+    llm = ScriptedLlm()
+
+    for _ in range(2):
+        draft = await toucher(dsn, llm)(a_touch(tenant, thread))
+        assert draft.content is None
+
+    assert llm.asked == []
+    with admin.cursor() as cur:
+        cur.execute(
+            "select count(*) from public.alerts"
+            " where organization_id = %s and type = 'no_active_mission'"
+            "   and dedup_key = %s",
+            (tenant, f"no-active-mission:{thread.conversation_id}"),
+        )
+        (alerts,) = cur.fetchone()
+        cur.execute(
+            "select count(*) from internal.message_outbox where conversation_id = %s",
+            (thread.conversation_id,),
+        )
+        (outbox,) = cur.fetchone()
+    assert (alerts, outbox) == (1, 0)
 
 
 async def test_with_an_active_discovery_mission_the_inbound_is_answered(
@@ -867,3 +976,26 @@ class TestMediaWithoutAWordDegradesHonestly:
         # E o que o CLIENTE disse continua no array: o corte é da rubrica, não
         # do histórico.
         assert any(message.content == "é esse mesmo?" for message in chat)
+
+
+@pytest.mark.db
+def test_one_active_agent_per_organization(admin: psycopg.Connection, two_tenants) -> None:
+    """W3-GD-07: no máximo um agente ativo por organização; ausência continua
+    legal. `create_agent` nasce inativo por padrão (Fix round 2 — a coluna da
+    tabela em si continua `default true`, `20260812000001:663`, mas a fixture
+    agora pede a ativação explicitamente, como o app faz), então a ativação
+    é este `update` explícito — e é ele que o índice único (20260917050000)
+    recusa na segunda organização, não o INSERT."""
+    activate = "update public.ai_agents set is_active=true where id=%s"
+    deactivate = "update public.ai_agents set is_active=false where id=%s"
+    first = create_agent(admin, two_tenants.a.id)
+    second = create_agent(admin, two_tenants.a.id)
+    other_org = create_agent(admin, two_tenants.b.id)
+
+    admin.execute(activate, (first,))
+    with pytest.raises(psycopg.errors.UniqueViolation):
+        admin.execute(activate, (second,))
+    admin.execute(activate, (other_org,))
+
+    admin.execute(deactivate, (first,))
+    admin.execute(activate, (second,))

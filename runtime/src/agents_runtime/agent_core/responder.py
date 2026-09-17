@@ -408,6 +408,33 @@ def build_responder(
                 # avançar mesmo assim — senão o coalescer a recria para sempre.
                 return ReplyDraft(None, None)
 
+            # W3-GD-05: a arbitragem roda AGORA, antes de qualquer guard de
+            # comportamento — não só na hora de decidir o conteúdo (mais
+            # abaixo). Antes disso, missão ausente só produzia o alerta
+            # quando NENHUM outro guard silenciava o turno primeiro: um guard
+            # `ai_disabled`, horário ou mídia calava a resposta na sua própria
+            # linha e o `arbitrate` nunca era alcançado, engolindo o
+            # diagnóstico. O silêncio em si continua decidido pelo guard que
+            # disparar primeiro (ordem inalterada); isto só garante que o
+            # alerta é observável mesmo quando outro motivo venceu a corrida.
+            try:
+                mission_winner, _losers = arbitrate(
+                    owner=owner_mission, discovery=discovery_mission
+                )
+            except MissionUnavailable:
+                mission_winner = None
+                async with conn.transaction():
+                    await scope_to_organization(conn, job.organization_id)
+                    await alerts_repo.open_alert(
+                        conn,
+                        organization_id=job.organization_id,
+                        type=alerts_repo.NO_ACTIVE_MISSION,
+                        severity="warning",
+                        title="Inbound sem missão ativa — nada foi respondido",
+                        payload={"conversation_id": str(job.conversation_id)},
+                        dedup_key=f"no-active-mission:{job.conversation_id}",
+                    )
+
             # Item 41: UM teto por turno, compartilhado pelas três finalidades
             # (agent_reply, judge_pre, embedding) que `metered(...)` constrói
             # abaixo — é por isso que o `TurnBudget` nasce aqui, fora delas.
@@ -533,26 +560,16 @@ def build_responder(
                     "humanize": {"split": split, "rhythm": rhythm},
                 })
 
-            # --- arbitragem: uma missão vence o turno; sem nenhuma, alerta e
-            # silêncio deliberado (a conversa avança; §3.4 inv. 8).
-            try:
-                winner, _losers = arbitrate(owner=owner_mission, discovery=discovery_mission)
-            except MissionUnavailable:
-                async with conn.transaction():
-                    await scope_to_organization(conn, job.organization_id)
-                    await alerts_repo.open_alert(
-                        conn,
-                        organization_id=job.organization_id,
-                        type=alerts_repo.NO_ACTIVE_MISSION,
-                        severity="warning",
-                        title="Inbound sem missão ativa — nada foi respondido",
-                        payload={"conversation_id": str(job.conversation_id)},
-                    )
+            # --- arbitragem: uma missão vence o turno; sem nenhuma, silêncio
+            # deliberado (a conversa avança; §3.4 inv. 8). O alerta em si já
+            # foi aberto (ou não) mais acima, ANTES dos guards — aqui só resta
+            # decidir o desfecho do turno com o resultado já calculado.
+            if mission_winner is None:
                 await note_step("skipped", "Sem missão ativa para este evento — nada respondido")
                 return ReplyDraft(None, None)
 
             resolved = merge_mission(
-                winner, None, agent_tools=version.config.enabled_tools
+                mission_winner, None, agent_tools=version.config.enabled_tools
             )
 
             # --- momentos (§3.3.4): fatos somam; a frase promocional só entra

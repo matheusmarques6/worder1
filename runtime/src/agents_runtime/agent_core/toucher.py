@@ -246,6 +246,22 @@ def build_toucher(
                 )
                 return TouchDraft(None, (), None)
 
+            # W3-GD-05: o diagnóstico de missão ausente roda ANTES dos guards
+            # de comportamento (linha mais abaixo) — antes disso, um guard que
+            # calasse o toque primeiro (ai_disabled, horário) nunca deixava a
+            # execução chegar ao `if mission is None` original, e o alerta
+            # nunca abria. O silêncio do turno continua decidido pelo guard
+            # que disparar primeiro; isto só garante que o diagnóstico é
+            # observável mesmo quando outro motivo venceu a corrida.
+            if mission is None:
+                await _alert(
+                    conn, job,
+                    type=alerts_repo.NO_ACTIVE_MISSION,
+                    title="Toque sem missão ativa — nada foi enviado",
+                    payload={"event_family": job.event_family, "node_ref": job.node_ref},
+                    dedup_key=f"no-active-mission:{job.conversation_id}",
+                )
+
             # --- chip de progresso no chat, o mesmo canal do responder. Sem
             # ele o toque calado por guard sumia: o nó pedia, recebia `queued`,
             # e nada acontecia — nem alerta (guard não é anomalia, e não deve
@@ -295,13 +311,9 @@ def build_toucher(
 
             if mission is None:
                 # A emissão validou, mas a missão saiu do ar até aqui — a
-                # verdade é do turno (§3.2.2-2): alerta e silêncio.
-                await _alert(
-                    conn, job,
-                    type=alerts_repo.NO_ACTIVE_MISSION,
-                    title="Toque sem missão ativa — nada foi enviado",
-                    payload={"event_family": job.event_family, "node_ref": job.node_ref},
-                )
+                # verdade é do turno (§3.2.2-2). O alerta já foi aberto (ou
+                # deduplicado) mais acima, antes dos guards; aqui só resta o
+                # silêncio.
                 return TouchDraft(None, (), None)
 
             resolved = merge_mission(
@@ -620,6 +632,7 @@ async def _alert(
     title: str,
     payload: dict,
     severity: str = "warning",
+    dedup_key: str | None = None,
 ) -> None:
     async with conn.transaction():
         await scope_to_organization(conn, job.organization_id)
@@ -630,6 +643,7 @@ async def _alert(
             severity=severity,
             title=title,
             payload={**payload, "conversation_id": str(job.conversation_id)},
+            dedup_key=dedup_key,
         )
 
 
