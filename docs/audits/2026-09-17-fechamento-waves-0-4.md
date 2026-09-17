@@ -16,8 +16,9 @@ pousou no commit errado e foi recuperado por `reset` + `cherry-pick`. O controla
 recuperação: os oito commits ficaram na ordem certa, a árvore limpa, e os dois patches reaplicados
 são byte-idênticos aos originais. Resultado: **Task 6 é agora `00ec603b`** (era `d6b49b36`) e
 **Task 7 é agora `c53ec181`** (era `62508bd1`); Tasks 1–5 não mudaram de SHA. O commit documental
-desta task (este arquivo) também mudou de SHA no processo — era `af8b866b`, é `0aed9562` no
-momento deste amend. Todas as referências abaixo já usam os SHAs corrigidos.
+desta task (este arquivo) também mudou de SHA no processo — era `af8b866b`, passou por `0aed9562`
+e o tip real, depois da revisão final desta fila, é `1d73daef`. Todas as referências abaixo já
+usam os SHAs corrigidos.
 
 ## Os sete commits reconciliados
 
@@ -49,8 +50,8 @@ Cada um está descrito em detalhe em `.superpowers/sdd/2026-09-17-fechamento-wav
 Estes oito resultados foram medidos na primeira rodada, contra a cadeia de commits que na época
 terminava em `62508bd1` (hoje `c53ec181` — mesmo conteúdo de diff, byte-idêntico, só o SHA mudou na
 recuperação). **Fix round 1** (Task 6 reaberta, novo tip `00ec603b`→`c53ec181`) tocou só
-`runtime/tests/db/factories.py`, dois arquivos de teste (`test_knowledge_retrieval.py`,
-`test_tools.py`) e a migration já existente — nenhum arquivo em `src/`, `next.config.js` ou
+`runtime/tests/db/factories.py`, três arquivos de teste (`test_knowledge_retrieval.py`,
+`test_responder_guards.py`, `test_tools.py`) e a migration já existente — nenhum arquivo em `src/`, `next.config.js` ou
 configuração de build. Por isso, no fix round, só `pnpm lint`, `pnpm typecheck` e a suíte unit do
 runtime foram re-executados (exit **0** os três, ver seção "Fix round 1"); `pnpm build` e o
 `pnpm test` completo não foram repetidos porque nada no diff desde o antigo `62508bd1`/`c53ec181`
@@ -178,10 +179,10 @@ exatamente este.
 | Onda | Condição de saída (do próprio plano) | Estado em `c53ec181` |
 |---|---|---|
 | **0 — Baseline** | Catálogo revalidado; executor descartável provado; baseline canônico replay/upgrade; CI usa o mesmo executor | W0-T1 completo (`2cce098..a8e5874`). W0-T2 entregue pelo plano filho E0 (`docs/superpowers/plans/2026-09-08-auditoria-ia-disposable-db-executor.md`) — é o mesmo executor usado nesta task. W0-T3 entregue pelo plano filho de baseline, fresh GREEN em `f75db83a` (DB 799/799, RLS 76/76, pipeline 32/1 skip Windows conhecido). W0-T4 entregue pelas tasks "7A Linux zero-skip" do mesmo plano filho (`97d0265a`, `71cf6d51`) — `.github/workflows/runtime.yml` já usa o executor. Ver `docs/superpowers/plans/2026-09-08-auditoria-ia-wave-0-baseline.md` (nota atualizada nesta task). |
-| **1 — Security** | Convite não confiável, RLS intratenant, 71/80 (debug), 94, fail-open cron, prompt injection, 303/unsupported | Fechado em rodada anterior a esta fila (ver autorrevisão no próprio plano, T1–T7 com commits próprios). Item 80 desta onda (a superfície `X-Internal` citada dentro dele) reforçado por `252951ab` nesta task — mas o achado central do item 80 (vazamento cross-tenant nas duas queries por e-mail) **continua aberto**, é decisão de produto adiada, não engenharia pendente. |
+| **1 — Security** | Convite não confiável, RLS intratenant, 71/80 (debug), 94, fail-open cron, prompt injection, 303/unsupported | Fechado em rodada anterior a esta fila (ver autorrevisão no próprio plano, T1–T7 com commits próprios). Item 80 desta onda (a superfície `X-Internal` citada dentro dele) reforçado por `252951ab` nesta task. As duas queries de comércio por e-mail que motivaram o achado central do item 80 já têm `organization_id` (`commerce-context.ts:17,22`, extraídas de `send-batch/route.ts` e escopadas por `2524ddf1`, antes desta fila) — verificado nesta task, não há vazamento cross-tenant pendente aqui. |
 | **2 — State/queues/cutover** | ai_pending, takeover humano, 78/79 housekeeping/manual_review, 81 DLQ, 82 cupons, multi-WABA, opt-out, 90, 70 | T1 (ai_pending) e T6 (multi-WABA/W2-T5, migration `20260915010000`) fechados em rodada anterior. **Nesta task:** T2/W2-T2a fechado (`fcc16f2d`, transcript humano); T3/W2-T2b fechado (`632619aa`, M2=A, housekeeping sem canal + `confirm_sender_delivery`, itens 78/79); T5/W2-T4 fechado (`a189070e`, item 82, unique de cupom + prefixo completo). M1 (histórico multi-WABA compartilhado vs. separado) e reconciliação de cupons já emitidos permanecem decisões abertas — ver "não fechado" abaixo. |
 | **3 — Contracts/limits** | Item 63 e achados adicionais do guard state; prazos/cancelamento; envelope de conexões | Item 63 e quatro dos oito achados adicionais fechados em rodada anterior (`f9bb5e8a`, `ecc292ea`, `1f7c7107`). **Nesta task:** W3-T6a fechado (`c48cc09e`, "duas varreduras"); W3-GD-05 fechado (`00ec603b`, alerta de missão ausente sobrevive a guard que cala); W3-GD-06 **parcial** (metade que bloqueia fechada, metade positiva parked — sem sinal autoritativo); W3-GD-07 **fechado** (`00ec603b`) — migration, teste focal e agora a bateria completa de DB/RLS/pipeline nos dois lanes, todos verdes, depois do fix round que corrigiu `tests/db/factories.py` (ver "Fix round 1"). Nota do gate de saída da Onda 3 substituída — ver `docs/superpowers/plans/2026-09-08-auditoria-ia-wave-3-contracts-limits.md`. |
-| **4 — AI product/cost** | 65/67/69/72/73/75/76/77/83/85/89, shadow/scheduled | Fora do escopo desta task, exceto W4-TC-02. **Nesta task:** W4-TC-02 fechado parcialmente (`c53ec181`, item 67) — a ÚNICA superfície que apresentava os contadores congelados como atividade viva (`src/app/api/ai/test/route.ts:212`) foi corrigida; o achado central do item 67 (ausência de escritor no runtime para os quatro contadores) **continua aberto e real**. Os demais itens da onda (65, 69, 72/73/75, 76/77, 83, 85, 89) e a decisão shadow/scheduled não foram tocados por esta fila. |
+| **4 — AI product/cost** | 65/67/69/72/73/75/76/77/83/85/89, shadow/scheduled | Fora do escopo desta task, exceto W4-TC-02. **Nesta task:** W4-TC-02 fechado parcialmente (`c53ec181`, item 67) — a ÚNICA superfície que apresentava os contadores congelados como atividade viva (`src/app/api/ai/test/route.ts:215`) foi corrigida; o achado central do item 67 (ausência de escritor no runtime para os quatro contadores) **continua aberto e real**. Os demais itens da onda (65, 69, 72/73/75, 76/77, 83, 85, 89) e a decisão shadow/scheduled não foram tocados por esta fila. |
 
 ## Disposição do banco descartável — resumo de nonces
 
@@ -225,11 +226,6 @@ foi reutilizado. Manifesto de todos os lanes contém as cinco migrations novas e
   fora de escopo).
 - **Item 92 — precisa de uma janela real de ao menos oito dias.** Não investigado nesta task; exige
   dados observados em produção por um período que não existe em ambiente descartável.
-- **Item 80 — o achado central continua aberto.** `252951ab` fechou só a superfície `X-Internal`
-  (família do item 71) num dos quatro chamadores citados dentro do item 80. As duas consultas sem
-  `.eq('organization_id', …)` em `send-batch/route.ts:337-343,366-374` (vazamento cross-tenant de
-  pedido/carrinho por e-mail) não foram tocadas — é decisão de produto adiada, registrada como tal
-  desde a auditoria original.
 - **Item 67 — ausência de escritor no runtime continua real.** `c53ec181` fechou só a apresentação
   como atividade viva num endpoint de debug; os quatro contadores de `ai_agents` seguem sem
   escritor em `runtime/`.
