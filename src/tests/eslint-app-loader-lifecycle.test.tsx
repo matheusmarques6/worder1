@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import React, { act } from 'react'
-import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createRoot, type Root } from 'react-dom/client'
 import { useAuthStore, useStoreStore } from '@/stores'
 
@@ -14,13 +14,15 @@ vi.mock('recharts', async () => {
   return { ...actual, ResponsiveContainer: ({ children }: { children?: React.ReactNode }) => <>{children}</> }
 })
 
+vi.stubGlobal('React', React)
+const { default: EmailAnalyticsPage } = await import('@/app/(dashboard)/analytics/email/page')
+const { default: ShopifyAnalyticsPage } = await import('@/app/(dashboard)/analytics/shopify/page')
+const { default: IntegrationsPage } = await import('@/app/(dashboard)/crm/integrations/page')
+
 let root: Root
 let container: HTMLDivElement
 let mounted = false
 let attached = false
-let EmailAnalyticsPage: typeof import('@/app/(dashboard)/analytics/email/page').default
-let ShopifyAnalyticsPage: typeof import('@/app/(dashboard)/analytics/shopify/page').default
-let IntegrationsPage: typeof import('@/app/(dashboard)/crm/integrations/page').default
 
 const store = (id: string) => ({ id, currency: 'BRL' } as any)
 const response = (data: unknown, ok = true) => ({ ok, json: async () => data })
@@ -29,13 +31,6 @@ const lastRequest = <Args extends readonly unknown[]>(fetchMock: { mock: { calls
   const urls = fetchMock.mock.calls.map((args) => String(args[0])).filter((url) => url.startsWith(prefix))
   return urls.at(-1)
 }
-
-beforeAll(async () => {
-  vi.stubGlobal('React', React)
-  ;({ default: EmailAnalyticsPage } = await import('@/app/(dashboard)/analytics/email/page'))
-  ;({ default: ShopifyAnalyticsPage } = await import('@/app/(dashboard)/analytics/shopify/page'))
-  ;({ default: IntegrationsPage } = await import('@/app/(dashboard)/crm/integrations/page'))
-})
 
 beforeEach(() => {
   mounted = false
