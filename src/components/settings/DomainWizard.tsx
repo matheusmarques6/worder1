@@ -6,6 +6,7 @@
 // verificação usa /api/email/domains/verify + /api/deliverability/domain-check (DMARC).
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import Image from 'next/image'
 import { I } from './icons'
 import { Badge, Modal, useCopy } from './ui'
 import { api } from './format'
@@ -168,7 +169,7 @@ export function DomainWizard({ domain, storeName, initialStep = 1, onClose, onDo
   return (
     <div className="wiz" role="dialog" aria-modal="true" aria-label={`Verificar domínio ${d.domain}`}>
       <div className="wiz-top">
-        <img src="/worder favicon.svg" alt="" style={{ height: 20 }} />
+        <Image src="/worder favicon.svg" alt="" width={20} height={20} style={{ height: 20 }} />
         <span className="t">Verificar domínio</span><span className="d">{d.domain}</span>
         <button type="button" className="btn x" onClick={onClose}>Sair e continuar depois</button>
       </div>

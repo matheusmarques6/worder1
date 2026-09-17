@@ -259,8 +259,11 @@ function ExcludedProducts({ excluded, onChange }: { excluded: string[]; onChange
             const p = byId.get(id)
             return (
               <span key={id} className="inline-flex items-center gap-1.5 bg-gray-100 border border-gray-200 rounded-lg pl-1 pr-1.5 py-1 text-xs text-gray-800 max-w-[240px]">
-                {p?.image
-                  ? <img src={p.image} alt="" className="w-5 h-5 rounded object-cover flex-shrink-0" />
+                 {p?.image
+                   ? (
+                     // eslint-disable-next-line @next/next/no-img-element -- store product URL is not safely allowlisted.
+                     <img src={p.image} alt="" className="w-5 h-5 rounded object-cover flex-shrink-0" />
+                   )
                   : <span className="w-5 h-5 rounded bg-gray-200 flex-shrink-0" />}
                 <span className="truncate">{p?.title || (loaded ? `Produto ${id}` : id)}</span>
                 <button type="button" onClick={() => toggle(id)} title="Voltar a permitir" className="text-gray-400 hover:text-red-500 flex-shrink-0">
@@ -305,7 +308,10 @@ function ExcludedProducts({ excluded, onChange }: { excluded: string[]; onChange
                 <label key={p.id} className={`flex items-center gap-3 px-3 py-2 cursor-pointer border-b border-gray-50 last:border-0 ${on ? 'bg-amber-50' : 'hover:bg-gray-50'}`}>
                   <input type="checkbox" checked={on} onChange={() => toggle(p.id)} className="w-4 h-4 rounded border-gray-300 text-brand-500" />
                   {p.image
-                    ? <img src={p.image} alt="" className="w-8 h-8 rounded object-cover flex-shrink-0" />
+                    ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- store product URL is not safely allowlisted.
+                      <img src={p.image} alt="" className="w-8 h-8 rounded object-cover flex-shrink-0" />
+                    )
                     : <span className="w-8 h-8 rounded bg-gray-100 flex-shrink-0" />}
                   <span className="flex-1 min-w-0">
                     <span className="block text-sm text-gray-900 truncate">{p.title}</span>

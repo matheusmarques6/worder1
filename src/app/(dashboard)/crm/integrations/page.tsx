@@ -163,6 +163,7 @@ function IntegrationCard({
           style={{ backgroundColor: `${integration.color}20` }}
         >
           {integration.icon_url ? (
+            // eslint-disable-next-line @next/next/no-img-element -- integration API icon URL is not safely allowlisted.
             <img
               src={integration.icon_url}
               alt={integration.name}
@@ -698,6 +699,7 @@ function IntegrationInstallModal({
               style={{ backgroundColor: `${integration.color}20` }}
             >
               {integration.icon_url ? (
+                // eslint-disable-next-line @next/next/no-img-element -- integration API icon URL is not safely allowlisted.
                 <img src={integration.icon_url} alt="" className="w-8 h-8" />
               ) : (
                 <span style={{ color: integration.color }} className="text-2xl font-bold">
@@ -920,6 +922,7 @@ function IntegrationConfigModal({
               style={{ backgroundColor: `${integration.color}20` }}
             >
               {integration.icon_url ? (
+                // eslint-disable-next-line @next/next/no-img-element -- integration API icon URL is not safely allowlisted.
                 <img src={integration.icon_url} alt="" className="w-7 h-7" />
               ) : (
                 <span style={{ color: integration.color }} className="text-xl font-bold">

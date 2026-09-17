@@ -173,6 +173,7 @@ export default function IntegrationConfigPage() {
                 style={{ backgroundColor: `${integration.color}20` }}
               >
                 {integration.icon_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- integration API icon URL is not safely allowlisted.
                   <img src={integration.icon_url} alt="" className="w-10 h-10" />
                 ) : (
                   <span style={{ color: integration.color }} className="text-2xl font-bold">

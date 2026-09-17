@@ -402,6 +402,7 @@ export default function ProductsPage() {
                     <td className="p-4">
                       <div className="flex items-center gap-3">
                         {imageUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element -- Shopify product URL is not constrained to an allowlisted host here.
                           <img
                             src={imageUrl}
                             alt={product.title}

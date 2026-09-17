@@ -1014,6 +1014,7 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                         {enrichedData.last_order_products.slice(0, 5).map((product, idx) => (
                           <div key={idx} className="flex items-center gap-3 p-2 rounded-lg bg-gray-50">
                             {product.image_url ? (
+                              // eslint-disable-next-line @next/next/no-img-element -- order product URL is not safely allowlisted.
                               <img
                                 src={product.image_url}
                                 alt={product.title}
@@ -1130,6 +1131,7 @@ export function ContactDrawer({ contact, onClose, onUpdateTags, pipelines = [], 
                               {order.items.slice(0, 5).map((item, itemIdx) => (
                                 <div key={itemIdx} className="flex items-center gap-2 p-1.5 rounded bg-gray-50">
                                   {item.product_image_url ? (
+                                    // eslint-disable-next-line @next/next/no-img-element -- order product URL is not safely allowlisted.
                                     <img
                                       src={item.product_image_url}
                                       alt={item.product_title}

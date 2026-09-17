@@ -97,7 +97,10 @@ export function MentionInput({ value, onChange, onSubmit, placeholder = 'Digite 
           : users.length === 0 ? <div className="py-3 px-4 text-sm text-gray-500 text-center">{mentionSearch ? 'Nenhum usuário encontrado' : 'Digite para buscar'}</div>
           : users.map((user, index) => (
             <button key={user.id} onClick={() => insertMention(user)} className={cn('w-full flex items-center gap-3 px-3 py-2 text-left transition-colors', index === selectedIndex ? 'bg-blue-50 dark:bg-blue-900/30' : 'hover:bg-gray-50 dark:hover:bg-gray-800')}>
-              {user.avatar_url ? <img src={user.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover" /> : <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center"><User className="w-4 h-4 text-gray-500" /></div>}
+              {user.avatar_url ? (
+                // eslint-disable-next-line @next/next/no-img-element -- user profile URL is not safely allowlisted.
+                <img src={user.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover" />
+              ) : <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center"><User className="w-4 h-4 text-gray-500" /></div>}
               <div className="flex-1 min-w-0"><p className="text-sm font-medium text-gray-900 dark:text-white truncate">{user.name || 'Sem nome'}</p><p className="text-xs text-gray-500 truncate">{user.email}</p></div>
             </button>
           ))}

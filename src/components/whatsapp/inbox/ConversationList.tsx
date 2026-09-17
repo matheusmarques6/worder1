@@ -80,6 +80,7 @@ function ConversationItem({
       {/* Avatar */}
       <div className="relative flex-shrink-0">
         {conversation.contact_avatar ? (
+          // eslint-disable-next-line @next/next/no-img-element -- contact avatar URL is not safely allowlisted.
           <img 
             src={conversation.contact_avatar} 
             alt={name}

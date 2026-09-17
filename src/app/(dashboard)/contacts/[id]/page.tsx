@@ -1,6 +1,7 @@
 'use client'
 
 import { useParams, useRouter } from 'next/navigation'
+import Image from 'next/image'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
@@ -497,6 +498,7 @@ export default function ContactDetailPage() {
           <div className="bg-white/50 border border-gray-200 rounded-xl p-6">
             <div className="flex flex-col items-center text-center">
               {contact.avatar_url || contact.profile_picture_url ? (
+                // eslint-disable-next-line @next/next/no-img-element -- contact-provided avatar URL is not safely allowlisted.
                 <img
                   src={contact.avatar_url || contact.profile_picture_url}
                   alt={contactName}
@@ -727,7 +729,7 @@ export default function ContactDetailPage() {
                                   <div className={`w-8 h-8 rounded-full ${iconCfg.bgColor} flex items-center justify-center flex-shrink-0 relative`}>
                                     <Icon size={16} className={iconCfg.color} weight="fill" />
                                     {isShopify && (
-                                      <img src="/integrations/icone shopify .png" alt="" className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-white p-[1px]" />
+                                      <Image src="/integrations/icone shopify .png" alt="" width={14} height={14} className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-white p-[1px]" />
                                     )}
                                   </div>
                                   {i < group.items.length - 1 && <div className="w-px h-full bg-gray-50 min-h-[24px]" />}
@@ -923,6 +925,7 @@ export default function ContactDetailPage() {
                     return (
                       <div key={evt.id} className="flex items-center gap-3 py-2 border-b border-gray-100 last:border-0">
                         {evt.properties?.imageUrl || evt.properties?.image_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element -- event-provided product URL is not safely allowlisted.
                           <img
                             src={evt.properties.imageUrl || evt.properties.image_url}
                             alt={title}
@@ -979,6 +982,7 @@ export default function ContactDetailPage() {
                     return (
                       <div key={evt.id} className="flex items-center gap-3 py-2 border-b border-gray-100 last:border-0">
                         {imageUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element -- event-provided product URL is not safely allowlisted.
                           <img
                             src={imageUrl}
                             alt={title}

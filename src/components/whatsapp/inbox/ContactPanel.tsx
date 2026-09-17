@@ -255,6 +255,7 @@ export function ContactPanel({
       <div className="p-6 border-b border-gray-200 text-center">
         {/* Avatar */}
         {contact.profile_picture_url || contact.avatar_url ? (
+          // eslint-disable-next-line @next/next/no-img-element -- WhatsApp contact URL is not safely allowlisted.
           <img
             src={contact.profile_picture_url || contact.avatar_url}
             alt={contact.name || 'Contato'}

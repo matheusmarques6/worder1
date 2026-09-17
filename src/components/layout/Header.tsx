@@ -511,6 +511,7 @@ function UserMenuDropdown({ isOpen, onClose, user }: UserMenuDropdownProps) {
                   >
                     <div className="relative">
                       {agent.avatar_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- agent profile URL is not safely allowlisted.
                         <img 
                           src={agent.avatar_url} 
                           alt={agent.name}
