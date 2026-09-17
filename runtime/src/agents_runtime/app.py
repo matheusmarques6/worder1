@@ -265,6 +265,35 @@ async def run(
             )
             tasks.append(asyncio.create_task(loop.run(), name=f"worker-{index}"))
 
+        # -- housekeeping: sweeps expired outbox leases and expires incentive
+        # grants. It NEEDS the sender_role connection to run — that is not
+        # new: housekeeping needed the exact same connection back when it
+        # lived inside `sender_pass`, which only ran on a `sender_role`
+        # connection too. What changed (W2-T2b) is that it no longer depends
+        # on a CHANNEL being wired — an instance with nowhere to send still
+        # owns cleanup. `sender_set_role is None` means the caller never
+        # provisioned that connection at all (most of the pipeline suite:
+        # worker-only smoke tests with no opinion about the sender) — the
+        # same precondition the sender itself gates on below, not a new
+        # escape hatch. Housekeeping is not optional; it simply cannot exist
+        # without the connection it has always required. Its own connection,
+        # separate from delivery, so its transactions never interleave with
+        # a send's.
+        if sender_set_role is not None:
+            housekeeping_conn = await _connect(dsn, sender_set_role, SENDER_ROLE, config=config)
+            connections.append(housekeeping_conn)
+
+            async def housekeeping():
+                while not stop.is_set():
+                    await engine.sweep_outbox_unknown(housekeeping_conn)
+                    await engine.review_stale_unknown(
+                        housekeeping_conn, review_after=config.unknown_review_after
+                    )
+                    await engine.expire_incentive_grants(housekeeping_conn)
+                    await _sleep_or_stop(clock, stop, config.sender_poll.total_seconds())
+
+            tasks.append(asyncio.create_task(housekeeping(), name="housekeeping"))
+
         # -- sender: only when a channel exists. There is no real adapter until
         # E1's final stretch, and a sender with nowhere to send would either
         # spin or lie.

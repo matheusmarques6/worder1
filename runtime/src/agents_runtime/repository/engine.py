@@ -396,6 +396,20 @@ async def mark_outbox_sent(
     return bool((await cursor.fetchone())[0])
 
 
+async def confirm_sender_delivery(
+    conn: psycopg.AsyncConnection, outbox_id: UUID, token: UUID, provider_message_id: str
+) -> bool:
+    """Encerra uma linha cujo envio o provedor já confirmou (M2=A).
+
+    Não abre transação: quem chama escopa a organização e commita.
+    """
+    cursor = await conn.execute(
+        "select internal.confirm_sender_delivery(%s, %s, %s)",
+        (outbox_id, token, provider_message_id),
+    )
+    return bool((await cursor.fetchone())[0])
+
+
 async def mark_outbox_failed(
     conn: psycopg.AsyncConnection,
     outbox_id: UUID,
