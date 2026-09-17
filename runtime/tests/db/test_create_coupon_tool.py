@@ -117,6 +117,40 @@ def _create_grant(
     return grant_id
 
 
+def _create_popup_grant(
+    admin: psycopg.Connection, org: uuid.UUID, thread, coupon_code: str
+) -> uuid.UUID:
+    """Grant 'issued' de popup, cru — mesma tática de _create_grant, mas
+    source='popup': issue_popup_incentive entrega o MESMO coupon_code
+    estático a todo visitante do bloco (20260910130000_popup_steps_v2.sql).
+    form_id substitui mission_version_id como referência obrigatória."""
+    form_id = uuid.uuid4()
+    with admin.cursor() as cur:
+        cur.execute(
+            """
+            insert into public.incentive_grants
+                (organization_id, contact_id, object_kind, object_ref, source,
+                 form_id, kind, value, validity_until, max_uses, uses,
+                 status, coupon_code, idempotency_key)
+            values (%(organization_id)s, %(contact_id)s, 'form', %(object_ref)s, 'popup',
+                    %(form_id)s, 'percent', 10, %(validity)s, 1, 0,
+                    'issued', %(coupon_code)s, %(key)s)
+            returning id
+            """,
+            {
+                "organization_id": org,
+                "contact_id": thread.contact_id,
+                "form_id": form_id,
+                "object_ref": str(form_id),
+                "validity": datetime.now(UTC) + timedelta(hours=4),
+                "coupon_code": coupon_code,
+                "key": f"k-{uuid.uuid4().hex}",
+            },
+        )
+        (grant_id,) = cur.fetchone()
+    return grant_id
+
+
 ARGS = {"object_kind": "cart", "object_ref": "cart-55"}
 
 
@@ -362,7 +396,10 @@ class TestGrantValidation:
 
 
 class TestCouponUniqueness:
-    """W2-T4: dois grants não podem compartilhar código na mesma org."""
+    """W2-T4: dois grants RUNTIME-issued (mission/moment) não podem
+    compartilhar código na mesma org; grants de popup (source='popup')
+    ficam fora do escopo — a mesma static code é deliberadamente entregue
+    a todo visitante de um bloco."""
 
     def test_same_code_twice_in_one_org_is_rejected(
         self, admin: psycopg.Connection, two_tenants
@@ -391,6 +428,27 @@ class TestCouponUniqueness:
             "update public.incentive_grants set coupon_code=%s where id=%s",
             (code, other_org),
         )
+
+    def test_two_popup_grants_in_one_org_can_share_a_code(
+        self, admin: psycopg.Connection, org: uuid.UUID
+    ) -> None:
+        """issue_popup_incentive entrega o MESMO código estático a todo
+        visitante de um bloco popup — não é colisão, é o desenho do produto.
+        O índice de unicidade (20260917030000) precisa ficar fora do escopo
+        de source='popup', senão a segunda submissão do mesmo popup na
+        mesma org morre com 23505 dentro da RPC (que route.ts engole)."""
+        thread_a = create_thread(admin, org)
+        thread_b = create_thread(admin, org)
+        code = f"POPUP-{uuid.uuid4().hex.upper()}"
+
+        first = _create_popup_grant(admin, org, thread_a, code)
+        second = _create_popup_grant(admin, org, thread_b, code)  # não deve levantar
+
+        rows = admin.execute(
+            "select coupon_code from public.incentive_grants where id in (%s, %s)",
+            (first, second),
+        ).fetchall()
+        assert [r[0] for r in rows] == [code, code]
 
     async def test_a_permanent_conflict_opens_an_alert_and_stops_at_one_call(
         self, dsn: str, admin: psycopg.Connection, org: uuid.UUID

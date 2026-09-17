@@ -140,6 +140,17 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // 10.1 — um agente ativo por organização (ai_agents_single_active_per_org).
+    // Criar já-ativo é ativação: arquiva os demais ANTES do insert, mesma
+    // semântica do canônico e das rotas PUT/PATCH.
+    if (agentData.is_active === true) {
+      const { error: archiveError } = await supabase
+        .from('ai_agents')
+        .update({ is_active: false })
+        .eq('organization_id', organizationId)
+      if (archiveError) throw new Error(archiveError.message)
+    }
+
     // Inserir
     const { data: agent, error } = await supabase
       .from('ai_agents')

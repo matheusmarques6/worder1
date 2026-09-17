@@ -4,7 +4,8 @@
 //
 // Called internally by the OAuth callback to start
 // the initial historical data import after store connection.
-// Authenticated via CRON_SECRET or X-Internal-Request header.
+// Authenticated via a bearer token matching INTERNAL_API_SECRET or
+// CRON_SECRET (see isInternalAuthorized in lib/internal-auth.ts).
 // =============================================
 
 import { NextRequest, NextResponse } from 'next/server';
