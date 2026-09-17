@@ -6,7 +6,7 @@ Três subcomandos, cada um respondendo a um ponto cego real do Apply de 12/08
 heartbeat e o smoke conferido tabela a tabela na mão.
 """
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from urllib.parse import urlsplit
 
 REQUIRED = (
@@ -115,6 +115,42 @@ def describe_health(
     return healthy, lines
 
 
+def build_smoke_report(
+    inbound: int,
+    outbound: int,
+    outbox: Mapping[str, int],
+    mirrored: int,
+    steps: Sequence[str],
+) -> tuple[bool, list[str]]:
+    """Uma linha por expectativa, na ordem do turno. Chip é adereço: relata,
+    não reprova."""
+    lines: list[str] = []
+    checks: list[bool] = []
+
+    def check(passed: bool, message: str) -> None:
+        checks.append(passed)
+        lines.append(("ok   " if passed else "falhou ") + message)
+
+    check(inbound > 0, f"mensagem do cliente na canônica ({inbound})")
+    check(outbound > 0, f"resposta do agente na canônica ({outbound})")
+
+    sent = outbox.get("sent", 0)
+    if sent > 0:
+        check(True, f"outbox sent={sent}")
+    else:
+        resto = ", ".join(f"{k}={v}" for k, v in sorted(outbox.items())) or "vazio"
+        check(False, f"outbox sem linha sent ({resto})")
+
+    check(mirrored > 0, f"espelho do inbox ({mirrored})")
+
+    lines.append(
+        ("ok   " if steps else "aviso ")
+        + f"chips de progresso: {', '.join(steps) if steps else 'nenhum'}"
+    )
+
+    return all(checks), lines
+
+
 async def _probe(dsn: str, *, stale_after: float) -> tuple[bool, list[str]]:
     """A sonda de fato: se o banco não responde, isso é um resultado — não um
     traceback. Ferramenta que existe porque o egress bloqueava o host não pode
@@ -139,6 +175,132 @@ async def _probe(dsn: str, *, stale_after: float) -> tuple[bool, list[str]]:
     return describe_health(age, depths, stale_after=stale_after)
 
 
+async def _smoke(
+    dsn: str, *, organization_id: str, phone: str, minutes: int
+) -> tuple[bool, list[str]]:
+    """A evidência do turno completo, lida do banco. Consultas de operador, não
+    de produto — por isso moram aqui e não em `repository/` (contrato de
+    camadas em `pyproject.toml`: `root_packages = ["agents_runtime"]`; este
+    script não é `agents_runtime`, então `lint-imports` nunca o vê).
+
+    Banco inalcançável ou consulta que falha é resultado, não traceback —
+    mesma regra do `_probe`."""
+    import psycopg
+
+    window = f"{minutes} minutes"
+    try:
+        conn = await psycopg.AsyncConnection.connect(dsn, autocommit=True)
+    except Exception as exc:
+        return False, [f"banco inalcançável: {exc}"]
+
+    try:
+        row = await (
+            await conn.execute(
+                """
+                select c.id
+                  from public.conversations c
+                  join public.contacts ct on ct.id = c.contact_id
+                 where c.organization_id = %s
+                   and (ct.phone = %s or ct.whatsapp = %s
+                        or ct.phone = %s or ct.whatsapp = %s)
+                 order by c.last_inbound_at desc nulls last
+                 limit 1
+                """,
+                (organization_id, phone, phone, phone.lstrip("+"), phone.lstrip("+")),
+            )
+        ).fetchone()
+        if row is None:
+            return False, ["falhou nenhuma conversa canônica para esse telefone"]
+        conversation_id = row[0]
+
+        counts = await (
+            await conn.execute(
+                f"""
+                select
+                  count(*) filter (where direction = 'inbound'),
+                  count(*) filter (where direction = 'outbound')
+                  from public.messages
+                 where conversation_id = %s
+                   and created_at > now() - interval '{window}'
+                """,
+                (conversation_id,),
+            )
+        ).fetchone()
+
+        outbox_rows = await (
+            await conn.execute(
+                f"""
+                select status, count(*)
+                  from internal.message_outbox
+                 where conversation_id = %s
+                   and created_at > now() - interval '{window}'
+                 group by status
+                """,
+                (conversation_id,),
+            )
+        ).fetchall()
+
+        mirrored = await (
+            await conn.execute(
+                f"""
+                select count(*)
+                  from public.whatsapp_cloud_messages wcm
+                  join public.whatsapp_cloud_conversations wcc on wcc.id = wcm.conversation_id
+                 where wcc.organization_id = %s
+                   and wcm.direction = 'outbound'
+                   and wcm."timestamp" > now() - interval '{window}'
+                """,
+                (organization_id,),
+            )
+        ).fetchone()
+
+        # Chips são gravados na conversa CLOUD (internal.emit_ai_run_step,
+        # migration 20260817000002, grava `v_cloud` — não a canônica). Mesma
+        # resolução por organização + wa_id, tolerando o '+', que essa função
+        # usa e que a consulta de espelho acima já cobre por join.
+        cloud_row = await (
+            await conn.execute(
+                """
+                select wcc.id
+                  from public.whatsapp_cloud_conversations wcc
+                 where wcc.organization_id = %s
+                   and (wcc.wa_id = %s or wcc.wa_id = %s)
+                 order by wcc.last_message_at desc nulls last
+                 limit 1
+                """,
+                (organization_id, phone, phone.lstrip("+")),
+            )
+        ).fetchone()
+
+        if cloud_row is None:
+            steps: list[tuple[str]] = []
+        else:
+            steps = await (
+                await conn.execute(
+                    f"""
+                    select step
+                      from public.whatsapp_ai_run_steps
+                     where conversation_id = %s
+                       and created_at > now() - interval '{window}'
+                     order by created_at
+                    """,
+                    (cloud_row[0],),
+                )
+            ).fetchall()
+    except Exception as exc:
+        return False, [f"banco inalcançável: {exc}"]
+    finally:
+        await conn.close()
+
+    return build_smoke_report(
+        inbound=counts[0],
+        outbound=counts[1],
+        outbox={status: total for status, total in outbox_rows},
+        mirrored=mirrored[0],
+        steps=[step for (step,) in steps],
+    )
+
+
 def _main(argv: list[str] | None = None) -> int:
     import argparse
     import asyncio
@@ -150,6 +312,10 @@ def _main(argv: list[str] | None = None) -> int:
     env_cmd.add_argument("--app-encryption-key", default=None)
     probe_cmd = sub.add_parser("probe", help="lê heartbeat e filas pelo banco")
     probe_cmd.add_argument("--stale-after", type=float, default=DEFAULT_STALE_AFTER)
+    smoke_cmd = sub.add_parser("smoke", help="conferência do turno completo, por veredito")
+    smoke_cmd.add_argument("--organization", required=True)
+    smoke_cmd.add_argument("--phone", required=True)
+    smoke_cmd.add_argument("--minutes", type=int, default=15)
     args = parser.parse_args(argv)
 
     if args.command == "env":
@@ -166,6 +332,19 @@ def _main(argv: list[str] | None = None) -> int:
         for line in lines:
             print(f"- {line}")
         return 0 if healthy else 1
+
+    if args.command == "smoke":
+        passed, lines = asyncio.run(
+            _smoke(
+                os.environ["SUPABASE_DB_URL"],
+                organization_id=args.organization,
+                phone=args.phone,
+                minutes=args.minutes,
+            )
+        )
+        for line in lines:
+            print(f"- {line}")
+        return 0 if passed else 1
 
     return 2
 

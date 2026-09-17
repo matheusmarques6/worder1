@@ -3,7 +3,7 @@ dito antes de alguém abrir o console do Render."""
 
 import psycopg
 import pytest
-from piloto_check import _main, _probe, describe_health, validate_env
+from piloto_check import _main, _probe, _smoke, build_smoke_report, describe_health, validate_env
 
 POOLER = "postgresql://postgres.abc:s3nha@aws-1-sa-east-1.pooler.supabase.com:5432/postgres"
 
@@ -149,3 +149,79 @@ class TestTheImpureProbe:
 
         monkeypatch.setattr(piloto_check, "_probe", unreachable_probe)
         assert _main(["probe"]) == 1
+
+
+STEPS = ["started", "generating", "judging", "sending", "sent"]
+
+
+class TestTheSmokeReport:
+    def test_a_complete_turn_passes(self) -> None:
+        passed, lines = build_smoke_report(
+            inbound=1, outbound=1, outbox={"sent": 1}, mirrored=1, steps=STEPS
+        )
+        assert passed is True
+        assert all(line.startswith("ok") for line in lines)
+
+    def test_an_inbound_that_never_arrived_fails_first(self) -> None:
+        passed, lines = build_smoke_report(
+            inbound=0, outbound=0, outbox={}, mirrored=0, steps=[]
+        )
+        assert passed is False
+        assert lines[0].startswith("falhou") and "cliente" in lines[0]
+
+    def test_a_generated_reply_stuck_in_the_outbox_is_named(self) -> None:
+        passed, lines = build_smoke_report(
+            inbound=1, outbound=1, outbox={"pending": 1}, mirrored=0, steps=STEPS
+        )
+        assert passed is False
+        assert any("outbox" in line and "pending" in line for line in lines)
+
+    def test_an_empty_outbox_is_named_vazio(self) -> None:
+        passed, lines = build_smoke_report(
+            inbound=1, outbound=1, outbox={}, mirrored=0, steps=STEPS
+        )
+        assert passed is False
+        assert any("outbox" in line and "vazio" in line for line in lines)
+
+    def test_a_failed_send_is_not_a_silent_pass(self) -> None:
+        passed, _ = build_smoke_report(
+            inbound=1, outbound=1, outbox={"failed": 1}, mirrored=0, steps=STEPS
+        )
+        assert passed is False
+
+    def test_a_reply_that_never_mirrored_is_reported(self) -> None:
+        passed, lines = build_smoke_report(
+            inbound=1, outbound=1, outbox={"sent": 1}, mirrored=0, steps=STEPS
+        )
+        assert passed is False
+        assert any("espelho" in line for line in lines)
+
+    def test_missing_progress_chips_do_not_fail_the_smoke(self) -> None:
+        passed, lines = build_smoke_report(
+            inbound=1, outbound=1, outbox={"sent": 1}, mirrored=1, steps=[]
+        )
+        assert passed is True
+        assert any("chip" in line for line in lines)
+
+
+class TestTheImpureSmoke:
+    async def test_an_unreachable_database_is_reported_not_raised(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        async def failing_connect(*_args: object, **_kwargs: object) -> None:
+            raise OSError("Network is unreachable")
+
+        monkeypatch.setattr(psycopg.AsyncConnection, "connect", failing_connect)
+
+        passed, lines = await _smoke(
+            "postgresql://unreachable/db",
+            organization_id="00000000-0000-0000-0000-000000000000",
+            phone="+5511999999999",
+            minutes=15,
+        )
+
+        assert passed is False
+        assert any(
+            "banco inalcançável" in line and "Network is unreachable" in line
+            for line in lines
+        )
