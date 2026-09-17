@@ -477,6 +477,7 @@ export default function NewCampaignPage() {
                         >
                           <div className="aspect-[4/5] bg-gray-100 overflow-hidden relative">
                             {t.thumbnail_url ? (
+                              // eslint-disable-next-line @next/next/no-img-element -- template thumbnails are API-editable URLs with no contracted hostname.
                               <img src={t.thumbnail_url} alt={t.name} className="w-full h-full object-cover" />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center">

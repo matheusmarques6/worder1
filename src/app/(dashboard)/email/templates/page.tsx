@@ -243,6 +243,7 @@ export default function EmailTemplatesPage() {
                     />
                   </div>
                 ) : template.thumbnail_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- template thumbnails are API-editable URLs with no contracted hostname.
                   <img src={template.thumbnail_url} alt={template.name} className="w-full h-full object-cover" />
                 ) : (
                   <div className="absolute inset-0 flex flex-col items-center justify-center">

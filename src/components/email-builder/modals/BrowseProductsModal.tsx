@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
+import Image from 'next/image'
 import { X, Search, ChevronDown, ChevronUp, Trash2, Loader2 } from 'lucide-react'
 import { useStoreStore } from '@/stores'
 
@@ -224,9 +225,9 @@ export function BrowseProductsModal({ isOpen, onClose, onSelect, maxProducts = 9
                   className={`flex items-center gap-3 px-6 py-3 border-b border-gray-50 hover:bg-gray-50 cursor-pointer transition-colors ${selected.has(product.id) ? 'bg-brand-50/30' : ''}`}>
                   <input type="checkbox" checked={selected.has(product.id)} readOnly
                     className="w-4 h-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500 flex-shrink-0 pointer-events-none" />
-                  <div className="w-12 h-12 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
+                  <div className="relative w-12 h-12 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
                     {product.image_url ? (
-                      <img src={product.image_url} alt="" className="w-full h-full object-cover" />
+                      <Image src={product.image_url} alt="" fill sizes="48px" className="w-full h-full object-cover" loading="eager" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-gray-300 text-[10px]">SEM FOTO</div>
                     )}
@@ -289,6 +290,7 @@ export function StaticProductsEditor({ products, onChange }: {
             <div className="flex items-center gap-2 min-w-0">
               {expandedId === product.id ? <ChevronUp className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />}
               {product.image_url && (
+                // eslint-disable-next-line @next/next/no-img-element -- product.image_url is editable in this component and can target an uncontracted host.
                 <img src={product.image_url} alt="" className="w-6 h-6 rounded object-cover flex-shrink-0" />
               )}
               <span className="text-xs font-medium text-gray-900 truncate">{product.title}</span>
@@ -331,6 +333,7 @@ export function StaticProductsEditor({ products, onChange }: {
                 }} className="w-full px-2 py-1 border border-gray-200 rounded text-xs text-gray-900 focus:border-brand-500 focus:outline-none" />
               </div>
               {product.image_url && (
+                // eslint-disable-next-line @next/next/no-img-element -- product.image_url is editable in this component and can target an uncontracted host.
                 <img src={product.image_url} alt="" className="w-full h-24 object-contain rounded border border-gray-100" />
               )}
             </div>

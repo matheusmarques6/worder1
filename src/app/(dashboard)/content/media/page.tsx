@@ -15,6 +15,7 @@
 // =============================================================
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import Image from 'next/image';
 import {
   Image as ImageIcon, Upload, Trash2, Copy, Loader2, X, Check, Search,
   RefreshCw, CheckSquare, Square, AlertCircle, Store,
@@ -390,7 +391,7 @@ export default function MediaPage() {
                       >
                         <div className="relative aspect-square bg-gray-50 flex items-center justify-center overflow-hidden">
                           {file.type?.startsWith('image') ? (
-                            <img src={file.url} alt={file.name} className="w-full h-full object-cover" loading="lazy" />
+                            <Image src={file.url} alt={file.name} fill sizes="(min-width: 1280px) 16.667vw, (min-width: 1024px) 20vw, (min-width: 768px) 25vw, (min-width: 640px) 33.333vw, 50vw" className="w-full h-full object-cover" loading="lazy" />
                           ) : (
                             <ImageIcon className="w-8 h-8 text-gray-300" />
                           )}
@@ -451,8 +452,8 @@ export default function MediaPage() {
                     </button>
                   </div>
                   {selectedFile.type?.startsWith('image') && (
-                    <div className="aspect-video bg-gray-50 rounded-lg overflow-hidden mb-4 border border-gray-100">
-                      <img src={selectedFile.url} alt={selectedFile.name} className="w-full h-full object-contain" />
+                    <div className="relative aspect-video bg-gray-50 rounded-lg overflow-hidden mb-4 border border-gray-100">
+                      <Image src={selectedFile.url} alt={selectedFile.name} fill sizes="256px" className="w-full h-full object-contain" loading="eager" />
                     </div>
                   )}
                   <div className="space-y-3">

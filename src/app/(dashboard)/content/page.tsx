@@ -157,6 +157,7 @@ export default function ContentPage() {
               {/* Thumbnail placeholder */}
               <div className="h-40 bg-gray-50 flex items-center justify-center group-hover:bg-gray-100 transition-colors">
                 {template.thumbnail_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- template thumbnails are API-editable URLs with no contracted hostname.
                   <img src={template.thumbnail_url} alt={template.name} className="w-full h-full object-cover" />
                 ) : (
                   <EnvelopeSimple className="w-12 h-12 text-gray-300" weight="duotone" />
