@@ -31,6 +31,8 @@ import psycopg
 
 from agents_runtime.agent_core import openrouter
 from agents_runtime.agent_core.guards import (
+    _number,
+    behavior_of,
     evaluate_inbound_guards,
     resolve_blocked_topic,
     schedule_silence,
@@ -201,11 +203,21 @@ def build_toucher(
                 active_moments = await moments_repo.load_active_moments(conn)
                 # Item 30: o toque é o SEGUNDO produtor de fala do runtime, e
                 # lê o mesmo estado que o turno de resposta lê.
+                #
+                # W3-T6a: mesmos dois knobs do responder, computados do MESMO
+                # jeito. `version` pode ainda ser None aqui — o alerta de
+                # "sem versão ativa" só é lançado depois — e `behavior_of({})`
+                # preserva o caminho sem criar `AttributeError` antes dele.
+                behavior = behavior_of(version.settings if version is not None else {})
+                count_bot = (_number(behavior.get("max_messages_per_conversation"), 0) or 0) > 0
+                check_human = behavior.get("stop_on_human_reply") is not False
                 guard_state = await agent_repo.load_legacy_guard_state(
                     conn,
                     organization_id=job.organization_id,
                     conversation_id=job.conversation_id,
                     channel_account_id=job.channel_account_id,
+                    count_bot=count_bot,
+                    check_human=check_human,
                 )
                 # E3 — o toque também fala com quem já comprou (ou nunca
                 # comprou): mesmo dado fixo do responder, mesma decisão 81b.

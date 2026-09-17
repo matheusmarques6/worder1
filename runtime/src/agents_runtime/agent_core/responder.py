@@ -42,6 +42,8 @@ import psycopg
 import agents_runtime
 from agents_runtime.agent_core import openrouter
 from agents_runtime.agent_core.guards import (
+    _number,
+    behavior_of,
     evaluate_inbound_guards,
     resolve_blocked_topic,
     resolve_handoff,
@@ -361,11 +363,23 @@ def build_responder(
                 # Item 30: o estado que os guards de comportamento leem. Vem do
                 # espelho legado do inbox porque a canônica não tem o dado —
                 # ver `load_legacy_guard_state`.
+                #
+                # W3-T6a: os dois knobs pulam a varredura de mensagens que
+                # este agente não usa. `version` pode ainda ser None aqui —
+                # o `NoActiveVersion` só é levantado depois — e `behavior_of`
+                # trata `{}` como "sem teto, sem stop_on_human_reply
+                # desligado" (defaults True/True), o mesmo caminho que já ia
+                # levantar a exceção sem criar `AttributeError` antes dela.
+                behavior = behavior_of(version.settings if version is not None else {})
+                count_bot = (_number(behavior.get("max_messages_per_conversation"), 0) or 0) > 0
+                check_human = behavior.get("stop_on_human_reply") is not False
                 guard_state = await agent_repo.load_legacy_guard_state(
                     conn,
                     organization_id=job.organization_id,
                     conversation_id=job.conversation_id,
                     channel_account_id=job.channel_account_id,
+                    count_bot=count_bot,
+                    check_human=check_human,
                 )
                 custom_rows = await custom_tools_repo.load_enabled_custom_tools(conn)
                 key_rows = (

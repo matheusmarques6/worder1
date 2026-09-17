@@ -13,10 +13,12 @@ DEFINER e recebe `p_organization_id`).
 """
 
 import uuid
+from datetime import UTC, datetime
 
 import psycopg
 import pytest
 
+from agents_runtime.agent_core.guards import evaluate_inbound_guards
 from agents_runtime.repository import agent as agent_repo
 from tests.db.conftest import TwoTenants
 from tests.db.factories import (
@@ -86,11 +88,57 @@ def wired(admin: psycopg.Connection, two_tenants: TwoTenants):
     return organization_id, thread, mirror
 
 
-async def read(dsn: str, organization_id: uuid.UUID, conversation_id: uuid.UUID):
+async def read(
+    dsn: str,
+    organization_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+    *,
+    count_bot: bool = True,
+    check_human: bool = True,
+):
     async with await psycopg.AsyncConnection.connect(dsn, autocommit=True) as conn:
         await conn.execute("set role worker_role")
         return await agent_repo.load_legacy_guard_state(
-            conn, organization_id=organization_id, conversation_id=conversation_id
+            conn,
+            organization_id=organization_id,
+            conversation_id=conversation_id,
+            count_bot=count_bot,
+            check_human=check_human,
+        )
+
+
+def mirror_message_at(
+    conn: psycopg.Connection,
+    organization_id: uuid.UUID,
+    mirror,
+    *,
+    sent_by_bot: bool,
+    sender: str,
+    timestamp: datetime,
+) -> None:
+    """Como `mirror_message`, mas com timestamp EXPLÍCITO.
+
+    Os testes do knob (W3-T6a) fixam o relógio dos dois lados — a mensagem e
+    o `now` que `evaluate_inbound_guards` recebe — então `now() - interval` do
+    banco real (que roda hoje, não em 2026-09-08) misturaria dois relógios.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            insert into public.whatsapp_cloud_messages
+                (organization_id, waba_id, conversation_id, message_id, direction,
+                 message_type, text_body, sent_by_bot, sender, "timestamp")
+            values (%s, %s, %s, %s, 'outbound', 'text', 'oi', %s, %s, %s)
+            """,
+            (
+                organization_id,
+                mirror.waba_id,
+                mirror.conversation_id,
+                f"wamid-{uuid.uuid4().hex[:12]}",
+                sent_by_bot,
+                sender,
+                timestamp,
+            ),
         )
 
 
@@ -245,3 +293,78 @@ class TestTheHandoffWrite:
             )
             (enabled,) = cur.fetchone()
         assert enabled is True
+
+
+class TestTheKnobsSkipTheScanWithoutErasingTheCooldown:
+    """W3-T6a: os knobs cortam a varredura que o agente não usa — mas a
+    lateral do último timestamp do bot NÃO é a mesma que a da contagem.
+
+    A armadilha que esta classe existe para pegar: colar as duas laterais e
+    condicionar a única projeção ao knob apagaria `last_bot_message_at`
+    junto com a contagem — e o guard anti-loop de cooldown curto (5s, não é
+    knob de loja) pararia de disparar em silêncio, deixando o agente livre
+    para responder duas vezes à mesma rajada.
+    """
+
+    async def test_with_both_knobs_off_the_count_is_skipped_but_the_cooldown_still_fires(
+        self, dsn: str, admin: psycopg.Connection, wired
+    ) -> None:
+        organization_id, thread, mirror = wired
+        mirror_message_at(
+            admin, organization_id, mirror,
+            sent_by_bot=True, sender="ai",
+            timestamp=datetime(2026, 9, 8, 11, 59, 58, tzinfo=UTC),
+        )
+        mirror_message_at(
+            admin, organization_id, mirror,
+            sent_by_bot=True, sender="ai",
+            timestamp=datetime(2026, 9, 8, 11, 59, 50, tzinfo=UTC),
+        )
+        mirror_message_at(
+            admin, organization_id, mirror,
+            sent_by_bot=False, sender="human",
+            timestamp=datetime(2026, 9, 8, 11, 59, 55, tzinfo=UTC),
+        )
+        admin.commit()
+
+        state = await read(
+            dsn, organization_id, thread.conversation_id,
+            count_bot=False, check_human=False,
+        )
+
+        silence = evaluate_inbound_guards(
+            {}, state, agent_id=state.ai_agent_id, now=datetime(2026, 9, 8, 12, tzinfo=UTC)
+        )
+        assert state.bot_message_count == 0
+        assert state.last_bot_message_at == datetime(2026, 9, 8, 11, 59, 58, tzinfo=UTC)
+        assert silence is not None and silence.reason == "cooldown"
+
+    async def test_with_both_knobs_on_the_count_and_human_flag_return(
+        self, dsn: str, admin: psycopg.Connection, wired
+    ) -> None:
+        organization_id, thread, mirror = wired
+        mirror_message_at(
+            admin, organization_id, mirror,
+            sent_by_bot=True, sender="ai",
+            timestamp=datetime(2026, 9, 8, 11, 59, 58, tzinfo=UTC),
+        )
+        mirror_message_at(
+            admin, organization_id, mirror,
+            sent_by_bot=True, sender="ai",
+            timestamp=datetime(2026, 9, 8, 11, 59, 50, tzinfo=UTC),
+        )
+        mirror_message_at(
+            admin, organization_id, mirror,
+            sent_by_bot=False, sender="human",
+            timestamp=datetime(2026, 9, 8, 11, 59, 55, tzinfo=UTC),
+        )
+        admin.commit()
+
+        state = await read(
+            dsn, organization_id, thread.conversation_id,
+            count_bot=True, check_human=True,
+        )
+
+        assert state.bot_message_count == 2
+        assert state.has_human_reply is True
+        assert state.last_bot_message_at == datetime(2026, 9, 8, 11, 59, 58, tzinfo=UTC)
