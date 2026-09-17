@@ -3,6 +3,8 @@
 import React, { act } from 'react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createRoot, type Root } from 'react-dom/client'
+import { ShopifyConfigModal } from '@/components/integrations/shopify/ShopifyConfigModal'
+import { RFMDashboard } from '@/components/shopify/RFMDashboard'
 
 vi.mock('recharts', async () => {
   const actual = await vi.importActual<typeof import('recharts')>('recharts')
@@ -11,25 +13,29 @@ vi.mock('recharts', async () => {
 
 let root: Root
 let container: HTMLDivElement
-let ShopifyConfigModal: typeof import('@/components/integrations/shopify/ShopifyConfigModal').ShopifyConfigModal
-let RFMDashboard: typeof import('@/components/shopify/RFMDashboard').RFMDashboard
+let mounted = false
+let attached = false
 
 const response = (data: unknown) => ({ ok: true, json: async () => data })
 const store = (id: string) => ({ id, name: `Store ${id}`, domain: `${id}.myshopify.com`, connectionStatus: 'active' } as any)
 
-beforeEach(async () => {
+beforeEach(() => {
+  mounted = false
+  attached = false
   vi.stubGlobal('React', React)
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
-  ;({ ShopifyConfigModal } = await import('@/components/integrations/shopify/ShopifyConfigModal'))
-  ;({ RFMDashboard } = await import('@/components/shopify/RFMDashboard'))
   container = document.createElement('div')
   document.body.append(container)
+  attached = true
   root = createRoot(container)
+  mounted = true
 })
 
 afterEach(async () => {
-  await act(async () => root.unmount())
-  container.remove()
+  if (mounted) await act(async () => root.unmount())
+  if (attached) container.remove()
+  mounted = false
+  attached = false
   vi.unstubAllGlobals()
   vi.clearAllMocks()
 })

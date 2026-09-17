@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import React, { act } from 'react'
-import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { createRoot, type Root } from 'react-dom/client'
 import { useAuthStore, useStoreStore } from '@/stores'
 
@@ -16,6 +16,8 @@ vi.mock('recharts', async () => {
 
 let root: Root
 let container: HTMLDivElement
+let mounted = false
+let attached = false
 let EmailAnalyticsPage: typeof import('@/app/(dashboard)/analytics/email/page').default
 let ShopifyAnalyticsPage: typeof import('@/app/(dashboard)/analytics/shopify/page').default
 let IntegrationsPage: typeof import('@/app/(dashboard)/crm/integrations/page').default
@@ -28,7 +30,16 @@ const lastRequest = <Args extends readonly unknown[]>(fetchMock: { mock: { calls
   return urls.at(-1)
 }
 
-beforeEach(async () => {
+beforeAll(async () => {
+  vi.stubGlobal('React', React)
+  ;({ default: EmailAnalyticsPage } = await import('@/app/(dashboard)/analytics/email/page'))
+  ;({ default: ShopifyAnalyticsPage } = await import('@/app/(dashboard)/analytics/shopify/page'))
+  ;({ default: IntegrationsPage } = await import('@/app/(dashboard)/crm/integrations/page'))
+})
+
+beforeEach(() => {
+  mounted = false
+  attached = false
   vi.stubGlobal('React', React)
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
   vi.stubGlobal('ResizeObserver', class {
@@ -38,17 +49,18 @@ beforeEach(async () => {
   })
   useAuthStore.setState({ user: { organization_id: 'org-1' } as any })
   useStoreStore.setState({ currentStore: store('store-a'), _hasHydrated: true })
-  ;({ default: EmailAnalyticsPage } = await import('@/app/(dashboard)/analytics/email/page'))
-  ;({ default: ShopifyAnalyticsPage } = await import('@/app/(dashboard)/analytics/shopify/page'))
-  ;({ default: IntegrationsPage } = await import('@/app/(dashboard)/crm/integrations/page'))
   container = document.createElement('div')
   document.body.append(container)
+  attached = true
   root = createRoot(container)
+  mounted = true
 })
 
 afterEach(async () => {
-  await act(async () => root.unmount())
-  container.remove()
+  if (mounted) await act(async () => root.unmount())
+  if (attached) container.remove()
+  mounted = false
+  attached = false
   vi.unstubAllGlobals()
   vi.clearAllMocks()
 })

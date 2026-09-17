@@ -3,6 +3,8 @@
 import React, { act } from 'react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createRoot, type Root } from 'react-dom/client'
+import { NotificationPanel } from '@/components/notifications/NotificationPanel'
+import { TransferModal } from '@/components/whatsapp/inbox/modals/TransferModal'
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn() }),
@@ -20,24 +22,28 @@ vi.mock('@/lib/supabase-client', () => ({
 
 let root: Root
 let container: HTMLDivElement
-let NotificationPanel: typeof import('@/components/notifications/NotificationPanel').NotificationPanel
-let TransferModal: typeof import('@/components/whatsapp/inbox/modals/TransferModal').TransferModal
+let mounted = false
+let attached = false
 
 const response = (data: unknown) => ({ ok: true, json: async () => data })
 
-beforeEach(async () => {
+beforeEach(() => {
+  mounted = false
+  attached = false
   vi.stubGlobal('React', React)
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
-  ;({ NotificationPanel } = await import('@/components/notifications/NotificationPanel'))
-  ;({ TransferModal } = await import('@/components/whatsapp/inbox/modals/TransferModal'))
   container = document.createElement('div')
   document.body.append(container)
+  attached = true
   root = createRoot(container)
+  mounted = true
 })
 
 afterEach(async () => {
-  await act(async () => root.unmount())
-  container.remove()
+  if (mounted) await act(async () => root.unmount())
+  if (attached) container.remove()
+  mounted = false
+  attached = false
   vi.unstubAllGlobals()
   vi.clearAllMocks()
 })

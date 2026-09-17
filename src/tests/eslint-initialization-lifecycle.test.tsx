@@ -6,6 +6,10 @@ import { createRoot, type Root } from 'react-dom/client'
 import { useAuthStore, useStoreStore, useUIStore } from '@/stores'
 import { useFlowStore } from '@/stores/flowStore'
 import { useDeals } from '@/hooks/useDeals'
+import DashboardLayout from '@/app/(dashboard)/layout'
+import { FlowBuilder } from '@/components/flow-builder'
+import { AdvancedMetricsSection } from '@/components/shopify/AdvancedMetricsSection'
+import { ContactDrawer } from '@/components/crm/ContactDrawer'
 
 vi.mock('next/navigation', () => ({ usePathname: () => '/dashboard', useRouter: () => ({ push: vi.fn() }) }))
 vi.mock('next/link', () => ({ default: ({ children }: { children: React.ReactNode }) => <>{children}</> }))
@@ -33,10 +37,8 @@ vi.mock('@/lib/supabase-client', () => ({ supabaseClient: { channel: () => { con
 
 let root: Root
 let container: HTMLDivElement
-let DashboardLayout: typeof import('@/app/(dashboard)/layout').default
-let FlowBuilder: typeof import('@/components/flow-builder').FlowBuilder
-let AdvancedMetricsSection: typeof import('@/components/shopify/AdvancedMetricsSection').AdvancedMetricsSection
-let ContactDrawer: typeof import('@/components/crm/ContactDrawer').ContactDrawer
+let mounted = false
+let attached = false
 
 const store = (id: string) => ({ id, name: `Store ${id}`, domain: `${id}.myshopify.com`, isActive: true })
 const response = (data: unknown) => ({ ok: true, json: async () => data })
@@ -53,25 +55,27 @@ function DealsProbe({ onIdentity }: { onIdentity: (refetch: unknown) => void }) 
   return <button onClick={() => setTick((tick) => tick + 1)}>rerender</button>
 }
 
-beforeEach(async () => {
+beforeEach(() => {
+  mounted = false
+  attached = false
   vi.stubGlobal('React', React)
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
   useAuthStore.setState({ user: { id: 'user-1', name: 'User', email: 'user@example.com', organization_id: 'org-1' } as any })
   useUIStore.setState({ sidebarCollapsed: false, _hasHydrated: true })
   useStoreStore.setState({ stores: [store('store-a')], currentStore: store('store-a'), _hasHydrated: true })
   useFlowStore.getState().resetStore()
-  ;({ default: DashboardLayout } = await import('@/app/(dashboard)/layout'))
-  ;({ FlowBuilder } = await import('@/components/flow-builder'))
-  ;({ AdvancedMetricsSection } = await import('@/components/shopify/AdvancedMetricsSection'))
-  ;({ ContactDrawer } = await import('@/components/crm/ContactDrawer'))
   container = document.createElement('div')
   document.body.append(container)
+  attached = true
   root = createRoot(container)
+  mounted = true
 })
 
 afterEach(async () => {
-  await act(async () => root.unmount())
-  container.remove()
+  if (mounted) await act(async () => root.unmount())
+  if (attached) container.remove()
+  mounted = false
+  attached = false
   vi.unstubAllGlobals()
   vi.clearAllMocks()
   vi.restoreAllMocks()

@@ -4,14 +4,16 @@ import React, { act } from 'react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createRoot, type Root } from 'react-dom/client'
 import { useFlowStore } from '@/stores/flowStore'
+import { AutomationLogsModal } from '@/components/crm/automations/AutomationLogsModal'
+import { EmailPreviewMode } from '@/components/flow-builder/panels/EmailPreviewMode'
+import { PropertiesPanel } from '@/components/flow-builder/panels/PropertiesPanel'
 
 vi.mock('@/stores', () => ({ useAuthStore: () => ({ user: { organization_id: 'org-1' } }) }))
 
 let root: Root
 let container: HTMLDivElement
-let AutomationLogsModal: typeof import('@/components/crm/automations/AutomationLogsModal').AutomationLogsModal
-let EmailPreviewMode: typeof import('@/components/flow-builder/panels/EmailPreviewMode').EmailPreviewMode
-let PropertiesPanel: typeof import('@/components/flow-builder/panels/PropertiesPanel').PropertiesPanel
+let mounted = false
+let attached = false
 
 const response = (data: unknown, ok = true) => ({ ok, json: async () => data })
 const deferred = <T,>() => {
@@ -19,20 +21,23 @@ const deferred = <T,>() => {
   return { promise: new Promise<T>((done) => { resolve = done }), resolve }
 }
 
-beforeEach(async () => {
+beforeEach(() => {
+  mounted = false
+  attached = false
   vi.stubGlobal('React', React)
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
-  ;({ AutomationLogsModal } = await import('@/components/crm/automations/AutomationLogsModal'))
-  ;({ EmailPreviewMode } = await import('@/components/flow-builder/panels/EmailPreviewMode'))
-  ;({ PropertiesPanel } = await import('@/components/flow-builder/panels/PropertiesPanel'))
   container = document.createElement('div')
   document.body.append(container)
+  attached = true
   root = createRoot(container)
+  mounted = true
 })
 
 afterEach(async () => {
-  await act(async () => root.unmount())
-  container.remove()
+  if (mounted) await act(async () => root.unmount())
+  if (attached) container.remove()
+  mounted = false
+  attached = false
   useFlowStore.setState({ nodes: [], selectedNodeId: null, showPropertiesPanel: false })
   vi.unstubAllGlobals()
   vi.clearAllMocks()
