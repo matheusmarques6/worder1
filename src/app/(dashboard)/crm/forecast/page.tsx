@@ -19,6 +19,7 @@ import {
   AlertCircle,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores'
+import { moedaDaLoja } from '@/lib/format/money';
 
 // =============================================
 // TYPES
@@ -80,7 +81,7 @@ interface ForecastData {
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
-    currency: 'BRL',
+    currency: moedaDaLoja(),
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(value)

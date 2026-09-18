@@ -259,6 +259,19 @@ async function findRecentCheckoutUrl(opts: EnrichOpts): Promise<string | null> {
   }
 }
 
+/**
+ * As colunas do catálogo, e a memória de quais existem neste banco.
+ *
+ * `description`, `body_html` e `collections` vieram numa migração que
+ * nem todo banco recebeu. Perguntar por elas e apanhar um 400 a cada
+ * chamada é caro e, pior, enche o registro de erro que não é erro. A
+ * primeira resposta vale para o processo inteiro.
+ */
+const COLUNAS_BASE =
+  'shopify_product_id, title, handle, vendor, product_type, tags, images, variants, price, status';
+const COLUNAS_NOVAS = `${COLUNAS_BASE}, description, body_html, collections`;
+let colunasNovasDisponiveis = true;
+
 export async function enrichShopifyEvent(
   eventType: string,
   properties: Record<string, any>,
@@ -291,21 +304,27 @@ export async function enrichShopifyEvent(
     const map = new Map<string, any>();
     if (productIds.length === 0) return map;
     try {
-      // Try with all the new columns first; fall back if the migration
-      // (description / body_html / collections) isn't applied yet.
-      let cols = 'shopify_product_id, title, handle, vendor, product_type, tags, images, variants, price, status, description, body_html, collections';
-      let { data, error } = await opts.supabase
-        .from('shopify_products')
-        .select(cols)
-        .eq('store_id', opts.storeId)
-        .in('shopify_product_id', productIds);
-      if (error && (error.code === 'PGRST204' || error.code === '42703')) {
-        cols = 'shopify_product_id, title, handle, vendor, product_type, tags, images, variants, price, status';
-        const fallback = await opts.supabase
+      // Tenta com as colunas novas e cai para as antigas se a migração
+      // (description / body_html / collections) ainda não foi aplicada.
+      //
+      // A resposta fica lembrada no processo. Sem isso a primeira
+      // tentativa falhava em TODA chamada — 100+ respostas 400 por dia
+      // só numa loja, cada uma custando uma ida ao banco e uma linha de
+      // erro que não era erro. Registro afogado assim esconde o erro que
+      // importa.
+      const buscar = (cols: string) =>
+        opts.supabase
           .from('shopify_products')
           .select(cols)
           .eq('store_id', opts.storeId)
           .in('shopify_product_id', productIds);
+
+      let { data, error } = await buscar(
+        colunasNovasDisponiveis ? COLUNAS_NOVAS : COLUNAS_BASE
+      );
+      if (error && (error.code === 'PGRST204' || error.code === '42703')) {
+        colunasNovasDisponiveis = false;
+        const fallback = await buscar(COLUNAS_BASE);
         data = fallback.data;
       }
       for (const p of (data || []) as any[]) {

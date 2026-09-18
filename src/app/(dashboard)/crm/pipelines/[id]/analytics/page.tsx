@@ -21,6 +21,7 @@ import {
   Activity,
   ArrowRight,
 } from 'lucide-react'
+import { moedaDaLoja } from '@/lib/format/money';
 import {
   BarChart,
   Bar,
@@ -166,7 +167,7 @@ const formatCurrency = (value: number) => {
   }
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
-    currency: 'BRL',
+    currency: moedaDaLoja(),
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(value)
@@ -175,7 +176,7 @@ const formatCurrency = (value: number) => {
 const formatFullCurrency = (value: number) => {
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
-    currency: 'BRL',
+    currency: moedaDaLoja(),
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value)

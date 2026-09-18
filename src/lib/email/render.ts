@@ -9,8 +9,16 @@
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { rewriteImagesForEmail } from './image-rewrite'
 import { fitProductImage, fitProductImageStyle } from './product-image'
+import { buildProductGrid, productGridTitle, type ProductGridConfig } from './product-grid'
 import { getAppBaseUrl } from '@/lib/app-url'
 import { stampHtmlLinks, type LinkParamsResolver } from '@/lib/tracking/link-params'
+// Importado no topo, não por `require` dentro da função. O `require`
+// não existe em contexto ESM: ele estourava, o `catch` engolia, e todo
+// link de descadastro caía calado na forma NÃO assinada — enquanto o
+// link de preferências, que não tem forma de reserva, virava nulo e
+// sumia. Nada disso aparecia em log nenhum. O módulo só importa
+// `crypto`, então não há ciclo a temer.
+import { signUnsubscribeToken } from '@/lib/email/unsubscribe-token'
 
 /**
  * Põe o conteúdo universal em dia dentro de um documento de e-mail.
@@ -408,7 +416,6 @@ export function buildUnsubscribeUrl(
 ): string {
   if (contactId && orgId) {
     try {
-      const { signUnsubscribeToken } = require('@/lib/email/unsubscribe-token');
       const token = signUnsubscribeToken({ contactId, orgId, campaignId, storeId });
       return `${baseUrl}/unsubscribe?token=${token}`;
     } catch {
@@ -431,7 +438,6 @@ export function buildPreferencesUrl(
 ): string | null {
   if (!contactId || !orgId) return null;
   try {
-    const { signUnsubscribeToken } = require('@/lib/email/unsubscribe-token');
     const token = signUnsubscribeToken({ contactId, orgId, campaignId, storeId });
     return `${baseUrl}/preferencias?token=${token}`;
   } catch {
@@ -475,7 +481,13 @@ export function addUnsubscribeLink(
   // footer block, custom CAN-SPAM section), avoid double-appending. Detect
   // by looking for any anchor pointing at /unsubscribe or /preferencias on
   // our domain — these are the standard footer destinations.
-  const hasUnsubAnchor = /href=["'][^"']*\/unsubscribe(\?|["'])/i.test(html);
+  // `/unsubscribe?token=…` é a forma assinada, mas sem o segredo de
+  // assinatura `buildUnsubscribeUrl` cai em `/api/unsubscribe/<id>` — e
+  // o detector não reconhecia essa, porque exigia `?` ou aspa logo
+  // depois de "unsubscribe". Resultado: o rodapé do template tinha um
+  // link de descadastro perfeitamente bom e um SEGUNDO rodapé era
+  // anexado embaixo assim mesmo.
+  const hasUnsubAnchor = /href=["'][^"']*\/(?:api\/)?unsubscribe(?:[/?]|["'])/i.test(html);
   const hasPrefsAnchor = /href=["'][^"']*\/preferencias(\?|["'])/i.test(html);
   if (hasUnsubAnchor && hasPrefsAnchor) {
     return html;
@@ -513,6 +525,123 @@ export function addUnsubscribeLink(
 }
 
 /**
+ * Lê o conteúdo de um marcador de feed de produtos.
+ *
+ * O formato novo é a configuração inteira em JSON. O antigo era
+ * `feedType:max:cols:showPrice:showComparePrice:showButton:texto` e não
+ * levava estilo nenhum — por isso o e-mail enviado saía com a cor e a
+ * altura de imagem que o código cravava, e não com as que a pessoa
+ * escolheu. Ele continua sendo lido porque está gravado no HTML de
+ * templates antigos; o que falta de estilo cai nos padrões da grade.
+ */
+export function parseProductBlockMarker(
+  raw: string
+): (ProductGridConfig & { feedType: string; maxProducts: number; cols: number }) | null {
+  const decodeUmaVez = (v: string): string => {
+    try { return decodeURIComponent(v) } catch { return v }
+  }
+
+  // No formato novo o marcador inteiro vem codificado, então decodificar
+  // tudo é o certo.
+  const talvezJson = decodeUmaVez(raw)
+  if (talvezJson.trim().startsWith('{')) {
+    try {
+      const cfg = JSON.parse(talvezJson)
+      return {
+        ...cfg,
+        feedType: String(cfg.feedType || 'bestsellers'),
+        maxProducts: Number(cfg.maxProducts) || 4,
+        cols: Number(cfg.cols) || 2,
+      }
+    } catch {
+      return null
+    }
+  }
+
+  // No formato antigo só o texto do botão vem codificado, e por isso a
+  // separação tem de acontecer no marcador CRU. Decodificar o marcador
+  // inteiro antes de separar estraga justamente o texto do botão: um
+  // "Comprar já — 20% off" vira "…20% off" na primeira passada, e a
+  // segunda lê "% o" como escape malformado, estoura, e o botão sai com
+  // o texto padrão. Uma decodificação, no campo que precisa dela.
+  const parts = raw.split(':')
+  if (parts.length < 3) return null
+  const [feedType, maxStr, colsStr, showPrice, showComparePrice, showButton, buttonText] = parts
+  return {
+    feedType: feedType || 'bestsellers',
+    maxProducts: parseInt(maxStr) || 4,
+    cols: parseInt(colsStr) || 2,
+    showPrice: showPrice !== 'false',
+    showComparePrice: showComparePrice !== 'false',
+    showButton: showButton !== 'false',
+    buttonText: decodeUmaVez(buttonText || '').trim() || 'Comprar',
+  }
+}
+
+/**
+ * Põe o texto de prévia no topo do corpo do e-mail.
+ *
+ * É a segunda linha da caixa de entrada, logo depois do assunto. O
+ * bloco tem duas partes, e as duas importam:
+ *
+ *   A div escondida com o texto — `display:none` não basta sozinho em
+ *   todo cliente, daí a combinação de altura zero, `overflow:hidden`,
+ *   opacidade zero e `mso-hide` para o Outlook.
+ *
+ *   E o enchimento de caracteres invisíveis depois dela. Sem ele, o
+ *   cliente completa a prévia com o começo do corpo — tipicamente o
+ *   "Ver no navegador" ou o alt do logo —, e o texto escrito com
+ *   cuidado aparece grudado num pedaço de lixo. Gmail, Outlook e Apple
+ *   Mail fazem isso; empurrá-los com espaço de largura zero é o que
+ *   Omnisend e Klaviyo também mandam.
+ */
+export function injectPreheader(html: string, texto: string): string {
+  const limpo = String(texto || '').trim()
+  if (!limpo) return html
+  // Já existe um? O documento pode trazer o seu por `settings.preheaderText`.
+  if (/mso-hide\s*:\s*all/i.test(html) && /display\s*:\s*none/i.test(html)) return html
+  const enchimento = '&#847;&zwnj;&nbsp;'.repeat(60)
+  const bloco =
+    `<div style="display:none;font-size:1px;color:#ffffff;line-height:1px;` +
+    `max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;">` +
+    `${escapeHtml(limpo)}${enchimento}</div>`
+  if (/<body[^>]*>/i.test(html)) {
+    return html.replace(/(<body[^>]*>)/i, `$1${bloco}`)
+  }
+  return bloco + html
+}
+
+/**
+ * Apaga um bloco dinâmico que não tem o que mostrar — e a linha que o
+ * continha.
+ *
+ * Trocar só o marcador por vazio deixava para trás
+ * `<tr><td style="padding:24px"></td></tr>`: uma faixa de espaço em
+ * branco no meio do e-mail, do tamanho do respiro configurado. É o
+ * buraco que se vê quando o bloco "some". Quando o marcador é o único
+ * conteúdo da célula, a linha inteira vai junto; a tabela vazia que
+ * sobra não ocupa altura nenhuma.
+ *
+ * Se o marcador divide a célula com outra coisa, só ele sai — nada é
+ * removido por engano.
+ */
+function removeBlockRow(html: string, marker: string, motivo?: string): string {
+  // O bloco sumir é silencioso por natureza, e foi esse silêncio que
+  // deixou o problema viver: `automation_runs.node_results` está vazio
+  // nas 1.323 execuções, então não havia onde ver que o resumo do pedido
+  // tinha sido apagado. Uma linha de registro é o que separa "o e-mail
+  // saiu esquisito" de "o bloco X saiu sem dado Y".
+  if (motivo) console.warn(`[email] bloco removido por falta de dado: ${motivo}`)
+  const escapado = marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const linha = new RegExp(`<tr[^>]*>\\s*<td[^>]*>\\s*${escapado}\\s*</td>\\s*</tr>`, 'g')
+  // `replace` primeiro e comparação depois: um `test` com regex global
+  // moveria o `lastIndex` e o `replace` seguinte começaria do meio.
+  const semLinha = html.replace(linha, '')
+  if (semLinha !== html) return semLinha
+  return html.replace(marker, '')
+}
+
+/**
  * Resolve dynamic product blocks in email HTML.
  * Replaces <!-- WORDER_PRODUCT_BLOCK:... --> comments with real product HTML.
  */
@@ -529,11 +658,21 @@ export async function resolveProductBlocks(
    */
   storeId?: string | null
 ): Promise<string> {
-  // O texto do botão viaja codificado (encodeURIComponent), então não tem
-  // espaço — mas TEM hífen quando o lojista escreve "Compre-agora", e o
-  // `[^-]` antigo fazia o marcador inteiro não casar: o bloco de produtos
-  // sumia do e-mail e sobrava um comentário HTML no lugar.
-  const regex = /<!-- WORDER_PRODUCT_BLOCK:(\w+):(\d+):(\d+):(true|false):(true|false):(true|false):(\S*) -->/g
+  // Dois formatos de marcador convivem. O novo leva a configuração
+  // inteira em JSON; o antigo, só sete campos separados por dois-pontos
+  // — e é o que está gravado no HTML de 111 dos 190 templates salvos,
+  // então continua sendo lido.
+  //
+  // O conteúdo casa por "tudo que não é espaço", e não por campo. O
+  // recorte por campo tinha um `[^-]` no texto do botão, e um lojista
+  // que escrevesse "Compre-agora" fazia o marcador inteiro não casar: o
+  // bloco de produtos sumia do e-mail e sobrava um comentário HTML no
+  // lugar. Casando o conteúdo inteiro, o texto do botão pode ter o que
+  // quiser — quem o interpreta é `parseProductBlockMarker`.
+  //
+  // Não-guloso de propósito: com dois marcadores na mesma linha, o
+  // guloso engoliria do primeiro até o último ` -->`.
+  const regex = /<!-- WORDER_PRODUCT_BLOCK:([^\s]*?) -->/g
   let result = html
   const matches: RegExpExecArray[] = []
   let m: RegExpExecArray | null
@@ -543,12 +682,15 @@ export async function resolveProductBlocks(
   }
 
   for (const match of matches) {
-    const [fullMatch, feedType, maxStr, colsStr, showPrice, showComparePrice, showButton, buttonTextRaw] = match
-    // Sem o decode, "Comprar agora" chegava no e-mail como "Comprar%20agora"
-    // — era o que o destinatário lia no botão.
-    const buttonText = escapeHtml(decodeUriSeguro(buttonTextRaw).trim() || 'Comprar')
-    const maxProducts = parseInt(maxStr) || 4
-    const cols = parseInt(colsStr) || 2
+    const fullMatch = match[0]
+    const cfg = parseProductBlockMarker(match[1])
+    if (!cfg) continue
+    const { feedType, maxProducts, cols } = cfg
+    // O id do feed salvo. É o que leva os filtros, os produtos
+    // excluídos, a reserva e a janela de tempo configurados pelo
+    // lojista até a resolução — sem ele, nada disso era aplicado no
+    // envio real.
+    const feedId = (cfg as any).feedId || undefined
 
     let products: any[] = []
     try {
@@ -557,7 +699,7 @@ export async function resolveProductBlocks(
       // 50-200ms/call adds up across a batch.
       const { resolveProductFeed } = await import('@/lib/email/product-feeds')
       products = await resolveProductFeed({
-        orgId, storeId, feedType, contactId, maxProducts, eventData,
+        orgId, storeId, feedType, feedId, contactId, maxProducts, eventData,
       })
     } catch {
       // No products available
@@ -565,52 +707,32 @@ export async function resolveProductBlocks(
 
     if (products.length === 0 && feedType.startsWith('trigger_')) {
       try {
+        // O feed segue junto mesmo na reserva: um produto que o lojista
+        // excluiu não deve reaparecer só porque a estratégia mudou.
         const { resolveProductFeed } = await import('@/lib/email/product-feeds')
-        products = await resolveProductFeed({ orgId, storeId, feedType: 'bestsellers', maxProducts, contactId, eventData })
+        products = await resolveProductFeed({ orgId, storeId, feedType: 'bestsellers', feedId, maxProducts, contactId, eventData })
       } catch {}
     }
 
     if (products.length === 0) {
-      result = result.replace(fullMatch, '')
+      result = removeBlockRow(
+        result, fullMatch,
+        `grade de produtos (feed "${feedType}", loja ${storeId || '—'}, org ${orgId})`
+      )
       continue
     }
 
-    const rows = Math.ceil(products.length / cols)
-    let productHtml = '<table width="100%" cellpadding="0" cellspacing="0" border="0" style="padding:16px;">'
+    // A moeda vem do evento; antes a grade cravava `R$` e uma loja em
+    // dólar anunciava "R$ 23.51".
+    const currency =
+      eventData?.Currency || eventData?.currency ||
+      eventData?.extra?.currency || eventData?.raw?.currency || 'BRL'
 
-    for (let r = 0; r < rows; r++) {
-      productHtml += '<tr>'
-      for (let c = 0; c < cols; c++) {
-        const p = products[r * cols + c]
-        if (!p) { productHtml += `<td width="${100 / cols}%"></td>`; continue }
-
-        // Título e preço vêm da loja e entram em atributo HTML: uma aspa
-        // no nome do produto quebrava a tag inteira.
-        const title = escapeHtml(p.title || p.name || 'Produto')
-        const price = escapeHtml(p.price || '0')
-        const comparePrice = escapeHtml(p.compare_at_price || p.compare_price || '')
-        const imgUrl = escapeHtml(p.image_url || p.images?.[0]?.src || '')
-        // O feed já monta a URL com o domínio da loja do e-mail. Sem URL,
-        // melhor um link morto do que um domínio inventado.
-        const url = escapeHtml(p.url || '#')
-
-        productHtml += `<td width="${100 / cols}%" style="padding:8px;vertical-align:top;text-align:center;">
-          <a href="${url}" style="text-decoration:none;color:inherit;display:block;">
-            <div style="border:1px solid #E5E7EB;border-radius:8px;overflow:hidden;background:#fff;">
-              ${imgUrl ? `<img src="${imgUrl}" alt="${title}" style="width:100%;height:auto;display:block;" />` : '<div style="background:#F3F4F6;height:200px;"></div>'}
-              <div style="padding:12px;">
-                <p style="margin:0;font-size:14px;font-weight:600;color:#111827;">${title}</p>
-                ${showPrice === 'true' ? `${showComparePrice === 'true' && comparePrice ? `<p style="margin:4px 0 0;font-size:12px;color:#9CA3AF;text-decoration:line-through;">R$ ${comparePrice}</p>` : ''}<p style="margin:2px 0 0;font-size:16px;font-weight:700;color:#F97316;">R$ ${price}</p>` : ''}
-                ${showButton === 'true' ? `<a href="${url}" style="display:inline-block;margin-top:10px;padding:10px 24px;background:#F97316;color:white;border-radius:6px;font-size:13px;font-weight:600;text-decoration:none;">${buttonText}</a>` : ''}
-              </div>
-            </div>
-          </a>
-        </td>`
-      }
-      productHtml += '</tr>'
-    }
-    productHtml += '</table>'
-    result = result.replace(fullMatch, productHtml)
+    const comMoeda = { ...cfg, currency }
+    result = result.replace(
+      fullMatch,
+      productGridTitle(comMoeda) + buildProductGrid(products, comMoeda)
+    )
   }
 
   return result
@@ -824,8 +946,51 @@ export async function resolveCartBlocks(
         })
       }
       if (products.length === 0) {
-        result = result.replace(match[0], '')
+        result = removeBlockRow(
+          result, match[0],
+          `produtos do gatilho (gatilho "${triggerType || '—'}", loja ${storeId || '—'}, org ${orgId})`
+        )
         continue
+      }
+    }
+
+    // "Mostrar itens fora de estoque" era um interruptor que não fazia
+    // nada: o painel oferecia a opção e o envio ignorava. Desligado — que
+    // é o padrão —, o item que a loja marcou como indisponível sai do
+    // e-mail, em vez de o cliente clicar num produto que não pode comprar.
+    //
+    // Só sai o que o catálogo DESTA loja afirma indisponível. `available`
+    // nulo é "não sei" e fica, porque três das quatro lojas sincronizam
+    // sem esse campo e um palpite tiraria produto bom do e-mail.
+    //
+    // E nunca esvazia o bloco: se todos estiverem esgotados, todos ficam.
+    // Um e-mail de carrinho anunciando item esgotado ainda é melhor do
+    // que um e-mail de carrinho sem carrinho nenhum.
+    if (cfg.showOutOfStock !== true && products.length > 0) {
+      const ids = [...new Set(
+        products.map((p: any) => (p.product_id != null ? String(p.product_id) : '')).filter(Boolean)
+      )] as string[]
+      if (ids.length > 0) {
+        try {
+          let q = supabaseAdmin
+            .from('shopify_products')
+            .select('shopify_product_id, available')
+            .in('shopify_product_id', ids)
+          if (storeId) q = q.eq('store_id', storeId)
+          else if (orgId) q = q.eq('organization_id', orgId)
+          const { data: catalogo } = await q
+          const esgotados = new Set(
+            (catalogo || [])
+              .filter((p: any) => p.available === false)
+              .map((p: any) => String(p.shopify_product_id))
+          )
+          if (esgotados.size > 0) {
+            const sobram = products.filter(
+              (p: any) => !esgotados.has(String(p.product_id ?? ''))
+            )
+            if (sobram.length > 0) products = sobram
+          }
+        } catch { /* sem catálogo, mostra o que veio: nunca derruba o envio */ }
       }
     }
 
@@ -913,17 +1078,28 @@ export async function resolveCartBlocks(
       // e segurada pelo CSS quando não dá.
       const imgSize = isVert ? '100%' : `${imgW}px`
       const boxW: number | '100%' = isVert ? '100%' : imgW
-      const fitted = fitProductImage(imgUrl, { width: imgW, height: imgH })
+      const fitted = fitProductImage(imgUrl, {
+        width: imgW,
+        height: imgH,
+        padColor: cfg.backgroundColor,
+      })
+      // Título, URL da foto e link do produto vêm da loja e entram em
+      // atributo HTML. Um nome como `Shampoo "Premium" & Co` fechava a
+      // aspa do `alt` e corrompia a tag inteira. A grade já escapava;
+      // esta linha tinha ficado de fora.
       const imgCell = cfg.showImage ? `<td width="${isVert ? '100%' : imgW}" style="vertical-align:middle;${isVert ? 'padding:0 0 12px 0;' : 'padding:0;'}">
-        <a href="${prodUrl}" style="display:block;text-decoration:none;">${imgUrl
-          ? `<img src="${fitted}" alt="${title}" style="${fitProductImageStyle({ width: boxW, height: imgH })}border-radius:${imgR}px;border:0;outline:none;" />`
+        <a href="${escapeHtml(prodUrl)}" style="display:block;text-decoration:none;">${imgUrl
+          ? `<img src="${escapeHtml(fitted)}" alt="${escapeHtml(title)}" style="${fitProductImageStyle({ width: boxW, height: imgH })}border-radius:${imgR}px;border:0;outline:none;" />`
           : `<div style="width:${imgSize};height:${imgH}px;background:#F3F4F6;border-radius:${imgR}px;display:flex;align-items:center;justify-content:center;color:#9CA3AF;font-size:11px;">imagem</div>`
         }</a>
       </td>` : ''
 
       const detailParts: string[] = []
-      if (cfg.showName) detailParts.push(`<p style="margin:0 0 6px;font-size:${cfg.nameFontSize}px;font-weight:${cfg.nameWeight};color:${cfg.nameColor};line-height:1.35;">${title}</p>`)
-      if (cfg.showDescription && desc) detailParts.push(`<p style="margin:0 0 6px;font-size:${cfg.descFontSize}px;color:${cfg.descColor};line-height:1.4;">${desc}</p>`)
+      // A fonte do nome e o peso da descrição existem no editor e não
+      // chegavam ao envio: quem os mudava via na tela e não no e-mail.
+      const nomeFonte = cfg.nameFontFamily && cfg.nameFontFamily !== 'inherit' ? `font-family:${cfg.nameFontFamily};` : ''
+      if (cfg.showName) detailParts.push(`<p style="margin:0 0 6px;font-size:${cfg.nameFontSize}px;font-weight:${cfg.nameWeight};color:${cfg.nameColor};${nomeFonte}line-height:1.35;">${escapeHtml(title)}</p>`)
+      if (cfg.showDescription && desc) detailParts.push(`<p style="margin:0 0 6px;font-size:${cfg.descFontSize}px;font-weight:${cfg.descWeight || '400'};color:${cfg.descColor};line-height:1.4;">${escapeHtml(desc)}</p>`)
       if (cfg.showPrice) {
         let priceHtml = `<span style="font-size:${cfg.priceFontSize}px;font-weight:${cfg.priceWeight};color:${cfg.priceColor};">${price}</span>`
         if (cfg.showOldPrice && oldPrice) {
@@ -932,7 +1108,7 @@ export async function resolveCartBlocks(
         detailParts.push(`<p style="margin:0 0 ${cfg.showButton ? 12 : 0}px;line-height:1.3;">${priceHtml}</p>`)
       }
       if (cfg.showButton) {
-        detailParts.push(`<p style="margin:0;text-align:${btnAlign === 'full' ? 'center' : btnAlign};line-height:1;"><a href="${checkoutUrl}" style="${btnDisplay}padding:${cfg.buttonPaddingV}px ${cfg.buttonPaddingH}px;background:${cfg.buttonColor};color:${cfg.buttonTextColor};border-radius:${cfg.buttonRadius}px;font-size:${cfg.buttonFontSize}px;font-weight:600;text-decoration:none;box-sizing:border-box;mso-padding-alt:0;">${cfg.buttonText}</a></p>`)
+        detailParts.push(`<p style="margin:0;text-align:${btnAlign === 'full' ? 'center' : btnAlign};line-height:1;"><a href="${escapeHtml(checkoutUrl)}" style="${btnDisplay}padding:${cfg.buttonPaddingV}px ${cfg.buttonPaddingH}px;background:${cfg.buttonColor};color:${cfg.buttonTextColor};border-radius:${cfg.buttonRadius}px;font-size:${cfg.buttonFontSize}px;font-weight:600;text-decoration:none;box-sizing:border-box;mso-padding-alt:0;">${escapeHtml(cfg.buttonText)}</a></p>`)
       }
       // vertical-align:middle on the details cell — the user explicitly
       // asked for vertically-centered text alongside the image.
@@ -942,10 +1118,15 @@ export async function resolveCartBlocks(
       // vertical padding so multi-item carts breathe.
       const rowPadTop = i === 0 ? '0' : '16px'
       const rowPadBottom = i === products.length - 1 ? '0' : '16px'
+      // `stackOnMobile` existia na configuração e não saía no HTML: a
+      // classe nunca era emitida, então a opção não fazia nada. Numa
+      // tela de 320px a foto de 200px deixava uns 100px para o nome do
+      // produto e o preço.
+      const stackClass = cfg.stackOnMobile !== false ? ' class="worder-cart-stack"' : ''
       if (isVert) {
         cartHtml += `<tr><td style="padding:${rowPadTop} 0 ${rowPadBottom};"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>${imgCell}</tr><tr>${detailsCell}</tr></table></td></tr>`
       } else {
-        cartHtml += `<tr><td style="padding:${rowPadTop} 0 ${rowPadBottom};"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>${isRight ? detailsCell + imgCell : imgCell + detailsCell}</tr></table></td></tr>`
+        cartHtml += `<tr><td style="padding:${rowPadTop} 0 ${rowPadBottom};"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"${stackClass}><tr>${isRight ? detailsCell + imgCell : imgCell + detailsCell}</tr></table></td></tr>`
       }
 
       if (cfg.separator && i < products.length - 1) {
@@ -957,6 +1138,90 @@ export async function resolveCartBlocks(
     result = result.replace(match[0], cartHtml)
   }
   return result
+}
+
+/**
+ * Preenche os itens do pedido quando o gatilho só mandou o id.
+ *
+ * O e-mail de "Pedido Aprovado" sai do gatilho `trigger_order_paid`, e o
+ * despacho do webhook manda só `order_id`, `order_number`, `total_price`
+ * e `currency` — nenhum item. O bloco de detalhes do pedido, ao não
+ * achar item nenhum, se apaga do HTML em silêncio: o e-mail chega com um
+ * buraco no lugar do resumo da compra, que é o conteúdo dele.
+ *
+ * Isto roda ANTES de `enrichOrderItemImages`, e é uma divisão de
+ * trabalho: aqui os itens aparecem; lá as fotos deles são buscadas.
+ * `enrichOrderItemImages` sozinho não resolvia porque ele desiste
+ * quando a lista está vazia — ele completa item que existe, não cria.
+ *
+ * Só toca no que falta: evento que já trouxe os itens sai daqui
+ * intocado.
+ */
+export async function hydrateOrderEventData(
+  eventData: Record<string, any>,
+  supabase: any,
+  storeId?: string,
+  organizationId?: string,
+): Promise<void> {
+  if (!eventData || typeof eventData !== 'object') return
+
+  const temItens = (v: any) => Array.isArray(v) && v.length > 0
+  if (
+    temItens(eventData.Items) ||
+    temItens(eventData.items) ||
+    temItens(eventData.line_items) ||
+    temItens(eventData.extra?.line_items)
+  ) return
+
+  const orderId =
+    eventData.order_id || eventData.OrderID || eventData.OrderId || eventData.orderId
+  const checkoutId =
+    eventData.checkout_id || eventData.CheckoutID || eventData.CheckoutId || eventData.checkoutId
+
+  // O pedido primeiro: num e-mail de pedido aprovado ele é a fonte certa,
+  // mesmo que o evento também carregue um id de checkout antigo.
+  const fontes: Array<{ tabela: string; coluna: string; valor: string }> = []
+  if (orderId) fontes.push({ tabela: 'shopify_orders', coluna: 'shopify_order_id', valor: String(orderId) })
+  if (checkoutId) fontes.push({ tabela: 'shopify_checkouts', coluna: 'shopify_checkout_id', valor: String(checkoutId) })
+  if (fontes.length === 0) return
+
+  for (const f of fontes) {
+    try {
+      const colunas = f.tabela === 'shopify_orders'
+        ? 'line_items, currency, order_number, subtotal_price, total_price, total_tax, total_discounts, created_at'
+        : 'line_items, currency'
+      let q = supabase.from(f.tabela).select(colunas).eq(f.coluna, f.valor).limit(1)
+      if (storeId) q = q.eq('store_id', storeId)
+      else if (organizationId) q = q.eq('organization_id', organizationId)
+
+      const { data } = await q
+      const linha = Array.isArray(data) ? data[0] : data
+      if (!linha || !Array.isArray(linha.line_items) || linha.line_items.length === 0) continue
+
+      // O bloco lê `Items` primeiro e entende tanto a forma da Shopify
+      // quanto a canônica, então a lista crua serve como está. As fotos
+      // vêm logo depois, no enriquecimento.
+      eventData.Items = linha.line_items
+
+      // Só completa o que o gatilho não trouxe — o que veio do evento
+      // manda, porque é o retrato do momento em que ele disparou.
+      const completar: Array<[string, any]> = [
+        ['currency', linha.currency],
+        ['order_number', linha.order_number],
+        ['subtotal_price', linha.subtotal_price],
+        ['total_price', linha.total_price],
+        ['total_tax', linha.total_tax],
+        ['total_discounts', linha.total_discounts],
+        ['created_at', linha.created_at],
+      ]
+      for (const [chave, valor] of completar) {
+        if (valor != null && eventData[chave] == null) eventData[chave] = valor
+      }
+      return
+    } catch {
+      // Sem os itens o bloco some, como antes: nunca derruba o envio.
+    }
+  }
 }
 
 /**
@@ -1079,7 +1344,10 @@ export function resolveOrderBlocks(
     const sepColor = cfg.separatorColor || divColor
 
     if (items.length === 0) {
-      result = result.replace(match[0], '')
+      result = removeBlockRow(
+        result, match[0],
+        `resumo do pedido (pedido ${eventData?.order_id || eventData?.OrderID || eventData?.OrderId || '—'} sem itens)`
+      )
       continue
     }
 
@@ -1157,7 +1425,13 @@ export function resolveOrderBlocks(
       const isEnLocale = currency === 'USD' || currency === 'EUR'
       const imgCell = cfg.showImage
         ? `<td width="${imgW}" valign="middle" style="vertical-align:middle;padding:0 16px 0 0;width:${imgW}px;">${imgUrl
-            ? `<img src="${imgUrl}" alt="${title.replace(/"/g, '&quot;')}" width="${imgW}" height="${imgW}" style="display:block;width:${imgW}px;height:${imgW}px;object-fit:cover;border-radius:${imgR}px;border:0;" />`
+            // A miniatura é quadrada, e o quadrado vem da CDN. Os
+            // atributos `width`/`height` sozinhos mandam no Outlook, que
+            // ignora `object-fit`: uma foto alta de frasco era espremida
+            // para caber em 80×80 e saía deformada. Pedindo o recorte na
+            // origem, o arquivo já chega quadrado e os atributos passam
+            // a descrever a verdade.
+            ? `<img src="${fitProductImage(imgUrl, { width: imgW, height: imgW, crop: true })}" alt="${title.replace(/"/g, '&quot;')}" width="${imgW}" height="${imgW}" style="display:block;width:${imgW}px;height:${imgW}px;object-fit:cover;border-radius:${imgR}px;border:0;" />`
             : `<div style="width:${imgW}px;height:${imgW}px;background:#F3F4F6;border-radius:${imgR}px;"></div>`
           }</td>`
         : ''
@@ -1165,13 +1439,23 @@ export function resolveOrderBlocks(
       // Build the detail block (right of image) as its own table so name/variant
       // rows align their right-edge values with each other (Omnisend look).
       const detailRows: string[] = []
-      if (cfg.showName) {
-        const nameText = `${title}${cfg.showQuantity ? ` &times; ${qty}` : ''}`
-        const priceText = cfg.showPrice ? fmtPrice(rowTotal) : ''
+      // Nome, preço e quantidade decidem se a linha do item tem conteúdo
+      // algum. O editor os grava sempre ligados, e o resto do bloco já
+      // usa `!== false` (veja `showOrderNumber`): faltando a chave, o
+      // certo é mostrar. Com verdade simples, uma configuração sem essas
+      // chaves renderizava a linha vazia — o mesmo buraco por outro
+      // caminho. Quem desligou de propósito grava `false` e continua
+      // desligado.
+      const showName = cfg.showName !== false
+      const showPrice = cfg.showPrice !== false
+      const showQuantity = cfg.showQuantity !== false
+      if (showName) {
+        const nameText = `${title}${showQuantity ? ` &times; ${qty}` : ''}`
+        const priceText = showPrice ? fmtPrice(rowTotal) : ''
         detailRows.push(
           `<tr>
             <td style="font-size:14px;font-weight:600;color:${primColor};line-height:1.45;padding:0;">${nameText}</td>
-            ${cfg.showPrice ? `<td style="font-size:14px;font-weight:600;color:${priceColor};line-height:1.45;padding:0 0 0 12px;text-align:right;white-space:nowrap;">${priceText}</td>` : ''}
+            ${showPrice ? `<td style="font-size:14px;font-weight:600;color:${priceColor};line-height:1.45;padding:0 0 0 12px;text-align:right;white-space:nowrap;">${priceText}</td>` : ''}
           </tr>`
         )
       }
@@ -1343,8 +1627,75 @@ export function prepareEmailHtml({
   // 0b. Replace countdown base URL placeholder
   result = result.replace(/\{\{countdown_base_url\}\}/g, baseUrl);
 
+  // 0c. Os links de sistema do rodapé.
+  //
+  // O bloco de rodapé emite `{{unsubscribe_url}}` e, quando ligado,
+  // `{{preferences_url}}`. Ninguém no caminho de envio preenchia essas
+  // chaves — só as rotas de teste e de pré-visualização, que mandam '#'.
+  // No envio de verdade elas caíam para string vazia e o "Descadastrar-se"
+  // do rodapé ia com `href=""`: um link de descadastro morto, que além de
+  // feio é problema de conformidade. E, como o detector de rodapé procura
+  // um anchor apontando para `/unsubscribe`, o link vazio não era
+  // reconhecido e um SEGUNDO rodapé era anexado embaixo.
+  //
+  // Os destinos existem e são assinados; o que faltava era ligá-los aqui,
+  // antes das variáveis, com os mesmos dados que o rodapé automático usa.
+  const mergeComSistema: Record<string, string> = { ...mergeData };
+  mergeComSistema.unsubscribe_url =
+    mergeComSistema.unsubscribe_url ||
+    buildUnsubscribeUrl(emailSendId, baseUrl, contactId, orgId, campaignId, storeId);
+  const urlPreferencias = buildPreferencesUrl(baseUrl, contactId, orgId, campaignId, storeId);
+  if (urlPreferencias) {
+    mergeComSistema.preferences_url = mergeComSistema.preferences_url || urlPreferencias;
+  }
+
+  // Link de sistema sem destino não vai morto para a caixa de entrada:
+  // o anchor inteiro sai, com o separador grudado nele, para não sobrar
+  // um "·" solto no rodapé.
+  //
+  //   view_in_browser_url — não existe página que sirva o e-mail
+  //   enviado. Não há destino honesto a dar.
+  //
+  //   preferences_url — o destino existe, mas depende do segredo de
+  //   assinatura. Sem ele, `buildPreferencesUrl` devolve nulo, e aí o
+  //   certo é omitir o link, não mandar um `href=""` (que a rede de
+  //   segurança logo abaixo ainda apontaria para a HOME DA LOJA — um
+  //   link escrito "Preferências" indo para a vitrine seria pior que
+  //   nenhum).
+  const semDestino = ['view_in_browser_url', 'preferences_url'].filter(
+    (tag) => !mergeComSistema[tag]
+  );
+  for (const tag of semDestino) {
+    result = result.replace(
+      new RegExp(
+        `(?:\\s*(?:&nbsp;|\\s)*(?:·|&middot;|\\|)(?:&nbsp;|\\s)*)?<a\\s[^>]*href=["']\\{\\{\\s*${tag}\\s*\\}\\}["'][^>]*>[\\s\\S]*?<\\/a>`,
+        'gi'
+      ),
+      ''
+    );
+  }
+
   // 1. Replace merge tags
-  result = renderMergeTags(result, mergeData);
+  result = renderMergeTags(result, mergeComSistema);
+
+  // 1a. Rede de segurança: variável que não resolve DENTRO de um `href`
+  // deixa `href=""`, e um link vazio não vai a lugar nenhum — o
+  // rastreador de clique nem o reescreve, porque o padrão dele exige ao
+  // menos um caractere no destino. Foi assim que o logo e o banner do
+  // topo pararam de levar à loja em 30 templates: a variável usada
+  // (`{{trigger.StoreURL}}`) não existia em carga nenhuma.
+  //
+  // A causa daquele caso está corrigida na origem. Isto é o que segura
+  // o PRÓXIMO: com a loja conhecida, o link volta para a home dela em
+  // vez de morrer. Sem loja conhecida, fica como está — inventar
+  // destino seria pior. Roda antes do rastreamento, então o link
+  // recuperado sai com UTM e contagem de clique como qualquer outro.
+  const lojaHome = String(mergeData.store_url || '').trim();
+  if (lojaHome) {
+    result = result.replace(/(<a\s[^>]*href=)(""|'')/gi, (_m, prefixo: string) =>
+      `${prefixo}"${escapeHtml(lojaHome)}"`
+    );
+  }
 
   // 1b. Rewrite Supabase Storage image URLs to the transform/CDN
   // endpoint. Same-host URLs but the /render/image/ path serves

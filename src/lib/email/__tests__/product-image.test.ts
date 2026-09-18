@@ -78,3 +78,34 @@ describe('fitProductImageStyle', () => {
     expect(fitProductImageStyle({ width: 200, height: 200 })).toContain('margin:0 auto')
   })
 })
+
+describe('a cor da barra de preenchimento', () => {
+  // Sem `crop`, a Shopify devolve a caixa inteira e a diferença de
+  // proporção vira barra em volta do produto. Em PNG ela é transparente
+  // e some sozinha; em JPG, não — e um e-mail de fundo escuro ganha
+  // duas faixas brancas ao lado do frasco.
+  it('vai para a URL quando o bloco sabe o próprio fundo', () => {
+    const u = new URL(fitProductImage(SHOPIFY, { width: 200, height: 200, padColor: '#101828' }))
+    expect(u.searchParams.get('pad_color')).toBe('101828')
+  })
+
+  it('aceita hexadecimal de três dígitos', () => {
+    const u = new URL(fitProductImage(SHOPIFY, { width: 200, height: 200, padColor: '#fff' }))
+    expect(u.searchParams.get('pad_color')).toBe('fff')
+  })
+
+  it('cor inválida vira ausência, não parâmetro quebrado', () => {
+    // Mandar `rgb(0,0,0)` faria a CDN recusar a transformação inteira e
+    // devolver a foto sem tratamento — pior que não pedir cor nenhuma.
+    for (const ruim of ['rgb(0,0,0)', 'preto', '#12', '', null, undefined]) {
+      const u = new URL(fitProductImage(SHOPIFY, { width: 200, height: 200, padColor: ruim as any }))
+      expect(u.searchParams.get('pad_color')).toBeNull()
+    }
+  })
+
+  it('com corte não há barra, então a cor não é enviada', () => {
+    const u = new URL(fitProductImage(SHOPIFY, { width: 200, height: 200, crop: true, padColor: '#fff' }))
+    expect(u.searchParams.get('pad_color')).toBeNull()
+    expect(u.searchParams.get('crop')).toBe('center')
+  })
+})

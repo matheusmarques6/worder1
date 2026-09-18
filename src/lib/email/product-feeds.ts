@@ -307,16 +307,140 @@ export function isExcluded(p: any, excluded: Set<string>): boolean {
 // returned nothing. We try the case-insensitive/null-tolerant filter first,
 // and if that still yields zero we fall back to ANY product of the store so
 // a recommendation block never renders empty when the catalog IS synced.
+/**
+ * A janela de tempo do feed, em dias. `3d`/`7d`/`30d`/`90d` é o que a
+ * tela oferece; qualquer outra coisa vira 90 dias, que é o horizonte
+ * mais largo que ela deixa escolher.
+ */
+function janelaEmDias(timePeriod?: string | null): number {
+  const m = String(timePeriod || '').trim().match(/^(\d+)\s*d$/i)
+  const n = m ? parseInt(m[1], 10) : 0
+  return n > 0 && n <= 365 ? n : 90
+}
+
+const desdeISO = (dias: number) =>
+  new Date(Date.now() - dias * 24 * 60 * 60 * 1000).toISOString()
+
+/**
+ * Os rankings de loja — mais vendidos e mais vistos — valem para TODOS
+ * os destinatários do mesmo disparo, então são calculados uma vez e
+ * reaproveitados por alguns minutos. Sem isso, uma campanha para mil
+ * contatos refaria a mesma contagem mil vezes.
+ */
+const CACHE_TTL_MS = 10 * 60 * 1000
+const rankingCache = new Map<string, { em: number; ids: string[] }>()
+
+async function comCache(chave: string, calcular: () => Promise<string[]>): Promise<string[]> {
+  const agora = Date.now()
+  const guardado = rankingCache.get(chave)
+  if (guardado && agora - guardado.em < CACHE_TTL_MS) return guardado.ids
+  const ids = await calcular()
+  rankingCache.set(chave, { em: agora, ids })
+  // O mapa não pode crescer sem fim num processo longo.
+  if (rankingCache.size > 200) {
+    for (const [k, v] of rankingCache) {
+      if (agora - v.em >= CACHE_TTL_MS) rankingCache.delete(k)
+    }
+  }
+  return ids
+}
+
+/**
+ * Os mais VENDIDOS de verdade, contados nos itens dos pedidos da janela.
+ *
+ * Antes, "Produtos mais vendidos" e "Produtos mais vistos" caíam no
+ * mesmo código de "Produtos mais recentes": as três opções da tela
+ * davam exatamente a mesma lista. O dado para fazer certo sempre esteve
+ * lá — 1.072 pedidos em 90 dias só numa das lojas.
+ */
+async function rankingMaisVendidos(storeId: string, dias: number): Promise<string[]> {
+  return comCache(`vendidos:${storeId}:${dias}`, async () => {
+    const { data } = await supabaseAdmin
+      .from('shopify_orders')
+      .select('line_items')
+      .eq('store_id', storeId)
+      .gte('created_at', desdeISO(dias))
+      .order('created_at', { ascending: false })
+      .limit(1000)
+    const contagem = new Map<string, number>()
+    for (const pedido of (data || []) as any[]) {
+      for (const item of (pedido.line_items || []) as any[]) {
+        const id = item?.product_id != null ? String(item.product_id) : ''
+        if (!id) continue
+        const qtd = Number(item.quantity) || 1
+        contagem.set(id, (contagem.get(id) || 0) + qtd)
+      }
+    }
+    return [...contagem.entries()].sort((a, b) => b[1] - a[1]).map(([id]) => id)
+  })
+}
+
+/** Os mais VISTOS, contados nas visualizações de produto da janela. */
+async function rankingMaisVistos(orgId: string, storeId: string, dias: number): Promise<string[]> {
+  return comCache(`vistos:${storeId}:${dias}`, async () => {
+    const { data } = await supabaseAdmin
+      .from('contact_events')
+      .select('properties')
+      .eq('organization_id', orgId)
+      .eq('store_id', storeId)
+      .eq('event_type', 'viewed_product')
+      .gte('occurred_at', desdeISO(dias))
+      .order('occurred_at', { ascending: false })
+      .limit(5000)
+    const contagem = new Map<string, number>()
+    for (const ev of (data || []) as any[]) {
+      const id = ev?.properties?.product_id != null ? String(ev.properties.product_id) : ''
+      if (!id) continue
+      contagem.set(id, (contagem.get(id) || 0) + 1)
+    }
+    return [...contagem.entries()].sort((a, b) => b[1] - a[1]).map(([id]) => id)
+  })
+}
+
+/**
+ * Busca no catálogo por uma lista de ids e devolve NA ORDEM da lista.
+ * O `in` do banco não preserva ordem, e num ranking a ordem é o dado.
+ */
+async function catalogoNaOrdem(
+  orgId: string, storeId: string, ids: string[], limite: number, excluded?: Set<string>
+): Promise<any[]> {
+  if (ids.length === 0) return []
+  // Busca com folga: parte dos ids do ranking pode estar escondida,
+  // esgotada ou sem foto, e aí o corte final ficaria curto.
+  const candidatos = ids.slice(0, Math.min(limite * 6, 200))
+  const { data } = await catalogQuery(orgId, storeId, excluded).in('shopify_product_id', candidatos)
+  const porId = new Map<string, any>()
+  for (const p of (data || []) as any[]) porId.set(String(p.shopify_product_id), p)
+  const temFoto = (p: any) => Array.isArray(p?.images) && p.images.length > 0
+  const achados = candidatos.map((id) => porId.get(id)).filter(Boolean)
+  // Mesma regra da grade: quem tem foto na frente, sem banir os outros.
+  return [...achados.filter(temFoto), ...achados.filter((p) => !temFoto(p))].slice(0, limite)
+}
+
 async function fetchNewestCatalog(orgId: string, storeId: string, limit: number, excluded?: Set<string>): Promise<any[]> {
+  // Busca com folga para poder descartar quem não tem foto sem devolver
+  // menos produto do que o bloco pediu.
+  const fetchSize = Math.min(Math.max(limit * 4, limit + 8), 100)
   const base = () => catalogQuery(orgId, storeId, excluded)
     .order('created_at', { ascending: false })
-    .limit(limit)
+    .limit(fetchSize)
   let { data } = await base().or('status.ilike.active,status.is.null')
   if (!data || data.length === 0) {
     const retry = await base()
     data = retry.data || []
   }
-  return data || []
+  const todos = data || []
+
+  // Cartão de recomendação sem foto vira um retângulo cinza no e-mail.
+  // Medido no catálogo real: os dois produtos mais recentes de uma das
+  // lojas são "Test Product" sem imagem, e como a ordem é do mais novo
+  // para o mais antigo eles ocupavam as duas primeiras vagas de toda
+  // grade daquela loja. Quem tem foto vem primeiro; os sem foto só
+  // entram para completar, e ainda assim é melhor do que grade vazia.
+  const temFoto = (p: any) => Array.isArray(p?.images) && p.images.length > 0
+  const comFoto = todos.filter(temFoto)
+  const semFoto = todos.filter((p: any) => !temFoto(p))
+  return [...comFoto, ...semFoto].slice(0, limit)
 }
 
 export async function resolveProductFeed(opts: ResolveFeedOptions): Promise<any[]> {
@@ -337,13 +461,22 @@ export async function resolveProductFeed(opts: ResolveFeedOptions): Promise<any[
   // quanto buscar a mais para não sobrar menos produto que o pedido.
   // A organização é a cerca: feed de outra org não configura nada aqui.
   let feedFilters: any[] = []
+  let fallbackType = ''
+  let timePeriod = ''
   const excluded = new Set<string>()
   if (feed_id) {
     try {
+      // `fallback_type` e `time_period` entram na leitura. A tela sempre
+      // os ofereceu e a API sempre os gravou — os cinco feeds salvos têm
+      // os dois preenchidos — mas o envio lia só filtros e exclusões, e
+      // ignorava ambos. Dois controles que não faziam nada.
       const { data: feed } = await supabaseAdmin.from('product_feeds')
-        .select('filters, excluded_product_ids').eq('id', feed_id).eq('organization_id', orgId).maybeSingle()
+        .select('filters, excluded_product_ids, fallback_type, time_period')
+        .eq('id', feed_id).eq('organization_id', orgId).maybeSingle()
       if (feed) {
         if (Array.isArray(feed.filters)) feedFilters = feed.filters as any[]
+        fallbackType = String((feed as any).fallback_type || '')
+        timePeriod = String((feed as any).time_period || '')
         for (const id of (feed.excluded_product_ids as any[]) || []) {
           if (id != null && String(id).trim()) excluded.add(String(id).trim())
         }
@@ -360,9 +493,29 @@ export async function resolveProductFeed(opts: ResolveFeedOptions): Promise<any[
 
   let products: any[] = []
 
+  const dias = janelaEmDias(timePeriod)
+
   switch (type) {
-    case 'bestsellers':
-    case 'most_viewed':
+    // As três eram a MESMA consulta — "mais vendidos", "mais vistos" e
+    // "mais recentes" davam listas idênticas, e quem escolhia na tela
+    // não recebia o que escolheu. Agora cada uma conta o que promete, na
+    // janela de tempo do feed.
+    case 'bestsellers': {
+      if (!store.id) break
+      const ids = await rankingMaisVendidos(store.id, dias)
+      const data = await catalogoNaOrdem(orgId, store.id, ids, fetchLimit, excluded)
+      products = data.map((p: any) => mapCatalogProduct(p, shopDomain))
+      break
+    }
+
+    case 'most_viewed': {
+      if (!store.id) break
+      const ids = await rankingMaisVistos(orgId, store.id, dias)
+      const data = await catalogoNaOrdem(orgId, store.id, ids, fetchLimit, excluded)
+      products = data.map((p: any) => mapCatalogProduct(p, shopDomain))
+      break
+    }
+
     case 'newest': {
       if (!store.id) break
       const data = await fetchNewestCatalog(orgId, store.id, fetchLimit, excluded)
@@ -384,28 +537,34 @@ export async function resolveProductFeed(opts: ResolveFeedOptions): Promise<any[
       if (!store.id) break
       if (contact_id) {
         try {
-          const { data: events } = await supabaseAdmin.from('tracking_events')
-            .select('properties')
-            .eq('visitor_id', contact_id)
-            .eq('event_type', 'product_viewed')
-            .order('created_at', { ascending: false })
-            .limit(limit)
-          const productIds = (events || [])
-            .map((e: any) => e.properties?.product_id)
-            .filter(Boolean)
-            .map((id: any) => String(id))
+          // A visualização de produto mora em `contact_events`, por
+          // `contact_id`. A consulta antiga ia em `tracking_events` por
+          // `visitor_id` — e `tracking_events` está VAZIA: zero linhas.
+          // Quer dizer que "Produtos visualizados recentemente" nunca
+          // devolveu nada e sempre caiu no catálogo. Os cinco feeds
+          // salvos são justamente desse tipo.
+          const { data: events } = await supabaseAdmin.from('contact_events')
+            .select('properties, occurred_at')
+            .eq('organization_id', orgId)
+            .eq('store_id', store.id)
+            .eq('contact_id', contact_id)
+            .eq('event_type', 'viewed_product')
+            .gte('occurred_at', desdeISO(dias))
+            .order('occurred_at', { ascending: false })
+            .limit(Math.max(limit * 4, 20))
+          // Ordem de visualização preservada e sem repetir produto.
+          const productIds: string[] = []
+          for (const e of (events || []) as any[]) {
+            const id = e?.properties?.product_id != null ? String(e.properties.product_id) : ''
+            if (id && !productIds.includes(id)) productIds.push(id)
+          }
           if (productIds.length > 0) {
             // Só o que existe no catálogo DESTA loja: um produto visto na
             // loja irmã não entra no e-mail desta.
-            const { data } = await catalogQuery(orgId, store.id, excluded)
-              .in('shopify_product_id', productIds)
-            products = (data || []).map((p: any) => mapCatalogProduct(p, shopDomain))
+            products = (await catalogoNaOrdem(orgId, store.id, productIds, limit, excluded))
+              .map((p: any) => mapCatalogProduct(p, shopDomain))
           }
         } catch {}
-      }
-      if (products.length === 0) {
-        const data = await fetchNewestCatalog(orgId, store.id, fetchLimit, excluded)
-        products = data.map((p: any) => mapCatalogProduct(p, shopDomain))
       }
       break
     }
@@ -560,6 +719,101 @@ export async function resolveProductFeed(opts: ResolveFeedOptions): Promise<any[
           description: props.Description || props.description || raw.description || null,
         }]
       }
+      // Gatilho que só manda o id. `trigger_order_paid` é o caso: o
+      // despacho carrega `order_id`, `order_number`, `total_price` e
+      // `currency` — e nenhum produto. Um fluxo de "Pedido Pago" com o
+      // bloco "Produtos do Gatilho" saía sem produto nenhum, que é
+      // justamente o conteúdo do e-mail de confirmação.
+      //
+      // O pedido está no banco, com os itens completos. Buscar por id é
+      // barato e acontece só quando o evento não trouxe nada. O
+      // enriquecimento logo acima é que completa imagem e link, porque
+      // `line_items` da Shopify não traz foto.
+      if (products.length === 0) {
+        const orderId =
+          event_data?.order_id || event_data?.OrderID || event_data?.orderId ||
+          event_data?.properties?.order_id || event_data?.properties?.OrderID
+        const checkoutId =
+          event_data?.checkout_id || event_data?.CheckoutID || event_data?.CheckoutId ||
+          event_data?.properties?.checkout_id || event_data?.properties?.CheckoutID
+
+        const fonte: Array<{ tabela: 'shopify_orders' | 'shopify_checkouts'; coluna: string; valor: string }> = []
+        if (orderId) fonte.push({ tabela: 'shopify_orders', coluna: 'shopify_order_id', valor: String(orderId) })
+        if (checkoutId) fonte.push({ tabela: 'shopify_checkouts', coluna: 'shopify_checkout_id', valor: String(checkoutId) })
+
+        for (const f of fonte) {
+          if (products.length > 0) break
+          try {
+            let q = supabaseAdmin
+              .from(f.tabela)
+              .select('line_items')
+              .eq('organization_id', orgId)
+              .eq(f.coluna, f.valor)
+              .limit(1)
+            if (store.id) q = q.eq('store_id', store.id)
+            const { data: rows } = await q
+            const li = rows?.[0]?.line_items
+            if (Array.isArray(li) && li.length > 0) {
+              products = li.slice(0, eventLimit).map((it: any, idx: number) => ({
+                ...mapTriggerItem(it),
+                _variant_id: String(it.variant_id || it.VariantID || '') || null,
+                _idx: idx,
+              }))
+            }
+          } catch { /* o e-mail sai sem produto, não quebra */ }
+        }
+
+        // Os itens do banco vêm sem foto: o mesmo enriquecimento que a
+        // lista do evento usa completa imagem, link e título.
+        const faltando = products.filter((p: any) => p.product_id && (!p.image_url || !p.url || p.url === '#'))
+        if (faltando.length > 0) {
+          try {
+            const ids = Array.from(new Set(faltando.map((p: any) => String(p.product_id))))
+            let eq = supabaseAdmin
+              .from('shopify_products')
+              .select('shopify_product_id, title, handle, images, variants, price')
+              .eq('organization_id', orgId)
+              .in('shopify_product_id', ids)
+            if (store.id) eq = eq.eq('store_id', store.id)
+            const { data: dbProducts } = await eq
+            const byId = new Map<string, any>()
+            for (const dp of dbProducts || []) {
+              if (dp.shopify_product_id) byId.set(String(dp.shopify_product_id), dp)
+            }
+            for (const p of products) {
+              const dp = p.product_id ? byId.get(String(p.product_id)) : null
+              if (!dp) continue
+              if (!p.image_url) {
+                const vId = (p as any)._variant_id
+                const variants: any[] = Array.isArray(dp.variants) ? dp.variants : []
+                const mv = vId ? variants.find((v: any) => String(v.id) === String(vId)) : null
+                let img: string | null = null
+                if (mv?.image_id && Array.isArray(dp.images)) {
+                  const vi = dp.images.find((i: any) => String(i?.id) === String(mv.image_id))
+                  img = vi?.src || vi?.url || null
+                }
+                if (!img && Array.isArray(dp.images) && dp.images.length > 0) {
+                  img = dp.images[0]?.url || dp.images[0]?.src || null
+                }
+                if (img) p.image_url = img
+              }
+              if ((!p.url || p.url === '#') && shopDomain && dp.handle) {
+                const vId = (p as any)._variant_id
+                p.url = vId
+                  ? `https://${shopDomain}/products/${dp.handle}?variant=${vId}`
+                  : `https://${shopDomain}/products/${dp.handle}`
+              }
+              if (!p.title || p.title === 'Product') p.title = dp.title || p.title
+              if ((!p.price || p.price === 0) && dp.price) p.price = parseFloat(String(dp.price))
+            }
+          } catch { /* não bloqueia */ }
+        }
+        for (const p of products) {
+          delete (p as any)._variant_id
+          delete (p as any)._idx
+        }
+      }
+
       if (products.length === 0 && contact_id) {
         try {
           const { data: recovery } = await supabaseAdmin.from('recovery_carts')
@@ -620,5 +874,95 @@ export async function resolveProductFeed(opts: ResolveFeedOptions): Promise<any[
     }
   }
 
+  // ── Não recomende o que a pessoa acabou de comprar ─────────────────
+  //
+  // Os fluxos de Upsell e de pós-compra disparam em `order_paid` e
+  // mostram "Recomendados Para Você". Sem esta regra, a grade oferece o
+  // produto que está na nota fiscal do próprio e-mail. Medido nos
+  // envios reais: 3 de 3 no Dr. Groot, cujo catálogo é pequeno o
+  // bastante para a sobreposição ser quase certa.
+  //
+  // Só vale para as listas de CATÁLOGO. Um feed que existe para mostrar
+  // os itens do pedido ou do carrinho continua mostrando-os — ali o
+  // produto comprado é o assunto, não uma recomendação ruim.
+  //
+  // Duas regras, dois critérios. O feed montado a partir do EVENTO
+  // (gatilho, carrinho) fica de fora das duas: ali a lista é o assunto
+  // do e-mail, não uma sugestão. Já "visualizados recentemente" aceita
+  // reserva — sempre aceitou — mas não a exclusão de comprados: se a
+  // pessoa viu o produto, mostrá-lo é justamente o ponto do feed.
+  const vemDoEvento = type.startsWith('trigger_') || type === 'cart_items'
+  const aceitaReserva = !vemDoEvento
+  const aceitaExclusaoDeComprados = !vemDoEvento && type !== 'recently_viewed'
+  if (aceitaExclusaoDeComprados && products.length > 0) {
+    const comprados = idsDoPedidoNoEvento(event_data)
+    if (comprados.size > 0) {
+      const sobram = products.filter((p: any) => {
+        const id = p?.product_id != null ? String(p.product_id) : ''
+        return !id || !comprados.has(id)
+      })
+      // Nunca esvazia: sem nada para pôr no lugar, é melhor repetir o
+      // produto do que mandar o e-mail com um buraco.
+      if (sobram.length > 0) products = sobram
+    }
+  }
+
+  // ── Reserva configurada ────────────────────────────────────────────
+  //
+  // A tela sempre ofereceu "se não houver resultado, usar…" e os cinco
+  // feeds salvos têm uma escolhida. O envio ignorava: o bloco sumia, ou
+  // caía num "mais recentes" cravado no código. Agora a escolha vale.
+  //
+  // Só para as listas de catálogo, pela mesma razão da regra acima: um
+  // gatilho que por natureza não tem produto — "Visualizou Página",
+  // "Inscrito via Popup" — tem de devolver nada. Encher de mais-vendido
+  // o e-mail de quem só visitou uma página não é reserva, é invenção.
+  if (products.length === 0 && store.id && aceitaReserva) {
+    const reserva = (fallbackType || '').trim()
+    const cadeia = reserva && reserva !== type ? [reserva] : []
+    // `newest` fecha a cadeia porque é a única que não depende de
+    // histórico: uma loja recém-conectada não tem venda nem visita.
+    if (!cadeia.includes('newest') && type !== 'newest') cadeia.push('newest')
+    for (const alternativa of cadeia) {
+      try {
+        let ids: string[] = []
+        if (alternativa === 'bestsellers') ids = await rankingMaisVendidos(store.id, dias)
+        else if (alternativa === 'most_viewed') ids = await rankingMaisVistos(orgId, store.id, dias)
+        const linhas = ids.length > 0
+          ? await catalogoNaOrdem(orgId, store.id, ids, fetchLimit, excluded)
+          : await fetchNewestCatalog(orgId, store.id, fetchLimit, excluded)
+        if (linhas.length > 0) {
+          products = linhas.map((p: any) => mapCatalogProduct(p, shopDomain))
+          break
+        }
+      } catch { /* a próxima da cadeia tenta */ }
+    }
+  }
+
   return products.slice(0, limit)
+}
+
+/**
+ * Os ids de produto que o evento diz que a pessoa comprou.
+ *
+ * Cobre as duas formas que chegam ao envio: `Items` (o que o webhook
+ * despacha e o que a hidratação do pedido preenche) e `line_items` (o
+ * formato cru da Shopify).
+ */
+function idsDoPedidoNoEvento(eventData: any): Set<string> {
+  const ids = new Set<string>()
+  if (!eventData || typeof eventData !== 'object') return ids
+  const ehPedido =
+    eventData.order_id != null || eventData.OrderId != null || eventData.OrderID != null ||
+    String(eventData.event_type || '').includes('order')
+  if (!ehPedido) return ids
+  const listas = [eventData.Items, eventData.items, eventData.line_items, eventData.extra?.line_items]
+  for (const lista of listas) {
+    if (!Array.isArray(lista)) continue
+    for (const item of lista) {
+      const id = item?.ProductID ?? item?.product_id ?? item?.productId
+      if (id != null && String(id).trim()) ids.add(String(id).trim())
+    }
+  }
+  return ids
 }

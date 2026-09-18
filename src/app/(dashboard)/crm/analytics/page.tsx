@@ -38,6 +38,7 @@ import {
   AreaChart,
 } from 'recharts'
 import { useAuthStore, useStoreStore } from '@/stores' // ✅ MODIFICADO
+import { moedaDaLoja } from '@/lib/format/money';
 
 // ==========================================
 // TYPES
@@ -164,7 +165,7 @@ interface AnalyticsData {
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
-    currency: 'BRL',
+    currency: moedaDaLoja(),
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(value)

@@ -42,6 +42,9 @@ const FALLBACK_TYPES = [
   { value: 'most_viewed', label: 'Produtos mais vistos' },
 ]
 
+/** As estratégias que contam algo dentro de uma janela de tempo. */
+const NEEDS_PERIOD = new Set(['bestsellers', 'most_viewed', 'recently_viewed'])
+
 const TIME_PERIODS = [
   { value: '3d', label: 'últimos 3 dias' },
   { value: '7d', label: 'últimos 7 dias' },
@@ -417,29 +420,41 @@ export function CreateFeedModal({ isOpen, onClose, onCreate, editFeed }: {
               className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 outline-none" />
           </div>
 
-          {/* Tipo principal */}
+          {/* Tipo principal + janela de tempo.
+              A janela ficava colada na reserva, como se valesse só para
+              ela. Ela vale para a ESTRATÉGIA: quanto tempo de venda, de
+              visualização ou de navegação entra na conta. O rótulo
+              agora diz isso. */}
           <div>
             <label className="block text-sm font-medium text-gray-900 mb-2">Quais produtos os clientes devem ver primeiro?</label>
             <select value={feedType} onChange={e => setFeedType(e.target.value)}
               className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 bg-white focus:border-brand-500 outline-none">
               {FEED_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
+            {NEEDS_PERIOD.has(feedType) && (
+              <div className="flex items-center gap-2 mt-2">
+                <span className="text-sm text-gray-500">Contando os</span>
+                <select value={timePeriod} onChange={e => setTimePeriod(e.target.value)}
+                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 bg-white focus:border-brand-500 outline-none">
+                  {TIME_PERIODS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
+              </div>
+            )}
+            <p className="text-xs text-gray-500 mt-2">
+              Depois de uma compra, o produto que o cliente acabou de levar não entra nas recomendações.
+            </p>
           </div>
 
           {/* Reserva */}
           <div>
-            <label className="block text-sm font-medium text-gray-900 mb-2">Se o cliente tem histórico limitado, o que deve ver?</label>
-            <div className="flex items-center gap-2">
-              <select value={fallbackType} onChange={e => setFallbackType(e.target.value)}
-                className="flex-1 border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 bg-white focus:border-brand-500 outline-none">
-                {FALLBACK_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-              </select>
-              <span className="text-sm text-gray-500">nos</span>
-              <select value={timePeriod} onChange={e => setTimePeriod(e.target.value)}
-                className="border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 bg-white focus:border-brand-500 outline-none">
-                {TIME_PERIODS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-              </select>
-            </div>
+            <label className="block text-sm font-medium text-gray-900 mb-2">Se não houver resultado, o que mostrar?</label>
+            <select value={fallbackType} onChange={e => setFallbackType(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 bg-white focus:border-brand-500 outline-none">
+              {FALLBACK_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+            </select>
+            <p className="text-xs text-gray-500 mt-1.5">
+              Vale para o cliente sem histórico e para a loja sem dado suficiente no período escolhido.
+            </p>
           </div>
 
           {/* Produtos excluídos */}

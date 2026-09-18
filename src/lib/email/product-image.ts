@@ -15,14 +15,28 @@
 // `max-*` e obedece o atributo `width` do HTML. Então o arquivo precisa
 // chegar já no tamanho certo.
 //
-// A CDN da Shopify aceita isso na própria URL: com `width` e `height` e
-// SEM `crop`, ela devolve a imagem reduzida para caber na caixa,
-// mantendo a proporção. É o `contain` feito no servidor deles — e de
-// graça, porque a imagem menor também pesa menos no e-mail.
+// A CDN da Shopify aceita isso na própria URL, e é preciso ser exato
+// sobre o que ela faz, porque o nome intuitivo engana:
 //
-// `crop` fica de fora de propósito: cortar o centro de uma foto de
-// produto alta decepa a tampa e a base do frasco. Melhor a imagem
-// inteira, menor.
+//   width + height, SEM crop → o arquivo volta com EXATAMENTE essas
+//     medidas, e a diferença de proporção vira barra de preenchimento
+//     em volta do produto. Não é um arquivo menor: é a caixa inteira,
+//     com o produto dentro. Quem denuncia isso na documentação é o
+//     parâmetro `pad_color`, que existe justamente para escolher a cor
+//     dessa barra. Visualmente é o `contain` que se quer — produto na
+//     proporção certa, centrado na caixa.
+//
+//   width + height, COM crop → a foto preenche a caixa e o excedente é
+//     cortado. É o `cover`.
+//
+// Na linha de um produto só, `crop` fica de fora: cortar o centro de
+// uma foto alta decepa a tampa e a base do frasco. Numa grade de
+// cartões, `crop` entra: cartão de altura desigual fica torto, e ali a
+// uniformidade vale mais que a borda da foto.
+//
+// Sobre a cor da barra: em PNG ela sai transparente e assume a cor do
+// e-mail sozinha. Em JPG não há transparência, então quem sabe o fundo
+// do bloco passa `padColor` e a barra some junto.
 // =============================================================
 
 /** Domínios da CDN da Shopify que aceitam redimensionar pela URL. */
@@ -39,13 +53,24 @@ const DPR = 2
 const MAX_PX = 1600
 
 /**
+ * A Shopify quer a cor da barra em hexadecimal sem `#`, de três ou seis
+ * dígitos. Qualquer outra coisa (um `rgb()`, um nome de cor, vazio) sai
+ * como nada, e a CDN usa o padrão dela — melhor isso do que mandar um
+ * parâmetro inválido e receber a imagem sem tratamento nenhum.
+ */
+function normalizeHex(v: string | null | undefined): string | null {
+  const m = String(v || '').trim().match(/^#?([0-9a-f]{3}|[0-9a-f]{6})$/i)
+  return m ? m[1].toLowerCase() : null
+}
+
+/**
  * Devolve a URL da imagem já dimensionada para caber numa caixa de
  * `width` × `height`, quando a origem permite. URL de outra CDN volta
  * intacta — aí quem segura é o CSS.
  */
 export function fitProductImage(
   url: string | null | undefined,
-  box: { width: number; height: number }
+  box: { width: number; height: number; crop?: boolean; padColor?: string | null }
 ): string {
   const src = String(url || '').trim()
   if (!src) return ''
@@ -64,9 +89,24 @@ export function fitProductImage(
   const h = Math.min(Math.round(box.height * DPR), MAX_PX)
   if (!(w > 0) || !(h > 0)) return src
 
-  // Sem `crop`: a Shopify encaixa dentro da caixa em vez de cortar.
   parsed.searchParams.set('width', String(w))
   parsed.searchParams.set('height', String(h))
+  // Com `crop`, a foto preenche a caixa e o excedente é cortado; sem
+  // ele, a caixa é preenchida com barra em volta do produto. Cortar na
+  // CDN é o que faz o Outlook obedecer, já que ele ignora `object-fit`.
+  if (box.crop) {
+    parsed.searchParams.set('crop', 'center')
+    // Com corte não sobra barra: o parâmetro de cor só confundiria.
+    parsed.searchParams.delete('pad_color')
+  } else {
+    parsed.searchParams.delete('crop')
+    // A cor da barra. Em PNG ela seria transparente e não faria falta,
+    // mas em JPG não há transparência: sem isto, uma foto de produto
+    // alta ganha duas faixas brancas num e-mail de fundo escuro.
+    const pad = normalizeHex(box.padColor)
+    if (pad) parsed.searchParams.set('pad_color', pad)
+    else parsed.searchParams.delete('pad_color')
+  }
   // O `v=` (versão do arquivo) fica onde está — é o que fura o cache
   // deles quando a foto muda.
   return parsed.toString()

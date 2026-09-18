@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { renderMergeTags, resolveOrderBlocks, enrichOrderItemImages } from '@/lib/email/render';
+import { renderMergeTags, resolveOrderBlocks, enrichOrderItemImages, hydrateOrderEventData } from '@/lib/email/render';
 import { getAuthClient, authError } from '@/lib/api-utils';
 import { publicStoreUrl } from '@/lib/shopify/store-url';
 import { resolveFeedStore } from '@/lib/email/product-feeds';
@@ -299,6 +299,7 @@ export async function POST(request: NextRequest) {
       const testStore = await loadPreviewStore(supabase, organizationId, requestedStoreId, contactId, testEvent);
       const testStoreUrl = publicStoreUrl(testStore.row) || undefined;
       if (html.includes('WORDER_ORDER_BLOCK')) {
+        await hydrateOrderEventData(testEvent, supabase, testStore.id || undefined, organizationId);
         await enrichOrderItemImages(testEvent, supabase, testStore.id || undefined, organizationId);
         html = resolveOrderBlocks(html, testEvent);
       }
@@ -543,6 +544,10 @@ export async function POST(request: NextRequest) {
     // 5. Resolve order-products blocks using event data
     let processedHtml = template.html;
     if (processedHtml.includes('WORDER_ORDER_BLOCK')) {
+      // A pré-visualização monta o e-mail pelo mesmo caminho do envio:
+      // sem hidratar aqui, a tela mostraria o bloco vazio e a caixa de
+      // entrada mostraria cheio (ou o contrário).
+      await hydrateOrderEventData(eventData, supabase, previewStore.id || undefined, organizationId);
       await enrichOrderItemImages(eventData, supabase, previewStore.id || undefined, organizationId);
       processedHtml = resolveOrderBlocks(processedHtml, eventData);
     }

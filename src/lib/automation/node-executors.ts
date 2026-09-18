@@ -969,7 +969,10 @@ const actionExecutors: Record<string, NodeExecutor> = {
         // (webhooks don't always include images inline)
         const eventData = context.trigger?.data || {};
         try {
-          const { enrichOrderItemImages } = await import('@/lib/email/render');
+          const { hydrateOrderEventData, enrichOrderItemImages } = await import('@/lib/email/render');
+          // Primeiro os itens: gatilho de pedido pago manda só o id, e
+          // sem esta linha o bloco de detalhes do pedido se apaga.
+          await hydrateOrderEventData(eventData, supabase, runStoreId || undefined, organizationId);
           // Com a loja do fluxo, a imagem vem do catálogo DELA; sem loja
           // (fluxo da organização inteira) fica a cerca da organização.
           await enrichOrderItemImages(eventData, supabase, runStoreId || undefined, organizationId);
@@ -1142,6 +1145,12 @@ const actionExecutors: Record<string, NodeExecutor> = {
           templateHtml: html,
           templateText: plainText,
           subject,
+          // O texto de prévia do nó. Ele existia no painel, era gravado
+          // em 124 dos 141 nós e nunca saía daqui: nem esta chamada nem
+          // o envio o levavam ao HTML, e nenhum template compensava com
+          // o seu próprio. Quem escreveu "10% OFF is still active" para
+          // aparecer na caixa de entrada via o começo do corpo no lugar.
+          preheader: config.preheader || '',
           fromEmail: senderEmail,
           senderName,
           // Node-level reply-to when configured; otherwise undefined so

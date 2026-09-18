@@ -30,6 +30,18 @@ export interface SendCampaignEmailParams {
    */
   templateText?: string;
   subject: string;
+  /**
+   * O texto de prévia — a segunda linha da caixa de entrada, logo
+   * depois do assunto.
+   *
+   * O nó de e-mail do fluxo sempre teve o campo, e 124 dos 141 nós
+   * salvos têm um escrito, todos em fluxo ativo — com código de
+   * desconto e variável de nome dentro. Nenhum chegava ao HTML: nem o
+   * executor nem esta função o passavam adiante, e nenhum template
+   * carrega `settings.preheaderText` que compensasse. O Gmail então
+   * mostrava o começo do corpo no lugar.
+   */
+  preheader?: string;
   fromEmail: string;
   senderName?: string;
   replyTo?: string;
@@ -70,6 +82,7 @@ export async function sendCampaignEmail({
   templateHtml,
   templateText,
   subject,
+  preheader,
   fromEmail,
   senderName,
   replyTo,
@@ -253,7 +266,15 @@ export async function sendCampaignEmail({
     // 3. Resolve dynamic product blocks + cart blocks — sempre com a loja
     // do envio, para que produtos e links saiam da loja certa numa
     // organização com várias lojas.
-    let htmlWithProducts = await resolveProductBlocks(templateHtml, organizationId, resolvedContactId || contactId, eventData, sendStoreId);
+    // O texto de prévia entra ANTES de tudo: assim ele passa pelas
+    // mesmas resoluções que o corpo — variável de gatilho e variável de
+    // contato —, e um preheader escrito como
+    // "{{first_name}}, seu cupom BACK15" chega resolvido à caixa de
+    // entrada em vez de mostrar a chave crua.
+    const { injectPreheader } = await import('@/lib/email/render');
+    const htmlComPreheader = injectPreheader(templateHtml, preheader || '');
+
+    let htmlWithProducts = await resolveProductBlocks(htmlComPreheader, organizationId, resolvedContactId || contactId, eventData, sendStoreId);
     // Pass eventData so the cart block can adapt to the active trigger
     // (cart vs checkout vs browse vs order) via trigger_auto feed type.
     htmlWithProducts = await resolveCartBlocks(htmlWithProducts, organizationId, resolvedContactId || contactId, eventData, triggerType, mergeData.store_url, sendStoreId);

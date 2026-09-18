@@ -141,3 +141,58 @@ describe('a caixa da imagem no bloco do gatilho', () => {
     expect(html).toContain('height:200px')
   })
 })
+
+describe('empilhar no celular', () => {
+  it('a linha leva a classe que empilha — a opção existia e não saía no HTML', async () => {
+    const html = await resolveCartBlocks(bloco(), 'org-1', undefined, evento)
+    expect(html).toContain('worder-cart-stack')
+  })
+
+  it('quem desliga a opção não recebe a classe', async () => {
+    const html = await resolveCartBlocks(
+      bloco({ stackOnMobile: false }),
+      'org-1',
+      undefined,
+      evento
+    )
+    expect(html).not.toContain('worder-cart-stack')
+  })
+})
+
+describe('o que vem da loja entra escapado', () => {
+  // Nome de produto, URL da foto e link do produto vêm da loja e entram
+  // em atributo HTML. Um `Shampoo "Premium" & Co` fechava a aspa do
+  // `alt` e corrompia a tag. A grade já escapava; a linha do gatilho
+  // tinha ficado de fora.
+  const hostil = {
+    line_items: [{
+      title: 'Shampoo "Premium" & Co',
+      price: '10.00',
+      image_url: 'https://cdn.shopify.com/s/files/1/x.jpg?v=1&a="b',
+      product_id: '1',
+    }],
+  }
+
+  it('aspa no nome não escapa do atributo', async () => {
+    const html = await resolveCartBlocks(bloco(), 'org-1', undefined, hostil)
+    const img = html.match(/<img[^>]*>/)?.[0] || ''
+    expect(img).toContain('&quot;Premium&quot;')
+    expect(img).not.toMatch(/alt="[^"]*"Premium"/)
+  })
+
+  it('o & do nome sai como entidade no corpo', async () => {
+    const html = await resolveCartBlocks(bloco(), 'org-1', undefined, hostil)
+    expect(html).toContain('&amp; Co')
+  })
+
+  it('aspa na URL da foto não quebra o src', async () => {
+    const html = await resolveCartBlocks(bloco(), 'org-1', undefined, hostil)
+    const src = html.match(/<img[^>]*src="([^"]*)"/)?.[1] || ''
+    // Aqui a aspa nem chega ao escape: `new URL()`, dentro do
+    // redimensionamento, já a devolve como `%22`. O `&` é que vira
+    // entidade, que é o certo para atributo HTML.
+    expect(src).not.toContain('"')
+    expect(src).toContain('%22')
+    expect(src).toContain('&amp;')
+  })
+})

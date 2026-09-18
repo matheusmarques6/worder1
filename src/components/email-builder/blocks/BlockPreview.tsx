@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { productImageHeight } from '@/lib/email/product-grid'
 import dynamic from 'next/dynamic'
 import { Instagram, Facebook, Music, Youtube, Link2, Zap, Copy, X } from 'lucide-react'
 import type { EmailBlock } from '../config/types'
@@ -493,7 +494,9 @@ export function BlockPreview({
         const rows = p.rows || 2
         const total = isListLayout ? rows : cols * rows
         const imgRatio = p.imageRatio || 'square'
-        const imgHeight = imgRatio === 'portrait' ? (p.maxImageHeight || 300) * 1.3 : imgRatio === 'landscape' ? (p.maxImageHeight || 300) * 0.65 : (p.maxImageHeight || 300)
+        // A mesma conta que o envio faz — antes eram duas, e escolher
+        // "Retrato" mostrava alto aqui e mandava quadrado.
+        const imgHeight = productImageHeight(p.maxImageHeight, imgRatio)
         // eslint-disable-next-line react-hooks/rules-of-hooks
         const gridId = `pgrid-${block.id.replace(/[^a-z0-9]/gi,'')}`
         const subClick = (el: string) => (e: React.MouseEvent) => {
@@ -597,7 +600,11 @@ export function BlockPreview({
                     )}
                     {p.showPrice !== false && (
                       <div onClick={subClick('price')} className={subRing('price')} style={{ marginTop: 4, padding: '2px 0' }}>
-                        {p.showComparePrice && (
+                        {/* `!== false` e não verdade simples: é o que o envio
+                            faz, e o padrão do bloco é ligado. Com verdade
+                            simples, uma configuração sem a chave escondia o
+                            preço riscado aqui e mostrava no e-mail. */}
+                        {p.showComparePrice !== false && (
                           <span
                             style={{
                               fontSize: (p.priceFontSize || 16) - 3,

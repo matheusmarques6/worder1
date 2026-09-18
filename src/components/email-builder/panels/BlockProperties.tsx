@@ -342,8 +342,14 @@ export function BlockProperties({ block, onChange, onSaveAsReusable, selectedSub
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-gray-700">Largura total no mobile</span>
-                    <div className={`relative w-9 h-5 rounded-full cursor-pointer transition-colors ${p.fullWidthMobile !== false ? 'bg-zinc-900' : 'bg-gray-200'}`} onClick={() => onChange('fullWidthMobile', p.fullWidthMobile === false)}>
-                      <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${p.fullWidthMobile !== false ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                    {/* Desligado por padrão, e agora de verdade. O botão
+                        aparecia ligado e não fazia nada — nem na prévia
+                        nem no envio. Mostrá-lo ligado e passar a valer
+                        mudaria a largura de 1.176 imagens já salvas no
+                        celular, sem ninguém ter pedido. Ligado é escolha
+                        explícita. */}
+                    <div className={`relative w-9 h-5 rounded-full cursor-pointer transition-colors ${p.fullWidthMobile === true ? 'bg-zinc-900' : 'bg-gray-200'}`} onClick={() => onChange('fullWidthMobile', p.fullWidthMobile !== true)}>
+                      <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${p.fullWidthMobile === true ? 'translate-x-4' : 'translate-x-0.5'}`} />
                     </div>
                   </div>
                 </div>

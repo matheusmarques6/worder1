@@ -141,9 +141,14 @@ describe('resolveProductFeed — produtos e links só da loja do e-mail', () => 
   })
 
   it('recently_viewed: produto visto na loja irmã não entra no e-mail desta', async () => {
-    fake.seed('tracking_events', [
-      { visitor_id: CONTATO_GROOT, event_type: 'product_viewed', properties: { product_id: '3' }, created_at: '2026-09-04' },
-      { visitor_id: CONTATO_GROOT, event_type: 'product_viewed', properties: { product_id: '1' }, created_at: '2026-09-03' },
+    // A visualização mora em `contact_events`, por `contact_id`. A
+    // consulta antiga ia em `tracking_events` por `visitor_id` — tabela
+    // que está vazia em produção, o que fazia este feed nunca devolver
+    // nada e sempre cair no catálogo.
+    const agora = new Date().toISOString()
+    fake.seed('contact_events', [
+      { organization_id: ORG, store_id: GROOT, contact_id: CONTATO_GROOT, event_type: 'viewed_product', properties: { product_id: '3' }, occurred_at: agora },
+      { organization_id: ORG, store_id: GROOT, contact_id: CONTATO_GROOT, event_type: 'viewed_product', properties: { product_id: '1' }, occurred_at: agora },
     ])
     const products = await resolveProductFeed({ orgId: ORG, storeId: GROOT, feedType: 'recently_viewed', contactId: CONTATO_GROOT, maxProducts: 4 })
     expect(products.map((p) => p.title)).toEqual(['Shampoo Groot'])

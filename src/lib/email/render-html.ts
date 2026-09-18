@@ -1,4 +1,5 @@
 import type { EmailBlock, EmailSection, EmailDocument, Padding } from '@/components/email-builder/config/types'
+import { buildProductGrid, productGridTitle } from './product-grid'
 import { migrateV1toV2 } from '@/components/email-builder/config/types'
 
 // Escape a value for safe use inside an HTML attribute (src/alt/href/title).
@@ -9,6 +10,23 @@ function attr(value: unknown): string {
   return String(value)
     .replace(/&/g, '&amp;')
     .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+}
+
+// Texto que vai para o CORPO do HTML.
+//
+// O editor desenha esses campos como texto puro (nó de texto do React),
+// então um nome de empresa "Groot & Co" ou um cupom "<PROMO>" aparecem
+// literais na tela. No HTML enviado eles iam crus: o `&` virava entidade
+// malformada e o `<...>` era engolido como tag. Três campos ficam de
+// fora de propósito, porque neles o HTML é o conteúdo: o texto rico
+// (`contentHtml`), o bloco HTML (`code`) e o texto do bloco dividido
+// (`textHtml`).
+function text(value: unknown): string {
+  if (value == null) return ''
+  return String(value)
+    .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
 }
@@ -103,15 +121,24 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
     case 'image': {
       const imgW = p.fillColumn ? '100%' : (p.width || 600)
       const imgStyle = `max-width:100%;height:auto;display:block;${p.fillColumn ? 'width:100%;' : `width:${imgW}px;`}margin:${p.align === 'left' ? '0 auto 0 0' : p.align === 'right' ? '0 0 0 auto' : '0 auto'};border:0;outline:0;vertical-align:bottom;${p.borderRadius ? `border-radius:${p.borderRadius}px;` : ''}${p.border?.width ? `border:${p.border.width}px solid ${p.border.color || '#E5E7EB'};` : ''}`
-      const img = `<img src="${attr(p.src)}" alt="${attr(p.alt)}" width="${p.fillColumn ? '100%' : imgW}" style="${imgStyle}" />`
+      // "Largura total no mobile": a classe é o que a folha de estilo do
+      // e-mail usa para esticar a imagem no celular. O botão existia no
+      // painel e não saía no HTML.
+      const mobileClass = p.fullWidthMobile === true ? ' class="worder-img-full-mobile"' : ''
+      const img = `<img src="${attr(p.src)}" alt="${attr(p.alt)}"${mobileClass} width="${p.fillColumn ? '100%' : imgW}" style="${imgStyle}" />`
       const linked = p.href ? `<a href="${attr(p.href)}" target="_blank" style="text-decoration:none;display:block;line-height:0;font-size:0;">${img}</a>` : img
       const blockBg = p.blockBgColor ? `background-color:${p.blockBgColor};` : ''
       const blockPadStyle = p.blockPadding ? `padding:${p.blockPadding.top || 0}px ${p.blockPadding.right || 0}px ${p.blockPadding.bottom || 0}px ${p.blockPadding.left || 0}px;` : ''
       return `<tr><td style="padding:${blockPad};text-align:${p.align || 'center'};line-height:0;font-size:0;${p.backgroundColor ? `background-color:${p.backgroundColor};` : ''}${blockBg}${blockPadStyle}">${linked}</td></tr>`
     }
 
-    case 'button':
-      return `<tr><td style="padding:${blockPad};text-align:${p.align || 'center'};${p.backgroundColor ? `background-color:${p.backgroundColor};` : ''}"><table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:${p.align === 'left' ? '0' : p.align === 'right' ? '0 0 0 auto' : '0 auto'};${p.fullWidth ? 'width:100%;' : ''}"><tr><td style="background-color:${p.bgColor || '#18181B'};border-radius:${p.borderRadius || 8}px;padding:${p.paddingV || 14}px ${p.paddingH || 32}px;text-align:center;"><a href="${p.href || '#'}" style="color:${p.textColor || '#fff'};font-size:${p.fontSize || 16}px;font-weight:${p.fontWeight || 'bold'};text-decoration:none;display:block;font-family:${font};">${p.text || ''}</a></td></tr></table></td></tr>`
+    case 'button': {
+      // "Ativar sombra" existia no painel e não saía no HTML. O Outlook
+      // ignora `box-shadow` — os demais obedecem, e é assim que a
+      // concorrência também a entrega: melhoria progressiva.
+      const sombra = p.shadow?.enabled ? 'box-shadow:0 2px 6px rgba(0,0,0,0.18);' : ''
+      return `<tr><td style="padding:${blockPad};text-align:${p.align || 'center'};${p.backgroundColor ? `background-color:${p.backgroundColor};` : ''}"><table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:${p.align === 'left' ? '0' : p.align === 'right' ? '0 0 0 auto' : '0 auto'};${p.fullWidth ? 'width:100%;' : ''}"><tr><td style="background-color:${p.bgColor || '#18181B'};border-radius:${p.borderRadius || 8}px;${sombra}padding:${p.paddingV || 14}px ${p.paddingH || 32}px;text-align:center;"><a href="${attr(p.href || '#')}" style="color:${p.textColor || '#fff'};font-size:${p.fontSize || 16}px;font-weight:${p.fontWeight || 'bold'};text-decoration:none;display:block;font-family:${font};">${text(p.text)}</a></td></tr></table></td></tr>`
+    }
 
     case 'divider': {
       const dw = p.width ?? 100
@@ -126,8 +153,17 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
     case 'html':
       return `<tr><td style="padding:${blockPad};">${p.code || ''}</td></tr>`
 
-    case 'video':
-      return `<tr><td style="padding:${blockPad};text-align:center;line-height:0;font-size:0;"><a href="${p.videoUrl || '#'}" target="_blank" style="display:block;line-height:0;"><img src="${p.thumbnailUrl || ''}" alt="Video" width="600" style="max-width:100%;height:auto;display:block;margin:0 auto;border-radius:8px;vertical-align:bottom;" /></a></td></tr>`
+    case 'video': {
+      // "Texto do Botão Play" existia no painel e não saía: a miniatura
+      // ia sozinha, sem nada que dissesse que era um vídeo. O rótulo vai
+      // ABAIXO da imagem, não sobreposto — e-mail não posiciona em cima
+      // de imagem de forma confiável, e um texto que some é pior que um
+      // texto deslocado.
+      const play = p.playText
+        ? `<div style="margin-top:10px;font-family:${font};font-size:14px;line-height:1.4;"><a href="${attr(p.videoUrl || '#')}" target="_blank" style="color:${p.playTextColor || linkColor};text-decoration:${linkUnderline ? 'underline' : 'none'};">▶ ${text(p.playText)}</a></div>`
+        : ''
+      return `<tr><td style="padding:${blockPad};text-align:center;line-height:0;font-size:0;"><a href="${attr(p.videoUrl || '#')}" target="_blank" style="display:block;line-height:0;"><img src="${attr(p.thumbnailUrl)}" alt="Video" width="600" style="max-width:100%;height:auto;display:block;margin:0 auto;border-radius:8px;vertical-align:bottom;" /></a>${play}</td></tr>`
+    }
 
     case 'social': {
       const iconUrls: Record<string, string> = {
@@ -162,11 +198,23 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
     }
 
     case 'header':
-      return `<tr><td style="padding:${blockPad};background-color:${p.backgroundColor || '#fff'};text-align:center;line-height:0;">${p.logoHref ? `<a href="${p.logoHref}" style="text-decoration:none;display:inline-block;line-height:0;">` : ''}<img src="${p.logoSrc || ''}" alt="Logo" width="${p.logoWidth || 160}" style="display:block;margin:0 auto;max-width:100%;height:auto;vertical-align:bottom;" />${p.logoHref ? '</a>' : ''}${p.showLinks && p.links?.length ? `<p style="margin:12px 0 0;font-size:${p.linkFontSize || 13}px;font-family:${font};line-height:1.4;">${p.links.map((l: any) => `<a href="${l.url}" style="color:${p.linkColor || '#6B7280'};text-decoration:none;margin:0 8px;">${l.text}</a>`).join('')}</p>` : ''}</td></tr>`
+      // `logoMaxHeight` existia no painel e não saía: um logo largo e
+      // baixo respeitava a largura e estourava a altura escolhida.
+      return `<tr><td style="padding:${blockPad};background-color:${p.backgroundColor || '#fff'};text-align:center;line-height:0;">${p.logoHref ? `<a href="${attr(p.logoHref)}" style="text-decoration:none;display:inline-block;line-height:0;">` : ''}<img src="${attr(p.logoSrc)}" alt="Logo" width="${p.logoWidth || 160}" style="display:block;margin:0 auto;max-width:100%;height:auto;${p.logoMaxHeight ? `max-height:${p.logoMaxHeight}px;width:auto;` : ''}vertical-align:bottom;" />${p.logoHref ? '</a>' : ''}${p.showLinks && p.links?.length ? `<p style="margin:12px 0 0;font-size:${p.linkFontSize || 13}px;font-family:${font};line-height:1.4;">${p.links.map((l: any) => `<a href="${attr(l.url)}" style="color:${p.linkColor || '#6B7280'};text-decoration:none;margin:0 8px;">${text(l.text)}</a>`).join('')}</p>` : ''}</td></tr>`
 
     case 'footer': {
       const flc = p.linkColor || p.textColor || '#9CA3AF'
-      return `<tr><td style="padding:${blockPad};background-color:${p.backgroundColor || '#F9FAFB'};text-align:${p.align || 'center'};font-size:${p.fontSize || 11}px;color:${p.textColor || '#9CA3AF'};font-family:${font};line-height:1.5;"><p style="margin:0;">${p.companyName || ''}</p>${p.address ? `<p style="margin:4px 0 0;">${p.address}</p>` : ''}<p style="margin:8px 0 0;">${p.showUnsubscribe ? `<a href="{{unsubscribe_url}}" style="color:${flc};text-decoration:underline;">Descadastrar-se</a>` : ''}${p.showUnsubscribe && p.showViewInBrowser ? ' · ' : ''}${p.showViewInBrowser ? `<a href="{{view_in_browser_url}}" style="color:${flc};text-decoration:underline;">Ver no navegador</a>` : ''}</p></td></tr>`
+      const estiloLink = `color:${flc};text-decoration:underline;`
+      // "Mostrar preferências" era um interruptor que não fazia nada: o
+      // editor desenhava o link e o HTML enviado não o emitia. A página
+      // de preferências existe e o link dela é assinado como o de
+      // descadastro — o que faltava era o rodapé pedir por ele.
+      const partes = [
+        p.showUnsubscribe ? `<a href="{{unsubscribe_url}}" style="${estiloLink}">Descadastrar-se</a>` : '',
+        p.showPreferences ? `<a href="{{preferences_url}}" style="${estiloLink}">Preferências</a>` : '',
+        p.showViewInBrowser ? `<a href="{{view_in_browser_url}}" style="${estiloLink}">Ver no navegador</a>` : '',
+      ].filter(Boolean)
+      return `<tr><td style="padding:${blockPad};background-color:${p.backgroundColor || '#F9FAFB'};text-align:${p.align || 'center'};font-size:${p.fontSize || 11}px;color:${p.textColor || '#9CA3AF'};font-family:${font};line-height:1.5;"><p style="margin:0;">${text(p.companyName)}</p>${p.address ? `<p style="margin:4px 0 0;">${text(p.address)}</p>` : ''}<p style="margin:8px 0 0;">${partes.join(' · ')}</p></td></tr>`
     }
 
     case 'product-grid': {
@@ -174,34 +222,89 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
       const rows = p.rows || 2
       const total = cols * rows
       const staticProds = p.staticProducts || []
-      const hasStaticProducts = staticProds.length > 0
+      // O modo escolhido manda. Antes só a presença de produtos
+      // estáticos decidia: quem escolhia "Produtos fixos" e ainda não
+      // tinha escolhido nenhum recebia um bloco DINÂMICO, com produtos
+      // que não pediu.
+      const modoEstatico = p.mode === 'static'
+      const hasStaticProducts = modoEstatico ? true : staticProds.length > 0
+
+      // O estilo do cartão, num objeto só. Ele serve a grade estática
+      // (montada aqui) e viaja no marcador da dinâmica (resolvida no
+      // envio) — antes as duas eram códigos diferentes, e o e-mail que
+      // saía ignorava tudo o que a pessoa tinha configurado.
+      const gridCfg = {
+        cols,
+        font,
+        // O título e o layout também: o envio cravava
+        // `18px bold #111827 center` e sempre a grade de colunas, então
+        // quem punha título branco em e-mail de fundo preto recebia um
+        // cabeçalho invisível, e quem escolhia "Lista" recebia colunas.
+        title: p.title || '',
+        titleFontSize: p.titleFontSize || 18,
+        titleWeight: p.titleWeight || 'bold',
+        titleColor: p.titleColor || '#111827',
+        titleAlign: p.titleAlign || 'center',
+        layout: p.layout === 'list' ? ('list' as const) : ('grid' as const),
+        showSeparator: !!p.showSeparator,
+        separatorColor: p.separatorColor || '#E5E7EB',
+        buttonAlign: p.buttonAlign || '',
+        nameLinkEnabled: p.nameLinkEnabled === true,
+        showName: p.showName !== false,
+        showPrice: p.showPrice !== false,
+        showComparePrice: p.showComparePrice !== false,
+        showButton: p.showButton !== false,
+        buttonText: p.buttonText || 'Comprar',
+        maxImageHeight: p.maxImageHeight || 300,
+        imageRatio: p.imageRatio || 'square',
+        productBorderRadius: p.productBorderRadius ?? 8,
+        productBorderColor: p.productBorderColor || '#E5E7EB',
+        productPadding: p.productPadding ?? 4,
+        nameFontSize: p.nameFontSize || 14,
+        nameWeight: p.nameWeight || '600',
+        nameColor: p.nameColor || '#111827',
+        priceFontSize: p.priceFontSize || 16,
+        priceWeight: p.priceWeight || '700',
+        priceColor: p.priceColor || '#18181B',
+        comparePriceColor: p.comparePriceColor || '#9CA3AF',
+        buttonColor: p.buttonColor || '#18181B',
+        buttonTextColor: p.buttonTextColor || '#FFFFFF',
+        buttonRadius: p.buttonRadius ?? 6,
+        buttonFontSize: p.buttonFontSize || 12,
+        buttonPaddingV: p.buttonPaddingV ?? 6,
+        buttonPaddingH: p.buttonPaddingH ?? 16,
+        buttonFullWidth: !!p.buttonFullWidth,
+      }
 
       let productsHtml = ''
       if (hasStaticProducts) {
-        // Render real static products as table grid
-        const prodsToRender = staticProds.slice(0, total)
-        const productRows: string[] = []
-        for (let r = 0; r < Math.ceil(prodsToRender.length / cols); r++) {
-          const rowProds = prodsToRender.slice(r * cols, r * cols + cols)
-          const cellWidth = Math.floor(100 / cols)
-          const cells = rowProds.map((prod: any) => {
-            const imgHtml = prod.image_url ? `<img src="${prod.image_url}" alt="${prod.title || ''}" width="100%" style="display:block;width:100%;height:auto;max-height:${p.maxImageHeight || 300}px;object-fit:cover;border-radius:${p.productBorderRadius ?? 0}px ${p.productBorderRadius ?? 0}px 0 0;" />` : `<div style="height:${p.maxImageHeight || 300}px;background:#f3f4f6;"></div>`
-            const nameHtml = p.showName !== false ? `<p style="margin:0;font-weight:${p.nameWeight || '600'};font-size:${p.nameFontSize || 14}px;color:${p.nameColor || '#111827'};font-family:${font};">${prod.title || ''}</p>` : ''
-            const priceHtml = p.showPrice !== false ? `<p style="margin:4px 0 0;">${p.showComparePrice && prod.compare_at_price ? `<span style="font-size:${(p.priceFontSize || 16) - 3}px;color:${p.comparePriceColor || '#9CA3AF'};text-decoration:line-through;margin-right:6px;">R$ ${Number(prod.compare_at_price).toFixed(2)}</span>` : ''}<span style="font-weight:${p.priceWeight || '700'};font-size:${p.priceFontSize || 16}px;color:${p.priceColor || '#18181B'};">R$ ${Number(prod.price || 0).toFixed(2)}</span></p>` : ''
-            const btnHtml = p.showButton !== false ? `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:8px ${p.buttonFullWidth ? '0' : 'auto'} 0;${p.buttonFullWidth ? 'width:100%;' : ''}"><tr><td style="background-color:${p.buttonColor || '#18181B'};border-radius:${p.buttonRadius ?? 6}px;padding:${p.buttonPaddingV ?? 6}px ${p.buttonPaddingH ?? 16}px;text-align:center;"><a href="${prod.url || '#'}" style="color:${p.buttonTextColor || '#FFFFFF'};font-size:${p.buttonFontSize || 12}px;font-weight:600;text-decoration:none;display:block;font-family:${font};">${p.buttonText || 'Comprar'}</a></td></tr></table>` : ''
-            return `<td width="${cellWidth}%" valign="top" style="vertical-align:top;padding:${p.productPadding ?? 4}px;"><div style="border:1px solid ${p.productBorderColor || '#E5E7EB'};border-radius:${p.productBorderRadius ?? 8}px;overflow:hidden;background:#fff;text-align:center;">${imgHtml}<div style="padding:${p.productPadding ?? 8}px;">${nameHtml}${priceHtml}${btnHtml}</div></div></td>`
-          }).join('')
-          // Pad with empty cells if row not full
-          const emptyCells = cols - rowProds.length > 0 ? `<td width="${Math.floor(100 / cols)}%" style="padding:${p.productPadding ?? 4}px;"></td>`.repeat(cols - rowProds.length) : ''
-          productRows.push(`<tr>${cells}${emptyCells}</tr>`)
-        }
-        productsHtml = `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" class="worder-product-grid">${productRows.join('')}</table>`
+        // Produtos já conhecidos: título e grade saem juntos aqui mesmo.
+        // `buildProductGrid` devolve vazio sem produto, e aí o título
+        // não sai sozinho — o mesmo cuidado do caminho dinâmico.
+        const grade = buildProductGrid(staticProds.slice(0, total), gridCfg)
+        productsHtml = grade ? productGridTitle(gridCfg) + grade : ''
       } else {
-        // Dynamic products: placeholder comment for server-side resolution at send time
-        productsHtml = `<!-- WORDER_PRODUCT_BLOCK:${p.feedType || 'bestsellers'}:${total}:${cols}:${p.showPrice !== false}:${p.showComparePrice !== false}:${p.showButton !== false}:${encodeURIComponent(p.buttonText || 'Comprar')} -->`
+        // Produtos dinâmicos: o marcador leva a configuração inteira para
+        // ser resolvida no envio. O feed e o limite vão junto — e o
+        // TÍTULO também, de propósito. Ele ficava fora do marcador, então
+        // quando o feed não devolvia produto a grade sumia e o título
+        // continuava lá: um "Recomendados Para Você" sozinho, com o vazio
+        // embaixo. Dentro do marcador, os dois somem juntos.
+        // `feedId` viaja junto. Sem ele, o vínculo com o feed salvo se
+        // perdia no caminho: os filtros, os produtos excluídos, a
+        // reserva e a janela de tempo que o lojista configurou no feed
+        // NUNCA eram aplicados no envio de verdade — só na tela de
+        // pré-visualização, que é a única que passava o id adiante.
+        const dyn = {
+          ...gridCfg,
+          feedType: p.feedType || 'bestsellers',
+          feedId: p.feedId || '',
+          maxProducts: total,
+        }
+        productsHtml = `<!-- WORDER_PRODUCT_BLOCK:${encodeURIComponent(JSON.stringify(dyn))} -->`
       }
 
-      return `<tr><td style="padding:${blockPad};${p.backgroundColor ? `background-color:${p.backgroundColor};` : ''}">${p.title ? `<p style="margin:0 0 16px;font-size:18px;font-weight:bold;color:#111827;text-align:center;font-family:${font};">${p.title}</p>` : ''}${productsHtml}</td></tr>`
+      return `<tr><td style="padding:${blockPad};${p.backgroundColor ? `background-color:${p.backgroundColor};` : ''}">${productsHtml}</td></tr>`
     }
 
     case 'abandoned-cart': {
@@ -218,8 +321,12 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
         showPrice: p.showPrice !== false,
         showOldPrice: p.showOldPrice !== false,
         showButton: p.showButton !== false,
+        // Desligado por padrão, como o painel mostra: item que a loja
+        // marcou indisponível não entra no e-mail.
+        showOutOfStock: p.showOutOfStock === true,
         nameFontSize: p.nameFontSize || 14, nameColor: p.nameColor || '#111827', nameWeight: p.nameWeight || '600',
-        descFontSize: p.descFontSize || 13, descColor: p.descColor || '#6B7280',
+        nameFontFamily: p.nameFontFamily || 'inherit',
+        descFontSize: p.descFontSize || 13, descColor: p.descColor || '#6B7280', descWeight: p.descWeight || '400',
         priceFontSize: p.priceFontSize || 14, priceColor: p.priceColor || '#111827', priceWeight: p.priceWeight || '600',
         oldPriceColor: p.oldPriceColor || '#9CA3AF',
         buttonText: p.buttonText || 'Comprar agora', buttonHref: p.buttonHref || '{{checkout_url}}',
@@ -235,6 +342,11 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
         imageBorderRadius: p.imageBorderRadius ?? 0,
         separator: p.separator !== false, separatorColor: p.separatorColor || '#E5E7EB',
         stackOnMobile: p.stackOnMobile !== false,
+        // O fundo do bloco vira a cor da barra de preenchimento da foto
+        // (quando ela é JPG e não tem transparência para resolver
+        // sozinha). Sem isto, um e-mail de fundo escuro ganha duas
+        // faixas brancas em volta do produto.
+        backgroundColor: p.backgroundColor || settings?.backgroundColor || null,
         font,
       }
       const configJson = encodeURIComponent(JSON.stringify(cartConfig))
@@ -293,9 +405,13 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
     case 'coupon': {
       const cpv = p.codePaddingV ?? 10
       const cph = p.codePaddingH ?? 28
-      return `<tr><td style="padding:${blockPad};background-color:${p.backgroundColor || '#FFF7ED'};text-align:${p.headerAlign || 'center'};font-family:${font};">${p.headerText ? `<p style="margin:0 0 10px;font-size:${p.headerFontSize || 14}px;color:${p.headerColor || '#9A3412'};font-weight:${p.headerFontWeight || '500'};text-align:${p.headerAlign || 'center'};">${p.headerText}</p>` : ''}<p style="margin:0;font-size:${p.codeFontSize || 32}px;font-weight:${p.codeFontWeight || 'bold'};color:${p.codeColor || '#18181B'};letter-spacing:${p.codeLetterSpacing ?? 4}px;${p.borderStyle !== 'none' ? `border:${p.borderWidth ?? 2}px ${p.borderStyle || 'dashed'} ${p.borderColor || '#18181B'};` : ''}border-radius:${p.borderRadius || 12}px;display:inline-block;padding:${cpv}px ${cph}px;max-width:100%;box-sizing:border-box;word-break:break-all;${p.codeBgColor ? `background-color:${p.codeBgColor};` : ''}" class="worder-coupon-code">${p.code || ''}</p>${p.footerText ? `<p style="margin:10px 0 0;font-size:${p.footerFontSize || 12}px;color:${p.footerColor || '#9CA3AF'};font-weight:${p.footerFontWeight || 'normal'};">${p.footerText}</p>` : ''}</td></tr>`
+      return `<tr><td style="padding:${blockPad};background-color:${p.backgroundColor || '#FFF7ED'};text-align:${p.headerAlign || 'center'};font-family:${font};">${p.headerText ? `<p style="margin:0 0 10px;font-size:${p.headerFontSize || 14}px;color:${p.headerColor || '#9A3412'};font-weight:${p.headerFontWeight || '500'};text-align:${p.headerAlign || 'center'};">${text(p.headerText)}</p>` : ''}<p style="margin:0;font-size:${p.codeFontSize || 32}px;font-weight:${p.codeFontWeight || 'bold'};color:${p.codeColor || '#18181B'};letter-spacing:${p.codeLetterSpacing ?? 4}px;${p.borderStyle !== 'none' ? `border:${p.borderWidth ?? 2}px ${p.borderStyle || 'dashed'} ${p.borderColor || '#18181B'};` : ''}border-radius:${p.borderRadius || 12}px;display:inline-block;padding:${cpv}px ${cph}px;max-width:100%;box-sizing:border-box;word-break:break-all;${p.codeBgColor ? `background-color:${p.codeBgColor};` : ''}" class="worder-coupon-code">${text(p.code)}</p>${p.footerText ? `<p style="margin:10px 0 0;font-size:${p.footerFontSize || 12}px;color:${p.footerColor || '#9CA3AF'};font-weight:${p.footerFontWeight || 'normal'};">${text(p.footerText)}</p>` : ''}</td></tr>`
     }
 
+    // Tipo antigo, sem entrada na paleta: não há como criar um pelo
+    // editor, e não existe nenhum salvo. Ele era um esqueleto de
+    // layout — colunas vazias, sem bloco dentro —, então não há
+    // conteúdo a renderizar. O layout em colunas de hoje é o `split`.
     case 'columns':
       return ''
 
@@ -306,13 +422,19 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
     case 'split': {
       const isImgLeft = p.layout !== 'image-right'
       const ratios = (p.splitRatio || '50-50').split('-').map(Number)
-      const imgCell = `<td width="${ratios[isImgLeft ? 0 : 1]}%" valign="top" style="vertical-align:top;line-height:0;font-size:0;"><img src="${p.imageSrc || ''}" alt="${p.imageAlt || ''}" width="${p.imageWidth || 300}" style="max-width:100%;height:auto;display:block;vertical-align:bottom;" /></td>`
-      const textCell = `<td width="${ratios[isImgLeft ? 1 : 0]}%" valign="middle" style="vertical-align:middle;padding:16px 20px;font-family:${font};">${p.textHtml || ''}${p.showButton !== false ? `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:16px;"><tr><td style="background-color:${p.buttonColor || '#18181B'};border-radius:8px;padding:12px 24px;"><a href="${p.buttonHref || '#'}" style="color:${p.buttonTextColor || '#fff'};font-size:15px;font-weight:bold;text-decoration:none;display:block;font-family:${font};">${p.buttonText || 'Saiba Mais'}</a></td></tr></table>` : ''}</td>`
+      // "Link da Imagem" existia no painel e não saía: a imagem do bloco
+      // dividido nunca era clicável, por mais que se preenchesse o campo.
+      const splitImg = `<img src="${attr(p.imageSrc)}" alt="${attr(p.imageAlt)}" width="${p.imageWidth || 300}" style="max-width:100%;height:auto;display:block;vertical-align:bottom;" />`
+      const splitImgLinked = p.imageHref
+        ? `<a href="${attr(p.imageHref)}" target="_blank" style="text-decoration:none;display:block;line-height:0;font-size:0;">${splitImg}</a>`
+        : splitImg
+      const imgCell = `<td width="${ratios[isImgLeft ? 0 : 1]}%" valign="top" style="vertical-align:top;line-height:0;font-size:0;">${splitImgLinked}</td>`
+      const textCell = `<td width="${ratios[isImgLeft ? 1 : 0]}%" valign="middle" style="vertical-align:middle;padding:16px 20px;font-family:${font};">${p.textHtml || ''}${p.showButton !== false ? `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:16px;"><tr><td style="background-color:${p.buttonColor || '#18181B'};border-radius:8px;padding:12px 24px;"><a href="${attr(p.buttonHref || '#')}" style="color:${p.buttonTextColor || '#fff'};font-size:15px;font-weight:bold;text-decoration:none;display:block;font-family:${font};">${text(p.buttonText || 'Saiba Mais')}</a></td></tr></table>` : ''}</td>`
       return `<tr><td style="padding:${blockPad};${p.backgroundColor ? `background-color:${p.backgroundColor};` : ''}"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" class="worder-section-stack"><tr>${isImgLeft ? imgCell + textCell : textCell + imgCell}</tr></table></td></tr>`
     }
 
     case 'header-bar':
-      return `<tr><td style="padding:${blockPad};background-color:${p.backgroundColor || '#fff'};text-align:${p.align || 'center'};font-family:${font};font-size:${p.fontSize || 13}px;">${(p.links || []).map((l: any, i: number) => `${i > 0 ? `<span style="color:${p.separatorColor || '#D1D5DB'};margin:0 8px;">${p.separator || '|'}</span>` : ''}<a href="${l.url || '#'}" style="color:${p.textColor || '#374151'};text-decoration:none;">${l.text}</a>`).join('')}</td></tr>`
+      return `<tr><td style="padding:${blockPad};background-color:${p.backgroundColor || '#fff'};text-align:${p.align || 'center'};font-family:${font};font-size:${p.fontSize || 13}px;">${(p.links || []).map((l: any, i: number) => `${i > 0 ? `<span style="color:${p.separatorColor || '#D1D5DB'};margin:0 8px;">${text(p.separator || '|')}</span>` : ''}<a href="${attr(l.url || '#')}" style="color:${p.textColor || '#374151'};text-decoration:none;">${text(l.text)}</a>`).join('')}</td></tr>`
 
     case 'drop-shadow': {
       const opacity = p.shadowType === 'darker' ? 0.2 : p.shadowType === 'dark' ? 0.12 : 0.05
@@ -335,7 +457,7 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
           const fw = isHeader ? (p.headerFontWeight || '600') : 'normal'
           const fs = isHeader ? hfs : (p.cellFontSize || 14)
           const borderStyle = bw > 0 ? `border-bottom:${bw}px solid ${p.borderColor || '#E5E7EB'};${ci < row.length - 1 ? `border-right:${bw}px solid ${p.borderColor || '#E5E7EB'};` : ''}` : ''
-          return `<td style="padding:${cp}px ${cp + 4}px;${borderStyle}font-size:${fs}px;color:${txtCol};font-weight:${fw};background-color:${bgCol};text-align:${ta};font-family:${font};">${cell}</td>`
+          return `<td style="padding:${cp}px ${cp + 4}px;${borderStyle}font-size:${fs}px;color:${txtCol};font-weight:${fw};background-color:${bgCol};text-align:${ta};font-family:${font};">${text(cell)}</td>`
         }).join('')
         return `<tr>${cells}</tr>`
       }).join('')
@@ -345,7 +467,7 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
 
     case 'review-quote': {
       const stars = p.showStars !== false ? `<div style="margin-bottom:12px;font-size:20px;color:${p.starColor || '#FBBF24'};">${'★'.repeat(p.rating || 5)}${'☆'.repeat(5 - (p.rating || 5))}</div>` : ''
-      return `<tr><td style="padding:${blockPad};background-color:${p.backgroundColor || '#F9FAFB'};text-align:${p.quoteAlign || 'center'};font-family:${font};">${stars}<p style="margin:0;font-size:${p.quoteFontSize || 16}px;color:${p.quoteColor || '#374151'};font-style:${p.quoteStyle || 'italic'};line-height:1.6;">"${p.quote || ''}"</p><p style="margin:12px 0 0;font-size:${p.authorFontSize || 14}px;color:${p.authorColor || '#6B7280'};font-weight:500;">— ${p.author || ''}</p></td></tr>`
+      return `<tr><td style="padding:${blockPad};background-color:${p.backgroundColor || '#F9FAFB'};text-align:${p.quoteAlign || 'center'};font-family:${font};">${stars}<p style="margin:0;font-size:${p.quoteFontSize || 16}px;color:${p.quoteColor || '#374151'};font-style:${p.quoteStyle || 'italic'};line-height:1.6;">"${text(p.quote)}"</p><p style="margin:12px 0 0;font-size:${p.authorFontSize || 14}px;color:${p.authorColor || '#6B7280'};font-weight:500;">— ${text(p.author)}</p></td></tr>`
     }
 
     case 'countdown': {
@@ -383,7 +505,11 @@ function renderBlock(block: EmailBlock, font: string, settings?: EmailDocument['
 }
 
 function renderSection(section: EmailSection, font: string, contentWidth: number, contentBg: string, settings?: EmailDocument['settings'], isFirst = false, isLast = false): string {
-  const s = section.styles
+  // Seção sem `styles` não é impossível — documento antigo, importado
+  // ou montado por API chega assim. Antes disso aqui, a leitura de
+  // `.hidden` num undefined estourava e derrubava o render do e-mail
+  // inteiro, não só da seção.
+  const s = (section.styles || {}) as NonNullable<EmailSection['styles']>
   // Hidden from builder: skip section entirely
   if ((s as any).hidden === true) return ''
   // Device visibility: if both hidden, skip section entirely
@@ -474,6 +600,15 @@ a{color:${s.textStyles?.link?.color || '#18181B'};${s.textStyles?.link?.underlin
   .worder-coupon-code{font-size:22px!important;letter-spacing:2px!important;padding:8px 16px!important;word-break:break-all!important;max-width:100%!important;box-sizing:border-box!important}
   .worder-product-grid td{display:block!important;width:100%!important}
   .worder-product-grid .worder-product-cell{display:block!important;width:100%!important}
+  /* Bloco de produto do gatilho: foto em cima, texto embaixo. Lado a
+     lado numa tela estreita, a foto comia o espaço do nome e do preço.
+     O recuo lateral do texto sai junto, senão fica torto empilhado. */
+  .worder-cart-stack td{display:block!important;width:100%!important;padding-left:0!important;padding-right:0!important}
+  .worder-cart-stack td img{margin:0 auto 12px!important}
+  /* "Largura total no mobile" na imagem. Só para quem liga a opção — a
+     imagem já é limitada por max-width:100%; isto é para a estreita
+     ocupar a largura toda do celular. */
+  .worder-img-full-mobile{width:100%!important;max-width:100%!important;height:auto!important}
 }
 </style>
 </head>
