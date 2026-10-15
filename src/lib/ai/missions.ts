@@ -22,6 +22,8 @@ export const FAMILY_LABELS: Record<string, string> = {
 }
 
 export interface Mission {
+  /** Agente dono (ai_missions.agent_id, 20261016000008). */
+  agent_id?: string | null
   id: string
   organization_id: string
   event_type: string

@@ -12,7 +12,7 @@
 // missão, incluindo o editor completo (MissionEditorModal).
 
 import { useCallback, useEffect, useState } from 'react'
-import { CheckCircle2, Loader2, Pencil, Plus, ShieldAlert, Target, Trash2 } from 'lucide-react'
+import { Bot, CheckCircle2, Loader2, Pencil, Plus, ShieldAlert, Target, Trash2 } from 'lucide-react'
 import { FAMILY_LABELS, type Mission } from '@/lib/ai/missions'
 import MissionEditorModal from './MissionEditorModal'
 
@@ -29,6 +29,10 @@ interface ContextVar {
 export default function AiMissionActionConfig({ config, onUpdate }: Props) {
   const [missions, setMissions] = useState<Mission[]>([])
   const [families, setFamilies] = useState<string[]>([])
+  // Passo 17 (plano IA): a missão pertence a um agente — mostrar o dono e
+  // escolher quem assume ao criar uma nova aqui.
+  const [agents, setAgents] = useState<Array<{ id: string; name: string | null; role: string | null; status: string }>>([])
+  const [newAgentId, setNewAgentId] = useState<string>('')
   const [loading, setLoading] = useState(true)
 
   // Criar/ativar missão sem sair do fluxo.
@@ -47,6 +51,9 @@ export default function AiMissionActionConfig({ config, onUpdate }: Props) {
     if (res.ok) {
       setMissions(body.missions ?? [])
       setFamilies(body.families ?? [])
+      const list = body.agents ?? []
+      setAgents(list)
+      setNewAgentId((current) => current || list.find((a: any) => a.status === 'active')?.id || list[0]?.id || '')
     }
   }, [])
 
@@ -120,6 +127,7 @@ export default function AiMissionActionConfig({ config, onUpdate }: Props) {
           event_type: config.eventFamily,
           display_name: newName.trim() || null,
           objective: newObjective.trim(),
+          agent_id: newAgentId || null,
         }),
       })
       const body = await res.json().catch(() => null)
@@ -189,6 +197,15 @@ export default function AiMissionActionConfig({ config, onUpdate }: Props) {
                 </span>
                 : “{selected.objective}”
               </span>
+            </p>
+            <p className="flex items-center gap-1.5 text-[11px] text-gray-500" data-testid="mission-owner">
+              <Bot className="w-3.5 h-3.5 shrink-0 text-gray-400" />
+              {(() => {
+                const owner = agents.find((a) => a.id === selected.agent_id)
+                return owner
+                  ? <span>Fala com a voz de <span className="font-medium text-gray-600">{owner.name || 'agente'}</span>{owner.role ? ` (${owner.role})` : ''}{owner.status !== 'active' ? ' — agente pausado' : ''}</span>
+                  : <span>Missão sem agente dono — o toque usa o único agente ativo da loja.</span>
+              })()}
             </p>
             <button
               type="button"
@@ -286,6 +303,20 @@ export default function AiMissionActionConfig({ config, onUpdate }: Props) {
                   placeholder="Objetivo (ex.: trazer o cliente de volta ao carrinho)"
                   className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
                 />
+                {agents.length > 1 && (
+                  <select
+                    value={newAgentId}
+                    onChange={e => setNewAgentId(e.target.value)}
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                    aria-label="Agente que assume esta missão"
+                  >
+                    {agents.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name || 'Sem nome'}{a.role ? ` — ${a.role}` : ''}{a.status !== 'active' ? ' (pausado)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
@@ -447,6 +478,7 @@ export default function AiMissionActionConfig({ config, onUpdate }: Props) {
         <MissionEditorModal
           family={config.eventFamily}
           mission={editor.mission}
+          agentId={editor.mission?.agent_id ?? newAgentId ?? null}
           onClose={() => setEditor(null)}
           onSaved={async () => {
             setEditor(null)

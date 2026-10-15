@@ -6,6 +6,7 @@ import { hasActiveProviderKey, providerKeyMissingResponse } from '@/lib/ai/provi
 import { hasBooleanTransferCooldown } from '@/lib/ai/guards';
 import { findAgentTemplate } from '@/lib/ai/agent-templates';
 import { listEntries } from '@/lib/ai/agent-entries';
+import { loadFlowTouchEntries } from '@/lib/ai/flow-touches';
 export const dynamic = 'force-dynamic';
 
 // =====================================================
@@ -79,9 +80,14 @@ export async function GET(request: NextRequest) {
     const conversations7d = new Map<string, number>()
     if (ids.length > 0) {
       const since = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString()
-      const [entriesResult, missions, conversations] = await Promise.all([
+      const [entriesResult, flowTouches, missions, conversations] = await Promise.all([
         listEntries(supabase, organizationId, ids).catch((e) => {
           console.error('Error listing agent entries:', e)
+          return []
+        }),
+        // Passo 17: "toque de fluxo" é derivado dos nós dos fluxos.
+        loadFlowTouchEntries(supabase, organizationId).catch((e) => {
+          console.error('Error deriving flow touches:', e)
           return []
         }),
         supabase
@@ -97,7 +103,7 @@ export async function GET(request: NextRequest) {
           .in('agent_id', ids)
           .gte('created_at', since),
       ])
-      entries = entriesResult
+      entries = [...entriesResult, ...flowTouches.filter((t) => ids.includes(t.agent_id))]
       for (const m of missions.data ?? []) {
         missionsCount.set(m.agent_id, (missionsCount.get(m.agent_id) ?? 0) + 1)
       }

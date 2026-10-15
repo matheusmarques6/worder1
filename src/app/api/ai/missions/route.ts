@@ -19,13 +19,22 @@ export async function GET(request: NextRequest) {
     .order('event_type', { ascending: true })
     .order('created_at', { ascending: false })
   if (agentId) query = query.eq('agent_id', agentId)
-  const { data, error } = await query
+  const [{ data, error }, agents] = await Promise.all([
+    query,
+    // Passo 17: o nó de fluxo mostra o agente dono da missão sem precisar
+    // de outra rota — a lista curta de agentes vem junto.
+    getSupabaseAdmin()
+      .from('ai_agents')
+      .select('id, name, role, status')
+      .eq('organization_id', auth.user.organization_id)
+      .order('created_at', { ascending: true }),
+  ])
 
   if (error) {
     console.error('Error fetching missions:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
-  return NextResponse.json({ missions: data ?? [], families: EVENT_FAMILIES })
+  return NextResponse.json({ missions: data ?? [], families: EVENT_FAMILIES, agents: agents.data ?? [] })
 }
 
 // POST /api/ai/missions — nova versão (sempre draft; ativar é ato explícito).

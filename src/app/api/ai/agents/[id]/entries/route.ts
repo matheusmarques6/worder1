@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { getAuthClient } from '@/lib/api-utils'
 import { ENTRY_KINDS, listEntries } from '@/lib/ai/agent-entries'
+import { loadFlowTouchEntries } from '@/lib/ai/flow-touches'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,8 +29,11 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
     return NextResponse.json({ error: 'Agente não encontrado' }, { status: 404 })
   }
   try {
-    const entries = await listEntries(supabase, organizationId, [params.id])
-    return NextResponse.json({ entries })
+    const [entries, touches] = await Promise.all([
+      listEntries(supabase, organizationId, [params.id]),
+      loadFlowTouchEntries(supabase, organizationId).catch(() => []),
+    ])
+    return NextResponse.json({ entries: [...entries, ...touches.filter((t) => t.agent_id === params.id)] })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
