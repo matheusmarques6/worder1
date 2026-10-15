@@ -388,7 +388,7 @@ function BuilderInner({ organizationId, agentId }: { organizationId: string; age
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
-        <Link href={`/ai/agentes/${agentId}`} className="btn btn-soft btn-sm"><ArrowLeft size={14} />Editor</Link>
+        <Link href="/ai/agentes" className="btn btn-soft btn-sm"><ArrowLeft size={14} />Fechar</Link>
         <div style={{ fontSize: 14, fontWeight: 800 }}>{agent.name || 'Sem nome'}</div>
         {dirty && <span className="chip chip-outline" style={{ color: 'var(--amber, #E0930B)' }}>não salvo</span>}
         {error && <span style={{ fontSize: 12, color: 'var(--red)' }}>{error}</span>}

@@ -1,7 +1,7 @@
 'use client'
 
 import BuilderCanvas from '@/components/ai-hub/builder/BuilderCanvas'
-import { useAiOrganizationId } from '@/components/ai-hub/AiShell'
+import { useAiOrganizationId } from '@/components/ai-hub/ai-context'
 
 export default function AgentBuilderPage({ params }: { params: { id: string } }) {
   const organizationId = useAiOrganizationId()

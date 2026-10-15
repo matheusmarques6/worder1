@@ -1,9 +1,7 @@
-'use client'
+import { redirect } from 'next/navigation'
 
-import AgentEditor from '@/components/ai-hub/AgentEditor'
-import { useAiOrganizationId } from '@/components/ai-hub/AiShell'
-
-export default function AgentEditorPage({ params }: { params: { id: string } }) {
-  const organizationId = useAiOrganizationId()
-  return <AgentEditor organizationId={organizationId} agentId={params.id} />
+// No protótipo, abrir um agente leva ao Construtor dele em tela cheia; a
+// antiga tela do agente (órbita) não existe mais. Links antigos caem aqui.
+export default function AgentPage({ params }: { params: { id: string } }) {
+  redirect(`/ai/construtor/${params.id}`)
 }

@@ -111,6 +111,10 @@ def emit(rules: list, wrap: str) -> str:
             if inner:
                 out.append(f"{prelude}{{{inner}}}")
             continue
+        # html,body{margin:0;height:100%} é do documento do protótipo: no app
+        # anularia as margens e a altura do invólucro.
+        if prelude.replace(" ", "") == "html,body":
+            continue
         sels = [s for s in (scope_selector(x, wrap) for x in split_selectors(prelude)) if s]
         if not sels or not body:
             continue

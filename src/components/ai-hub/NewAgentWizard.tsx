@@ -52,7 +52,7 @@ export default function NewAgentWizard({ organizationId }: { organizationId: str
       })
       const data = await res.json().catch(() => null)
       if (!res.ok) throw new Error(data?.error || 'Não foi possível criar o agente')
-      router.push(`/ai/agentes/${data.agent.id}`)
+      router.push(`/ai/construtor/${data.agent.id}`)
     } catch (e: any) {
       setError(e.message)
       setSaving(false)

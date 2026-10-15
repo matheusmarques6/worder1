@@ -1,17 +1,10 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { Bot, Loader2, MessageCircle, Plus, Workflow } from 'lucide-react'
-import { Card } from '@/components/agents/ui/primitives'
 import type { AgentEntry } from '@/lib/ai/agent-entries'
-
-/**
- * A lista de agentes do protótipo (plano IA, M2 passo 16): avatar, nome,
- * função, onde atua, estado, conversas 7d, receita 7d (0 até o M5).
- * Dados de GET /api/ai/agents (passo 15).
- */
+import { brl, num } from '@/lib/ai/brl'
+import { Av, Icon } from './proto/ui'
 
 export interface AgentListRow {
   id: string
@@ -27,9 +20,9 @@ export interface AgentListRow {
 }
 
 export const STATUS_LABEL: Record<AgentListRow['status'], { label: string; chip: string }> = {
-  draft: { label: 'Rascunho', chip: 'chip chip-outline' },
-  active: { label: 'Ativo', chip: 'chip chip-green' },
-  paused: { label: 'Pausado', chip: 'chip chip-red' },
+  draft: { label: 'Rascunho', chip: 'chip ne' },
+  active: { label: 'Ativo', chip: 'chip ok' },
+  paused: { label: 'Pausado', chip: 'chip ne' },
 }
 
 export function initials(name: string | null): string {
@@ -37,18 +30,22 @@ export function initials(name: string | null): string {
   return parts.slice(0, 2).map((p) => p[0]?.toUpperCase() ?? '').join('') || 'A'
 }
 
+/** "Onde atua" no texto do protótipo: "WhatsApp (11) 4000-1234 · 2 fluxos",
+ *  "Fluxo Carrinho abandonado · toque 2", "Sem canal". */
 export function whereItActs(entries: AgentEntry[]): string {
   const numbers = entries.filter((e) => e.kind === 'whatsapp_account')
   const flows = entries.filter((e) => e.kind === 'flow_touch')
   const parts: string[] = []
-  if (numbers.length === 1) parts.push(numbers[0].label)
+  if (numbers.length === 1) parts.push(`WhatsApp ${numbers[0].label.split(' · ').pop()}`)
   else if (numbers.length > 1) parts.push(`${numbers.length} números`)
-  if (flows.length > 0) parts.push(`${flows.length} fluxo${flows.length > 1 ? 's' : ''}`)
-  return parts.length > 0 ? parts.join(' · ') : 'Nenhuma entrada'
+  if (flows.length === 1 && numbers.length === 0) parts.push(`Fluxo ${flows[0].label}`)
+  else if (flows.length > 0) parts.push(`${flows.length} fluxo${flows.length > 1 ? 's' : ''}`)
+  return parts.length > 0 ? parts.join(' · ') : 'Sem canal'
 }
 
+/** Lista de agentes do protótipo (AgentsList em "IA Telas P1"). Clicar abre o
+ *  Construtor do agente em tela cheia. Dados de GET /api/ai/agents. */
 export default function AgentsList({ organizationId }: { organizationId: string }) {
-  const router = useRouter()
   const [agents, setAgents] = useState<AgentListRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -71,91 +68,37 @@ export default function AgentsList({ organizationId }: { organizationId: string 
   useEffect(() => { void load() }, [load])
 
   return (
-    <div style={{ padding: 22, maxWidth: 1080, width: '100%', margin: '0 auto' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 18 }}>
-        <div>
-          <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-.01em' }}>Agentes</div>
-          <div style={{ fontSize: 12.5, color: 'var(--text-3)' }}>
-            Cada agente atua em números e fluxos; quem responde cada conversa é decidido por essas entradas.
-          </div>
-        </div>
-        <div style={{ flex: 1 }} />
-        <Link href="/ai/agentes/novo" className="btn btn-primary btn-sm">
-          <Plus size={14} />Novo agente
-        </Link>
+    <div className="pin">
+      <div className="ph">
+        <div><h1 className="h1">Agentes</h1><p className="lead">Canais e fluxos escolhem qual agente responde.</p></div>
+        <Link className="btn pri" href="/ai/agentes/novo"><Icon n="plus" s={16} />Novo agente</Link>
       </div>
-
-      {error && <p style={{ fontSize: 12.5, color: 'var(--red)', marginBottom: 12 }}>{error}</p>}
-
+      {error && <div className="warn" style={{ marginBottom: 12 }}><Icon n="alert" s={16} /><div>{error}</div></div>}
       {loading ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-3)', padding: 24 }}>
-          <Loader2 size={16} className="animate-spin" />Carregando…
-        </div>
+        <div className="al">{[0, 1, 2].map((i) => <div key={i} className="al-row" style={{ height: 74, opacity: 0.5 }} />)}</div>
       ) : agents.length === 0 ? (
-        <Card style={{ padding: 28, textAlign: 'center' }}>
-          <Bot size={28} style={{ color: 'var(--text-3)', margin: '0 auto 10px' }} />
-          <div style={{ fontSize: 15, fontWeight: 800 }}>Nenhum agente ainda</div>
-          <p style={{ fontSize: 13, color: 'var(--text-3)', margin: '6px 0 14px' }}>
-            Comece por um modelo (vendas, pós-compra, recuperação) ou do zero.
-          </p>
-          <Link href="/ai/agentes/novo" className="btn btn-primary btn-sm">
-            <Plus size={14} />Criar o primeiro agente
-          </Link>
-        </Card>
+        <div className="card" style={{ padding: 28, textAlign: 'center' }}>
+          <div className="ct">Nenhum agente ainda</div>
+          <p className="lead" style={{ margin: '6px auto 14px' }}>Comece por um modelo pronto ou do zero.</p>
+          <Link className="btn pri" href="/ai/agentes/novo"><Icon n="plus" s={16} />Novo agente</Link>
+        </div>
       ) : (
-        <div style={{ display: 'grid', gap: 10 }}>
-          {agents.map((agent) => {
-            const status = STATUS_LABEL[agent.status] ?? STATUS_LABEL.draft
+        <div className="al">
+          {agents.map((a) => {
+            const status = STATUS_LABEL[a.status] ?? STATUS_LABEL.draft
             return (
-              <button
-                key={agent.id}
-                type="button"
-                className="act-row"
-                style={{ textAlign: 'left', cursor: 'pointer', gap: 14, padding: '14px 16px' }}
-                onClick={() => router.push(`/ai/agentes/${agent.id}`)}
-                data-testid="agent-row"
-              >
-                <div style={{
-                  width: 38, height: 38, borderRadius: 12, display: 'grid', placeItems: 'center',
-                  background: 'var(--brand-soft, #FFF3EA)', color: 'var(--brand, #F97316)',
-                  fontWeight: 800, fontSize: 13, flexShrink: 0,
-                }}>
-                  {initials(agent.name)}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div className="act-t" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {agent.name || 'Sem nome'}
-                    <span className={status.chip}>{status.label}</span>
-                  </div>
-                  <div className="act-d">
-                    {agent.role || 'Sem função definida'}
-                    {' · '}
-                    <span title="Onde atua">
-                      {agent.entries.some((e) => e.kind === 'whatsapp_account') && <MessageCircle size={11} style={{ display: 'inline', marginRight: 3 }} />}
-                      {agent.entries.some((e) => e.kind === 'flow_touch') && <Workflow size={11} style={{ display: 'inline', marginRight: 3 }} />}
-                      {whereItActs(agent.entries)}
-                    </span>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: 22, flexShrink: 0 }}>
-                  <Metric label="Conversas 7d" value={String(agent.conversations_7d)} />
-                  <Metric label="Receita 7d" value={`R$ ${agent.revenue_7d.toFixed(0)}`} muted />
-                  <Metric label="Missões" value={String(agent.missions_count)} />
-                </div>
-              </button>
+              <Link key={a.id} className="al-row" href={`/ai/construtor/${a.id}`} data-testid="agent-row">
+                <Av name={a.name} s={40} />
+                <div className="al-n"><b>{a.name || 'Sem nome'}</b><span>{a.role || 'Sem função'} · {whereItActs(a.entries)}</span></div>
+                <span className={status.chip}>{status.label}</span>
+                <div className="al-m"><b>{num(a.conversations_7d)}</b><span>conversas em 7 dias</span></div>
+                <div className="al-m"><b>{a.revenue_7d ? brl(a.revenue_7d, 0) : 'R$ 0'}</b><span>receita atribuída</span></div>
+                <Icon n="chevR" s={16} c="var(--tx3)" />
+              </Link>
             )
           })}
         </div>
       )}
-    </div>
-  )
-}
-
-function Metric({ label, value, muted }: { label: string; value: string; muted?: boolean }) {
-  return (
-    <div style={{ textAlign: 'right', minWidth: 72 }}>
-      <div style={{ fontSize: 15, fontWeight: 800, color: muted ? 'var(--text-3)' : 'var(--text)' }}>{value}</div>
-      <div style={{ fontSize: 10.5, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.04em' }}>{label}</div>
     </div>
   )
 }

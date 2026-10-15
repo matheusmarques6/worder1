@@ -44,7 +44,7 @@ export default function WhatsappAgentePage() {
               Nenhum agente ligado a um número ainda{agents.length > 0 ? ' — abra um agente e use "Definir onde atua".' : '.'}
             </p>
           ) : onWhatsApp.map((a) => (
-            <Link key={a.id} href={`/ai/agentes/${a.id}`} className="act-row" style={{ textDecoration: 'none' }}>
+            <Link key={a.id} href={`/ai/construtor/${a.id}`} className="act-row" style={{ textDecoration: 'none' }}>
               <Bot size={16} style={{ color: 'var(--text-3)' }} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div className="act-t">{a.name || 'Sem nome'}{a.status !== 'active' && ' · pausado'}</div>
