@@ -21,7 +21,7 @@ from uuid import UUID
 import psycopg
 
 from agents_runtime.agent_core.guards import GuardState
-from agents_runtime.agent_core.media import read_message
+from agents_runtime.agent_core.media import read_media_ref, read_message
 from agents_runtime.agent_core.think_gate import PendingMessage
 
 #: Quantas mensagens de histórico acompanham a pergunta. Conversa de meses não
@@ -240,6 +240,70 @@ async def load_conversation_view(
     )
 
 
+@dataclass(frozen=True, slots=True)
+class MirrorMedia:
+    """As colunas de mídia do espelho legado (`whatsapp_cloud_messages`),
+    preenchidas pelo pipeline de download do app."""
+
+    media_url: str | None
+    media_storage_path: str | None
+    media_mime_type: str | None
+
+
+async def load_mirror_media(
+    conn: psycopg.AsyncConnection, *, organization_id: UUID, provider_message_id: str
+) -> MirrorMedia | None:
+    """Alteração 2026-10-15-03: o caminho 1 de `media_fetch.py`."""
+    cursor = await conn.execute(
+        """
+        select media_url, media_storage_path, media_mime_type
+          from public.whatsapp_cloud_messages
+         where organization_id = %s and message_id = %s
+         limit 1
+        """,
+        (organization_id, provider_message_id),
+    )
+    row = await cursor.fetchone()
+    if row is None:
+        return None
+    return MirrorMedia(media_url=row[0], media_storage_path=row[1], media_mime_type=row[2])
+
+
+async def save_transcript(
+    conn: psycopg.AsyncConnection,
+    *,
+    organization_id: UUID,
+    conversation_id: UUID,
+    provider_message_id: str,
+    text: str,
+) -> None:
+    """Alteração 2026-10-15-03: a transcrição fica na canônica, para a próxima
+    leitura (retry, próximo turno, transcript) não pagar o STT de novo — o
+    TS faz o mesmo em `text_body`. O espelho legado recebe `text_body` em
+    melhor esforço: o inbox mostra o texto, mas um grant ausente ali nunca
+    pode custar a transcrição."""
+    await conn.execute(
+        """
+        update public.messages
+           set content = content || jsonb_build_object('text', %s::text, 'transcribed', true)
+         where organization_id = %s and conversation_id = %s and provider_message_id = %s
+        """,
+        (text, organization_id, conversation_id, provider_message_id),
+    )
+    try:
+        await conn.execute(
+            """
+            update public.whatsapp_cloud_messages
+               set text_body = %s
+             where organization_id = %s and message_id = %s
+               and coalesce(text_body, '') = ''
+            """,
+            (text, organization_id, provider_message_id),
+        )
+    except psycopg.Error:
+        pass
+
+
 def _message(row: tuple) -> PendingMessage:
     """`(author_type, content)` → a mensagem como o prompt a verá.
 
@@ -250,7 +314,15 @@ def _message(row: tuple) -> PendingMessage:
     teste unitário; `agent_core.media` tem os dois.
     """
     text, media_kind = read_message(row[1], row[0])
-    return PendingMessage(author=row[0], text=text, media_kind=media_kind)
+    media_id, mime_type = read_media_ref(row[1]) if media_kind else (None, None)
+    return PendingMessage(
+        author=row[0],
+        text=text,
+        media_kind=media_kind,
+        provider_message_id=row[2] if len(row) > 2 else None,
+        media_id=media_id,
+        mime_type=mime_type,
+    )
 
 
 async def load_pending_messages(
@@ -269,7 +341,7 @@ async def load_pending_messages(
     """
     cursor = await conn.execute(
         """
-        select author_type, content
+        select author_type, content, provider_message_id
           from public.messages
          where conversation_id = %s
            and direction = 'inbound'

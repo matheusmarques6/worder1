@@ -132,6 +132,20 @@ def openai_message(message: Message) -> dict:
     tool-loop (assistant pedindo, role="tool" respondendo). Compartilhado com
     os adapters de chave direta OpenAI-compatível: um dialeto, uma tradução."""
     wire: dict = {"role": message.role, "content": message.content}
+    if message.images:
+        # Alteração 2026-10-15-03: dialeto multimodal da OpenAI (que a
+        # OpenRouter e os compatíveis — Gemini via endpoint OpenAI — repassam).
+        parts: list[dict] = []
+        if message.content:
+            parts.append({"type": "text", "text": message.content})
+        parts.extend(
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:{image.mime_type};base64,{image.data_base64}"},
+            }
+            for image in message.images
+        )
+        wire["content"] = parts
     if message.tool_calls:
         wire["tool_calls"] = [
             {

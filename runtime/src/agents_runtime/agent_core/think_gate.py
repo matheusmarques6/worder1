@@ -15,6 +15,8 @@ Definition fixed with Bruno on 2026-08-03: the canonical docs name the gate
 
 from dataclasses import dataclass
 
+from agents_runtime.agent_core.llm import ImageAttachment
+
 # Words that mean the conversation has friction: a complaint, a cancellation,
 # money going backwards, or an escalation. These deserve the careful path even
 # in three characters — "cancela" is short and expensive to get wrong.
@@ -61,6 +63,14 @@ class PendingMessage:
     """O tipo da mídia quando a mensagem não trouxe palavra nenhuma do cliente
     — áudio, imagem sem legenda (item 31). `None` sempre que houve texto,
     legenda inclusive: com legenda o cliente escreveu, e o turno é normal."""
+    # Alteração 2026-10-15-03: o que o ingest guardou para buscar a mídia
+    # (`media_enrich.py`). Nunca entram no prompt; só `text` e `image` entram.
+    provider_message_id: str | None = None
+    media_id: str | None = None
+    mime_type: str | None = None
+    image: ImageAttachment | None = None
+    """A imagem já buscada e codificada, quando o provedor enxerga. `None`
+    para texto, áudio e para imagem que não deu para ler."""
 
 
 @dataclass(frozen=True, slots=True)

@@ -62,6 +62,12 @@ from agents_runtime.agent_core.media import (
     media_step_detail,
     speechless_media,
 )
+from agents_runtime.agent_core.media_enrich import (
+    EnrichmentReport,
+    enrich_pending_media,
+    provider_supports_vision,
+)
+from agents_runtime.agent_core.media_fetch import MediaFetcher, MediaRef, from_env_optional
 from agents_runtime.agent_core.metering import (
     DEFAULT_TURN_LLM_CALL_LIMIT,
     TURN_LLM_CALL_LIMIT_VARIABLE,
@@ -83,6 +89,7 @@ from agents_runtime.agent_core.prompt_compiler import (
     compile_prompt,
 )
 from agents_runtime.agent_core.providers import NoOrgLlmKey, resolve_agent_llm, scoped_agent_llm
+from agents_runtime.agent_core.stt import SttPort, WhisperStt, select_stt_key
 from agents_runtime.agent_core.think_gate import PendingMessage, should_think
 from agents_runtime.agent_core.tool_loop import MAX_TOOL_ROUNDS as MAX_TOOL_ROUNDS
 from agents_runtime.agent_core.tool_loop import generate_with_tools
@@ -98,7 +105,7 @@ from agents_runtime.judges.pre_send import (
     guarded_reply,
     with_merchant_judges,
 )
-from agents_runtime.obs.telemetry import annotate
+from agents_runtime.obs.telemetry import annotate, span
 from agents_runtime.queueing.jobs import InboundJob, MissionTouchJob
 from agents_runtime.repository import agent as agent_repo
 from agents_runtime.repository import alerts as alerts_repo
@@ -251,6 +258,8 @@ def _as_chat(messages: Sequence[PendingMessage]) -> list[Message]:
         Message(
             role="user" if message.author == "contact" else "assistant",
             content=message.text,
+            # Alteração 2026-10-15-03: a imagem do cliente vai inline.
+            images=(message.image,) if message.image is not None else (),
         )
         for message in messages
         if not is_store_media_line(message)
@@ -270,6 +279,9 @@ def build_responder(
     shopify_transport: httpx.AsyncBaseTransport | None = None,
     turn_llm_call_limit: int | None = None,
     config: QueueingConfig | None = None,
+    media_fetcher: MediaFetcher | None = None,
+    stt_factory: Callable[[tuple, str | None], SttPort | None] | None = None,
+    vision: bool | None = None,
 ):
     """O responder real. `llm` é a porta da PLATAFORMA (Judge 1 + embeddings —
     D4); com `agent_llm_from_org_keys` ligado (produção), a resposta do agente
@@ -527,6 +539,31 @@ def build_responder(
             # isto decide o QUE ela diz. E antes da arbitragem e da cascata de
             # chave BYO, porque nada aqui precisa de missão nem de LLM — a
             # chamada seria token queimado para gerar a partir de nada.
+            # --- alteração 2026-10-15-03: antes de degradar, tentar LER a
+            # mídia — áudio vira texto (STT pela chave da org), imagem vira
+            # anexo (quando o provedor enxerga). O que não der para ler cai na
+            # degradação honesta logo abaixo, exatamente como antes.
+            pending, media_report = await _enrich_media_for_turn(
+                conn,
+                job,
+                pending,
+                media_fetcher=media_fetcher,
+                stt_factory=stt_factory,
+                key_rows=key_rows,
+                base_secret=base_secret,
+                provider=version.provider,
+                vision=vision,
+                agent_id=version.agent_id,
+                budget=turn_budget,
+                clock=clock,
+                note_step=note_step,
+            )
+            if media_report.transcribed or media_report.images_attached:
+                conversation = _as_chat(transcript + pending)
+                input_text = "\n".join(
+                    f"{message.role}: {message.content}" for message in conversation
+                )
+
             speechless = speechless_media(pending)
             if speechless is not None:
                 # A loja pode ter configurado que mídia vai para humano em vez
@@ -952,14 +989,120 @@ def agent_responder(dsn: str):
     entrega a costura do motor. Chave ausente mata o processo na largada: é a
     diferença entre um deploy que falha e um agente que emudece em produção.
     """
+    base_secret = os.environ.get("ENCRYPTION_KEY") or None
     return build_responder(
         dsn,
         llm=openrouter.from_env(),
         set_role=os.environ.get("AGENTS_WORKER_SET_ROLE"),
         agent_llm_from_org_keys=True,
-        base_secret=os.environ.get("ENCRYPTION_KEY") or None,
+        base_secret=base_secret,
         config=config_from_env(dict(os.environ)),
+        # Alteração 2026-10-15-03: busca de mídia pela Meta com o token da
+        # conta. Sem ENCRYPTION_KEY segue None e o turno degrada como antes.
+        media_fetcher=from_env_optional(
+            base_secret, api_version=os.environ.get("AGENTS_META_API_VERSION")
+        ),
     )
+
+
+def _default_stt(key_rows: tuple, base_secret: str | None) -> SttPort | None:
+    """A cascata de STT (openai → groq) com as chaves BYO da org."""
+    choice = select_stt_key(key_rows, base_secret=base_secret)
+    return WhisperStt(choice) if choice is not None else None
+
+
+async def _enrich_media_for_turn(
+    conn: psycopg.AsyncConnection,
+    job: InboundJob,
+    pending: tuple[PendingMessage, ...],
+    *,
+    media_fetcher: MediaFetcher | None,
+    stt_factory: Callable[[tuple, str | None], SttPort | None] | None,
+    key_rows: tuple,
+    base_secret: str | None,
+    provider: str | None,
+    vision: bool | None,
+    agent_id: UUID | None,
+    budget: TurnBudget,
+    clock: Clock,
+    note_step: Callable[[str, str | None], Awaitable[None]],
+) -> tuple[tuple[PendingMessage, ...], EnrichmentReport]:
+    """Alteração 2026-10-15-03 — a costura de `media_enrich` com banco, rede
+    e trilha: busca pelo fetcher, transcreve com a chave da org (linha `stt`
+    em `internal.llm_calls`, span `llm_call`, slot no teto do turno) e grava
+    a transcrição na canônica. Toda falha aqui é degradação, nunca morte do
+    turno: `enrich_pending_media` recebe `None` e a mensagem segue como mídia
+    sem palavra."""
+    needs = any(
+        message.author == "contact" and message.media_kind in ("audio", "image")
+        for message in pending
+    )
+    if media_fetcher is None or not needs:
+        return pending, EnrichmentReport()
+
+    stt = (stt_factory or _default_stt)(key_rows, base_secret)
+    record = _recorder(conn, job.organization_id, job.conversation_id, agent_id)
+
+    async def fetch(ref: MediaRef):
+        try:
+            return await media_fetcher.fetch(conn, organization_id=job.organization_id, ref=ref)
+        except Exception:
+            logger.warning("media fetch failed", exc_info=True)
+            return None
+
+    async def transcribe(data: bytes, mime_type: str) -> str | None:
+        if stt is None:
+            return None
+        try:
+            budget.reserve("stt")
+            with span("llm_call", kind="stt", model=stt.model):
+                started = clock.now()
+                result = await stt.transcribe(data, mime_type=mime_type)
+                annotate(provider=result.provider, model=result.model)
+            await record(
+                CallRecord(
+                    purpose="stt",
+                    provider=result.provider,
+                    model=result.model,
+                    input_tokens=None,
+                    output_tokens=None,
+                    cost_usd=result.cost_usd,
+                    latency_ms=int((clock.now() - started).total_seconds() * 1000),
+                )
+            )
+            return result.text or None
+        except Exception:
+            logger.warning("stt failed", exc_info=True)
+            return None
+
+    async def persist(message: PendingMessage, text: str) -> None:
+        if not message.provider_message_id:
+            return
+        try:
+            async with conn.transaction():
+                await scope_to_organization(conn, job.organization_id)
+                await agent_repo.save_transcript(
+                    conn,
+                    organization_id=job.organization_id,
+                    conversation_id=job.conversation_id,
+                    provider_message_id=message.provider_message_id,
+                    text=text,
+                )
+        except Exception:
+            logger.debug("transcript persist failed", exc_info=True)
+
+    try:
+        return await enrich_pending_media(
+            pending,
+            fetch=fetch,
+            transcribe=transcribe if stt is not None else None,
+            vision=vision if vision is not None else provider_supports_vision(provider),
+            persist_transcript=persist,
+            note_step=note_step,
+        )
+    finally:
+        if stt is not None:
+            await stt.aclose()
 
 
 def _metered(

@@ -248,9 +248,11 @@ autoria; `speechless_media` identifica o lote de mensagens do contato sem texto 
 `responder.py` trata esse caso antes de trabalho de LLM: `settings.media_fallback.mode = 'handoff'`
 chama o handoff compartilhado; caso contrário, `media_apology` devolve o pedido honesto de texto,
 configurado ou default. Legenda é texto utilizável; lote misto com texto segue o fluxo textual.
-*Efeito na loja:* não há transcrição de áudio nem compreensão visual nativa. Há uma resposta
-honesta ou transferência, não geração sobre mensagem vazia. **Fallback resolvido pelo item 31;
-STT/visão nativos continuam fora do runtime.**
+*Efeito na loja:* **resolvido em 2026-10-15** (`docs/alteracoes/2026-10-15-03-audio-e-visao.md`):
+`agent_core/stt.py` transcreve com a chave BYO (openai → groq), `media_fetch.py` busca a mídia
+(espelho assinado ou Graph da Meta com o token da conta) e `media_enrich.py` põe a transcrição no
+turno e a imagem inline quando o provedor enxerga. O fallback do item 31 continua valendo para o
+que não der para ler (sem chave de STT, provedor sem visão, download falhou, > 10 MB).
 
 ### O que o agente sabe operar
 

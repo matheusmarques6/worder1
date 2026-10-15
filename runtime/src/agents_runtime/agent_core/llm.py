@@ -77,6 +77,16 @@ class ToolCall:
 
 
 @dataclass(frozen=True, slots=True)
+class ImageAttachment:
+    """Uma imagem inline (alteração 2026-10-15-03). Base64 porque é o único
+    formato que os três dialetos (OpenAI, Anthropic, OpenRouter) aceitam sem
+    URL pública — e a mídia do cliente nunca ganha URL pública."""
+
+    mime_type: str
+    data_base64: str
+
+
+@dataclass(frozen=True, slots=True)
 class Message:
     role: str
     content: str
@@ -84,6 +94,8 @@ class Message:
     tool_calls: tuple[ToolCall, ...] = ()
     #: role="tool" respondendo à chamada com este id.
     tool_call_id: str | None = None
+    #: Imagens do CLIENTE nesta fala (role="user"); cada adapter traduz.
+    images: tuple[ImageAttachment, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

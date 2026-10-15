@@ -258,4 +258,20 @@ def _anthropic_turn(message: Message) -> dict:
                 }
             ],
         }
+    if message.images:
+        # Alteração 2026-10-15-03: blocos `image` base64 do dialeto /v1/messages.
+        blocks = [
+            {
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": image.mime_type,
+                    "data": image.data_base64,
+                },
+            }
+            for image in message.images
+        ]
+        if message.content:
+            blocks.append({"type": "text", "text": message.content})
+        return {"role": message.role, "content": blocks}
     return {"role": message.role, "content": message.content}

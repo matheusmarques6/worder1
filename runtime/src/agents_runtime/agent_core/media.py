@@ -99,6 +99,11 @@ def read_message(content: object, author: str) -> tuple[str, str | None]:
     from_contact = author == "contact"
 
     words = _words(content.get("text")) or _words(content.get("caption"))
+    # Alteração 2026-10-15-03: áudio já transcrito pelo runtime
+    # (`save_transcript`) lê como fala do cliente, sem marcador — o mesmo que
+    # o TS faz ao gravar a transcrição em `text_body` (`router.ts:46`).
+    if content.get("transcribed") is True and words:
+        return words, None
     kind = content.get("type")
     if not isinstance(kind, str):
         # Dialeto do backfill de criação: ele copia `content` cru do espelho
@@ -238,4 +243,18 @@ def media_apology(kind: str, settings: Mapping | None) -> str:
     return (
         f"Desculpe, {_APOLOGIES.get(kind, _DEFAULT_APOLOGY)} por aqui. "
         "Pode me escrever em texto, por favor?"
+    )
+
+
+def read_media_ref(content: object) -> tuple[str | None, str | None]:
+    """`(media_id, mime_type)` que o ingest guardou (`webhook-processor.ts`,
+    ramo runtime: `ingestContent.media_id` / `mime_type`). Ausentes no dialeto
+    do backfill — e então a busca pela Graph não é possível, só pelo espelho."""
+    if not isinstance(content, Mapping):
+        return None, None
+    media_id = content.get("media_id")
+    mime = content.get("mime_type")
+    return (
+        media_id if isinstance(media_id, str) and media_id else None,
+        mime if isinstance(mime, str) and mime else None,
     )

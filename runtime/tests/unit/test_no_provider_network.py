@@ -41,6 +41,10 @@ _ADAPTERS = {
     # A porta das lojas: o braço que o offer_engine usa para materializar
     # cupom. Provedor de comércio, mesma regra dos de LLM/canal.
     Path("connectors/shopify.py"),
+    # Alteração 2026-10-15-03: STT (OpenAI/Groq pela chave da org) e a busca de
+    # mídia pela Graph da Meta — adapters como os de cima, mesma regra.
+    Path("agent_core/stt.py"),
+    Path("agent_core/media_fetch.py"),
 }
 
 # Relative to tests/. The contract level is the one allowed to reach a provider,
