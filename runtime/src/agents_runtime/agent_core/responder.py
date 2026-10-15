@@ -420,6 +420,12 @@ def build_responder(
                 # Alteração 2026-10-15-05: a base de conhecimento é consultada
                 # sempre que existe, não só com a tool ligada (FORK item 32).
                 org_has_knowledge = await knowledge_repo.has_knowledge(conn)
+                # Alteração 2026-10-15-11: regras das notas do agente.
+                knowledge_rules = (
+                    await knowledge_repo.load_rules(conn, agent_id=version.agent_id)
+                    if version is not None and org_has_knowledge
+                    else ()
+                )
                 # Alteração 2026-10-15-09: com mais de um agente ativo, a
                 # transferência entre agentes entra como ferramenta do turno.
                 active_agents = await agent_repo.list_active_agents(
@@ -716,7 +722,11 @@ def build_responder(
                     clock,
                     knowledge_limit,
                     has_knowledge=org_has_knowledge,
+                    agent_id=version.agent_id,
                 )
+                # Busca feita e nada acima do limiar: candidata a lacuna, que
+                # só é registrada conforme o desfecho do turno (abaixo).
+                knowledge_missed = bool(org_has_knowledge and query.strip() and not knowledge)
 
                 agent = agent_block(version, settings)
                 window_open = True
@@ -745,6 +755,7 @@ def build_responder(
                     ),
                     mode="turn",
                     knowledge=knowledge,
+                    rules=knowledge_rules,
                 )
                 # 9.1: o span do turno (aberto pelo worker) ganha os IDs que a
                 # trilha interna já tem — telemetria e banco contam UMA história.
@@ -837,6 +848,7 @@ def build_responder(
                                     agent_id=version.agent_id,
                                     channel_account_id=job.channel_account_id,
                                     phone=state.contact_phone,
+                                    last_question=query or None,
                                 ),
                                 dict(call.arguments), clock=clock,
                             )
@@ -906,6 +918,13 @@ def build_responder(
                             verdict=judgement.outcome,
                             rationale=judgement.rationale,
                         )
+
+                if outcome.draft is None and outcome.judgement is not None and set(
+                    outcome.judgement.failed_criteria
+                ) & FACTUAL_CRITERIA:
+                    await _record_gap(
+                        conn, job, query, "blocked", version.agent_id
+                    )
 
                 if outcome.draft is None:
                     # Item 41: se o motivo foi o teto do turno (e não o juiz),
@@ -982,6 +1001,10 @@ def build_responder(
                 # As flags de entrega viajam COM o envio (payload da outbox): o
                 # sender obedece por linha, sem env global (Pacote B 17/08).
                 split, rhythm = delivery_flags(version.settings)
+                if knowledge_missed:
+                    await _record_gap(
+                        conn, job, query, "answered_without_source", version.agent_id
+                    )
                 return accepted(
                     {"text": outcome.draft, "humanize": {"split": split, "rhythm": rhythm}},
                     outcome.selected_attempt,
@@ -1248,6 +1271,39 @@ def _recorder(
     return record
 
 
+#: Critérios da rubrica `factual` (evals/rubrics/factual.json): reprovação
+#: por eles é sinal de que faltou fonte, não de tom — vira lacuna.
+FACTUAL_CRITERIA = frozenset(
+    {"responde-com-base-no-conhecimento", "sem-promessas-inventadas", "admite-nao-saber"}
+)
+
+
+async def _record_gap(
+    conn: psycopg.AsyncConnection,
+    job: InboundJob | MissionTouchJob,
+    question: str,
+    outcome: str,
+    agent_id: UUID | None,
+) -> None:
+    """Registra a lacuna (alteração 2026-10-15-11). Telemetria de produto:
+    falhar aqui nunca custa o turno."""
+    if not question.strip():
+        return
+    try:
+        async with conn.transaction():
+            await scope_to_organization(conn, job.organization_id)
+            await knowledge_repo.record_gap(
+                conn,
+                organization_id=job.organization_id,
+                question=question,
+                outcome=outcome,
+                agent_id=agent_id,
+                conversation_id=job.conversation_id,
+            )
+    except Exception:
+        logger.debug("knowledge gap write failed", exc_info=True)
+
+
 async def _knowledge(
     conn: psycopg.AsyncConnection,
     job: InboundJob | MissionTouchJob,
@@ -1258,6 +1314,7 @@ async def _knowledge(
     limit: int,
     *,
     has_knowledge: bool = False,
+    agent_id: UUID | None = None,
 ) -> tuple[str, ...]:
     """A camada de conhecimento, buscada antes de gerar.
 
@@ -1277,7 +1334,7 @@ async def _knowledge(
 
     result = await run_tool(
         conn,
-        SearchKnowledge(embedder, limit=limit),
+        SearchKnowledge(embedder, limit=limit, agent_id=agent_id),
         ToolContext(organization_id=job.organization_id, conversation_id=job.conversation_id),
         {"query": query},
         clock=clock,

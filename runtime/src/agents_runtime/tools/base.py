@@ -48,6 +48,9 @@ class ToolContext:
     agent_id: UUID | None = None
     channel_account_id: UUID | None = None
     phone: str | None = None
+    # Alteração 2026-10-15-11: o que o contato perguntou neste turno — a
+    # transferência por "não sei responder" registra a lacuna com ela.
+    last_question: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

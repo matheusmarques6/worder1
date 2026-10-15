@@ -132,12 +132,21 @@ async def has_knowledge(conn: psycopg.AsyncConnection) -> bool:
     return bool(row and row[0])
 
 
+#: Peso do callout "resposta pronta" na ordenação (alteração 2026-10-15-11):
+#: mesma regra da RPC `search_agent_knowledge` (20261016000010).
+ANSWER_WEIGHT = 1.3
+
+#: Teto do bloco de regras no prompt — regra é sempre lida, então é curta.
+MAX_RULES = 20
+
+
 async def search_knowledge(
     conn: psycopg.AsyncConnection,
     *,
     embedding: Sequence[float],
     limit: int = 5,
     threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
+    agent_id: UUID | None = None,
 ) -> tuple[KnowledgeChunk, ...]:
     """The nearest chunks first, bounded — the last layer of the prompt.
 
@@ -159,13 +168,24 @@ async def search_knowledge(
            and c.embedding_model = any(%(spaces)s)
            and c.organization_id = public.current_app_organization_id()
            and 1 - (c.embedding <=> %(query)s::vector) >= %(threshold)s
-         order by c.embedding <=> %(query)s::vector
+           -- Alteração 2026-10-15-11: com agente, só fontes que ELE lê (M:N
+           -- ai_source_agents) ou o vínculo antigo por chunk.
+           and (
+                %(agent)s::uuid is null
+                or c.agent_id = %(agent)s::uuid
+                or exists (select 1 from public.ai_source_agents sa
+                            where sa.source_id = c.source_id and sa.agent_id = %(agent)s::uuid)
+           )
+         order by (1 - (c.embedding <=> %(query)s::vector))
+                  * (case when c.chunk_kind = 'resposta' then %(weight)s else 1.0 end) desc
          limit %(limit)s
         """,
         {
             "query": _vector_literal(embedding),
             "limit": limit,
             "threshold": threshold,
+            "agent": agent_id,
+            "weight": ANSWER_WEIGHT,
             # Um chunk de OUTRO espaço vetorial não é um vizinho distante: é um
             # sem relação com esta query. A distância cosseno o rankeia do
             # mesmo jeito, sem erro — foi assim que a divergência
@@ -185,3 +205,101 @@ async def search_knowledge(
         )
         for row in await cursor.fetchall()
     )
+
+
+async def load_rules(
+    conn: psycopg.AsyncConnection, *, agent_id: UUID | None, limit: int = MAX_RULES
+) -> tuple[str, ...]:
+    """Os callouts `[!regra]` das fontes que o agente lê (alteração
+    2026-10-15-11). Regra não depende de a pergunta ser parecida: entra
+    SEMPRE no prompt, ao lado dos limites. Escopo pela conexão (policy)."""
+    if agent_id is None:
+        return ()
+    cursor = await conn.execute(
+        """
+        select c.content
+          from public.ai_agent_chunks c
+         where c.chunk_kind = 'regra'
+           and c.organization_id = public.current_app_organization_id()
+           and (
+                c.agent_id = %(agent)s
+                or exists (select 1 from public.ai_source_agents sa
+                            where sa.source_id = c.source_id and sa.agent_id = %(agent)s)
+           )
+         order by c.source_id, c.position nulls last, c.created_at
+         limit %(limit)s
+        """,
+        {"agent": agent_id, "limit": limit},
+    )
+    return tuple(row[0] for row in await cursor.fetchall())
+
+
+GAP_OUTCOMES = ("transferred", "answered_without_source", "blocked", "no_source")
+
+
+def normalize_question(text: str) -> str:
+    """A pergunta como chave de agrupamento barata (a rotina diária agrupa por
+    embedding depois): minúsculas, espaços colapsados, sem pontuação final."""
+    return " ".join(text.lower().split()).strip(" ?!.")[:500]
+
+
+async def record_gap(
+    conn: psycopg.AsyncConnection,
+    *,
+    organization_id: UUID,
+    question: str,
+    outcome: str,
+    agent_id: UUID | None,
+    conversation_id: UUID | None,
+) -> UUID | None:
+    """Uma lacuna de conhecimento (`ai_knowledge_gaps`). A mesma pergunta
+    ainda aberta soma contagem, guarda o agente e o exemplo; senão nasce.
+    Chamador abre a transação e o escopo."""
+    if outcome not in GAP_OUTCOMES:
+        raise ValueError(f"desfecho de lacuna desconhecido: {outcome}")
+    key = normalize_question(question)
+    if not key:
+        return None
+    example = Jsonb([{
+        "text": question[:500],
+        "conversation_id": str(conversation_id) if conversation_id else None,
+    }])
+    cursor = await conn.execute(
+        """
+        update public.ai_knowledge_gaps
+           set count = count + 1,
+               last_seen = now(),
+               outcome = %(outcome)s,
+               agent_ids = case when %(agent)s::uuid is null or %(agent)s::uuid = any(agent_ids)
+                                then agent_ids else agent_ids || %(agent)s::uuid end,
+               examples = case when jsonb_array_length(examples) >= 10 then examples
+                               else examples || %(example)s end
+         where organization_id = %(org)s
+           and status = 'open'
+           and cluster_key = %(key)s
+        returning id
+        """,
+        {
+            "org": organization_id, "key": key, "outcome": outcome,
+            "agent": agent_id, "example": example,
+        },
+    )
+    row = await cursor.fetchone()
+    if row is not None:
+        return row[0]
+    cursor = await conn.execute(
+        """
+        insert into public.ai_knowledge_gaps
+            (organization_id, cluster_key, question, examples, outcome, agent_ids, conversation_id)
+        values (%(org)s, %(key)s, %(question)s, %(example)s, %(outcome)s,
+                case when %(agent)s::uuid is null then '{}'::uuid[] else array[%(agent)s::uuid] end,
+                %(conv)s)
+        returning id
+        """,
+        {
+            "org": organization_id, "key": key, "question": question[:500], "example": example,
+            "outcome": outcome, "agent": agent_id, "conv": conversation_id,
+        },
+    )
+    row = await cursor.fetchone()
+    return None if row is None else row[0]

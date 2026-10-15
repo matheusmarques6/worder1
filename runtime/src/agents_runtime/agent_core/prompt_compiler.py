@@ -6,7 +6,8 @@ aceita o schema do seu dono — dataclass congelada com campos exatos; campo
 alheio explode na construção ("texto de missão dentro de nó = fronteira
 vazou", §4.3).
 
-Ordem fixa do frame: AGENT · MISSION · STATE · CHANNEL · CONVERSATION · KNOWLEDGE (se houver).
+Ordem fixa do frame: AGENT · MISSION · STATE · CHANNEL · CONVERSATION · KNOWLEDGE_RULES ·
+KNOWLEDGE (os dois últimos se houver).
 (O delta do nó já chegou FUNDIDO na missão pelo mission_resolver — o frame
 grava o node_ref como proveniência, não como bloco próprio.)
 
@@ -340,6 +341,7 @@ def compile_prompt(
     conversation: ConversationBlock | None,
     mode: str = "turn",
     knowledge: tuple[str, ...] = (),
+    rules: tuple[str, ...] = (),
 ) -> CompiledPrompt:
     """Monta o frame do turno. `mode='preview'` tolera blocos ausentes
     (viram fantasmas); um TURNO sem missão recusa compilar — toque sem missão
@@ -356,6 +358,13 @@ def compile_prompt(
             _state_block(state),
             _channel_block(channel),
             _conversation_block(conversation, mode),
+            # Alteração 2026-10-15-11: as regras ([!regra]) das notas que o
+            # agente lê — sempre, sem depender da busca.
+            *((RenderedBlock(
+                kind="KNOWLEDGE_RULES",
+                text="# REGRAS DA LOJA (obrigatórias)\n"
+                + "\n".join(f"- {rule}" for rule in rules),
+            ),) if rules else ()),
             *((RenderedBlock(
                 kind="KNOWLEDGE",
                 text="# CONHECIMENTO\n" + "\n".join(f"- {chunk}" for chunk in knowledge),

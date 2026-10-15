@@ -434,6 +434,7 @@ def build_toucher(
                         budget=turn_budget,
                     ),
                     clock, DEFAULT_LIMIT,
+                    agent_id=version.agent_id,
                 )
 
                 capture = AttemptTraceCapture()

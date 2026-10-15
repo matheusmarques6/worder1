@@ -30,6 +30,7 @@ from agents_runtime.agent_core.llm import ToolSpec
 from agents_runtime.repository import agent as agent_repo
 from agents_runtime.repository import catalog as catalog_repo
 from agents_runtime.repository import crm as crm_repo
+from agents_runtime.repository import knowledge as knowledge_repo
 from agents_runtime.repository import orders as orders_repo
 from agents_runtime.repository.scope import scope_to_organization
 from agents_runtime.tools.base import ToolContext, ToolResult
@@ -502,6 +503,21 @@ class TransferToHuman:
             title="Agente transferiu a conversa para a equipe",
             payload={"handoff_reason": reason, "summary": summary or None},
         )
+        if reason == "no_knowledge" and context.last_question:
+            # Alteração 2026-10-15-11: "não sei responder" é lacuna.
+            try:
+                async with conn.transaction():
+                    await scope_to_organization(conn, context.organization_id)
+                    await knowledge_repo.record_gap(
+                        conn,
+                        organization_id=context.organization_id,
+                        question=context.last_question,
+                        outcome="transferred",
+                        agent_id=context.agent_id,
+                        conversation_id=context.conversation_id,
+                    )
+            except Exception:  # registro, nunca condição da transferência
+                pass
         if context.contact_id is not None:
             try:
                 async with conn.transaction():

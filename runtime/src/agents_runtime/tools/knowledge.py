@@ -29,9 +29,13 @@ DEFAULT_LIMIT = 5
 class SearchKnowledge:
     name = "search_knowledge"
 
-    def __init__(self, embedder: EmbedderPort, *, limit: int = DEFAULT_LIMIT) -> None:
+    def __init__(
+        self, embedder: EmbedderPort, *, limit: int = DEFAULT_LIMIT, agent_id=None
+    ) -> None:
         self._embedder = embedder
         self._limit = limit
+        # Alteração 2026-10-15-11: só as fontes que ESTE agente lê.
+        self._agent_id = agent_id
 
     async def __call__(
         self,
@@ -47,7 +51,8 @@ class SearchKnowledge:
         async with conn.transaction():
             await scope_to_organization(conn, context.organization_id)
             chunks = await knowledge_repo.search_knowledge(
-                conn, embedding=embedded.vectors[0], limit=self._limit
+                conn, embedding=embedded.vectors[0], limit=self._limit,
+                agent_id=self._agent_id or context.agent_id,
             )
 
         return ToolResult(
