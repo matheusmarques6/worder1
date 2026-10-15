@@ -40,15 +40,30 @@ export function blockMetrics(input: {
     byTool.set(call.tool_name, t)
   }
 
+  // O runtime grava a entrada do turno (outcome.entry_id, alteração
+  // 2026-10-15-15) só para WhatsApp. Com desfechos marcados, cada número
+  // conta os seus; sem nenhum marcado (histórico antigo), uma entrada só
+  // herda os números do agente e várias ficam sem número.
+  const tagged = input.outcomes.some((r) => r.entry_id)
+  const entryNumbers = (e: { id: string; kind: string }) => {
+    if (tagged && e.kind === 'whatsapp_account') {
+      const ek = computeKpis(input.outcomes.filter((r) => r.entry_id === e.id))
+      return {
+        conversations: ek.conversations,
+        first_response_ms: ek.first_response_ms,
+        purchase_rate: ek.conversations ? ek.conversion : null,
+      }
+    }
+    const single = input.entries.length === 1 && !tagged
+    return {
+      conversations: single ? k.conversations : null,
+      first_response_ms: single ? k.first_response_ms : null,
+      purchase_rate: single ? k.conversion : null,
+    }
+  }
+
   return {
-    entries: input.entries.map((e) => ({
-      id: e.id, kind: e.kind, label: e.label,
-      // O desfecho ainda não guarda a entrada (outcome.entry_id): com uma
-      // entrada só, os números do agente SÃO os dela; com várias, null.
-      conversations: input.entries.length === 1 ? k.conversations : null,
-      first_response_ms: input.entries.length === 1 ? k.first_response_ms : null,
-      purchase_rate: input.entries.length === 1 ? k.conversion : null,
-    })),
+    entries: input.entries.map((e) => ({ id: e.id, kind: e.kind, label: e.label, ...entryNumbers(e) })),
     knowledge: input.sources.map((s) => ({ id: s.id, name: s.name, uses: sourceUse.get(s.id) ?? 0 })),
     tools: [...byTool.entries()].map(([name, t]) => ({
       name, calls: t.calls, success_rate: ratio(t.ok, t.calls),

@@ -97,3 +97,23 @@ async def transfer_to_human(
     except Exception:
         pass
     return marked
+
+
+def handoff_destination(settings: dict | None) -> UUID | None:
+    """O agente para onde a transferência DECIDIDA PELO MODELO vai, se a loja
+    escolheu um no Construtor (alteração 2026-10-15-15). Lê
+    `settings.safety.handoff_destination`; ausente, vazio ou inválido = equipe.
+
+    Só a ferramenta `transfer_to_human` consulta isto. Pedido explícito de
+    atendente (palavra-chave), mídia que a IA não interpreta e assunto
+    proibido continuam indo para pessoas: mandar para outro robô quem pediu
+    uma pessoa contrariaria o cliente.
+    """
+    safety = (settings or {}).get("safety") if isinstance(settings, dict) else None
+    raw = safety.get("handoff_destination") if isinstance(safety, dict) else None
+    if not raw or not isinstance(raw, str):
+        return None
+    try:
+        return UUID(raw)
+    except ValueError:
+        return None

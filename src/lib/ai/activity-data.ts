@@ -4,7 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { OutcomeRow } from './activity-summary'
 
 export const OUTCOME_COLUMNS =
-  'conversation_id, agent_id, started_at, first_response_ms, messages_sent, resolved_without_human, transferred, ' +
+  'conversation_id, agent_id, entry_id, started_at, first_response_ms, messages_sent, resolved_without_human, transferred, ' +
   'handoff_reason, order_id, revenue, topic, incentives_offered, incentives_used, discount_total, blocked_count, gap, cost_usd, tokens'
 
 /** Fuso da loja para dias/horas: São Paulo (o protótipo e a base são BR). */

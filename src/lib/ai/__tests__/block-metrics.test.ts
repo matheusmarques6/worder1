@@ -37,6 +37,28 @@ describe('blockMetrics', () => {
     const m = blockMetrics({ outcomes: [row({})], toolCalls: [], sources: [], entries: [{ id: 'a', kind: 'whatsapp_account', label: 'A' }, { id: 'b', kind: 'flow_touch', label: 'B' }] })
     expect(m.entries.every((e) => e.conversations === null)).toBe(true)
   })
+
+  it('com outcome.entry_id, cada número de WhatsApp conta as suas conversas', () => {
+    const m = blockMetrics({
+      outcomes: [
+        row({ conversation_id: 'c1', entry_id: 'a', order_id: 'o', first_response_ms: 1000 }),
+        row({ conversation_id: 'c2', entry_id: 'a', first_response_ms: 3000 }),
+        row({ conversation_id: 'c3', entry_id: 'b' }),
+        row({ conversation_id: 'c4', entry_id: null }),
+      ],
+      toolCalls: [], sources: [],
+      entries: [
+        { id: 'a', kind: 'whatsapp_account', label: 'A' },
+        { id: 'b', kind: 'whatsapp_account', label: 'B' },
+        { id: 'z', kind: 'whatsapp_account', label: 'Z' },
+        { id: 'f', kind: 'flow_touch', label: 'Fluxo' },
+      ],
+    })
+    expect(m.entries[0]).toMatchObject({ conversations: 2, first_response_ms: 2000, purchase_rate: 0.5 })
+    expect(m.entries[1]).toMatchObject({ conversations: 1, purchase_rate: 0 })
+    expect(m.entries[2]).toMatchObject({ conversations: 0, first_response_ms: null, purchase_rate: null })
+    expect(m.entries[3]).toMatchObject({ conversations: null })
+  })
 })
 
 describe('diagnose (formato do protótipo)', () => {

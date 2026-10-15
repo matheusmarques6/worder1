@@ -7,6 +7,9 @@
 export interface OutcomeRow {
   conversation_id: string
   agent_id: string | null
+  /** Entrada (WhatsApp) por onde a conversa chegou; null em toque de fluxo
+   *  e em desfechos anteriores à alteração 2026-10-15-15 do runtime. */
+  entry_id?: string | null
   started_at: string
   first_response_ms: number | null
   messages_sent: number

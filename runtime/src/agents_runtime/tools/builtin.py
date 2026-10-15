@@ -493,6 +493,26 @@ class TransferToHuman:
         if reason not in HANDOFF_REASONS:
             reason = "other"
         summary = _text(arguments, "summary")
+        # Alteração 2026-10-15-15: destino escolhido no Construtor. Se for
+        # outro agente ativo, a conversa vai para ele; se ele não estiver
+        # ativo (pausado, apagado), cai na equipe como antes.
+        if context.handoff_agent_id is not None and context.handoff_agent_id != context.agent_id:
+            routed = await _hand_to_agent_by_id(conn, context, context.handoff_agent_id, summary)
+            if routed is not None:
+                return ToolResult(
+                    self.name,
+                    True,
+                    {
+                        "transferred": True,
+                        "routed": "agent",
+                        "reason": reason,
+                        "to": {"name": routed[1], "role": routed[2]},
+                        "instruction": (
+                            f"A conversa passa para {routed[1]} a partir da próxima mensagem. "
+                            "Responda ao cliente em uma frase curta avisando quem continua."
+                        ),
+                    },
+                )
         marked = await transfer_to_human(
             conn,
             organization_id=context.organization_id,
@@ -577,6 +597,52 @@ TRANSFER_TO_HUMAN_SPEC = ToolSpec(
 )
 
 
+async def _assign_to_agent(
+    conn: Any, context: ToolContext, target: tuple[Any, str, str | None], summary: str
+) -> None:
+    """Passa a conversa para `target` e registra na timeline. Chamado dentro
+    da transação já escopada (alterações 2026-10-15-09 e -15)."""
+    await agent_repo.assign_conversation_agent(
+        conn,
+        conversation_id=context.conversation_id,
+        agent_id=target[0],
+        reset_owner_mission=True,
+    )
+    if context.contact_id is not None:
+        try:
+            await crm_repo.add_activity(
+                conn,
+                organization_id=context.organization_id,
+                contact_id=context.contact_id,
+                conversation_id=context.conversation_id,
+                type="agent_assigned",
+                title=f"Transferido para o agente {target[1]} (IA)",
+                description=f"Resumo: {summary}" if summary else None,
+                metadata={
+                    "source": "ai_agent",
+                    "from_agent_id": str(context.agent_id) if context.agent_id else None,
+                    "to_agent_id": str(target[0]),
+                    "conversation_id": str(context.conversation_id),
+                },
+            )
+        except Exception:  # registro, nunca condição da transferência
+            pass
+
+
+async def _hand_to_agent_by_id(
+    conn: Any, context: ToolContext, agent_id: Any, summary: str
+) -> tuple[Any, str, str | None] | None:
+    """O destino só vale se for um agente ATIVO da mesma org; senão None."""
+    async with conn.transaction():
+        await scope_to_organization(conn, context.organization_id)
+        agents = await agent_repo.list_active_agents(conn, organization_id=context.organization_id)
+        target = next((a for a in agents if a[0] == agent_id), None)
+        if target is None:
+            return None
+        await _assign_to_agent(conn, context, target, summary)
+        return target
+
+
 class TransferToAgent:
     """Passa a conversa para OUTRO agente ativo da loja (alteração
     2026-10-15-09). Não desliga a IA: o próximo turno é atendido pelo agente
@@ -613,31 +679,7 @@ class TransferToAgent:
                         ],
                     },
                 )
-            await agent_repo.assign_conversation_agent(
-                conn,
-                conversation_id=context.conversation_id,
-                agent_id=target[0],
-                reset_owner_mission=True,
-            )
-            if context.contact_id is not None:
-                try:
-                    await crm_repo.add_activity(
-                        conn,
-                        organization_id=context.organization_id,
-                        contact_id=context.contact_id,
-                        conversation_id=context.conversation_id,
-                        type="agent_assigned",
-                        title=f"Transferido para o agente {target[1]} (IA)",
-                        description=f"Resumo: {summary}" if summary else None,
-                        metadata={
-                            "source": "ai_agent",
-                            "from_agent_id": str(context.agent_id) if context.agent_id else None,
-                            "to_agent_id": str(target[0]),
-                            "conversation_id": str(context.conversation_id),
-                        },
-                    )
-                except Exception:  # registro, nunca condição da transferência
-                    pass
+            await _assign_to_agent(conn, context, target, summary)
         return ToolResult(
             self.name,
             True,

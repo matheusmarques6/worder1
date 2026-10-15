@@ -118,3 +118,45 @@ class TestClosing:
             (tenant,),
         ).fetchone()
         assert again == (0,)
+
+
+class TestEntryOfTheTurn:
+    """Alteração 2026-10-15-15: o desfecho guarda a entrada (número) do turno,
+    para os números por bloco do Construtor."""
+
+    async def test_record_turn_writes_the_whatsapp_entry(self, dsn, admin, tenant) -> None:
+        from agents_runtime.repository import outcomes as outcomes_repo
+        from tests.db.factories import create_agent_entry, create_message
+
+        agent = create_agent(admin, tenant, status="active")
+        thread = create_thread(admin, tenant)
+        entry = create_agent_entry(admin, tenant, agent, ref_id=thread.channel_account_id)
+        create_message(admin, tenant, thread)
+        async with await psycopg.AsyncConnection.connect(dsn, autocommit=True) as conn:
+            await outcomes_repo.record_turn(
+                conn, organization_id=tenant, conversation_id=thread.conversation_id,
+                agent_id=agent, contact_id=thread.contact_id, tokens=10,
+            )
+        (got,) = admin.execute(
+            "select entry_id from public.ai_conversation_outcomes where conversation_id = %s",
+            (thread.conversation_id,),
+        ).fetchone()
+        assert got == entry
+
+    async def test_without_an_entry_it_stays_null(self, dsn, admin, tenant) -> None:
+        from agents_runtime.repository import outcomes as outcomes_repo
+        from tests.db.factories import create_message
+
+        agent = create_agent(admin, tenant, status="active")
+        thread = create_thread(admin, tenant)
+        create_message(admin, tenant, thread)
+        async with await psycopg.AsyncConnection.connect(dsn, autocommit=True) as conn:
+            await outcomes_repo.record_turn(
+                conn, organization_id=tenant, conversation_id=thread.conversation_id,
+                agent_id=agent, contact_id=thread.contact_id,
+            )
+        (got,) = admin.execute(
+            "select entry_id from public.ai_conversation_outcomes where conversation_id = %s",
+            (thread.conversation_id,),
+        ).fetchone()
+        assert got is None

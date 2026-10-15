@@ -49,7 +49,11 @@ from agents_runtime.agent_core.guards import (
     resolve_handoff,
     schedule_silence,
 )
-from agents_runtime.agent_core.handoff import UNMIRRORED_DETAIL, transfer_to_human
+from agents_runtime.agent_core.handoff import (
+    UNMIRRORED_DETAIL,
+    handoff_destination,
+    transfer_to_human,
+)
 from agents_runtime.agent_core.llm import (
     LlmPort,
     Message,
@@ -850,6 +854,7 @@ def build_responder(
                                     channel_account_id=job.channel_account_id,
                                     phone=state.contact_phone,
                                     last_question=query or None,
+                                    handoff_agent_id=handoff_destination(version.settings),
                                 ),
                                 dict(call.arguments), clock=clock,
                             )

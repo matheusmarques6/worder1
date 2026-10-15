@@ -39,11 +39,35 @@ async def record_turn(
                    coalesce(bool_or(l.cost_usd is null), false) as unknown
               from internal.llm_calls l
              where l.conversation_id = %(conv)s
+        ),
+        -- Alteração 2026-10-15-15: a entrada (número de WhatsApp) por onde a
+        -- conversa chegou, para os números por bloco do Construtor. O número
+        -- é o da última mensagem do contato; a entrada é a do agente que
+        -- atende. Sem entrada ligada (só agente ativo, toque de fluxo): null.
+        entry as (
+            select e.id
+              from public.ai_agent_entries e
+             where e.organization_id = %(org)s
+               and e.agent_id = %(agent)s
+               and e.kind = 'whatsapp_account'
+               and e.active
+               and e.ref_id = (
+                   select m.channel_account_id
+                     from public.messages m
+                    where m.conversation_id = %(conv)s
+                      and m.author_type = 'contact'
+                      and m.channel_account_id is not null
+                    order by m.created_at desc
+                    limit 1
+               )
+             limit 1
         )
         insert into public.ai_conversation_outcomes as o
-            (conversation_id, organization_id, agent_id, contact_id, first_inbound_at,
-             first_response_ms, messages_sent, tokens, cost_usd, cost_unknown)
-        select %(conv)s, %(org)s, %(agent)s, %(contact)s, first_in.at,
+            (conversation_id, organization_id, agent_id, entry_id, contact_id,
+             first_inbound_at, first_response_ms, messages_sent, tokens, cost_usd,
+             cost_unknown)
+        select %(conv)s, %(org)s, %(agent)s, (select id from entry), %(contact)s,
+               first_in.at,
                case when first_in.at is null then null
                     else greatest(0, (extract(epoch from now() - first_in.at) * 1000)::int) end,
                1, coalesce(%(tokens)s, 0), spend.cost, spend.unknown
@@ -54,6 +78,7 @@ async def record_turn(
                cost_usd = excluded.cost_usd,
                cost_unknown = excluded.cost_unknown,
                agent_id = coalesce(excluded.agent_id, o.agent_id),
+               entry_id = coalesce(o.entry_id, excluded.entry_id),
                contact_id = coalesce(o.contact_id, excluded.contact_id),
                first_inbound_at = coalesce(o.first_inbound_at, excluded.first_inbound_at),
                first_response_ms = coalesce(o.first_response_ms, excluded.first_response_ms),

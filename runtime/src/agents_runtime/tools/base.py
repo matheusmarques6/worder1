@@ -51,6 +51,10 @@ class ToolContext:
     # Alteração 2026-10-15-11: o que o contato perguntou neste turno — a
     # transferência por "não sei responder" registra a lacuna com ela.
     last_question: str | None = None
+    # Alteração 2026-10-15-15: destino da transferência escolhido no
+    # Construtor (settings.safety.handoff_destination). Quando é outro agente
+    # ativo, `transfer_to_human` passa a conversa para ele em vez da equipe.
+    handoff_agent_id: UUID | None = None
 
 
 @dataclass(frozen=True, slots=True)

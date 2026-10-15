@@ -126,3 +126,49 @@ class TestTransferToAgent:
         spec = builtin.transfer_to_agent_spec(rows, exclude=agents.me)
         assert spec.parameters["properties"]["agent"]["enum"] == ["Vendas"]
         assert "Vendas (Vendas no WhatsApp)" in spec.description
+
+
+class TestHandoffDestination:
+    """Alteração 2026-10-15-15: destino da transferência escolhido no Construtor."""
+
+    def test_reads_a_valid_agent_id(self) -> None:
+        from agents_runtime.agent_core.handoff import handoff_destination
+
+        target = uuid4()
+        assert handoff_destination({"safety": {"handoff_destination": str(target)}}) == target
+
+    def test_missing_empty_or_invalid_means_the_team(self) -> None:
+        from agents_runtime.agent_core.handoff import handoff_destination
+
+        assert handoff_destination(None) is None
+        assert handoff_destination({}) is None
+        assert handoff_destination({"safety": {"handoff_destination": None}}) is None
+        assert handoff_destination({"safety": {"handoff_destination": "team"}}) is None
+
+    async def test_transfer_to_human_goes_to_the_chosen_agent(self, agents, monkeypatch) -> None:
+        human = AsyncMock(return_value=True)
+        monkeypatch.setattr(builtin, "transfer_to_human", human)
+        context = ToolContext(
+            organization_id=uuid4(), conversation_id=uuid4(), contact_id=uuid4(),
+            agent_id=agents.me, handoff_agent_id=agents.support,
+        )
+        arguments = {"reason": "other", "summary": "x"}
+        result = await builtin.TransferToHuman()(_conn(), context, arguments)
+        assert result.success and result.output["routed"] == "agent"
+        assert result.output["to"]["name"] == "Suporte"
+        assert agents.assign.await_args.kwargs["agent_id"] == agents.support
+        human.assert_not_awaited()
+
+    async def test_an_inactive_destination_falls_back_to_the_team(
+        self, agents, monkeypatch
+    ) -> None:
+        human = AsyncMock(return_value=True)
+        monkeypatch.setattr(builtin, "transfer_to_human", human)
+        context = ToolContext(
+            organization_id=uuid4(), conversation_id=uuid4(), contact_id=uuid4(),
+            agent_id=agents.me, handoff_agent_id=uuid4(),
+        )
+        result = await builtin.TransferToHuman()(_conn(), context, {"reason": "other"})
+        assert result.success and "routed" not in result.output
+        human.assert_awaited_once()
+        agents.assign.assert_not_awaited()
