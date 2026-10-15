@@ -6,6 +6,7 @@ import { periodWindow } from '@/lib/ai/activity-summary'
 import { loadOutcomes } from '@/lib/ai/activity-data'
 import { listEntries } from '@/lib/ai/agent-entries'
 import { loadFlowTouchEntries } from '@/lib/ai/flow-touches'
+import { usdToBrl, usdToBrlRate } from '@/lib/ai/brl'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,7 +26,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   try {
     const outcomes = await loadOutcomes(supabase, organizationId, window.start, params.id)
     const conversationIds = outcomes.map((o) => o.conversation_id)
-    const [calls, readers, entries, touches] = await Promise.all([
+    const [calls, readers, entries, touches, usdBrl, version] = await Promise.all([
       conversationIds.length
         ? supabase
             .from('ai_runtime_activity_tools')
@@ -38,19 +39,33 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       supabase.from('ai_source_agents').select('source_id').eq('organization_id', organizationId).eq('agent_id', params.id),
       listEntries(supabase, organizationId, [params.id]),
       loadFlowTouchEntries(supabase, organizationId).catch(() => []),
+      usdToBrlRate(supabase),
+      // "avaliação" do bloco do agente: nota da versão em produção (passo 26).
+      supabase.from('ai_agent_versions').select('eval_score').eq('organization_id', organizationId)
+        .eq('agent_id', params.id).eq('status', 'produção').order('created_at', { ascending: false }).limit(1).maybeSingle(),
     ])
     const sourceIds = (readers.data ?? []).map((r: any) => r.source_id)
     const { data: sources } = sourceIds.length
       ? await supabase.from('ai_sources').select('id, name').eq('organization_id', organizationId).in('id', sourceIds)
       : { data: [] as Array<{ id: string; name: string }> }
+    const m = blockMetrics({
+      outcomes,
+      toolCalls: ((calls as any).data ?? []) as ToolCallRow[],
+      sources: (sources ?? []) as Array<{ id: string; name: string }>,
+      entries: [...entries, ...touches.filter((t) => t.agent_id === params.id)],
+    })
+    const score = (version as any)?.data?.eval_score
     return NextResponse.json({
       period: { days, start: window.start.toISOString() },
-      ...blockMetrics({
-        outcomes,
-        toolCalls: ((calls as any).data ?? []) as ToolCallRow[],
-        sources: (sources ?? []) as Array<{ id: string; name: string }>,
-        entries: [...entries, ...touches.filter((t) => t.agent_id === params.id)],
-      }),
+      usd_brl: usdBrl,
+      ...m,
+      // O Construtor mostra dinheiro em R$ (custo de LLM chega em US$).
+      agent: {
+        ...m.agent,
+        cost_brl: usdToBrl(m.agent.cost_usd, usdBrl),
+        cost_per_conversation_brl: usdToBrl(m.agent.cost_per_conversation, usdBrl),
+        eval_score: score === null || score === undefined ? null : Number(score),
+      },
     })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 })

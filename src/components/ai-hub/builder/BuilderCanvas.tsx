@@ -1,53 +1,36 @@
 'use client'
 
-// O Construtor (plano IA M6 passo 32): o agente desenhado como um fluxo —
-// entradas → agente (com conhecimento e ferramentas ao lado) → adaptação →
-// limites → revisão → precisa de pessoa? → transferir | enviar. O desenho
-// vem de buildBuilderGraph (puro, testado); este componente só pinta, abre
-// o inspector (os MESMOS AreaFields do editor), acende o caminho de um
-// teste, mostra métricas por bloco e o diagnóstico, e salva o hub.
+// O Construtor em tela cheia (protótipo: function Builder em "IA Construtor
+// do Agente v2"). Barra escura com nome, versão salva, loja, desfazer e
+// refazer, Métricas, Histórico, Diagnosticar, Testar, Ativo e Fechar; à
+// esquerda a paleta, o inspector ou o diagnóstico; no meio o canvas; à
+// direita o Testar ou o Histórico. O que se edita aqui é o HubState do
+// agente (agent-hub.ts); Salvar grava pelo mesmo PATCH e vira versão.
 
-import React, { memo, useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { useStoreStore } from '@/stores'
+import { agentToHub, hubToAgentPatch, type HubState } from '@/lib/ai/agent-hub'
 import {
-  ReactFlow, ReactFlowProvider, Background, BackgroundVariant, Controls, MiniMap, Handle, Position, useReactFlow,
-  type Edge, type Node, type NodeProps,
-} from '@xyflow/react'
-import '@xyflow/react/dist/style.css'
-import {
-  AlertTriangle, ArrowLeft, BarChart3, BookOpen, FlaskConical, History as HistoryIcon, Loader2, MessageCircle, Plus,
-  Redo2, Save, Search, Stethoscope, Trash2, Undo2, Workflow, Wrench, X,
-} from 'lucide-react'
-import { agentToHub, hubToAgentPatch, type HubAreaId, type HubState } from '@/lib/ai/agent-hub'
-import {
-  buildBuilderGraph, historyInit, historyPush, historyRedo, historyUndo, litEdges, litPath,
-  type BuilderNode, type BuilderNodeKind, type History,
-} from '@/lib/ai/builder-graph'
+  buildPalette, deriveModel, issueNode, runPath, setAdapt, setDelivery, setModel, setPhrases, setPresentation,
+  setReview, setRules, setTopics, setVoice, toggleTool, type PaletteItem,
+} from '@/lib/ai/builder-model'
 import type { Diagnostic } from '@/lib/ai/block-metrics'
-import type { RuntimeMode } from '@/lib/ai/runtime-rollout'
-import { TOOL_CATALOG } from '@/lib/ai/tools/catalog'
-import AreaFields from '../AreaFields'
-import AgentTestPanel from '../AgentTestPanel'
-import AgentVersionsPanel from '../AgentVersionsPanel'
-
-const KIND_STYLE: Record<BuilderNodeKind, { color: string; tint: string; title: string }> = {
-  entry: { color: '#16A34A', tint: '#E9F7EE', title: 'Entrada' },
-  knowledge: { color: '#0E9384', tint: '#E6F5F3', title: 'Conhecimento' },
-  tool: { color: '#0B7285', tint: '#E3F3F6', title: 'Ferramenta' },
-  agent: { color: '#F97316', tint: '#FFF3EA', title: 'Agente' },
-  adapt: { color: '#7C5CFC', tint: '#F2EFFF', title: 'Adaptação' },
-  limits: { color: '#E5484D', tint: '#FDECEC', title: 'Limites' },
-  review: { color: '#E0930B', tint: '#FCF3E0', title: 'Revisão' },
-  needs_person: { color: '#3B6EF6', tint: '#EEF3FF', title: 'Decisão' },
-  transfer: { color: '#16A34A', tint: '#E9F7EE', title: 'Transferir' },
-  send: { color: '#64748B', tint: '#EEF1F5', title: 'Enviar' },
-  slot: { color: '#94A3B8', tint: '#F8FAFC', title: 'Vazio' },
-}
+import type { AgentEntry } from '@/lib/ai/agent-entries'
+import { USD_BRL_FALLBACK } from '@/lib/ai/brl'
+import { Icon, Modal, Toast } from '../proto/ui'
+import { AgentMissionsArea } from '../AreaFields'
+import Canvas, { type AgentHead, type RunState } from './Canvas'
+import { Diagnostics, Inspector, Palette } from './Panels'
+import { Checklist, Playground, Versions, type MissionOption } from './RightPanels'
 
 interface AgentRow {
   id: string
   name: string | null
+  role: string | null
   status: 'draft' | 'active' | 'paused'
+  is_active?: boolean
   provider: string | null
   model: string | null
   monthly_cap_usd: number | null
@@ -55,583 +38,431 @@ interface AgentRow {
   settings: Record<string, any> | null
   presentation_mode: string | null
   client_adaptation: Record<string, unknown> | null
-  sources_count?: number
 }
+interface ListAgent { id: string; name: string | null; role: string | null; status: string; entries: AgentEntry[] }
+interface Note { id: string; name: string; status?: string | null; source_type?: string | null; kind?: string | null; chunks_count?: number | null; readers: string[] }
+interface Snapshot { hub: HubState; dest: string }
 
-interface Entry { id: string; kind: string; label: string; ref_id?: string }
-interface Note { id: string; name: string; status?: string | null; readers: string[] }
-interface BlockNodeData extends Record<string, unknown> {
-  node: BuilderNode
-  metric: string | null
-  diagnostic: 'error' | 'warning' | null
-  lit: boolean
-  selected: boolean
-}
+const MONTHS = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
 
-const fmtPct = (v: number | null | undefined) => (v === null || v === undefined ? '—' : `${Math.round(v * 100)}%`)
-const fmtUsd = (v: number | null | undefined) => (v === null || v === undefined ? '—' : `US$ ${Number(v).toFixed(2)}`)
-
-/** A linha de métrica de cada bloco (janela de 7 dias, passo 31). */
-function metricFor(node: BuilderNode, m: any): string | null {
-  if (!m) return null
-  switch (node.kind) {
-    case 'entry': {
-      const e = (m.entries ?? []).find((x: any) => `entry:${x.id}` === node.id)
-      return e?.conversations === null || e?.conversations === undefined ? null : `${e.conversations} conversas · compra ${fmtPct(e.purchase_rate)}`
-    }
-    case 'knowledge': {
-      const k = (m.knowledge ?? []).find((x: any) => x.id === node.refId)
-      return k ? `${k.uses} consulta(s)` : null
-    }
-    case 'tool': {
-      const t = (m.tools ?? []).find((x: any) => x.name === node.refId)
-      if (!t) return '0 chamadas'
-      return `${t.calls} chamada(s) · ${fmtPct(t.success_rate)} ok${t.issued !== undefined ? ` · ${t.issued} emitido(s)` : ''}`
-    }
-    case 'agent': return `${m.agent.conversations} conversas · ${fmtUsd(m.agent.cost_usd)}`
-    case 'limits': return `${m.limits.blocked} bloqueio(s)`
-    case 'review': return `${fmtPct(m.review.approved_rate)} aprovadas`
-    case 'needs_person': return `${m.needs_person.transferred} transferida(s)`
-    case 'transfer': return `${Object.keys(m.transfer.reasons ?? {}).length} motivo(s)`
-    case 'send': return `${m.send.replies} resposta(s) · ${fmtPct(m.send.resolved_rate)} sem humano`
-    default: return null
-  }
-}
-
-/** O nó do canvas que um diagnóstico aponta (passo 31 usa nomes de grupo). */
-function diagnosticNode(d: Diagnostic, nodes: BuilderNode[]): string {
-  const first = (kind: BuilderNodeKind, slot: string) => nodes.find((n) => n.kind === kind)?.id ?? slot
-  if (d.node === 'entries') return first('entry', 'slot-entry')
-  if (d.node === 'tools') return first('tool', 'slot-tool')
-  if (d.node === 'knowledge') {
-    const id = d.id.split(':')[1]
-    return id && nodes.some((n) => n.id === `knowledge:${id}`) ? `knowledge:${id}` : first('knowledge', 'slot-knowledge')
-  }
-  return nodes.some((n) => n.id === d.node) ? d.node : 'agent'
-}
-
-const BlockNode = memo(function BlockNode({ data }: NodeProps<Node<BlockNodeData>>) {
-  const { node, metric, diagnostic, lit, selected } = data
-  const style = KIND_STYLE[node.kind]
-  const slot = node.kind === 'slot'
-  return (
-    <div style={{
-      width: node.kind === 'agent' ? 220 : 190, padding: '10px 12px', borderRadius: 12, position: 'relative',
-      background: slot ? 'transparent' : '#fff',
-      border: `${selected ? 2 : 1.5}px ${slot ? 'dashed' : 'solid'} ${selected || lit ? style.color : 'var(--border, #E5E7EB)'}`,
-      boxShadow: lit ? `0 0 0 4px ${style.tint}` : '0 1px 2px rgba(0,0,0,.05)',
-      opacity: slot ? 0.8 : 1, transition: 'box-shadow .2s, border-color .2s',
-    }}>
-      <Handle type="target" position={Position.Top} style={{ opacity: 0 }} />
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ width: 8, height: 8, borderRadius: 4, background: style.color, flexShrink: 0 }} />
-        <span style={{ fontSize: 10, fontWeight: 700, color: style.color, textTransform: 'uppercase', letterSpacing: '.04em' }}>
-          {style.title}
-        </span>
-        {diagnostic && (
-          <span title="Veja o diagnóstico" style={{
-            marginLeft: 'auto', width: 9, height: 9, borderRadius: 5,
-            background: diagnostic === 'error' ? 'var(--red, #E5484D)' : 'var(--amber, #E0930B)',
-          }} />
-        )}
-      </div>
-      <div style={{ fontSize: 13, fontWeight: 700, marginTop: 3, display: 'flex', alignItems: 'center', gap: 4, color: slot ? 'var(--text-3)' : undefined }}>
-        {slot && <Plus size={12} />}{node.label}
-      </div>
-      {node.sub && <div style={{ fontSize: 11, color: 'var(--text-3, #6B7280)' }}>{node.sub}</div>}
-      {metric && (
-        <div style={{ fontSize: 10.5, marginTop: 5, paddingTop: 5, borderTop: '1px solid var(--border, #E5E7EB)', color: 'var(--text-2, #374151)' }}>
-          {metric}
-        </div>
-      )}
-      <Handle type="source" position={Position.Bottom} style={{ opacity: 0 }} />
-      <Handle type="source" id="left" position={Position.Left} style={{ opacity: 0 }} />
-      <Handle type="source" id="right" position={Position.Right} style={{ opacity: 0 }} />
-    </div>
-  )
-})
-
-const nodeTypes = { block: BlockNode }
-
-export default function BuilderCanvas(props: { organizationId: string; agentId: string }) {
-  return (
-    <ReactFlowProvider>
-      <BuilderInner {...props} />
-    </ReactFlowProvider>
-  )
-}
-
-function BuilderInner({ organizationId, agentId }: { organizationId: string; agentId: string }) {
-  const flow = useReactFlow()
+export default function BuilderCanvas({ organizationId, agentId }: { organizationId: string; agentId: string }) {
+  const router = useRouter()
+  const store = useStoreStore((s) => s.currentStore)
   const [agent, setAgent] = useState<AgentRow | null>(null)
-  const [history, setHistory] = useState<History<HubState> | null>(null)
-  const [savedHub, setSavedHub] = useState('')
-  const [entries, setEntries] = useState<Entry[]>([])
+  const [agents, setAgents] = useState<ListAgent[]>([])
+  const [entries, setEntries] = useState<AgentEntry[]>([])
   const [notes, setNotes] = useState<Note[]>([])
-  const [accounts, setAccounts] = useState<Array<{ id: string; label: string }>>([])
-  const [runtimeMode, setRuntimeMode] = useState<RuntimeMode>('runtime')
+  const [missions, setMissions] = useState<MissionOption[]>([])
   const [metrics, setMetrics] = useState<any>(null)
-  const [diagnostics, setDiagnostics] = useState<Diagnostic[]>([])
-  const [showMetrics, setShowMetrics] = useState(true)
-  const [panel, setPanel] = useState<'diagnostics' | 'history' | 'test' | null>(null)
-  const [selected, setSelected] = useState<string | null>(null)
-  const [trace, setTrace] = useState<any>(null)
-  const [query, setQuery] = useState('')
-  const [loading, setLoading] = useState(true)
+  const [issues, setIssues] = useState<Diagnostic[]>([])
+  const [accounts, setAccounts] = useState<Array<{ id: string; label: string }>>([])
+  const [spentUsd, setSpentUsd] = useState<number | null>(null)
+  const [keyMask, setKeyMask] = useState<string | null>(null)
+  const [rejected, setRejected] = useState<Array<{ at: string; text: string }>>([])
+  const [previews, setPreviews] = useState<Record<string, string>>({})
+  const [version, setVersion] = useState<string | null>(null)
+
+  // Estado editável com desfazer/refazer (hist/fut do protótipo).
+  const [f, setF] = useState<Snapshot | null>(null)
+  const [saved, setSaved] = useState<Snapshot | null>(null)
+  const [hist, setHist] = useState<Snapshot[]>([])
+  const [fut, setFut] = useState<Snapshot[]>([])
+
+  const [sel, setSel] = useState<string | null>(null)
+  const [drag, setDrag] = useState<PaletteItem | null>(null)
+  const [run, setRun] = useState<RunState | null>(null)
+  const [mode, setMode] = useState<'test' | 'ver' | null>(null)
+  const [mets, setMets] = useState(true)
+  const [diag, setDiag] = useState(false)
+  const [pal, setPal] = useState(false)
+  const [ck, setCk] = useState(false)
+  const [cp, setCp] = useState(false)
+  const [toast, setToast] = useState<string | null>(null)
+  const [renaming, setRenaming] = useState(false)
+  const [newSource, setNewSource] = useState<PaletteItem['sourceKind'] | null>(null)
+  const [missionsOpen, setMissionsOpen] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const hub = history?.present ?? null
+  const usdBrl = Number(metrics?.usd_brl) || USD_BRL_FALLBACK
 
   const loadSide = useCallback(async () => {
-    const [entriesRes, notesRes, metricsRes, diagRes] = await Promise.all([
-      fetch(`/api/ai/agents/${agentId}/entries`),
-      fetch('/api/ai/knowledge'),
-      fetch(`/api/ai/agents/${agentId}/block-metrics`),
-      fetch(`/api/ai/agents/${agentId}/diagnostics`),
+    const [ag, en, kn, mi, me, di, sp, wa, ev, ve] = await Promise.all([
+      fetch(`/api/ai/agents?organization_id=${encodeURIComponent(organizationId)}`).then((r) => (r.ok ? r.json() : { agents: [] })).catch(() => ({ agents: [] })),
+      fetch(`/api/ai/agents/${agentId}/entries`).then((r) => (r.ok ? r.json() : { entries: [] })).catch(() => ({ entries: [] })),
+      fetch('/api/ai/knowledge').then((r) => (r.ok ? r.json() : { folders: [] })).catch(() => ({ folders: [] })),
+      fetch(`/api/ai/missions?agent_id=${agentId}`).then((r) => (r.ok ? r.json() : { missions: [] })).catch(() => ({ missions: [] })),
+      fetch(`/api/ai/agents/${agentId}/block-metrics`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch(`/api/ai/agents/${agentId}/diagnostics`).then((r) => (r.ok ? r.json() : { diagnostics: [] })).catch(() => ({ diagnostics: [] })),
+      fetch(`/api/ai/agents/${agentId}/spend`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch('/api/whatsapp/business-accounts', { credentials: 'include' }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch(`/api/ai/activity/events?kind=blocked&agent=${agentId}&limit=3`).then((r) => (r.ok ? r.json() : { events: [] })).catch(() => ({ events: [] })),
+      fetch(`/api/ai/agents/${agentId}/versions`).then((r) => (r.ok ? r.json() : { versions: [] })).catch(() => ({ versions: [] })),
     ])
-    const entriesBody = entriesRes.ok ? await entriesRes.json() : { entries: [] }
-    setEntries(entriesBody.entries ?? [])
-    const notesBody = notesRes.ok ? await notesRes.json() : { folders: [] }
-    setNotes((notesBody.folders ?? []).flatMap((f: any) => f.notes ?? []))
-    setMetrics(metricsRes.ok ? await metricsRes.json() : null)
-    const diagBody = diagRes.ok ? await diagRes.json() : { diagnostics: [] }
-    setDiagnostics(diagBody.diagnostics ?? [])
-  }, [agentId])
+    setAgents(ag.agents ?? [])
+    setEntries(en.entries ?? [])
+    setNotes((kn.folders ?? []).flatMap((x: any) => x.notes ?? []))
+    setMissions(mi.missions ?? [])
+    setMetrics(me)
+    setIssues(di.diagnostics ?? [])
+    setSpentUsd(sp && typeof sp.spent_usd === 'number' ? sp.spent_usd : null)
+    const list = Array.isArray(wa) ? wa : wa?.accounts ?? wa?.data ?? []
+    setAccounts(list.map((a: any) => ({ id: a.id, label: a.verified_name ? `${a.verified_name} · ${a.display_phone_number || a.phone_number || ''}` : a.display_phone_number || a.phone_number || 'WhatsApp' })))
+    setRejected((ev.events ?? []).map((e: any) => ({ at: whenLabel(e.created_at), text: e.text })))
+    const cur = (ve.versions ?? []).find((v: any) => v.current) ?? (ve.versions ?? [])[0]
+    setVersion(cur ? String(cur.tag).replace(/^v/i, '') : null)
+  }, [agentId, organizationId])
 
   const load = useCallback(async () => {
-    setLoading(true)
     try {
       const res = await fetch(`/api/ai/agents/${agentId}`)
       const body = await res.json().catch(() => null)
       if (!res.ok) throw new Error(body?.error || 'Agente não encontrado')
       const row: AgentRow = body.agent ?? body
-      row.status = row.status ?? ((row as any).is_active ? 'active' : 'paused')
-      await loadSide()
+      row.status = row.status ?? (row.is_active ? 'active' : 'paused')
       setAgent(row)
-      const next = agentToHub(row)
-      setHistory(historyInit(next))
-      setSavedHub(JSON.stringify(next))
+      const snap: Snapshot = { hub: agentToHub(row), dest: String(row.settings?.safety?.handoff_destination || 'team') }
+      setF(snap); setSaved(snap); setHist([]); setFut([])
       setError(null)
+      await loadSide()
     } catch (e: any) {
       setError(e.message)
-    } finally {
-      setLoading(false)
     }
   }, [agentId, loadSide])
-
   useEffect(() => { void load() }, [load])
-
   useEffect(() => {
-    fetch('/api/ai/runtime-mode').then((r) => (r.ok ? r.json() : null)).then((d) => {
-      if (d?.mode === 'legacy') setRuntimeMode('legacy')
+    fetch('/api/api-keys').then((r) => (r.ok ? r.json() : { keys: [] })).then((d) => {
+      const k = (d.keys ?? []).find((x: any) => x.is_active !== false && x.provider === (agent?.provider || 'openrouter')) ?? (d.keys ?? [])[0]
+      setKeyMask(k?.api_key_hint ? `${String(k.api_key_hint).split('-')[0]}-••••${String(k.api_key_hint).slice(-4)}` : null)
     }).catch(() => {})
-    fetch('/api/whatsapp/business-accounts', { credentials: 'include' })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        const list = Array.isArray(d) ? d : d?.accounts ?? d?.data ?? []
-        setAccounts(list.map((a: any) => ({
-          id: a.id,
-          label: a.verified_name ? `${a.verified_name} · ${a.display_phone_number || a.phone_number || ''}` : (a.display_phone_number || a.phone_number || 'WhatsApp'),
-        })))
-      })
-      .catch(() => {})
-  }, [organizationId])
+  }, [agent?.provider])
 
-  const readNotes = useMemo(() => notes.filter((n) => n.readers.includes(agentId)), [notes, agentId])
-  const dirty = hub !== null && JSON.stringify(hub) !== savedHub
-
-  // O hub mostra quantas fontes o agente lê (área Conhecimento).
-  const hubForGraph = useMemo(
-    () => (hub ? { ...hub, knowledge: { sources: readNotes.length } } : null),
-    [hub, readNotes.length],
-  )
-  const graph = useMemo(
-    () => (hubForGraph ? buildBuilderGraph({ hub: hubForGraph, entries, sources: readNotes }) : { nodes: [], edges: [] }),
-    [hubForGraph, entries, readNotes],
-  )
-  const lit = useMemo(() => litPath(trace, graph.nodes), [trace, graph.nodes])
-  const litE = useMemo(() => litEdges(graph.edges, lit), [graph.edges, lit])
-  const diagByNode = useMemo(() => {
-    const map = new Map<string, 'error' | 'warning'>()
-    for (const d of diagnostics) {
-      const id = diagnosticNode(d, graph.nodes)
-      if (map.get(id) !== 'error') map.set(id, d.severity)
-    }
-    return map
-  }, [diagnostics, graph.nodes])
-
-  const rfNodes: Node<BlockNodeData>[] = useMemo(() => graph.nodes.map((n) => ({
-    id: n.id, type: 'block', position: { x: n.x, y: n.y }, draggable: false,
-    data: {
-      node: n,
-      metric: showMetrics ? metricFor(n, metrics) : null,
-      diagnostic: diagByNode.get(n.id) ?? null,
-      lit: lit.has(n.id),
-      selected: selected === n.id,
-    },
-  })), [graph.nodes, showMetrics, metrics, diagByNode, lit, selected])
-
-  const rfEdges: Edge[] = useMemo(() => graph.edges.map((e) => {
-    const on = litE.has(e.id)
-    const fromSide = e.source.startsWith('knowledge:') || e.source === 'slot-knowledge'
-      || (e.source === 'agent' && (e.target.startsWith('tool:') || e.target === 'slot-tool'))
-    return {
-      id: e.id, source: e.source, target: e.target, label: e.label,
-      sourceHandle: fromSide ? 'right' : undefined,
-      animated: on,
-      style: { stroke: on ? 'var(--brand, #F97316)' : '#CBD5E1', strokeWidth: on ? 2.5 : 1.5 },
-      labelStyle: { fontSize: 11, fontWeight: 700 },
-    }
-  }), [graph.edges, litE])
-
-  const change = useCallback((next: HubState) => {
-    setHistory((h) => (h ? historyPush(h, next) : h))
+  const dirty = f !== null && saved !== null && JSON.stringify(f) !== JSON.stringify(saved)
+  const upd = useCallback((fn: (s: Snapshot) => Snapshot) => {
+    setF((cur) => {
+      if (!cur) return cur
+      const next = fn(cur)
+      if (JSON.stringify(next) === JSON.stringify(cur)) return cur
+      setHist((h) => [...h.slice(-30), cur]); setFut([])
+      return next
+    })
   }, [])
-  const undo = useCallback(() => setHistory((h) => (h ? historyUndo(h) : h)), [])
-  const redo = useCallback(() => setHistory((h) => (h ? historyRedo(h) : h)), [])
+  const updHub = useCallback((fn: (h: HubState) => HubState) => upd((s) => ({ ...s, hub: fn(s.hub) })), [upd])
+  const undo = useCallback(() => {
+    if (!hist.length || !f) return
+    setFut((x) => [f, ...x]); setF(hist[hist.length - 1]); setHist((h) => h.slice(0, -1))
+  }, [hist, f])
+  const redo = useCallback(() => {
+    if (!fut.length || !f) return
+    setHist((h) => [...h, f]); setF(fut[0]); setFut((x) => x.slice(1))
+  }, [fut, f])
 
   const save = useCallback(async () => {
-    if (!hub || !agent || saving) return
+    if (!dirty || !f || !agent || saving) return
     setSaving(true)
-    setError(null)
     try {
-      const res = await fetch(`/api/ai/agents/${agent.id}`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(hubToAgentPatch(agent, hub)),
-      })
-      if (!res.ok) {
-        const d = await res.json().catch(() => null)
-        throw new Error(d?.error || 'Erro ao salvar o agente')
-      }
+      const patch = hubToAgentPatch(agent, f.hub)
+      patch.settings = { ...patch.settings, safety: { ...(patch.settings.safety ?? {}), handoff_destination: f.dest === 'team' ? null : f.dest } }
+      const res = await fetch(`/api/ai/agents/${agent.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) })
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || 'Erro ao salvar')
       await load()
+      setToast('Salvo como versão nova')
     } catch (e: any) {
-      setError(e.message)
+      setToast(e.message)
     } finally {
       setSaving(false)
     }
-  }, [hub, agent, saving, load])
+  }, [dirty, f, agent, saving, load])
 
   useEffect(() => {
-    const onKey = (ev: KeyboardEvent) => {
-      if (!(ev.ctrlKey || ev.metaKey)) return
-      const target = ev.target as HTMLElement | null
-      const typing = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
-      const key = ev.key.toLowerCase()
-      if (key === 's') { ev.preventDefault(); void save(); return }
+    const h = (e: KeyboardEvent) => {
+      const m = e.metaKey || e.ctrlKey
+      const typing = (e.target as HTMLElement | null)?.closest('input,textarea,select,[contenteditable]')
+      if (m && e.key.toLowerCase() === 's') { e.preventDefault(); void save(); return }
       if (typing) return
-      if (key === 'z' && ev.shiftKey) { ev.preventDefault(); redo() }
-      else if (key === 'z') { ev.preventDefault(); undo() }
-      else if (key === 'y') { ev.preventDefault(); redo() }
+      if (m && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo() }
+      if (m && e.key.toLowerCase() === 'y') { e.preventDefault(); redo() }
+      if (e.key === 'Escape') { setSel(null); setDiag(false) }
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
   }, [save, undo, redo])
 
-  const focusNode = useCallback((id: string) => {
-    const node = graph.nodes.find((n) => n.id === id)
-    if (!node) return
-    setSelected(id)
-    void flow.setCenter(node.x + 100, node.y + 40, { zoom: 1.1, duration: 400 })
-  }, [graph.nodes, flow])
+  // Caminho do teste: um bloco a cada 320 ms (run.i do protótipo).
+  useEffect(() => {
+    if (!run || run.i >= run.path.length) return
+    const t = setTimeout(() => setRun((o) => o && { ...o, i: o.i + 1 }), 320)
+    return () => clearTimeout(t)
+  }, [run])
 
-  const run = async (key: string, fn: () => Promise<void>) => {
-    setBusy(key)
-    setError(null)
-    try { await fn(); await loadSide() } catch (e: any) { setError(e.message) } finally { setBusy(null) }
+  const model = useMemo(() => {
+    if (!f || !agent) return null
+    const m = deriveModel({
+      hub: f.hub, agentId, entries, missions, agents, metrics, usdBrl, handoffDest: f.dest,
+      notes: notes.map((n) => ({ ...n, preview: previews[n.id] ?? '' })),
+      spentBrl: spentUsd == null ? null : Math.round(spentUsd * usdBrl * 100) / 100,
+    })
+    return m
+  }, [f, agent, agentId, entries, missions, agents, metrics, usdBrl, notes, previews, spentUsd])
+
+  // A prévia da fonte vem quando o bloco é aberto.
+  useEffect(() => {
+    if (!sel?.startsWith('k:')) return
+    const id = sel.slice(2)
+    if (previews[id] !== undefined) return
+    fetch(`/api/ai/knowledge/${id}`).then((r) => (r.ok ? r.json() : null)).then((d) => {
+      const text = String(d?.note?.body_markdown ?? d?.note?.text_content ?? '').replace(/[#>*_[\]]/g, '').trim()
+      setPreviews((p) => ({ ...p, [id]: text.slice(0, 280) }))
+    }).catch(() => {})
+  }, [sel, previews])
+
+  if (error && !agent) return <div style={{ padding: 24 }}>{error} · <Link href="/ai/agentes">Voltar</Link></div>
+  if (!agent || !f || !model) return <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon n="refresh" s={20} className="spin" /></div>
+
+  const active = agent.status === 'active'
+  const head: AgentHead & { id: string } = { id: agent.id, name: f.hub.identity.name || agent.name || 'Agente', role: agent.role || 'Agente', active, draft: agent.status === 'draft' }
+  const linked = new Set(entries.filter((e) => e.kind === 'whatsapp_account').map((e) => e.ref_id))
+  const ownerOf = (accountId: string) => {
+    const owner = agents.find((a) => (a.entries ?? []).some((e) => e.kind === 'whatsapp_account' && e.ref_id === accountId))
+    return owner ? owner.name || 'Agente' : null
+  }
+  const palette = buildPalette({
+    accounts: accounts.map((a) => ({ ...a, agentName: ownerOf(a.id) })), linkedAccountIds: linked,
+    enabledTools: f.hub.tools.enabled, agents, agentId, dest: f.dest,
+  })
+  const warns = issues.filter((i) => i.lv !== 'ok').length
+
+  const add = async (it: PaletteItem) => {
+    setDrag(null); setDiag(false); setPal(false)
+    if (it.k === 'entry' && it.accountId) {
+      const res = await fetch(`/api/ai/agents/${agentId}/entries`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: 'whatsapp_account', ref_id: it.accountId }) })
+      const body = await res.json().catch(() => null)
+      if (!res.ok) { setToast(res.status === 409 ? 'Este número já é atendido por outro agente' : body?.error || 'Não foi possível ligar'); return }
+      await loadSide(); setToast('Entrada adicionada'); return
+    }
+    if (it.k === 'kb' && it.sourceKind) { setNewSource(it.sourceKind); return }
+    if (it.k === 'tool' && it.toolName) { updHub((h) => toggleTool(h, it.toolName!, true)); setSel(`t:${it.toolName}`); setToast('Ferramenta ligada'); return }
+    if (it.k === 'limit') {
+      updHub((h) => (it.limitKind === 'topic' ? setTopics(h, [...h.limits.blocked, 'Novo assunto']) : setRules(h, [...h.limits.invariants, 'Nova regra'])))
+      setSel('n-limits'); setToast('Regra adicionada em Limites'); return
+    }
+    if (it.k === 'crit') { updHub((h) => setReview(h, [...h.judges.custom.filter((j) => j.active).map((j) => j.criterion), 'Novo critério'])); setSel('n-review'); setToast('Critério adicionado na Revisão'); return }
+    if (it.k === 'dest' && it.dest) { upd((s) => ({ ...s, dest: it.dest! })); setSel('n-transfer'); setToast(`Transferência agora vai para ${it.t.replace('Transferir p/ ', '')}`) }
   }
 
-  const linkAccount = (accountId: string) => run(`acc:${accountId}`, async () => {
-    const res = await fetch(`/api/ai/agents/${agentId}/entries`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ kind: 'whatsapp_account', ref_id: accountId }),
-    })
+  const remove = async (id: string) => {
+    if (id.startsWith('t:')) { updHub((h) => toggleTool(h, id.slice(2), false)); setSel(null); setToast('Bloco removido. Ctrl+Z desfaz'); return }
+    if (id.startsWith('e:')) {
+      const e = entries.find((x) => `e:${x.id}` === id)
+      if (!e) return
+      if (e.kind === 'flow_touch') { setToast('Este toque vem de um fluxo. Tire o agente no nó de IA do fluxo.'); return }
+      const res = await fetch(`/api/ai/agents/${agentId}/entries?entry_id=${encodeURIComponent(e.id)}`, { method: 'DELETE' })
+      if (res.ok) { await loadSide(); setSel(null); setToast('Entrada removida') }
+      return
+    }
+    if (id.startsWith('k:')) {
+      const note = notes.find((n) => `k:${n.id}` === id)
+      if (!note) return
+      const res = await fetch(`/api/ai/knowledge/${note.id}/agents`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agent_ids: note.readers.filter((r) => r !== agentId) }),
+      })
+      if (res.ok) { await loadSide(); setSel(null); setToast(`${head.name} parou de ler esta fonte`) }
+    }
+  }
+
+  const copyId = (id: string) => {
+    const real = id.replace(/^[ekt]:/, '')
+    void navigator.clipboard?.writeText(real).catch(() => {})
+    setToast('ID copiado: ' + real)
+  }
+
+  const publish = async (accountId: string | null) => {
+    if (accountId) {
+      await fetch(`/api/ai/agents/${agentId}/entries`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: 'whatsapp_account', ref_id: accountId }) })
+    }
+    const res = await fetch(`/api/ai/agents/${agentId}/activate`, { method: 'POST' })
     const body = await res.json().catch(() => null)
-    if (res.status === 409) throw new Error(`${body?.error}. Desligue-o lá primeiro.`)
-    if (!res.ok) throw new Error(body?.error || 'Não foi possível ligar a entrada')
-  })
-  const unlinkEntry = (entryId: string) => run(`entry:${entryId}`, async () => {
-    const res = await fetch(`/api/ai/agents/${agentId}/entries?entry_id=${encodeURIComponent(entryId)}`, { method: 'DELETE' })
-    if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || 'Não foi possível desligar')
-    setSelected(null)
-  })
-  const setNoteReader = (note: Note, reads: boolean) => run(`note:${note.id}`, async () => {
-    const agentIds = reads ? Array.from(new Set([...note.readers, agentId])) : note.readers.filter((id) => id !== agentId)
-    const res = await fetch(`/api/ai/knowledge/${note.id}/agents`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agent_ids: agentIds }),
-    })
-    if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || 'Não foi possível mudar quem lê a nota')
-    if (!reads) setSelected(null)
-  })
-  const addTool = (name: string) => {
-    if (!hub || hub.tools.enabled.includes(name)) return
-    change({ ...hub, tools: { enabled: [...hub.tools.enabled, name] } })
+    if (!res.ok) { setToast(body?.error || 'Não foi possível ativar'); return }
+    setCk(false); await load(); setToast(`${head.name} está ativo`)
   }
-  const removeTool = (name: string) => {
-    if (!hub) return
-    change({ ...hub, tools: { enabled: hub.tools.enabled.filter((t) => t !== name) } })
-    setSelected(null)
+  const pause = async () => {
+    const res = await fetch(`/api/ai/agents/${agentId}/pause`, { method: 'POST' })
+    if (res.ok) { setCp(false); await load(); setToast(`${head.name} pausado`) }
   }
 
-  if (loading && !hub) {
-    return <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Loader2 className="animate-spin" /></div>
-  }
-  if (!hub || !agent) {
-    return <div style={{ padding: 24, color: 'var(--red)' }}>{error || 'Agente não encontrado'}</div>
-  }
+  const draftPatch = dirty ? (hubToAgentPatch(agent, f.hub) as unknown as Record<string, unknown>) : null
+  const now = new Date()
+  const left = diag
+    ? <Diagnostics issues={issues} onClose={() => setDiag(false)} onPick={(node) => { setDiag(false); setSel(issueNode(node, model)) }} />
+    : sel
+      ? <Inspector id={sel} f={model} agent={head} modelSlug={f.hub.budget.model} handoffMessage={f.hub.handoff.message} keyMask={keyMask}
+          monthLabel={MONTHS[now.getMonth()]} agents={agents} rejected={rejected} onClose={() => setSel(null)} onRemove={(id) => void remove(id)} onCopy={copyId}
+          actions={{
+            setVoice: (l) => updHub((h) => setVoice(h, l)),
+            setPres: (l) => updHub((h) => setPresentation(h, l)),
+            setModel: (s) => updHub((h) => setModel(h, s)),
+            setCapBrl: (v) => updHub((h) => ({ ...h, budget: { ...h.budget, cap_usd: v == null || !Number.isFinite(v) || v <= 0 ? null : Math.round((v / usdBrl) * 100) / 100 } })),
+            setAdapt: (l, on) => updHub((h) => setAdapt(h, l, on)),
+            setTopics: (l) => updHub((h) => setTopics(h, l)),
+            setRules: (l) => updHub((h) => setRules(h, l)),
+            setReview: (l) => updHub((h) => setReview(h, l)),
+            setPhrases: (l) => updHub((h) => setPhrases(h, l)),
+            setMessage: (m) => updHub((h) => ({ ...h, handoff: { ...h.handoff, message: m } })),
+            setDest: (d) => upd((s) => ({ ...s, dest: d })),
+            setDelivery: (p) => updHub((h) => setDelivery(h, p)),
+            editMissions: () => setMissionsOpen(true),
+          }} />
+      : <Palette groups={palette} agents={agents} agentId={agentId} setDrag={setDrag} onAdd={(it) => void add(it)}
+          setAgent={(id) => { if (id !== agentId) router.push(`/ai/construtor/${id}`) }} />
 
-  const q = query.trim().toLowerCase()
-  const match = (text: string) => !q || text.toLowerCase().includes(q)
-  const linkedAccounts = new Set(entries.filter((e) => e.kind === 'whatsapp_account').map((e) => e.ref_id))
-  const selectedNode = graph.nodes.find((n) => n.id === selected) ?? null
+  const tb = (ic: string, l: string, on: boolean, fn: () => void, extra?: React.ReactNode) => (
+    <button type="button" className={'w-tb' + (on ? ' on' : '')} onClick={fn}><Icon n={ic} s={15} />{l}{extra}</button>
+  )
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
-        <Link href="/ai/agentes" className="btn btn-soft btn-sm"><ArrowLeft size={14} />Fechar</Link>
-        <div style={{ fontSize: 14, fontWeight: 800 }}>{agent.name || 'Sem nome'}</div>
-        {dirty && <span className="chip chip-outline" style={{ color: 'var(--amber, #E0930B)' }}>não salvo</span>}
-        {error && <span style={{ fontSize: 12, color: 'var(--red)' }}>{error}</span>}
-        <div style={{ flex: 1 }} />
-        <button type="button" className={`btn btn-sm ${showMetrics ? 'btn-primary' : 'btn-soft'}`} onClick={() => setShowMetrics((v) => !v)}>
-          <BarChart3 size={14} />Métricas
-        </button>
-        <button type="button" className="btn btn-soft btn-sm" onClick={() => setPanel(panel === 'diagnostics' ? null : 'diagnostics')}>
-          <Stethoscope size={14} />Diagnosticar{diagnostics.length > 0 && ` (${diagnostics.length})`}
-        </button>
-        <button type="button" className="btn btn-soft btn-sm" onClick={() => setPanel('history')}><HistoryIcon size={14} />Histórico</button>
-        <button type="button" className="btn btn-soft btn-sm" onClick={() => setPanel('test')}><FlaskConical size={14} />Testar</button>
-        {trace && <button type="button" className="btn btn-soft btn-sm" onClick={() => setTrace(null)}><X size={14} />Apagar caminho</button>}
-        <button type="button" className="btn btn-soft btn-sm" title="Desfazer (Ctrl+Z)" disabled={history!.past.length === 0} onClick={undo}><Undo2 size={14} /></button>
-        <button type="button" className="btn btn-soft btn-sm" title="Refazer (Ctrl+Y)" disabled={history!.future.length === 0} onClick={redo}><Redo2 size={14} /></button>
-        <button type="button" className="btn btn-primary btn-sm" title="Salvar (Ctrl+S)" disabled={!dirty || saving} onClick={() => void save()}>
-          {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}Salvar
-        </button>
-      </div>
-
-      <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-        <aside style={{ width: 240, borderRight: '1px solid var(--border)', overflowY: 'auto', padding: 12, display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid var(--border)', borderRadius: 8, padding: '5px 8px' }}>
-            <Search size={13} style={{ color: 'var(--text-3)' }} />
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar bloco"
-              style={{ border: 0, outline: 'none', fontSize: 12.5, flex: 1, background: 'transparent' }} />
-          </label>
-
-          <PaletteGroup title="Entradas">
-            {accounts.filter((a) => match(a.label)).map((a) => (
-              <PaletteItem key={a.id} icon={<MessageCircle size={13} />} label={a.label}
-                done={linkedAccounts.has(a.id)} busy={busy === `acc:${a.id}`} onClick={() => void linkAccount(a.id)} />
-            ))}
-            {match('Instagram') && <PaletteItem icon={<MessageCircle size={13} />} label="Instagram" disabled hint="em breve" />}
-            {match('E-mail') && <PaletteItem icon={<MessageCircle size={13} />} label="E-mail" disabled hint="em breve" />}
-            <Link href="/automations" style={{ fontSize: 11.5, color: 'var(--brand)' }}>Toques de fluxo nascem no Flow Builder</Link>
-          </PaletteGroup>
-
-          <PaletteGroup title="Conhecimento">
-            {notes.filter((n) => match(n.name)).slice(0, 40).map((n) => (
-              <PaletteItem key={n.id} icon={<BookOpen size={13} />} label={n.name}
-                done={n.readers.includes(agentId)} busy={busy === `note:${n.id}`} onClick={() => void setNoteReader(n, true)} />
-            ))}
-            {notes.length === 0 && <Link href="/ai/conhecimento" style={{ fontSize: 11.5, color: 'var(--brand)' }}>Criar a primeira nota</Link>}
-          </PaletteGroup>
-
-          <PaletteGroup title="Ferramentas">
-            {TOOL_CATALOG.filter((t) => match(t.label)).map((t) => (
-              <PaletteItem key={t.name} icon={<Wrench size={13} />} label={t.label}
-                done={hub.tools.enabled.includes(t.name)} onClick={() => addTool(t.name)} />
-            ))}
-          </PaletteGroup>
-
-          <PaletteGroup title="Regras e transferência">
-            {match('Limites') && <PaletteItem icon={<AlertTriangle size={13} />} label="Limites" onClick={() => focusNode('limits')} />}
-            {match('Revisão') && <PaletteItem icon={<AlertTriangle size={13} />} label="Revisão" onClick={() => focusNode('review')} />}
-            {match('Transferência') && <PaletteItem icon={<Workflow size={13} />} label="Transferência" onClick={() => focusNode('needs_person')} />}
-          </PaletteGroup>
-        </aside>
-
-        <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
-          <ReactFlow
-            nodes={rfNodes}
-            edges={rfEdges}
-            nodeTypes={nodeTypes}
-            onNodeClick={(_e, node) => setSelected(node.id)}
-            onPaneClick={() => setSelected(null)}
-            nodesConnectable={false}
-            fitView
-            fitViewOptions={{ padding: 0.2 }}
-            proOptions={{ hideAttribution: true }}
-          >
-            <Background variant={BackgroundVariant.Dots} gap={18} size={1} />
-            <Controls showInteractive={false} />
-            <MiniMap pannable zoomable nodeColor={(n) => KIND_STYLE[(n.data as BlockNodeData).node.kind].color} />
-          </ReactFlow>
-
-          {panel === 'diagnostics' && (
-            <div style={{ position: 'absolute', top: 12, right: 12, width: 320, maxHeight: '70%', overflowY: 'auto', background: '#fff', border: '1px solid var(--border)', borderRadius: 12, padding: 12, boxShadow: '0 8px 24px rgba(0,0,0,.08)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
-                <strong style={{ fontSize: 13 }}>Diagnóstico</strong>
-                <button type="button" className="btn btn-soft btn-sm" style={{ marginLeft: 'auto' }} onClick={() => setPanel(null)}><X size={13} /></button>
-              </div>
-              {diagnostics.length === 0 ? (
-                <p style={{ fontSize: 12.5, color: 'var(--green)', margin: 0 }}>Nada a corrigir.</p>
-              ) : diagnostics.map((d) => (
-                <button key={d.id} type="button" className="act-row" onClick={() => focusNode(diagnosticNode(d, graph.nodes))}
-                  style={{ width: '100%', textAlign: 'left', background: 'none', border: 0, cursor: 'pointer' }}>
-                  <AlertTriangle size={14} style={{ color: d.severity === 'error' ? 'var(--red)' : 'var(--amber, #E0930B)', flexShrink: 0 }} />
-                  <span className="act-d" style={{ fontSize: 12 }}>{d.message}</span>
-                </button>
-              ))}
+    <div className={'w-app' + (pal ? ' pal-open' : '')}>
+      <header className="w-top">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/ia/worder-mark.png" alt="Worder" className="w-logo" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
+        <span className="w-vd"></span>
+        <div className="w-title">
+          {renaming ? (
+            <input autoFocus className="w-select" style={{ height: 30, width: 220 }} defaultValue={f.hub.identity.name}
+              onBlur={(e) => { const v = e.target.value.trim(); if (v) updHub((h) => ({ ...h, identity: { ...h.identity, name: v } })); setRenaming(false) }}
+              onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setRenaming(false) }} />
+          ) : <b>{head.name} · Agente de {head.role.toLowerCase()}</b>}
+          <button type="button" className="w-tb ic" aria-label="Renomear" onClick={() => setRenaming(true)}><Icon n="edit" s={14} /></button>
+        </div>
+        {head.draft && !active && <span className="w-store" style={{ background: '#3A2A0F', color: '#F5C46B' }}>Rascunho</span>}
+        {dirty ? <span className="w-saved dirty"><i></i>Alterações não salvas</span> : <span className="w-saved"><Icon n="check" s={13} />Salvo{version ? ` · versão ${version}` : ''}</span>}
+        <span className="w-store"><Icon n="store" s={12} />{store?.name || 'Loja'}</span>
+        <span className="w-sp"></span>
+        <button type="button" className="w-tb ic" onClick={undo} disabled={!hist.length} aria-label="Desfazer"><Icon n="undo" s={15} /></button>
+        <button type="button" className="w-tb ic" onClick={redo} disabled={!fut.length} aria-label="Refazer"><Icon n="redo" s={15} /></button>
+        <span className="w-vd"></span>
+        {tb('chart', 'Métricas', mets, () => setMets((m) => !m))}
+        {tb('clock', 'Histórico', mode === 'ver', () => setMode((m) => (m === 'ver' ? null : 'ver')))}
+        {tb('alert', 'Diagnosticar', diag, () => { setSel(null); setDiag((d) => !d) }, warns > 0 ? <span className="w-badge">{warns}</span> : null)}
+        {tb('play', 'Testar', mode === 'test', () => { setMode((m) => (m === 'test' ? null : 'test')); setRun(null) })}
+        {dirty && <button type="button" className="w-save" onClick={() => void save()} disabled={saving}>Salvar</button>}
+        <label className={'w-active' + (active ? ' on' : '')}>
+          <button type="button" className={'w-sw' + (active ? ' on' : '')} role="switch" aria-checked={active} aria-label="Ativo" onClick={() => (active ? setCp(true) : setCk(true))}></button>
+          {active ? 'Ativo' : 'Pausado'}{active && <i></i>}
+        </label>
+        <Link className="w-close" href="/ai/agentes">Fechar</Link>
+      </header>
+      <div className="w-body">
+        {left}
+        <div className="w-main">
+          <Canvas f={model} agent={head} sel={sel} setSel={(id) => { setSel(id); if (id) setDiag(false) }} drag={drag} onDrop={(it) => void add(it)}
+            run={run} onRemove={(id) => void remove(id)} mets={mets} issues={issues} fitKey={`${Boolean(mode)}-${sel ? 1 : 0}`}
+            nodeIdOf={(node) => issueNode(node, model)} />
+          {run && run.i >= run.path.length && (
+            <div className={'w-run' + (run.fail ? ' fail' : '')}>
+              <Icon n={run.fail ? 'alert' : 'check'} s={14} />
+              {run.fail ? 'A revisão bloqueou a resposta. Nada foi enviado.' : `Caminho da resposta: ${run.path.length} blocos`}
+              <button type="button" onClick={() => setRun(null)} aria-label="Limpar"><Icon n="x" s={13} /></button>
             </div>
           )}
+          {drag && <div className="w-hint">Solte no lugar destacado</div>}
         </div>
-
-        {selectedNode && (
-          <aside style={{ width: 380, borderLeft: '1px solid var(--border)', overflowY: 'auto', padding: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-              <span style={{ width: 10, height: 10, borderRadius: 5, background: KIND_STYLE[selectedNode.kind].color }} />
-              <strong style={{ fontSize: 14 }}>{selectedNode.label}</strong>
-              <button type="button" className="btn btn-soft btn-sm" style={{ marginLeft: 'auto' }} onClick={() => setSelected(null)}><X size={13} /></button>
-            </div>
-            <Inspector
-              node={selectedNode}
-              hub={hub}
-              onChange={change}
-              organizationId={organizationId}
-              agentId={agentId}
-              runtimeMode={runtimeMode}
-              entries={entries}
-              notes={readNotes}
-              busy={busy}
-              onUnlinkEntry={(id) => void unlinkEntry(id)}
-              onStopReading={(note) => void setNoteReader(note, false)}
-              onRemoveTool={removeTool}
-            />
+        {mode && (
+          <aside className="w-right">
+            {mode === 'test'
+              ? <Playground agentId={agentId} agentName={head.name} missions={missions} draft={draftPatch} usdBrl={usdBrl}
+                  onClose={() => { setMode(null); setRun(null) }}
+                  onRun={(trace, flow) => { const r = runPath(trace, model, flow); setRun({ path: r.path, i: 0, fail: r.fail }) }} />
+              : <Versions agentId={agentId} agentName={head.name} onClose={() => setMode(null)} onRestored={load} onToast={setToast} />}
           </aside>
         )}
       </div>
-
-      {panel === 'history' && (
-        <AgentVersionsPanel agentId={agentId} onClose={() => setPanel(null)} onRestored={load} />
+      {ck && (
+        <Checklist agentId={agentId} agentName={head.name} onClose={() => setCk(false)} onPublish={publish}
+          accounts={accounts.map((a) => ({ ...a, agentName: ownerOf(a.id), linkedHere: linked.has(a.id) }))} />
       )}
-      {panel === 'test' && (
-        <AgentTestPanel
-          agentId={agentId}
-          draft={dirty ? (hubToAgentPatch(agent, hub) as unknown as Record<string, unknown>) : null}
-          onClose={() => setPanel(null)}
-          onTrace={setTrace}
-        />
+      {cp && (
+        <Modal title={`Pausar ${head.name}?`} width={460} onClose={() => setCp(false)}
+          sub={`Conversas em andamento vão para a equipe no Inbox. Toques de fluxo com ${head.name} ficam parados até você ativar de novo.`}
+          footer={<><button type="button" className="btn" onClick={() => setCp(false)}>Cancelar</button><button type="button" className="btn dark" onClick={() => void pause()}>Pausar</button></>} />
       )}
+      {newSource && <NewSource kind={newSource} agentId={agentId} onClose={() => setNewSource(null)} onDone={async (msg) => { setNewSource(null); await loadSide(); setToast(msg) }} />}
+      {missionsOpen && (
+        <Modal title={`Missões de ${head.name}`} width={720} onClose={() => setMissionsOpen(false)}
+          footer={<button type="button" className="btn" onClick={() => { setMissionsOpen(false); void loadSide() }}>Fechar</button>}>
+          <AgentMissionsArea agentId={agentId} />
+        </Modal>
+      )}
+      {!sel && !diag && (
+        <button type="button" className="w-fab" onClick={() => setPal((o) => !o)} aria-expanded={pal}><Icon n={pal ? 'x' : 'plus'} s={18} />{pal ? 'Fechar' : 'Blocos'}</button>
+      )}
+      {pal && <div className="w-palscrim" onClick={() => setPal(false)}></div>}
+      {toast && <Toast msg={toast} onDone={() => setToast(null)} />}
     </div>
   )
 }
 
-function PaletteGroup({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <div style={{ fontSize: 10.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--text-3)' }}>{title}</div>
-      {children}
-    </div>
-  )
+function whenLabel(iso: string): string {
+  const d = new Date(iso)
+  const today = new Date()
+  const yesterday = new Date(today.getTime() - 86_400_000)
+  const hm = `${String(d.getHours()).padStart(2, '0')}h${String(d.getMinutes()).padStart(2, '0')}`
+  if (d.toDateString() === today.toDateString()) return `Hoje, ${hm}`
+  if (d.toDateString() === yesterday.toDateString()) return `Ontem, ${hm}`
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}, ${hm}`
 }
 
-function PaletteItem({ icon, label, onClick, done, busy, disabled, hint }: {
-  icon: React.ReactNode; label: string; onClick?: () => void; done?: boolean; busy?: boolean; disabled?: boolean; hint?: string
-}) {
-  return (
-    <button type="button" disabled={disabled || done || busy} onClick={onClick} title={done ? 'Já está no agente' : hint}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', borderRadius: 8, fontSize: 12.5, textAlign: 'left',
-        border: '1px solid var(--border)', background: done ? 'var(--bg)' : '#fff',
-        cursor: disabled || done ? 'default' : 'pointer', opacity: disabled ? 0.45 : 1,
-      }}>
-      {busy ? <Loader2 size={13} className="animate-spin" /> : icon}
-      <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
-      {hint && <span style={{ fontSize: 10, color: 'var(--text-3)' }}>{hint}</span>}
-      {done && <span style={{ fontSize: 10, color: 'var(--green)' }}>no agente</span>}
-      {!done && !disabled && !busy && <Plus size={12} style={{ color: 'var(--text-3)' }} />}
-    </button>
-  )
-}
-
-function Inspector({ node, hub, onChange, organizationId, agentId, runtimeMode, entries, notes, busy, onUnlinkEntry, onStopReading, onRemoveTool }: {
-  node: BuilderNode
-  hub: HubState
-  onChange: (next: HubState) => void
-  organizationId: string
+/** Fonte nova a partir da paleta: página da loja, texto, documento ou P&R. */
+function NewSource({ kind, agentId, onClose, onDone }: {
+  kind: 'site' | 'text' | 'doc' | 'qa'
   agentId: string
-  runtimeMode: RuntimeMode
-  entries: Entry[]
-  notes: Note[]
-  busy: string | null
-  onUnlinkEntry: (entryId: string) => void
-  onStopReading: (note: Note) => void
-  onRemoveTool: (name: string) => void
+  onClose: () => void
+  onDone: (msg: string) => Promise<void>
 }) {
-  const fields = (area: HubAreaId) => (
-    <AreaFields area={area} hub={hub} onChange={onChange} organizationId={organizationId} agentId={agentId} runtimeMode={runtimeMode} />
-  )
-  const hint = (text: string) => <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 12px' }}>{text}</p>
+  const [name, setName] = useState('')
+  const [url, setUrl] = useState('')
+  const [text, setText] = useState('')
+  const [file, setFile] = useState<File | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const titles = { site: 'Página da loja', text: 'Texto', doc: 'Documento', qa: 'Perguntas e respostas' }
 
-  switch (node.kind) {
-    case 'agent':
-      return (
-        <div style={{ display: 'grid', gap: 18 }}>
-          {fields('identity')}
-          <div style={{ borderTop: '1px solid var(--border)', paddingTop: 14 }}>{fields('budget')}</div>
-        </div>
-      )
-    case 'entry': {
-      const entry = entries.find((e) => `entry:${e.id}` === node.id)
-      if (!entry) return null
-      if (entry.kind === 'flow_touch') {
-        return <>{hint('Este toque nasce de um nó "Missão de IA" no Flow Builder. Para tirar, edite o fluxo.')}<Link href="/automations" className="btn btn-soft btn-sm">Abrir fluxos</Link></>
+  const submit = async () => {
+    setBusy(true); setError(null)
+    try {
+      let res: Response
+      if (kind === 'site') {
+        res = await fetch(`/api/ai/agents/${agentId}/sources`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source_type: 'url', name: name || url, url }) })
+      } else if (kind === 'text') {
+        res = await fetch('/api/ai/knowledge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, body_markdown: text, agent_ids: [agentId] }) })
+      } else if (kind === 'qa') {
+        res = await fetch('/api/ai/knowledge/import/csv', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ csv: text, mode: 'faq', agent_ids: [agentId] }) })
+      } else {
+        if (!file) throw new Error('Escolha um arquivo')
+        const form = new FormData()
+        form.append('file', file)
+        res = await fetch(`/api/ai/agents/${agentId}/sources/upload`, { method: 'POST', body: form })
       }
-      return (
-        <>
-          {hint('Mensagens que chegam neste número são respondidas por este agente.')}
-          <button type="button" className="btn btn-soft btn-sm" style={{ color: 'var(--red)' }} disabled={busy === `entry:${entry.id}`} onClick={() => onUnlinkEntry(entry.id)}>
-            <Trash2 size={13} />Desligar do agente
-          </button>
-        </>
-      )
+      const body = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(body?.error || 'Não foi possível criar a fonte')
+      await onDone('Fonte adicionada. Processando…')
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setBusy(false)
     }
-    case 'knowledge': {
-      const note = notes.find((n) => n.id === node.refId)
-      if (!note) return null
-      return (
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {hint(`Status: ${note.status ?? '—'}. O agente busca nesta nota quando a pergunta é factual.`)}
-          <Link href={`/ai/conhecimento?note=${note.id}`} className="btn btn-soft btn-sm"><BookOpen size={13} />Abrir em Conhecimento</Link>
-          <button type="button" className="btn btn-soft btn-sm" style={{ color: 'var(--red)' }} disabled={busy === `note:${note.id}`} onClick={() => onStopReading(note)}>
-            <X size={13} />Parar de ler
-          </button>
-        </div>
-      )
-    }
-    case 'tool': {
-      const tool = TOOL_CATALOG.find((t) => t.name === node.refId)
-      return (
-        <>
-          {hint(tool?.description ?? 'Ferramenta fora do catálogo.')}
-          {tool?.requiresStore && hint('Só funciona com a loja Shopify conectada.')}
-          <button type="button" className="btn btn-soft btn-sm" style={{ color: 'var(--red)' }} onClick={() => onRemoveTool(node.refId!)}>
-            <Trash2 size={13} />Remover do agente
-          </button>
-        </>
-      )
-    }
-    case 'slot':
-      return hint(node.id === 'slot-entry'
-        ? 'Ligue um número na paleta à esquerda (Entradas).'
-        : node.id === 'slot-knowledge'
-          ? 'Escolha uma nota na paleta à esquerda (Conhecimento).'
-          : 'Escolha uma ferramenta na paleta à esquerda.')
-    case 'review':
-      return fields('judges')
-    case 'needs_person':
-    case 'transfer':
-      return fields('handoff')
-    default:
-      return node.area ? fields(node.area) : null
   }
+
+  return (
+    <Modal title={`Nova fonte: ${titles[kind]}`} onClose={onClose} width={520}
+      sub="O agente passa a consultar o conteúdo assim que o processamento terminar."
+      footer={<><span className="l" style={{ color: 'var(--er)' }}>{error}</span><button type="button" className="btn" onClick={onClose}>Cancelar</button><button type="button" className="btn pri" disabled={busy} onClick={() => void submit()}>Adicionar</button></>}>
+      <div style={{ display: 'grid', gap: 12, paddingBottom: 8 }}>
+        {kind !== 'qa' && kind !== 'doc' && <div><label className="flbl">Nome</label><input className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder={kind === 'site' ? 'Tabela de medidas' : 'Garantia e assistência'} /></div>}
+        {kind === 'site' && <div><label className="flbl">Endereço da página</label><input className="field" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://sualoja.com.br/pages/medidas" /></div>}
+        {kind === 'text' && <div><label className="flbl">Texto</label><textarea className="field" rows={8} value={text} onChange={(e) => setText(e.target.value)} /></div>}
+        {kind === 'qa' && <div><label className="flbl">CSV com pergunta e resposta</label><textarea className="field" rows={8} value={text} onChange={(e) => setText(e.target.value)} placeholder={'pergunta,resposta\nQual o prazo?,De 2 a 4 dias úteis'} /></div>}
+        {kind === 'doc' && <div><label className="flbl">Arquivo PDF, DOCX ou TXT</label><input className="field" type="file" accept=".pdf,.docx,.txt" onChange={(e) => setFile(e.target.files?.[0] ?? null)} style={{ paddingTop: 8 }} /></div>}
+      </div>
+    </Modal>
+  )
 }

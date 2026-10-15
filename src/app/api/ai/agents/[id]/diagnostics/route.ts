@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { getAuthClient } from '@/lib/api-utils'
 import { diagnose, monthSpend } from '@/lib/ai/block-metrics'
 import { hasActiveProviderKey } from '@/lib/ai/provider-key-check'
+import { usdToBrlRate } from '@/lib/ai/brl'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,7 +18,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
   const organizationId = auth.user.organization_id
   const { data: agent } = await supabase
     .from('ai_agents')
-    .select('id, provider, settings, monthly_cap_usd')
+    .select('id, name, provider, settings, monthly_cap_usd')
     .eq('id', params.id)
     .eq('organization_id', organizationId)
     .maybeSingle()
@@ -29,12 +30,13 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
   const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString()
   const provider = agent.provider || 'openai'
 
-  const [hasKey, missions, readers, outcomes, spend] = await Promise.all([
+  const [hasKey, missions, readers, outcomes, spend, usdBrl] = await Promise.all([
     hasActiveProviderKey(supabase, organizationId, provider),
-    supabase.from('ai_missions').select('id, event_type, concession').eq('organization_id', organizationId).eq('agent_id', params.id).eq('status', 'active'),
+    supabase.from('ai_missions').select('id, event_type, display_name, concession').eq('organization_id', organizationId).eq('agent_id', params.id).eq('status', 'active'),
     supabase.from('ai_source_agents').select('source_id').eq('organization_id', organizationId).eq('agent_id', params.id),
     supabase.from('ai_conversation_outcomes').select('blocked_count').eq('organization_id', organizationId).eq('agent_id', params.id).gte('started_at', weekAgo).limit(5000),
     supabase.from('ai_usage_logs').select('cost_usd').eq('organization_id', organizationId).eq('agent_id', params.id).gte('created_at', monthStart.toISOString()).limit(20000),
+    usdToBrlRate(supabase),
   ])
   const sourceIds = (readers.data ?? []).map((r: any) => r.source_id)
   const { data: sources } = sourceIds.length
@@ -43,6 +45,8 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
 
   const settings = (agent.settings ?? {}) as Record<string, any>
   const diagnostics = diagnose({
+    agentName: (agent as any).name || 'O agente',
+    usdBrl,
     hasProviderKey: hasKey,
     provider,
     activeMissions: (missions.data ?? []) as any,

@@ -73,45 +73,89 @@ function countReasons(rows: OutcomeRow[]): Record<string, number> {
   return out
 }
 
-export interface Diagnostic { id: string; severity: 'error' | 'warning'; node: string; message: string }
+/** Item do diagnóstico no formato do protótipo (ISSUES): título, explicação
+ *  e nível. `node` diz qual bloco do Construtor acender: 'agent', 'entries',
+ *  'tools', 'tool:<nome>', 'knowledge', 'knowledge:<id>', 'review',
+ *  'split' ou 'transfer'. Itens 'ok' entram na conta de "tudo certo". */
+export interface Diagnostic {
+  id: string
+  lv: 'error' | 'warn' | 'ok'
+  node: string
+  t: string
+  d: string
+}
+
+const brl2 = (v: number) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 export function diagnose(input: {
+  agentName: string
   hasProviderKey: boolean
   provider: string
-  activeMissions: Array<{ id: string; event_type: string; concession: any }>
+  activeMissions: Array<{ id: string; event_type: string; display_name?: string | null; concession: any }>
   enabledTools: string[]
   handoffKeywords: string[]
   sources: Array<{ id: string; name: string; status: string | null }>
   blocked7d: number
   monthlyCapUsd: number | null
   monthSpendUsd: number
+  /** Cotação USD→BRL para os valores do texto. */
+  usdBrl: number
 }): Diagnostic[] {
   const out: Diagnostic[] = []
+  const n = input.agentName || 'O agente'
+  const brl = (usd: number) => brl2(usd * input.usdBrl)
+
   if (!input.hasProviderKey) {
-    out.push({ id: 'no_key', severity: 'error', node: 'agent', message: `Sem chave ${input.provider}: o agente não responde.` })
+    out.push({ id: 'no_key', lv: 'error', node: 'agent', t: `Sem chave ${input.provider} conectada`, d: `Sem a chave, ${n} não responde ninguém. Conecte em Configurações › Integrações.` })
+  } else {
+    out.push({ id: 'key_ok', lv: 'ok', node: 'agent', t: 'Chave de IA conectada', d: `${n} usa a chave ${input.provider} da conta.` })
   }
+
   if (input.activeMissions.length === 0) {
-    out.push({ id: 'no_mission', severity: 'error', node: 'entries', message: 'Nenhuma missão ativa: o agente fica em silêncio em toda conversa.' })
+    out.push({ id: 'no_mission', lv: 'error', node: 'entries', t: 'Nenhuma missão ativa', d: `Sem missão, ${n} fica em silêncio em toda conversa.` })
+  } else {
+    out.push({ id: 'mission_ok', lv: 'ok', node: 'entries', t: `${input.activeMissions.length} missão(ões) ativa(s)`, d: input.activeMissions.map((m) => m.display_name || m.event_type).join(' · ') })
   }
+
   for (const m of input.activeMissions) {
     const kind = m.concession?.kind
-    if (kind && kind !== 'none' && !input.enabledTools.includes('create_coupon')) {
-      out.push({ id: `coupon_off:${m.id}`, severity: 'warning', node: 'tools', message: `A missão ${m.event_type} autoriza desconto, mas a ferramenta de cupom está desligada.` })
+    if (!kind || kind === 'none') continue
+    const label = m.display_name || m.event_type
+    if (input.enabledTools.includes('create_coupon')) {
+      out.push({ id: `coupon_ok:${m.id}`, lv: 'ok', node: 'tool:create_coupon', t: `${label} autoriza cupom e Criar cupom está ligado`, d: 'A trava dupla está completa para este fluxo.' })
+    } else {
+      out.push({ id: `coupon_off:${m.id}`, lv: 'warn', node: 'tools', t: `${label} autoriza cupom, mas Criar cupom está desligado`, d: 'O fluxo libera o desconto e o agente não consegue emitir. Ligue a ferramenta ou tire a autorização do toque.' })
     }
   }
+
   if (!input.enabledTools.includes('transfer_to_human') && input.handoffKeywords.length === 0) {
-    out.push({ id: 'no_handoff', severity: 'error', node: 'transfer', message: 'Sem caminho para uma pessoa: ligue Transferir ou defina palavras de transferência.' })
+    out.push({ id: 'no_handoff', lv: 'error', node: 'transfer', t: 'Sem caminho para uma pessoa', d: `Sem isto, ${n} não tem para quem passar a conversa quando não souber responder.` })
+  } else {
+    out.push({ id: 'handoff_ok', lv: 'ok', node: 'split', t: 'Transferência configurada', d: input.handoffKeywords.length ? `Transfere com ${input.handoffKeywords.slice(0, 3).map((k) => `"${k}"`).join(', ')}.` : 'Transfere quando o agente decide que precisa de uma pessoa.' })
   }
+
+  let sourcesOk = 0
   for (const s of input.sources) {
-    if (s.status === 'error') out.push({ id: `source_error:${s.id}`, severity: 'warning', node: 'knowledge', message: `A fonte "${s.name}" falhou ao processar.` })
-    else if (s.status === 'pending' || s.status === 'processing') out.push({ id: `source_sync:${s.id}`, severity: 'warning', node: 'knowledge', message: `A fonte "${s.name}" ainda está sincronizando.` })
+    if (s.status === 'error') out.push({ id: `source_error:${s.id}`, lv: 'warn', node: `knowledge:${s.id}`, t: `A fonte "${s.name}" falhou ao processar`, d: `Até corrigir, ${n} não consulta esse conteúdo.` })
+    else if (s.status === 'pending' || s.status === 'processing') out.push({ id: `source_sync:${s.id}`, lv: 'warn', node: `knowledge:${s.id}`, t: `${s.name} ainda sincronizando`, d: `Até terminar, ${n} pode citar informação antiga dessa fonte.` })
+    else sourcesOk += 1
   }
+  if (sourcesOk > 0) out.push({ id: 'sources_ok', lv: 'ok', node: 'knowledge', t: `${sourcesOk} fonte(s) prontas`, d: 'Conteúdo processado e disponível para consulta.' })
+
   if (input.blocked7d >= 5) {
-    out.push({ id: 'many_blocks', severity: 'warning', node: 'review', message: `A revisão segurou ${input.blocked7d} respostas em 7 dias — veja os critérios no Testar.` })
+    out.push({ id: 'many_blocks', lv: 'warn', node: 'review', t: `A revisão reprovou ${input.blocked7d} respostas`, d: 'Em 7 dias. Vale revisar o texto dos critérios ou rodar o Testar com essas perguntas.' })
+  } else {
+    out.push({ id: 'review_ok', lv: 'ok', node: 'review', t: 'Revisão antes de enviar ligada', d: input.blocked7d ? `${input.blocked7d} resposta(s) reprovada(s) em 7 dias.` : 'Nenhuma resposta reprovada em 7 dias.' })
   }
-  if (input.monthlyCapUsd && input.monthlyCapUsd > 0 && input.monthSpendUsd / input.monthlyCapUsd >= 0.8) {
-    const pct = Math.round((input.monthSpendUsd / input.monthlyCapUsd) * 100)
-    out.push({ id: 'cap_80', severity: pct >= 100 ? 'error' : 'warning', node: 'agent', message: `Teto mensal em ${pct}% (US$ ${input.monthSpendUsd.toFixed(2)} de US$ ${input.monthlyCapUsd.toFixed(2)}).` })
+
+  if (input.monthlyCapUsd && input.monthlyCapUsd > 0) {
+    const ratio = input.monthSpendUsd / input.monthlyCapUsd
+    const pct = Math.round(ratio * 100)
+    if (ratio >= 0.8) {
+      out.push({ id: 'cap_80', lv: ratio >= 1 ? 'error' : 'warn', node: 'agent', t: `Limite do mês em ${pct}%`, d: `${brl(input.monthSpendUsd)} de ${brl(input.monthlyCapUsd)}. Ao atingir o limite, ${n} pausa e avisa a equipe.` })
+    } else {
+      out.push({ id: 'cap_ok', lv: 'ok', node: 'agent', t: `Limite do mês em ${pct}%`, d: `${brl(input.monthSpendUsd)} de ${brl(input.monthlyCapUsd)}.` })
+    }
   }
   return out
 }

@@ -5,10 +5,11 @@ import { AGENT_TEMPLATES, findAgentTemplate } from '../agent-templates'
 const base = {
   hasProviderKey: true, provider: 'openai', missionsCount: 1,
   handoffKeywords: [] as string[], handoffToolEnabled: true, entriesCount: 1,
+  evalScore: 90, evalGrave: 0,
 }
 
 describe('computeReadiness', () => {
-  it('fica verde com chave, missão e caminho para humano', () => {
+  it('fica verde com chave, missão, caminho para humano e avaliação sem Grave', () => {
     expect(computeReadiness(base).ready).toBe(true)
   })
 
@@ -29,10 +30,10 @@ describe('computeReadiness', () => {
     expect(readiness.ready).toBe(true)
   })
 
-  it('avaliação: nunca rodada é aviso, graves bloqueiam, nota boa fica verde', () => {
-    const never = computeReadiness(base)
-    expect(never.items.find((i) => i.id === 'eval')).toMatchObject({ ok: false, blocking: false })
-    expect(never.ready).toBe(true)
+  it('avaliação (protótipo): obrigatória; nunca rodada e Grave bloqueiam, nota baixa é aviso', () => {
+    const never = computeReadiness({ ...base, evalScore: null, evalGrave: null })
+    expect(never.items.find((i) => i.id === 'eval')).toMatchObject({ ok: false, blocking: true })
+    expect(never.ready).toBe(false)
     const grave = computeReadiness({ ...base, evalScore: 90, evalGrave: 1 })
     expect(grave.ready).toBe(false)
     expect(grave.items.find((i) => i.id === 'eval')?.blocking).toBe(true)
@@ -41,6 +42,7 @@ describe('computeReadiness', () => {
     const low = computeReadiness({ ...base, evalScore: 50, evalGrave: 0 })
     expect(low.ready).toBe(true)
     expect(low.items.find((i) => i.id === 'eval')?.detail).toMatch(/abaixo de 70/)
+    expect(low.items.find((i) => i.id === 'eval')?.ok).toBe(true)
   })
 
   it('entrada ausente é aviso, não bloqueio', () => {

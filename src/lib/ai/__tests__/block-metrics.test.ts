@@ -39,31 +39,36 @@ describe('blockMetrics', () => {
   })
 })
 
-describe('diagnose', () => {
+describe('diagnose (formato do protótipo)', () => {
   const base = {
-    hasProviderKey: true, provider: 'openai', activeMissions: [{ id: 'm1', event_type: 'whatsapp.received', concession: { kind: 'none' } }],
+    agentName: 'Duda', usdBrl: 5, hasProviderKey: true, provider: 'openai',
+    activeMissions: [{ id: 'm1', event_type: 'whatsapp.received', display_name: 'Atendimento direto', concession: { kind: 'none' } }],
     enabledTools: ['transfer_to_human'], handoffKeywords: [], sources: [], blocked7d: 0, monthlyCapUsd: null, monthSpendUsd: 0,
   }
-  it('agente saudável não tem aviso', () => {
-    expect(diagnose(base)).toEqual([])
+  it('agente saudável: só itens ok', () => {
+    const d = diagnose(base)
+    expect(d.every((x) => x.lv === 'ok')).toBe(true)
+    expect(d.map((x) => x.id)).toEqual(['key_ok', 'mission_ok', 'handoff_ok', 'review_ok'])
   })
-  it('cada regra aponta o nó certo', () => {
+  it('cada problema aponta o bloco certo e traz título e explicação', () => {
     const d = diagnose({
-      ...base, hasProviderKey: false, activeMissions: [{ id: 'm2', event_type: 'cart.abandoned', concession: { kind: 'percent', max: 10 } }],
-      enabledTools: [], sources: [{ id: 's', name: 'FAQ', status: 'error' }, { id: 't', name: 'Site', status: 'processing' }],
+      ...base, hasProviderKey: false,
+      activeMissions: [{ id: 'm2', event_type: 'cart.abandoned', display_name: 'Carrinho · toque 2', concession: { kind: 'percent', max: 10 } }],
+      enabledTools: [], sources: [{ id: 's', name: 'FAQ', status: 'error' }, { id: 't', name: 'Catálogo Shopify', status: 'processing' }],
       blocked7d: 6, monthlyCapUsd: 10, monthSpendUsd: 8.5,
     })
-    expect(d.map((x) => [x.id.split(':')[0], x.node, x.severity])).toEqual([
-      ['no_key', 'agent', 'error'],
-      ['coupon_off', 'tools', 'warning'],
-      ['no_handoff', 'transfer', 'error'],
-      ['source_error', 'knowledge', 'warning'],
-      ['source_sync', 'knowledge', 'warning'],
-      ['many_blocks', 'review', 'warning'],
-      ['cap_80', 'agent', 'warning'],
-    ])
+    const by = Object.fromEntries(d.map((x) => [x.id, x]))
+    expect(by.no_key).toMatchObject({ lv: 'error', node: 'agent' })
+    expect(by['coupon_off:m2']).toMatchObject({ lv: 'warn', node: 'tools' })
+    expect(by.no_handoff).toMatchObject({ lv: 'error', node: 'transfer' })
+    expect(by['source_error:s']).toMatchObject({ node: 'knowledge:s' })
+    expect(by['source_sync:t'].t).toBe('Catálogo Shopify ainda sincronizando')
+    expect(by.many_blocks).toMatchObject({ lv: 'warn', node: 'review' })
+    expect(by.cap_80.d).toContain('R$ 42,50 de R$ 50,00')
+    for (const x of d) { expect(x.t.length).toBeGreaterThan(0); expect(x.d.length).toBeGreaterThan(0) }
   })
-  it('sem missão ativa é erro na entrada', () => {
-    expect(diagnose({ ...base, activeMissions: [] })[0]).toMatchObject({ id: 'no_mission', node: 'entries', severity: 'error' })
+  it('trava dupla completa vira item ok no bloco da ferramenta', () => {
+    const d = diagnose({ ...base, enabledTools: ['transfer_to_human', 'create_coupon'], activeMissions: [{ id: 'm3', event_type: 'x', display_name: 'Toque 2', concession: { kind: 'percent' } }] })
+    expect(d.find((x) => x.id === 'coupon_ok:m3')).toMatchObject({ lv: 'ok', node: 'tool:create_coupon' })
   })
 })

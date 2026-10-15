@@ -42,51 +42,54 @@ export function computeReadiness(input: {
       id: 'provider_key',
       ok: input.hasProviderKey,
       blocking: true,
-      label: 'Chave do provedor',
+      label: 'Chave de IA conectada',
       detail: input.hasProviderKey
-        ? `Chave ${input.provider} ativa`
-        : `Cadastre uma chave ${input.provider} em Configurações › Integrações`,
+        ? `Usa a chave ${input.provider} da conta.`
+        : `Sem a chave ${input.provider}, o agente não responde. Conecte em Configurações › Integrações.`,
     },
     {
       id: 'mission',
       ok: input.missionsCount > 0,
       blocking: true,
-      label: 'Pelo menos uma missão',
+      label: 'Uma missão ativa',
       detail:
         input.missionsCount > 0
-          ? `${input.missionsCount} missão(ões) do agente`
-          : 'Crie ou semeie uma missão para este agente',
+          ? `${input.missionsCount} missão(ões) prontas para usar.`
+          : 'Sem missão, o agente não sabe o que fazer quando o cliente chama.',
     },
     {
       id: 'handoff',
       ok: handoffOk,
       blocking: true,
-      label: 'Caminho para humano',
+      label: 'Transferência configurada',
       detail: handoffOk
-        ? 'Ferramenta transfer_to_human ligada ou palavras de handoff definidas'
-        : 'Ligue transfer_to_human ou defina palavras de handoff',
+        ? input.handoffKeywords.length > 0
+          ? `Transfere para a equipe com ${input.handoffKeywords.slice(0, 2).map((k) => `"${k}"`).join(' e ')}.`
+          : 'Transfere para a equipe quando precisar de uma pessoa.'
+        : 'Sem isto, o agente não tem para quem passar a conversa quando não souber responder.',
     },
     {
       id: 'entry',
       ok: input.entriesCount > 0,
       blocking: false,
-      label: 'Onde atua',
+      label: 'Número de WhatsApp',
       detail:
         input.entriesCount > 0
-          ? `${input.entriesCount} entrada(s)`
-          : 'Sem número ou fluxo ligado: só responde se for o único agente ativo',
+          ? `${input.entriesCount} entrada(s) ligada(s).`
+          : 'Sem número, o agente só responde nos toques de fluxo em que for escolhido.',
     },
     {
       id: 'eval',
-      ok: evaluated && evalScore! >= EVAL_PASS_SCORE && (evalGrave ?? 0) === 0,
-      // Casos graves bloqueiam; nota baixa ou nunca avaliado é só aviso.
-      blocking: evaluated && (evalGrave ?? 0) > 0,
-      label: 'Avaliação automática',
+      // Protótipo: a avaliação sem cenário Grave é obrigatória para ativar
+      // (nunca avaliado também bloqueia). Nota abaixo do mínimo é aviso no texto.
+      ok: evaluated && (evalGrave ?? 0) === 0,
+      blocking: true,
+      label: 'Avaliação sem cenário Grave',
       detail: !evaluated
-        ? 'Ainda não avaliado — rode a avaliação antes de ligar'
+        ? 'Roda os cenários de Conversação e Segurança com o agente. Leva cerca de 1 minuto.'
         : (evalGrave ?? 0) > 0
-          ? `${evalGrave} caso(s) grave(s) na última avaliação (nota ${Math.round(evalScore!)})`
-          : `Nota ${Math.round(evalScore!)}${evalScore! < EVAL_PASS_SCORE ? ` — abaixo de ${EVAL_PASS_SCORE}` : ''}`,
+          ? `${evalGrave} cenário(s) Grave(s) na última avaliação. Nota ${Math.round(evalScore!)}.`
+          : `Nota ${Math.round(evalScore!)}${evalScore! < EVAL_PASS_SCORE ? `, abaixo de ${EVAL_PASS_SCORE}` : ''}.`,
     },
   ]
   return { ready: items.every((i) => i.ok || !i.blocking), items }
