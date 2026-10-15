@@ -133,11 +133,24 @@ async function getOverview() {
     created_at: a.created_at,
   }));
 
+  // Plano IA M5 passo 30: filas do runtime de IA e DLQs (contagens).
+  let aiQueues: Array<{ queue_name: string; queue_length: number; oldest_msg_age_sec: number | null }> = [];
+  try {
+    const { data: queues } = await supabaseAdmin.rpc('ai_queue_health');
+    aiQueues = (queues ?? []) as typeof aiQueues;
+  } catch {
+    aiQueues = [];
+  }
+  const dlqTotal = aiQueues
+    .filter((q) => q.queue_name.endsWith('_dlq'))
+    .reduce((sum, q) => sum + Number(q.queue_length || 0), 0);
+
   return NextResponse.json({
     total_accounts: accounts.length,
     accounts: enrichedAccounts,
     quality_summary: qualitySummary,
     message_stats: { total_7d: totalMessages7d },
+    ai_queues: { queues: aiQueues, dlq_total: dlqTotal },
   });
 }
 

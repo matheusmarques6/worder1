@@ -40,6 +40,7 @@ export default function ActivityDashboard() {
   const [events, setEvents] = useState<any[]>([])
   const [eventKind, setEventKind] = useState('')
   const [alerts, setAlerts] = useState<any[]>([])
+  const [alertsOpen, setAlertsOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -64,9 +65,20 @@ export default function ActivityDashboard() {
     fetch(`/api/ai/activity/events?${qs}`).then((r) => (r.ok ? r.json() : { events: [] })).then((d) => setEvents(d.events ?? [])).catch(() => {})
   }, [eventKind, agent])
 
-  useEffect(() => {
+  const loadAlerts = useCallback(() => {
     fetch('/api/ai/alerts?status=open').then((r) => (r.ok ? r.json() : { alerts: [] })).then((d) => setAlerts(d.alerts ?? [])).catch(() => {})
   }, [])
+  // Alerta crítico aparece em até 1 minuto (aceite do passo 30).
+  useEffect(() => {
+    loadAlerts()
+    const timer = setInterval(loadAlerts, 60_000)
+    return () => clearInterval(timer)
+  }, [loadAlerts])
+
+  const settleAlert = async (id: string, status: 'acknowledged' | 'resolved') => {
+    await fetch(`/api/ai/alerts/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) })
+    loadAlerts()
+  }
 
   const agentName = useMemo(() => {
     const m = new Map<string, string>((data?.agents ?? []).map((a: any) => [a.id, a.name || 'Agente']))
@@ -93,7 +105,9 @@ export default function ActivityDashboard() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <div style={{ fontSize: 18, fontWeight: 800 }}>Atividade</div>
         {alerts.length > 0 && (
-          <span className="chip chip-red" title={alerts.map((a) => a.title).join('\n')}><AlertTriangle size={12} /> {alerts.length} alerta(s) aberto(s)</span>
+          <button type="button" className="chip chip-red" style={{ cursor: 'pointer', border: 0 }} onClick={() => setAlertsOpen(!alertsOpen)}>
+            <AlertTriangle size={12} /> {alerts.length} alerta(s) aberto(s)
+          </button>
         )}
         <div style={{ flex: 1 }} />
         <div className="seg-ctl">
@@ -108,6 +122,20 @@ export default function ActivityDashboard() {
         </label>
         <a className="btn btn-soft btn-sm" href={`/api/ai/activity/export.csv?period=${period}${agent ? `&agent=${agent}` : ''}`}><Download size={14} />CSV</a>
       </div>
+
+      {alertsOpen && alerts.length > 0 && (
+        <Card style={{ padding: 14, display: 'grid', gap: 6 }}>
+          <div style={{ fontWeight: 800, fontSize: 13.5 }}>Alertas abertos</div>
+          {alerts.map((a) => (
+            <div key={a.id} style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 12.5, borderTop: '1px solid var(--border)', paddingTop: 6 }}>
+              <span className={`chip ${a.severity === 'critical' ? 'chip-red' : 'chip-outline'}`}>{a.severity}</span>
+              <span style={{ flex: 1 }}>{a.title}<span style={{ color: 'var(--text-3)' }}> · {a.type} · {new Date(a.created_at).toLocaleString('pt-BR')}</span></span>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => void settleAlert(a.id, 'acknowledged')}>Reconhecer</button>
+              <button type="button" className="btn btn-soft btn-sm" onClick={() => void settleAlert(a.id, 'resolved')}>Resolver</button>
+            </div>
+          ))}
+        </Card>
+      )}
 
       {error && <p style={{ color: 'var(--red)', fontSize: 13 }}>{error}</p>}
       {loading && !data ? <Loader2 size={18} className="animate-spin" /> : k && (

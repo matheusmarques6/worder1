@@ -2202,7 +2202,8 @@ const actionExecutors: Record<string, NodeExecutor> = {
           p_delta: delta,
           p_concession_request: concession,
           p_preferred_channel: config.preferredChannel || 'whatsapp',
-          p_otel: null,
+          // Plano IA M5 passo 30: o trace do fluxo continua no runtime.
+          p_otel: (await import('@/lib/obs/trace-carrier')).currentTraceCarrier(),
           p_run_id: runId,
         });
         if (error) {

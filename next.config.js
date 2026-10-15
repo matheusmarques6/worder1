@@ -2,6 +2,8 @@
 const nextConfig = {
   experimental: {
     serverComponentsExternalPackages: ['undici', 'pdf-parse', 'mammoth'],
+    // Plano IA M5 passo 30: src/instrumentation.ts (OpenTelemetry → Logfire).
+    instrumentationHook: true,
   },
   images: {
     remotePatterns: [
