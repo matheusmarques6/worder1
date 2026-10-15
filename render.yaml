@@ -39,6 +39,10 @@ services:
         value: sender_role
       - key: AGENTS_PROCESS_NAME
         value: agents-runtime-render
+      # Lida desde 2026-10-15 (runtime/docs/alteracoes/2026-10-15-02). Cada
+      # worker é uma conexão longa no pooler: subir exige conferir o limite.
+      - key: AGENTS_WORKERS
+        value: "2"
       - key: AGENTS_LOG_LEVEL
         value: INFO
       - key: DEPLOY_ENV
@@ -57,5 +61,8 @@ services:
         sync: false
       - key: AGENTS_PREVIEW_TOKEN # o mesmo valor vai na Vercel p/ o preview
         sync: false
+      # Com o token, os spans de domínio (turn, send, llm_call, tool_call)
+      # também vão ao Logfire (runtime/docs/alteracoes/2026-10-15-01); não é
+      # preciso OTEL_EXPORTER_OTLP_ENDPOINT.
       - key: AGENTS_LOGFIRE_TOKEN # opcional (D13): vazio = Logfire desligado
         sync: false

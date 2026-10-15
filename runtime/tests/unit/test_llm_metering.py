@@ -270,3 +270,35 @@ class TestEveryMeteredCallSiteIsBudgeted:
             "chamada(s) de `_metered(...)`/`partial(_metered, ...)` sem "
             f"`budget=` — este turno fica fora do teto de custo do item 41: {offenders}"
         )
+
+
+class TestTheSpanPerCall:
+    """Alteração 2026-10-15-01: cada chamada de modelo abre um span `llm_call`
+    com finalidade e modelo — rótulos, nunca conteúdo."""
+
+    async def test_a_chat_call_opens_a_span_with_labels_only(self, monkeypatch) -> None:
+        from agents_runtime.obs import telemetry as telemetry_module
+
+        class Recorder:
+            def __init__(self) -> None:
+                self.calls: list[tuple[str, dict]] = []
+
+            def start_as_current_span(self, name: str, attributes: dict):
+                self.calls.append((name, attributes))
+                import contextlib
+
+                @contextlib.contextmanager
+                def cm():
+                    yield "span"
+
+                return cm()
+
+        recorder = Recorder()
+        monkeypatch.setattr(telemetry_module, "_tracer", recorder)
+        clock, ledger = FrozenClock(START), Ledger()
+        await metered(clock, ledger, purpose="agent_reply").chat(a_request())
+
+        ((name, attributes),) = recorder.calls
+        assert name == "llm_call"
+        assert attributes["kind"] == "agent_reply"
+        assert "messages" not in attributes and "content" not in attributes

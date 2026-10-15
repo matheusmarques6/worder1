@@ -9,6 +9,7 @@ from agents_runtime.obs.logfire_setup import configure_logfire
 from agents_runtime.obs.logging import JsonFormatter, configure_logging
 from agents_runtime.obs.telemetry import (
     SAFE_ATTRIBUTES,
+    adopt_global_tracer,
     annotate,
     configure_telemetry,
     span,
@@ -17,6 +18,7 @@ from agents_runtime.obs.telemetry import (
 __all__ = [
     "SAFE_ATTRIBUTES",
     "JsonFormatter",
+    "adopt_global_tracer",
     "annotate",
     "carrier",
     "configure_logfire",

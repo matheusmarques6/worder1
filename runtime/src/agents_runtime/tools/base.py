@@ -31,6 +31,7 @@ from uuid import UUID
 import psycopg
 
 from agents_runtime.clock import Clock
+from agents_runtime.obs.telemetry import annotate, span
 from agents_runtime.repository import tool_calls as tool_calls_repo
 from agents_runtime.repository.scope import scope_to_organization
 
@@ -85,13 +86,17 @@ async def run_tool(
     clock: Clock,
 ) -> ToolResult:
     started = clock.now()
-    try:
-        result = await tool(conn, context, arguments)
-    except Exception as error:
-        # Expected failures are returned as `success=False` by the tool itself;
-        # this catch is the net for the unexpected, and it records them the same
-        # way instead of letting a bug reach the customer as silence.
-        result = ToolResult(tool=tool.name, success=False, error=str(error))
+    # Alteração 2026-10-15-01: um span por ferramenta, filho do `turn`; o nome
+    # da tool é rótulo, os argumentos (texto do cliente) nunca entram.
+    with span("tool_call", kind=tool.name):
+        try:
+            result = await tool(conn, context, arguments)
+        except Exception as error:
+            # Expected failures are returned as `success=False` by the tool itself;
+            # this catch is the net for the unexpected, and it records them the same
+            # way instead of letting a bug reach the customer as silence.
+            result = ToolResult(tool=tool.name, success=False, error=str(error))
+        annotate(outcome="ok" if result.success else "failed")
 
     latency_ms = int((clock.now() - started).total_seconds() * 1000)
 

@@ -81,6 +81,37 @@ def configure_telemetry(service_name: str = "agents-runtime") -> bool:
     return True
 
 
+def adopt_global_tracer(service_name: str = "agents-runtime") -> bool:
+    """Liga `span()` ao TracerProvider global já configurado por outro SDK.
+
+    Alteração 2026-10-15-01 (runtime/docs/alteracoes): `configure_logfire`
+    chama `logfire.configure`, que instala um TracerProvider global e exporta
+    para o Logfire — mas `_tracer` só era preenchido por `configure_telemetry`,
+    e só com `OTEL_EXPORTER_OTLP_ENDPOINT`. Em produção (render.yaml define
+    apenas o token do Logfire) os spans de domínio `turn`, `send`,
+    `mission_touch` e `coalesce_pass` eram no-op, e o Logfire via só os spans
+    automáticos de httpx e psycopg.
+
+    Chamada DEPOIS de `configure_logfire` ter ligado. Recusa (devolve False)
+    quando já existe tracer (endpoint OTLP explícito manda) ou quando o
+    provider global ainda é o proxy padrão do SDK — adotar esse produziria
+    spans não gravados e custo de atributos por nada.
+    """
+    global _tracer
+    if _tracer is not None:
+        return False
+    try:
+        from opentelemetry import trace
+        from opentelemetry.trace import ProxyTracerProvider
+    except ImportError:
+        return False
+    provider = trace.get_tracer_provider()
+    if isinstance(provider, ProxyTracerProvider):
+        return False
+    _tracer = trace.get_tracer(service_name)
+    return True
+
+
 @contextmanager
 def span(name: str, *, remote=None, remote_role: str = "link", **attributes):
     """`with span("turn", organization_id=..., outcome=...):` — no-op sem tracer.

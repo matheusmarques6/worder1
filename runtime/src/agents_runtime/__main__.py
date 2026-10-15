@@ -21,7 +21,12 @@ from agents_runtime import server
 from agents_runtime.app import _connect, run
 from agents_runtime.channels.port import ChannelPort
 from agents_runtime.config import config_from_env
-from agents_runtime.obs import configure_logfire, configure_logging, configure_telemetry
+from agents_runtime.obs import (
+    adopt_global_tracer,
+    configure_logfire,
+    configure_logging,
+    configure_telemetry,
+)
 from agents_runtime.repository.scope import WORKER_ROLE
 
 DSN_VARIABLE = "SUPABASE_DB_URL"
@@ -50,6 +55,21 @@ def _factory_from_env(variable: str, dsn: str, *, required: bool = False):
     module_name, _, attribute = spec.partition(":")
     factory = getattr(importlib.import_module(module_name), attribute)
     return factory(dsn)
+
+
+def _workers_from_env(default: int = 2) -> int:
+    """`AGENTS_WORKERS`: inteiro >= 1. Vazio usa o padrão; inválido morre na
+    partida, como todo erro de configuração aqui (nunca "assume 2 em silêncio")."""
+    raw = os.environ.get("AGENTS_WORKERS", "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError as error:
+        raise RuntimeError(f"AGENTS_WORKERS={raw!r} não é um inteiro") from error
+    if value < 1:
+        raise RuntimeError(f"AGENTS_WORKERS={value} precisa ser >= 1")
+    return value
 
 
 def _channel_from_env(dsn: str) -> ChannelPort | None:
@@ -130,6 +150,9 @@ async def _serve(dsn: str) -> None:
             # Like the responder, production must not use the scaffold toucher.
             touch=_factory_from_env("AGENTS_TOUCHER", dsn, required=True),
             process_name=os.environ.get("AGENTS_PROCESS_NAME", "agents-runtime"),
+            # Alteração 2026-10-15-02: AGENTS_WORKERS estava documentada no
+            # DEPLOY.md e nunca era lida — o processo subia sempre com 2.
+            workers=_workers_from_env(),
             worker_set_role=os.environ.get("AGENTS_WORKER_SET_ROLE"),
             sender_set_role=os.environ.get("AGENTS_SENDER_SET_ROLE"),
         )
@@ -155,8 +178,13 @@ def main() -> None:
     configure_telemetry()
     enabled = configure_logfire()
     if enabled:
+        # Alteração 2026-10-15-01: sem endpoint OTLP próprio, os spans de
+        # domínio passam a usar o provider que o Logfire instalou — senão
+        # `turn`/`send` ficam no-op em produção e o Logfire só vê httpx/psycopg.
+        adopted = adopt_global_tracer()
         logging.getLogger("agents_runtime").info(
-            "logfire ligado", extra={"instrumented": list(enabled)}
+            "logfire ligado",
+            extra={"instrumented": list(enabled), "domain_spans": adopted},
         )
 
     dsn = os.environ.get(DSN_VARIABLE)

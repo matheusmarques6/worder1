@@ -46,6 +46,7 @@ from typing import Protocol
 
 from agents_runtime.agent_core.llm import ChatRequest, ChatResult, EmbeddingResult, LlmPort
 from agents_runtime.clock import Clock
+from agents_runtime.obs.telemetry import annotate, span
 
 #: An embedding is an embedding whatever the meter was built for — the purpose
 #: of a chat call is the composition's choice, this one is not.
@@ -154,16 +155,22 @@ class MeteredLlm:
     async def chat(self, request: ChatRequest) -> ChatResult:
         if self._budget is not None:
             self._budget.reserve(self._purpose)
-        started = self._clock.now()
-        result = await self._inner.chat(request)
+        # Alteração 2026-10-15-01: um span por chamada, filho do `turn`. Só
+        # rótulos (finalidade, provedor, modelo): o conteúdo fica no Postgres.
+        with span("llm_call", kind=self._purpose, model=request.model):
+            started = self._clock.now()
+            result = await self._inner.chat(request)
+            annotate(provider=result.provider, model=result.model)
         await self._bill(self._purpose, result.provider, result.model, result, started)
         return result
 
     async def embed(self, texts: Sequence[str], *, model: str) -> EmbeddingResult:
         if self._budget is not None:
             self._budget.reserve(EMBEDDING_PURPOSE)
-        started = self._clock.now()
-        result = await self._inner.embed(texts, model=model)
+        with span("llm_call", kind=EMBEDDING_PURPOSE, model=model):
+            started = self._clock.now()
+            result = await self._inner.embed(texts, model=model)
+            annotate(provider=result.provider, model=result.model)
         await self._bill(EMBEDDING_PURPOSE, result.provider, result.model, result, started)
         return result
 

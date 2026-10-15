@@ -306,3 +306,73 @@ class TestConfigureLogfire:
         monkeypatch.setenv("AGENTS_LOGFIRE_TOKEN", "lf-token")
         monkeypatch.setattr(logfire_setup, "_import_logfire", lambda: None)
         assert logfire_setup.configure_logfire() == ()
+
+
+class TestAdoptGlobalTracer:
+    """Alteração 2026-10-15-01: com o Logfire ligado (e sem endpoint OTLP
+    próprio) os spans de domínio passam a gravar no provider global."""
+
+    def test_declines_when_the_global_provider_is_still_the_proxy(self, monkeypatch) -> None:
+        from opentelemetry import trace
+        from opentelemetry.trace import ProxyTracerProvider
+
+        monkeypatch.setattr(telemetry_module, "_tracer", None)
+        monkeypatch.setattr(trace, "get_tracer_provider", lambda: ProxyTracerProvider())
+        assert telemetry_module.adopt_global_tracer() is False
+        assert telemetry_module._tracer is None
+
+    def test_adopts_a_real_provider_and_spans_start_recording(self, monkeypatch) -> None:
+        from opentelemetry import trace
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+        from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+            InMemorySpanExporter,
+        )
+
+        exporter = InMemorySpanExporter()
+        provider = TracerProvider()
+        provider.add_span_processor(SimpleSpanProcessor(exporter))
+        monkeypatch.setattr(telemetry_module, "_tracer", None)
+        monkeypatch.setattr(trace, "get_tracer_provider", lambda: provider)
+
+        assert telemetry_module.adopt_global_tracer("test-runtime") is True
+        with span("turn", organization_id="org-1", phone="+55119"):
+            pass
+
+        (recorded,) = exporter.get_finished_spans()
+        assert recorded.name == "turn"
+        assert dict(recorded.attributes) == {"organization_id": "org-1"}
+
+    def test_an_explicit_tracer_wins_over_adoption(self, monkeypatch) -> None:
+        recorder = _SpanRecorder()
+        monkeypatch.setattr(telemetry_module, "_tracer", recorder)
+        assert telemetry_module.adopt_global_tracer() is False
+        assert telemetry_module._tracer is recorder
+
+
+class TestWorkersFromEnv:
+    """Alteração 2026-10-15-02: AGENTS_WORKERS passa a ser lida."""
+
+    def test_empty_uses_the_default(self, monkeypatch) -> None:
+        from agents_runtime.__main__ import _workers_from_env
+
+        monkeypatch.delenv("AGENTS_WORKERS", raising=False)
+        assert _workers_from_env() == 2
+
+    def test_a_number_is_honoured(self, monkeypatch) -> None:
+        from agents_runtime.__main__ import _workers_from_env
+
+        monkeypatch.setenv("AGENTS_WORKERS", "4")
+        assert _workers_from_env() == 4
+
+    def test_garbage_dies_at_startup(self, monkeypatch) -> None:
+        import pytest
+
+        from agents_runtime.__main__ import _workers_from_env
+
+        monkeypatch.setenv("AGENTS_WORKERS", "dois")
+        with pytest.raises(RuntimeError):
+            _workers_from_env()
+        monkeypatch.setenv("AGENTS_WORKERS", "0")
+        with pytest.raises(RuntimeError):
+            _workers_from_env()
