@@ -29,6 +29,20 @@ describe('computeReadiness', () => {
     expect(readiness.ready).toBe(true)
   })
 
+  it('avaliação: nunca rodada é aviso, graves bloqueiam, nota boa fica verde', () => {
+    const never = computeReadiness(base)
+    expect(never.items.find((i) => i.id === 'eval')).toMatchObject({ ok: false, blocking: false })
+    expect(never.ready).toBe(true)
+    const grave = computeReadiness({ ...base, evalScore: 90, evalGrave: 1 })
+    expect(grave.ready).toBe(false)
+    expect(grave.items.find((i) => i.id === 'eval')?.blocking).toBe(true)
+    const good = computeReadiness({ ...base, evalScore: 83, evalGrave: 0 })
+    expect(good.items.find((i) => i.id === 'eval')).toMatchObject({ ok: true })
+    const low = computeReadiness({ ...base, evalScore: 50, evalGrave: 0 })
+    expect(low.ready).toBe(true)
+    expect(low.items.find((i) => i.id === 'eval')?.detail).toMatch(/abaixo de 70/)
+  })
+
   it('entrada ausente é aviso, não bloqueio', () => {
     const readiness = computeReadiness({ ...base, entriesCount: 0 })
     expect(readiness.ready).toBe(true)

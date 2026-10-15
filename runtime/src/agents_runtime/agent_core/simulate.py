@@ -189,6 +189,7 @@ def as_chat(history: Sequence[Mapping[str, Any]], message: str) -> tuple[Message
 
 @dataclass
 class SimulationTrace:
+    version_id: UUID | None = None
     reply: str | None = None
     blocked: bool = False
     blocked_by: str | None = None
@@ -241,6 +242,8 @@ async def simulate_turn(
     rubrics_directory: Any = None,
     turn_llm_call_limit: int = 8,
     clock: Clock | None = None,
+    purpose: str = PURPOSE,
+    eval_run_id: UUID | None = None,
 ) -> SimulationTrace:
     clock = clock or SystemClock()
     profile = profile or ContactProfile()
@@ -270,6 +273,7 @@ async def simulate_turn(
             await knowledge_repo.load_rules(conn, agent_id=agent_id) if has_knowledge else ()
         )
 
+    trace.version_id = version.id
     version = apply_draft(version, agent_draft)
     trace.rules = list(rules)
     resolved = (
@@ -298,7 +302,7 @@ async def simulate_turn(
                 await llm_repo.record_llm_call(
                     conn,
                     organization_id=organization_id,
-                    purpose=PURPOSE,
+                    purpose=purpose,
                     provider=call.provider,
                     model=call.model,
                     conversation_id=None,
@@ -307,12 +311,13 @@ async def simulate_turn(
                     cost_usd=call.cost_usd,
                     latency_ms=call.latency_ms,
                     agent_id=agent_id,
+                    eval_run_id=eval_run_id,
                 )
         except Exception:  # trilha nunca derruba a simulação
             pass
 
     def metered(llm: LlmPort) -> MeteredLlm:
-        return MeteredLlm(llm, clock=clock, record=record, purpose=PURPOSE, budget=budget)
+        return MeteredLlm(llm, clock=clock, record=record, purpose=purpose, budget=budget)
 
     # --- conhecimento do agente (mesma busca do turno)
     knowledge: tuple[str, ...] = ()

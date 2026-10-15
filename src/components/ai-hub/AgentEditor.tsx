@@ -16,6 +16,7 @@ import ClassicView from './ClassicView'
 import { STATUS_LABEL, initials } from './AgentsList'
 import AgentTestPanel from './AgentTestPanel'
 import AgentVersionsPanel from './AgentVersionsPanel'
+import EvalRunner from './EvalRunner'
 
 /**
  * O editor de UM agente (plano IA, M2 passo 16): cabeçalho com nome, função,
@@ -151,6 +152,22 @@ export default function AgentEditor({ organizationId, agentId }: { organizationI
     }
   }
 
+  // Passo 26: Ativar abre o checklist primeiro (com a avaliação automática).
+  const openChecklist = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/ai/agents/${agentId}/readiness`)
+      const body = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(body?.error || 'Não foi possível carregar o checklist')
+      setChecklist(body)
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const pause = async () => {
     setBusy(true)
     try {
@@ -240,7 +257,7 @@ export default function AgentEditor({ organizationId, agentId }: { organizationI
             <Pause size={14} />Pausar
           </button>
         ) : (
-          <button type="button" className="btn btn-soft btn-sm" disabled={busy} onClick={() => void activate()}
+          <button type="button" className="btn btn-soft btn-sm" disabled={busy} onClick={() => void openChecklist()}
             style={{ color: 'var(--green)' }}>
             <Play size={14} />Ativar
           </button>
@@ -262,7 +279,7 @@ export default function AgentEditor({ organizationId, agentId }: { organizationI
       {checklist && (
         <Modal title="Antes de ativar" onClose={() => setChecklist(null)}>
           <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 12px' }}>
-            O agente só liga com o mínimo garantido. Resolva os itens em vermelho e tente de novo.
+            O agente só liga com o mínimo garantido. Itens em vermelho bloqueiam; em amarelo são avisos.
           </p>
           <div style={{ display: 'grid', gap: 8 }}>
             {checklist.items.map((item) => (
@@ -275,9 +292,14 @@ export default function AgentEditor({ organizationId, agentId }: { organizationI
               </div>
             ))}
           </div>
+          <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+            <EvalRunner agentId={agent.id} onDone={() => void openChecklist()} />
+          </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
             <button type="button" className="btn btn-soft btn-sm" onClick={() => setChecklist(null)}>Fechar</button>
-            <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => void activate()}>Tentar de novo</button>
+            <button type="button" className="btn btn-primary btn-sm" disabled={busy || !checklist.ready} onClick={() => void activate()}>
+              <Play size={14} />Ativar
+            </button>
           </div>
         </Modal>
       )}

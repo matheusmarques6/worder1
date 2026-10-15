@@ -32,6 +32,7 @@ from uuid import UUID
 import psycopg
 
 from agents_runtime.agent_core.copilot import CopilotUnavailable, suggest_reply
+from agents_runtime.agent_core.evaluate import run_evaluation
 from agents_runtime.agent_core.mission_resolver import merge_mission
 from agents_runtime.agent_core.prompt_compiler import (
     ChannelBlock,
@@ -40,6 +41,7 @@ from agents_runtime.agent_core.prompt_compiler import (
     agent_block,
     compile_prompt,
 )
+from agents_runtime.agent_core.responder import default_rubrics_directory
 from agents_runtime.agent_core.simulate import (
     ContactProfile,
     SimulationUnavailable,
@@ -48,8 +50,10 @@ from agents_runtime.agent_core.simulate import (
 from agents_runtime.app import _connect
 from agents_runtime.commerce.moments import apply_moment_restrictions, resolve_moments
 from agents_runtime.config import QueueingConfig
+from agents_runtime.evals.pack import load_rubrics
 from agents_runtime.repository import agent as agent_repo
 from agents_runtime.repository import engine as engine_repo
+from agents_runtime.repository import evals as evals_repo
 from agents_runtime.repository import missions as missions_repo
 from agents_runtime.repository import moments as moments_repo
 from agents_runtime.repository.scope import (
@@ -559,6 +563,88 @@ async def _simulate(
     return _response(200, trace.as_dict())
 
 
+#: Tarefas de avaliação em andamento — referência forte para o GC não
+#: coletar a tarefa no meio (asyncio só guarda referência fraca).
+_EVAL_TASKS: set[asyncio.Task] = set()
+
+
+async def _start_eval(
+    dsn: str,
+    *,
+    set_role: str | None,
+    body: dict[str, Any],
+    platform_llm: Any,
+    base_secret: str | None,
+    config: QueueingConfig | None = None,
+) -> bytes:
+    """Alteração 2026-10-15-13: `POST /internal/run-eval` cria o run e roda o
+    pack em segundo plano; responde 202 com o id."""
+    try:
+        organization_id = UUID(str(body["organization_id"]))
+        agent_id = UUID(str(body["agent_id"]))
+    except (KeyError, ValueError):
+        return _response(400, {"error": "organization_id e agent_id (uuid) são obrigatórios"})
+    if platform_llm is None:
+        return _response(503, {"error": "avaliação sem cliente de plataforma"})
+
+    async with _connection(dsn, set_role, config=config) as conn:
+        async with conn.transaction():
+            await scope_to_organization(conn, organization_id)
+            version = await agent_repo.load_version_for_preview(
+                conn, organization_id=organization_id, agent_id=agent_id
+            )
+            if version is None:
+                return _response(422, {"error": "agente não encontrado nesta organização"})
+            if version.id == version.agent_id:
+                return _response(422, {"error": "salve o agente antes de avaliar (sem versão)"})
+            run_id = await evals_repo.start_run(
+                conn, organization_id=organization_id, agent_version_id=version.id
+            )
+
+    rubrics = load_rubrics(default_rubrics_directory())
+
+    async def work() -> None:
+        try:
+            async with _connection(dsn, set_role, config=config) as conn:
+                await run_evaluation(
+                    conn,
+                    organization_id=organization_id,
+                    agent_id=agent_id,
+                    agent_version_id=version.id,
+                    run_id=run_id,
+                    rubrics=rubrics,
+                    platform_llm=platform_llm,
+                    base_secret=base_secret,
+                )
+        except Exception:
+            logger.exception("avaliação falhou", extra={"eval_run_id": str(run_id)})
+
+    task = asyncio.create_task(work())
+    _EVAL_TASKS.add(task)
+    task.add_done_callback(_EVAL_TASKS.discard)
+    return _response(
+        202, {"run_id": str(run_id), "agent_version_id": str(version.id), "status": "running"}
+    )
+
+
+async def _read_eval(
+    dsn: str, *, set_role: str | None, body: dict[str, Any], config: QueueingConfig | None = None
+) -> bytes:
+    """`POST /internal/eval-run` — o andamento de um run da org."""
+    try:
+        organization_id = UUID(str(body["organization_id"]))
+        run_id = UUID(str(body["run_id"]))
+    except (KeyError, ValueError):
+        return _response(400, {"error": "organization_id e run_id (uuid) são obrigatórios"})
+    async with _connection(dsn, set_role, config=config) as conn:
+        async with conn.transaction():
+            await scope_to_organization(conn, organization_id)
+            run = await evals_repo.load_run(conn, run_id=run_id)
+    if run is None:
+        return _response(404, {"error": "avaliação não encontrada"})
+    return _response(200, run)
+
+
 def _authorized(headers: dict, token: str) -> bool:
     provided = headers.get("authorization", "")
     prefix = "bearer "
@@ -702,6 +788,57 @@ async def serve(
                 except Exception:
                     logger.exception("simulação falhou")
                     writer.write(_response(503, {"error": "simulação indisponível"}))
+                return
+
+            if path == "/internal/run-eval":
+                if not preview_token:
+                    writer.write(_response(404, {"error": "not found"}))
+                    return
+                if method != "POST":
+                    writer.write(_response(405, {"error": "POST only"}))
+                    return
+                if not _authorized(headers, preview_token):
+                    writer.write(_response(401, {"error": "token de serviço inválido"}))
+                    return
+                try:
+                    body = json.loads(raw.decode() or "{}")
+                    if not isinstance(body, dict):
+                        raise ValueError("o corpo é um objeto JSON")
+                except ValueError as exc:
+                    writer.write(_response(400, {"error": f"JSON inválido: {exc}"}))
+                    return
+                try:
+                    writer.write(await _start_eval(
+                        dsn, set_role=set_role, body=body, platform_llm=platform_llm,
+                        base_secret=base_secret, config=config,
+                    ))
+                except Exception:
+                    logger.exception("avaliação falhou")
+                    writer.write(_response(503, {"error": "avaliação indisponível"}))
+                return
+
+            if path == "/internal/eval-run":
+                if not preview_token:
+                    writer.write(_response(404, {"error": "not found"}))
+                    return
+                if method != "POST":
+                    writer.write(_response(405, {"error": "POST only"}))
+                    return
+                if not _authorized(headers, preview_token):
+                    writer.write(_response(401, {"error": "token de serviço inválido"}))
+                    return
+                try:
+                    body = json.loads(raw.decode() or "{}")
+                    if not isinstance(body, dict):
+                        raise ValueError("o corpo é um objeto JSON")
+                except ValueError as exc:
+                    writer.write(_response(400, {"error": f"JSON inválido: {exc}"}))
+                    return
+                try:
+                    writer.write(await _read_eval(dsn, set_role=set_role, body=body, config=config))
+                except Exception:
+                    logger.exception("consulta de avaliação falhou")
+                    writer.write(_response(503, {"error": "consulta de avaliação indisponível"}))
                 return
 
             writer.write(_response(404, {"error": "not found"}))
