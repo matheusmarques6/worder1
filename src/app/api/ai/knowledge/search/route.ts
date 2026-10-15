@@ -12,16 +12,16 @@ export async function GET(request: NextRequest) {
   const q = (new URL(request.url).searchParams.get('q') ?? '').trim()
   if (q.length < 2) return NextResponse.json({ results: [] })
   // Vírgula, parênteses e curingas quebram a sintaxe do .or() do PostgREST.
-  const term = sanitizeSearchTerm(q, 100)
-  if (term.length < 2) return NextResponse.json({ results: [] })
+  const buscaSegura = sanitizeSearchTerm(q, 100)
+  if (buscaSegura.length < 2) return NextResponse.json({ results: [] })
   const { data, error } = await getSupabaseAdmin()
     .from('ai_sources')
     .select('id, name, folder, kind, body_markdown')
     .eq('organization_id', auth.user.organization_id)
-    .or(`name.ilike.%${term}%,body_markdown.ilike.%${term}%`)
+    .or(`name.ilike.%${buscaSegura}%,body_markdown.ilike.%${buscaSegura}%`)
     .limit(20)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  const lower = term.toLowerCase()
+  const lower = buscaSegura.toLowerCase()
   const results = (data ?? []).map((n: any) => {
     const body: string = n.body_markdown ?? ''
     const at = body.toLowerCase().indexOf(lower)
