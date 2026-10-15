@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Estado dos Agentes de IA</title>
+<meta name="description" content="Relatório completo do estado da camada de agentes de IA do Worder em 15/10/2026: aba IA, canais, runtime, conhecimento, telemetria, schema e pendências.">
+<style>
+  :root{
+    --bg:#f6f7f9; --card:#ffffff; --ink:#1a1d23; --muted:#5b6472; --line:#e3e6ea;
+    --accent:#2f5bea; --ok:#1e8e4d; --warn:#b7791f; --bad:#c93b3b; --soft:#eef2ff;
+    --okbg:#e8f6ee; --warnbg:#fff6e5; --badbg:#fdeaea; --code:#f1f3f5;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0f1115; --card:#171a21; --ink:#e8eaee; --muted:#9aa3b2; --line:#272c36;
+      --accent:#7c9cff; --ok:#4fc37f; --warn:#e3a94a; --bad:#ef6a6a; --soft:#1d2440;
+      --okbg:#15291d; --warnbg:#2d2413; --badbg:#2f1717; --code:#1f232b;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0f1115; --card:#171a21; --ink:#e8eaee; --muted:#9aa3b2; --line:#272c36;
+    --accent:#7c9cff; --ok:#4fc37f; --warn:#e3a94a; --bad:#ef6a6a; --soft:#1d2440;
+    --okbg:#15291d; --warnbg:#2d2413; --badbg:#2f1717; --code:#1f232b;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:1040px;margin:0 auto;padding:32px 16px 80px}
+  header{margin-bottom:28px}
+  h1{font-size:30px;margin:0 0 6px;letter-spacing:-.01em}
+  .sub{color:var(--muted);font-size:14px}
+  h2{font-size:21px;margin:44px 0 12px;padding-top:12px;border-top:1px solid var(--line)}
+  h3{font-size:16px;margin:22px 0 8px}
+  p{margin:8px 0}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:12px 0}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+  .kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px}
+  .kpi .v{font-size:24px;font-weight:600;letter-spacing:-.01em}
+  .kpi .l{color:var(--muted);font-size:13px}
+  .tag{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;vertical-align:middle}
+  .ok{background:var(--okbg);color:var(--ok)} .warn{background:var(--warnbg);color:var(--warn)} .bad{background:var(--badbg);color:var(--bad)} .info{background:var(--soft);color:var(--accent)}
+  table{width:100%;border-collapse:collapse;margin:10px 0;font-size:14px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--muted);font-weight:600;font-size:13px}
+  code{font:13px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:var(--code);padding:1px 5px;border-radius:4px}
+  ul,ol{padding-left:22px;margin:6px 0}
+  li{margin:4px 0}
+  .callout{border-left:4px solid var(--accent);background:var(--soft);padding:12px 14px;border-radius:6px;margin:14px 0}
+  .callout.bad{border-color:var(--bad);background:var(--badbg)}
+  .callout.warn{border-color:var(--warn);background:var(--warnbg)}
+  .toc{columns:2;gap:24px;font-size:14px}
+  .toc a{color:var(--accent);text-decoration:none}
+  .flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0}
+  .flow .n{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13px}
+  .flow .n.py{border-color:var(--accent)}
+  .flow .a{color:var(--muted)}
+  .small{font-size:13px;color:var(--muted)}
+  @media (max-width:640px){.toc{columns:1} h1{font-size:24px} table{font-size:13px} th,td{padding:6px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Estado dos Agentes de IA no Worder</h1>
+  <div class="sub">Relatório de auditoria técnica · 15 de outubro de 2026 · branch <code>claude/debug-console-error-FWrLE</code> · banco Supabase <code>rqpmoavktzvxfcfsdkcc</code> (leitura)</div>
+</header>
+
+<div class="card">
+  <strong>Como ler.</strong> Cada afirmação aponta o arquivo e, quando faz diferença, a linha. Os números de produção vieram de consultas somente leitura no banco em 15/10/2026. Tudo o que não foi possível confirmar está marcado como tal.
+  <div class="toc" style="margin-top:12px">
+    <div><a href="#resumo">1. Resumo executivo</a></div>
+    <div><a href="#vivo">2. Estado vivo em produção</a></div>
+    <div><a href="#arq">3. Arquitetura: dois motores</a></div>
+    <div><a href="#aba">4. A aba IA</a></div>
+    <div><a href="#canais">5. Canais: WhatsApp, e-mail, Instagram</a></div>
+    <div><a href="#runtime">6. Como os agentes rodam</a></div>
+    <div><a href="#conhecimento">7. Conhecimento (RAG)</a></div>
+    <div><a href="#telemetria">8. Telemetria</a></div>
+    <div><a href="#schema">9. Schema e migrations</a></div>
+    <div><a href="#docs">10. Planejado vs entregue</a></div>
+    <div><a href="#problemas">11. Problemas priorizados</a></div>
+    <div><a href="#proximos">12. Próximos passos sugeridos</a></div>
+  </div>
+</div>
+
+<!-- ===================================================== -->
+<h2 id="resumo">1. Resumo executivo</h2>
+
+<div class="callout bad">
+  <strong>Veredito.</strong> A camada de agentes é um piloto bem desenhado que está parado. Existe um único agente em uma única organização, a org está no modo <code>runtime</code>, e o runtime Python que atende esse modo rodou de um PC (processo <code>runtime-pc-piloto</code>) e deu o último sinal de vida em 25/09/2026. Nenhuma mensagem de WhatsApp entrou nos últimos 30 dias. A última chamada de LLM registrada é de 17/08/2026. Hoje, se um cliente escrever para essa loja, a mensagem vai para a fila <code>q_inbound</code> e ninguém a consome.
+</div>
+
+<div class="grid">
+  <div class="kpi"><div class="v">1</div><div class="l">agente IA em produção (ativo)</div></div>
+  <div class="kpi"><div class="v">1 org</div><div class="l">em modo runtime (piloto 17/08)</div></div>
+  <div class="kpi"><div class="v">25/09</div><div class="l">último heartbeat do runtime</div></div>
+  <div class="kpi"><div class="v">0</div><div class="l">mensagens inbound em 30 dias</div></div>
+  <div class="kpi"><div class="v">18</div><div class="l">chamadas LLM registradas (total)</div></div>
+  <div class="kpi"><div class="v">0</div><div class="l">fontes de conhecimento / chunks</div></div>
+</div>
+
+<h3>Os cinco pontos que mais importam</h3>
+<ol>
+  <li><strong>Runtime fora do ar e nunca implantado no Render.</strong> O <code>render.yaml</code> existe, mas o STATUS oficial registra que o deploy (etapa 8.1) nunca foi conectado. O piloto rodou via Docker num PC e morreu. Com a org em modo runtime, o caminho legado em Next.js recusa o job (<code>src/app/api/workers/whatsapp-ai-respond/route.ts:75-78</code>). Resultado: WhatsApp sem resposta de IA.</li>
+  <li><strong>Tabela <code>ai_budgets</code> não existe em produção</strong>, e <code>checkAiBudget</code> trata erro de leitura como bloqueio (<code>src/lib/ai/budget.ts:191-202</code>). Isso trava toda chamada paga do lado TypeScript: ingestão de conhecimento marca a fonte como erro "Não foi possível verificar o orçamento de IA" (<code>src/app/api/ai/process/document/route.ts:46-60</code>), embeddings lançam exceção (<code>embeddings.ts:107</code>), e o motor legado nem gera resposta (<code>engine.ts:90</code>). Isso explica os zero chunks no banco.</li>
+  <li><strong>A aba IA tem fluxos quebrados na navegação básica.</strong> Não há como criar um agente pela UI (o botão redireciona para a própria página), o painel de Conhecimento sempre aparece vazio porque chama a API sem <code>organization_id</code>, e escolher um agente em Relatórios/Avaliação joga o usuário de volta para a aba Agente.</li>
+  <li><strong>Só existe canal WhatsApp.</strong> Não há agente de e-mail, nem de Instagram, nem no runtime nem no Next.js. Os seletores de canal mostram "E-mail (em breve)" e "Instagram (em breve)" desabilitados.</li>
+  <li><strong>Telemetria existe no banco, mas não está "em tudo".</strong> No runtime, a trilha em Postgres (llm_calls, tool_calls, judge_scores, agent_traces, alerts) está completa para o turno. Porém os spans de domínio (<code>turn</code>, <code>send</code>, <code>mission_touch</code>) só nascem com <code>OTEL_EXPORTER_OTLP_ENDPOINT</code>, que o deploy não define, então o Logfire veria só spans automáticos de httpx/psycopg. No Next.js não há Sentry, OpenTelemetry ou Logfire, e quatro caminhos de IA não registram custo algum (copiloto sem budget, segmentação, targeting de popups, rota <code>/api/whatsapp/ai</code>).</li>
+</ol>
+
+<!-- ===================================================== -->
+<h2 id="vivo">2. Estado vivo em produção (consultado em 15/10/2026)</h2>
+
+<table>
+  <tr><th>Indicador</th><th>Valor</th><th>Leitura</th></tr>
+  <tr><td>Linhas em <code>ai_runtime_rollout</code></td><td>1, modo <code>runtime</code>, nota "cutover piloto PC 17/08"</td><td>A única org migrada é a do piloto. Rollback documentado: apagar a linha.</td></tr>
+  <tr><td>Heartbeat em <code>internal.runtime_heartbeats</code></td><td>processo <code>runtime-pc-piloto</code>, iniciado 17/08 13:27, último beat 25/09 13:38</td><td>Runtime morto há cerca de 20 dias. O <code>/healthz</code> responderia 503.</td></tr>
+  <tr><td>Agentes em <code>ai_agents</code></td><td>1 ativo, nome "Matheus", modelo <code>google/gemini-3.5-flash</code> via OpenRouter, tools habilitadas: nenhuma</td><td>Sem <code>search_knowledge</code>, o runtime nem consulta a base de conhecimento.</td></tr>
+  <tr><td>Versões em <code>ai_agent_versions</code></td><td>1 "produção", 1 "arquivada"</td><td>O runtime só compila prompt a partir da versão em produção.</td></tr>
+  <tr><td>Missões em <code>ai_missions</code></td><td>7 linhas, 2 ativas (<code>whatsapp.received</code>, <code>cart.abandoned</code>), 5 em rascunho</td><td>Catálogo padrão semeado; só o atendimento direto e o carrinho abandonado estão ligados.</td></tr>
+  <tr><td>Chave LLM da org (<code>organization_api_keys</code>)</td><td>1 chave, provider <code>openrouter</code>, ativa</td><td>Não há chave OpenAI, então a ingestão de conhecimento (que exige OpenAI) não funcionaria mesmo sem o problema do budget.</td></tr>
+  <tr><td>Fontes e chunks de conhecimento</td><td>0 e 0</td><td>Nenhuma base de conhecimento foi ingerida.</td></tr>
+  <tr><td>Ferramentas customizadas</td><td>0</td><td>Recurso nunca usado.</td></tr>
+  <tr><td><code>internal.llm_calls</code></td><td>18 no total, 0 em 30 dias; últimas em 17/08 (gemini-3.5-flash para resposta, claude-haiku-4.5 para o Juiz 1)</td><td>Toda a atividade é do dia do piloto.</td></tr>
+  <tr><td><code>internal.tool_calls</code> / <code>judge_scores</code> / <code>agent_traces</code></td><td>0 / 7 / 3</td><td>O juiz rodou 7 vezes, 3 respostas foram aceitas e rastreadas.</td></tr>
+  <tr><td><code>ai_usage_logs</code></td><td>15 linhas, todas <code>whatsapp_agent</code>, última 17/08 13:56</td><td>Caminho legado (TypeScript) usado só até o cutover do piloto.</td></tr>
+  <tr><td>Alertas abertos em <code>alerts</code></td><td>2, ambos <code>critical_violation</code> ("Judge 1 reprovou a resposta e nada foi enviado"), 17/08</td><td>Ninguém reconheceu os alertas. Não há consumidor de alertas na UI.</td></tr>
+  <tr><td>Filas pgmq</td><td>todas vazias, exceto <code>q_inbound_dlq</code> com 4 mensagens</td><td>Quatro turnos morreram na dead letter e nunca foram reprocessados.</td></tr>
+  <tr><td>Mensagens WhatsApp Cloud</td><td>41 no total, última 17/08 21:41</td><td>A conta WhatsApp está "active" mas sem tráfego.</td></tr>
+</table>
+
+<!-- ===================================================== -->
+<h2 id="arq">3. Arquitetura: dois motores coexistindo</h2>
+
+<p>Existem duas implementações completas do agente, e cada organização está em exatamente uma delas, decidido pela tabela <code>ai_runtime_rollout</code> (<code>src/lib/ai/runtime-rollout.ts</code>). Linha ausente significa <code>legacy</code>.</p>
+
+<div class="card">
+<h3>Modo <span class="tag info">legacy</span> (TypeScript, dentro da Vercel)</h3>
+<div class="flow">
+  <span class="n">Webhook Meta</span><span class="a">→</span>
+  <span class="n">QStash</span><span class="a">→</span>
+  <span class="n">webhook-processor</span><span class="a">→</span>
+  <span class="n">ai_pending + debounce 8s</span><span class="a">→</span>
+  <span class="n">QStash (delay)</span><span class="a">→</span>
+  <span class="n">worker whatsapp-ai-respond</span><span class="a">→</span>
+  <span class="n">cloud-runner → engine.ts</span><span class="a">→</span>
+  <span class="n">cloud-sender (bolhas)</span><span class="a">→</span>
+  <span class="n">Meta Cloud API</span>
+</div>
+<p class="small">Arquivos: <code>src/lib/whatsapp/webhook-processor.ts:609-694</code>, <code>src/app/api/workers/whatsapp-ai-respond/route.ts</code>, <code>src/lib/ai/cloud-runner.ts</code> (1.179 linhas), <code>src/lib/ai/engine.ts</code>, <code>src/lib/ai/cloud-sender.ts</code>. Provedores via <code>src/lib/whatsapp/ai-providers.ts</code> (<code>callAI</code>, <code>callAIWithTools</code>). Sete tools fixas em <code>src/lib/ai/tools/registry.ts</code>. Guard rails em <code>cloud-runner.ts:403-700</code> (agente ativo, ativação manual, cooldown pós-transferência, cooldown 5s, máximo de mensagens, parar em resposta humana, palavras de handoff, chave BYO). Áudio vira texto com Whisper (OpenAI ou Groq) e imagem usa visão (<code>cloud-runner.ts:726-807</code>).</p>
+</div>
+
+<div class="card">
+<h3>Modo <span class="tag info">runtime</span> (Python, processo único asyncio, pensado para o Render)</h3>
+<div class="flow">
+  <span class="n">Webhook Meta</span><span class="a">→</span>
+  <span class="n">webhook-processor</span><span class="a">→</span>
+  <span class="n">RPC ingest_inbound_message</span><span class="a">→</span>
+  <span class="n py">coalescer (2s)</span><span class="a">→</span>
+  <span class="n py">pgmq q_inbound</span><span class="a">→</span>
+  <span class="n py">worker: lease + responder</span><span class="a">→</span>
+  <span class="n py">Juiz 1 pré-envio</span><span class="a">→</span>
+  <span class="n py">internal.message_outbox</span><span class="a">→</span>
+  <span class="n py">sender (preflight + humanize)</span><span class="a">→</span>
+  <span class="n">Meta Cloud API</span>
+</div>
+<p class="small">Pacote <code>runtime/src/agents_runtime</code>. Entrada <code>__main__.py</code> → <code>app.py:run</code>. O Next.js faz apenas a ingestão e o espelho no inbox; prompt, LLM, juiz, ferramentas, momentos e envio acontecem no Python. Detalhes na seção 6.</p>
+</div>
+
+<div class="callout warn">
+<strong>Consequência prática.</strong> O <code>runtime/FORK.md</code> lista 32 capacidades que uma org perde ao migrar para o runtime, entre elas: sem transcrição de áudio e sem visão (item 11), um agente por org ignorando o canal de origem (item 3), sem teto mensal de gasto (item 25), sem piso de relevância no RAG (item 30). Em compensação, só o runtime tem Juiz 1 obrigatório, missões, momentos, cupons e ferramentas customizadas. As duas pilhas não são equivalentes, e a UI não deixa isso claro: o catálogo de tools mostra seis ferramentas que o runtime não executa (checklist item 87), reduzindo para só <code>search_knowledge</code> quando a org está no runtime (<code>src/lib/ai/tools/catalog.ts:83-87</code>).
+</div>
+
+<!-- ===================================================== -->
+<h2 id="aba">4. A aba IA (<code>/ai</code>)</h2>
+
+<p>Página <code>src/app/(dashboard)/ai/page.tsx</code> com três abas: <strong>Agente</strong>, <strong>Conhecimento</strong> e <strong>Atividade</strong>. As abas antigas (reports, eval, api-keys, missions, limits) são remapeadas para essas três. A rota antiga <code>/whatsapp/ai-agents</code> virou um redirect para <code>/ai</code>. Existe também <code>/whatsapp/agente</code>, que reaproveita o interruptor do agente e a área de missão, com link para o hub.</p>
+
+<h3>4.1 Aba Agente</h3>
+<ul>
+  <li>Carrega <code>GET /api/ai/agents/canonical</code> e <code>GET /api/ai/missions</code> (<code>AgentTab.tsx:248-249</code>). Se houver mais de um agente ativo, pede para escolher o canônico (<code>POST /api/ai/agents/canonical</code>) e arquiva os demais: a regra é um agente por loja.</li>
+  <li>Dois layouts sem alternância manual: <strong>RadialView</strong> (nove áreas em órbita, a partir de 1024px) e <strong>ClassicView</strong> (as mesmas áreas em passos verticais). O centro do radial chama <code>POST /api/ai/preview-prompt</code>, que depende do runtime estar no ar (<code>AGENTS_RUNTIME_URL</code> + <code>AGENTS_PREVIEW_TOKEN</code>); sem isso responde 503 e aparecem blocos "fantasma".</li>
+  <li>As nove áreas (<code>src/lib/ai/agent-hub.ts:35-45</code>) e o que cada uma grava:</li>
+</ul>
+<table>
+  <tr><th>Área</th><th>Campos</th><th>Onde grava</th></tr>
+  <tr><td>Identidade</td><td>nome; voz (casual, amigável, profissional, luxo); apresentação (transparente, nome+função, discreta)</td><td><code>persona.tone</code>, <code>presentation_mode</code></td></tr>
+  <tr><td>Descoberta</td><td>missão "WhatsApp direto": objetivo, critérios, proibições, concessão, máximo de turnos, política de mudança de assunto; editor modal</td><td><code>ai_missions</code> via <code>/api/ai/missions</code></td></tr>
+  <tr><td>Adaptação</td><td>5 toggles (espelhar tom, espelhar tamanho, emoji se o cliente usar, insistir menos após reclamação, saudação distinta para recompra); tamanho base; entrega: debounce 3-60s, dividir em bolhas, ritmo de digitação</td><td><code>client_adaptation</code>, <code>persona.response_length</code>, <code>settings.delivery</code></td></tr>
+  <tr><td>Conhecimento</td><td>contagem de fontes (sempre 0, ver bugs)</td><td>-</td></tr>
+  <tr><td>Ferramentas</td><td>toggles do catálogo: transfer_to_human, search_knowledge, save_customer, save_interests, timeline, product_lookup, order_status</td><td><code>settings.tools.enabled</code></td></tr>
+  <tr><td>Limites</td><td>tópicos bloqueados; invariantes</td><td><code>settings.safety.blocked_topics</code>, <code>persona.guidelines</code></td></tr>
+  <tr><td>Handoff</td><td>palavras-chave; mensagem de transição</td><td><code>settings.safety</code></td></tr>
+  <tr><td>Juízes</td><td>Juiz 1 fixo (pré-envio, obrigatório); juízes do lojista {nome, critério, ativo}</td><td><code>settings.judges.custom</code></td></tr>
+  <tr><td>Motor &amp; budget</td><td>modelo em texto livre; provedor somente leitura; gerenciador de chaves (8 provedores). <strong>Não há campo de orçamento em dinheiro.</strong></td><td>coluna <code>model</code>; <code>organization_api_keys</code></td></tr>
+</table>
+<p>Não existe campo de system prompt livre: o prompt nasce dessas áreas mais a missão (no runtime, compilado por <code>prompt_compiler.py</code>; no legado, por <code>prompt-builder.ts</code> mais o <code>system_prompt</code> gravado por propostas aplicadas). O interruptor geral (<code>AgentPowerSwitch</code>) faz <code>PATCH /api/ai/agents/{id} {is_active}</code> na hora.</p>
+
+<h3>4.2 Ferramentas customizadas</h3>
+<p><code>CustomToolsSection.tsx</code>: slug, rótulo, descrição, quando usar, endpoint https, GET/POST, header de autenticação guardado como segredo, parâmetros tipados. A ferramenta nasce desligada e o próprio schema do banco exige um teste aprovado antes de habilitar (<code>supabase/migrations/20260814000003</code>). O teste roda em Next.js com guarda SSRF; a execução real só acontece no runtime Python (<code>tools/custom_http.py</code>).</p>
+
+<h3>4.3 Aba Conhecimento</h3>
+<p><code>KnowledgeBasePanel.tsx</code>. Tipos exibidos: arquivo, URL, texto, FAQ, produtos Shopify, políticas Shopify. Mas o modal de adicionar só oferece <strong>texto, URL e FAQ</strong> (<code>:300-311</code>): upload de arquivo e sincronização Shopify existem como API (<code>/sources/upload</code>, <code>/integrations/{id}/sync</code>) e não têm botão. URL é página única; não há profundidade de crawl na UI (o crawler no backend segue sitemap até 20 páginas). Chips de status: Aguardando, Processando, Pronto, Erro; ações: reprocessar e excluir. Cabeçalho ainda em inglês ("Knowledge Base").</p>
+
+<h3>4.4 Aba Atividade</h3>
+<ul>
+  <li><strong>Conversas &amp; relatórios</strong> (<code>ReportsView.tsx</code>, <code>GET /api/ai/agents/{id}/reports</code>): medidor de qualidade, CSAT real (<code>whatsapp_csat_ratings</code>) ou "estimado por IA", histograma de estrelas, conversas, taxa de resolução; propostas de prompt com diff (gerar, aplicar, dispensar). O próprio código comenta que essa seção é "legado congelado" (<code>:204-205</code>).</li>
+  <li><strong>Atividade do runtime</strong> (<code>RuntimeActivitySection.tsx</code>, <code>GET /api/ai/activity</code>): últimas 50 linhas da view <code>ai_runtime_activity</code>: quando, canal, missão, chamadas LLM, chamadas de tool, custo USD, veredito e nota do último juiz. <strong>Só mostra orgs no runtime</strong>; orgs legadas ficam invisíveis aqui.</li>
+  <li><strong>Avaliação</strong> (<code>EvalView.tsx</code>): versões com nota, critérios aprovados/reprovados, kappa de Cohen juiz×humano, casos por tag, anotação de respostas (bom/ruim/corrigir). <strong>Teste de cenários</strong> (<code>TestRunView.tsx</code>): personas sintéticas, status pass/flag/grave, transcrição.</li>
+  <li><strong>/settings/ai-usage</strong>: chamadas, sucesso %, tokens, custo cobrável contra o orçamento, custo de plataforma, agrupado por feature/modelo/dia. Só lê o orçamento; não há onde defini-lo.</li>
+  <li><strong>Inbox</strong> (<code>AgentActivity.tsx</code>): passos ao vivo via Realtime em <code>whatsapp_ai_run_steps</code>; run considerada travada após 120s.</li>
+</ul>
+
+<h3>4.5 Defeitos confirmados na UI</h3>
+<table>
+  <tr><th>#</th><th>Defeito</th><th>Evidência</th></tr>
+  <tr><td>U1 <span class="tag bad">P0</span></td><td>Painel de Conhecimento sempre vazio ("Nenhum agente de IA criado")</td><td><code>KnowledgeBasePanel.tsx:89</code> chama <code>GET /api/ai/agents</code> sem <code>organization_id</code>; a rota devolve 400 (<code>src/app/api/ai/agents/route.ts:39-41</code>). Afeta a aba Conhecimento e o nó Conhecimento do radial.</td></tr>
+  <tr><td>U2 <span class="tag bad">P0</span></td><td>Não há como criar um agente pela interface</td><td>Botão "Criar agente" leva a <code>/whatsapp/ai-agents</code> (<code>AgentTab.tsx:404</code>), que redireciona para <code>/ai</code>. Nenhum componente chama <code>POST /api/ai/agents</code>.</td></tr>
+  <tr><td>U3 <span class="tag warn">P1</span></td><td>Selecionar agente em Relatórios/Avaliação perde a seleção e muda de aba</td><td><code>AgentSelect.tsx:376</code> faz <code>router.replace('/whatsapp/ai-agents?tab=activity&amp;agent=…')</code>; o redirect não conhece <code>activity</code> e descarta <code>agent</code> (<code>ai-agents/page.tsx:12-18</code>).</td></tr>
+  <tr><td>U4 <span class="tag warn">P1</span></td><td>Conhecimento nunca aparece como configurado no radial</td><td><code>agent-hub.ts:168</code> fixa <code>knowledge.sources = 0</code>.</td></tr>
+  <tr><td>U5 <span class="tag warn">P2</span></td><td>Textos apontando para abas que não existem</td><td>"aba Limites → migração" (<code>RuntimeActivitySection.tsx:503</code>), "aba Agentes" (<code>KnowledgeBasePanel.tsx:195</code>), "aba Fontes"/"API Keys" (<code>catalog.ts</code>).</td></tr>
+  <tr><td>U6 <span class="tag warn">P2</span></td><td>Seletor de versão na Avaliação é cosmético</td><td>Troca só o rótulo; critérios e casos não são recarregados. <code>TestRunView</code> nunca recebe <code>versionLabel</code>.</td></tr>
+  <tr><td>U7 <span class="tag warn">P2</span></td><td>Validações fracas no cliente</td><td>Modelo em texto livre; concessão sem teto contra a missão (<code>AiMissionActionConfig.tsx:414-424</code>); debounce aceita qualquer valor até salvar.</td></tr>
+  <tr><td>U8 <span class="tag info">P3</span></td><td>Página <code>/moments</code> referida no código não existe</td><td><code>ai/page.tsx:7-8</code>; só <code>MomentBanner</code> (campanhas e automações) consome <code>GET /api/ai/moments/active</code>.</td></tr>
+  <tr><td>U9 <span class="tag info">P3</span></td><td>Código morto no front</td><td><code>useWhatsAppAIAnalytics.ts</code> sem importador; <code>/api/whatsapp/ai/analytics</code> lê <code>whatsapp_ai_interactions</code>, que nada escreve.</td></tr>
+</table>
+
+<!-- ===================================================== -->
+<h2 id="canais">5. Canais: WhatsApp, e-mail, Instagram, fluxos</h2>
+
+<h3>5.1 WhatsApp <span class="tag ok">existe</span></h3>
+<p><strong>Entrada.</strong> <code>src/app/api/whatsapp/webhook/route.ts</code> é só um encaminhador deprecado para <code>/api/whatsapp/cloud/webhook</code>. Com <code>ENABLE_ASYNC_WEBHOOK=true</code>, a rota valida o HMAC, grava o payload bruto em <code>whatsapp_webhook_events</code> e enfileira no QStash; o worker chama <code>processWebhookPayload</code> (<code>src/lib/whatsapp/webhook-processor.ts</code>). A mensagem é classificada em texto, áudio, imagem ou não suportado (documento, sticker, localização, vídeo). Em seguida, o fork por rollout (<code>:490-500</code>):</p>
+<ul>
+  <li><strong>runtime:</strong> RPC <code>ingest_inbound_message</code> com o debounce lido de <code>ai_agents.settings.delivery</code> (padrão 8s, cache 30s). Se a conversa está com IA desligada ou o tipo não é suportado, chama <code>cancel_pending_ai_response</code>. Nada mais roda no Next.js.</li>
+  <li><strong>legacy:</strong> marca <code>ai_pending</code> e <code>ai_debounce_until</code>, enfileira <code>whatsapp-ai-respond</code> no QStash com atraso; sem QStash, roda síncrono atrás do mesmo claim. O worker recusa o job se a org virou runtime, respeita o debounce, faz claim atômico (<code>claim_legacy_ai_pending</code>), roda o agente e, em falha transitória, tenta até 3 vezes e depois alerta (Slack + <code>notifications</code>). Rede de segurança: cron <code>reprocess-whatsapp-pending</code> a cada minuto.</li>
+</ul>
+<p><strong>Saída (legado).</strong> <code>sendHumanizedReply</code> (<code>cloud-sender.ts:121</code>): moderação de tópicos bloqueados (desliga IA e transfere), janela de 24h, opt-in, limitador e circuit breaker, até 4 bolhas de 600 caracteres, indicador de digitação, atraso de 1,5s com teto total de 8s, upsert em <code>whatsapp_cloud_messages</code> com <code>sent_by_bot</code>, atualização da conversa e <code>increment_agent_conversations</code>.</p>
+<p><strong>Saída (runtime).</strong> Outbox em <code>internal.message_outbox</code>, consumida por <code>queueing/sender.py</code> em lotes de 50 com lease de 60s: preflight em SQL (opt-out, janela de 24h, rebaixar para template, momentos), send guard, envio via <code>channels/cloud_api.py</code> com token por conta, humanização equivalente, espelho no inbox e passo <code>ai_run_step</code>. O webhook de status correlaciona de volta com <code>correlate_channel_status</code>.</p>
+<div class="callout warn"><strong>Defeito no legado:</strong> <code>window_closed</code> nunca é tratado em <code>cloud-runner.ts</code>; cai no ramo final (<code>:1164-1177</code>) como falha transitória, é retentado 3 vezes e vira alerta "gave_up". Uma janela fechada não é transitória.</div>
+
+<h3>5.2 E-mail <span class="tag bad">não existe</span></h3>
+<p>Não há agente de e-mail em nenhuma das duas pilhas. O webhook da Resend (<code>src/app/api/webhooks/resend/route.ts</code>) trata apenas delivered, bounced, failed, complained, opened e clicked; não existe ingestão de e-mail recebido. Em <code>src/lib/email</code> e <code>src/app/api/email*</code> não há nenhuma chamada a LLM (grep por openai, anthropic, callAI vazio). No runtime, a única menção é um comentário em <code>sender.py:223</code> ("adapters de email/instagram chegam…"), e <code>MissionTouchJob.preferred_channel</code> é lido do payload mas nunca usado. A UI do nó de fluxo mostra "E-mail (em breve)" desabilitado (<code>AiMissionActionConfig.tsx:434-443</code>).</p>
+
+<h3>5.3 Instagram <span class="tag bad">não existe</span></h3>
+<p><code>src/app/api/instagram/webhook/route.ts</code> armazena mensagens e não tem caminho de IA. Mesma situação do e-mail na UI e no runtime.</p>
+
+<h3>5.4 Flow builder <span class="tag ok">existe, só via runtime</span></h3>
+<p>O nó <strong>"Toque de IA (Missão)"</strong> (<code>action_ai_mission</code>, <code>src/lib/automation/node-executors.ts:2124-2232</code>) faz uma única chamada à RPC <code>emit_ai_mission_job</code> com a família do evento, objetivo/tom delta, concessão opcional, canal preferido e <code>p_otel: null</code>. Todo o trabalho acontece no runtime (toucher). Se a org não está no runtime, o nó falha com <code>not_rolled_out</code>. O executor antigo <code>action_whatsapp_ai</code> está deprecado e atualiza <code>whatsapp_conversations.bot_active</code>, tabela legada que a inbox Cloud não lê, ou seja, não faz nada útil para conversas Cloud.</p>
+
+<h3>5.5 Outros usos de IA fora do agente</h3>
+<ul>
+  <li><strong>Copiloto do inbox</strong> (<code>/api/whatsapp/ai/copilot</code>, <code>ai-chatbot-service.ts:362-440</code>): usa a chave de plataforma <code>OPENAI_API_KEY</code>, lê a tabela legada <code>whatsapp_conversations</code> (<code>:172</code>), então provavelmente responde "Conversation not found" para conversas da inbox Cloud.</li>
+  <li><strong>Segmentação por linguagem natural</strong> (<code>/api/segments/ai/generate</code>): chave de plataforma Anthropic, não cobrável.</li>
+  <li><strong>Targeting de popups/forms</strong> (<code>popups/ai-targeting.ts</code>): sem registro de custo, só rate limit diário no Upstash.</li>
+  <li><strong>Rota <code>/api/whatsapp/ai</code></strong>: opera sobre <code>whatsapp_ai_configs</code> e <code>whatsapp_conversations</code> (legado), sem chamador no front. Efetivamente morta.</li>
+</ul>
+
+<!-- ===================================================== -->
+<h2 id="runtime">6. Como os agentes rodam (runtime Python)</h2>
+
+<h3>6.1 Processo e filas</h3>
+<ul>
+  <li><strong>Boot</strong> (<code>__main__.py</code>): exige <code>SUPABASE_DB_URL</code> (session pooler, porque o engine usa <code>SET ROLE</code> e leases por sessão), <code>AGENTS_RESPONDER</code> e <code>AGENTS_TOUCHER</code>; sem eles o processo não sobe, para nunca responder sem o Juiz 1. <code>AGENTS_CHANNEL</code> é opcional (sem ele, não há sender). HTTP opcional por <code>AGENTS_HTTP_PORT</code>: <code>GET /healthz</code> (lê o heartbeat, 503 se velho) e <code>POST /internal/preview-prompt</code> (bearer <code>AGENTS_PREVIEW_TOKEN</code>).</li>
+  <li><strong>Tarefas</strong> (<code>app.py:run</code>): coalescer a cada 2s (<code>internal.coalesce_due_conversations</code> → <code>q_inbound</code>), heartbeat, replay de DLQ, 2 workers fixos (<code>AGENTS_WORKERS</code> é ignorado, o DEPLOY.md admite), housekeeping (varrer outbox, expirar grants) e sender.</li>
+  <li><strong>Filas pgmq:</strong> <code>q_inbound</code>, <code>q_domain_events</code>, <code>q_scheduled</code>, <code>q_evals</code> e suas DLQs. Round-robin ponderado 8:4:1. <code>q_scheduled</code> e <code>q_evals</code> não têm consumidor.</li>
+  <li><strong>Turno</strong> (<code>queueing/worker.py:267-381</code>): transação curta confere rollout e conta WhatsApp e faz <code>claim_conversation</code> (lease 2 min); responder roda fora de transação com timeout de 90s e keepalive a cada 45s; commit por CAS em <code>conclude_turn</code> grava outbox e trace aceito. Resultados BUSY (retry em 2s), STALE/SUPERSEDED/DONE (arquiva). Teto de 3 turnos simultâneos por tenant, em memória (vale só com um processo).</li>
+  <li><strong>Falhas:</strong> classificação transitória/permanente/desconhecida; backoff 30s × 4ⁿ com jitter, teto 1h; limites 5/5/2; dead letter abre alerta <code>send_failed</code> ou <code>mission_touch_failed</code>.</li>
+</ul>
+
+<h3>6.2 O laço do agente (<code>agent_core/responder.py</code>)</h3>
+<p>Ordem: arbitragem de missão → guards de comportamento do lojista → palavras de handoff → horário comercial → mídia sem texto → momentos → escolha da chave LLM → recuperação de conhecimento → <code>compile_prompt</code> → <code>guarded_reply</code> (gerar + julgar) → tópicos bloqueados no rascunho.</p>
+<ul>
+  <li><strong>Prompt</strong> é compilado no Python (<code>prompt_compiler.py:334-364</code>) em blocos AGENT · MISSION · STATE · CHANNEL · CONVERSATION · KNOWLEDGE, a partir da versão do agente com status "produção", missões, momentos, grants, ledger e histórico de compras. Sem missão ativa, não compila (alerta <code>no_active_mission</code> e silêncio). Uma linha fixa proíbe negar que é IA.</li>
+  <li><strong>Provedores:</strong> OpenRouter (chat e embeddings) e chaves diretas OpenAI-compatíveis (OpenAI, Groq, DeepSeek, Gemini) e Anthropic. Cascata BYO-only: chave direta da org para o provedor do agente, senão OpenRouter da org, senão alerta <code>no_org_llm_key</code> e silêncio. A chave de plataforma <code>AGENTS_OPENROUTER_API_KEY</code> serve só ao Juiz 1 (<code>anthropic/claude-haiku-4.5</code>) e aos embeddings. Chaves descriptografadas por <code>crypto/secret_box.py</code>, port byte-compatível do codec do app.</li>
+  <li><strong>Ferramentas:</strong> laço de até 3 rodadas (<code>tool_loop.py</code>). Disponíveis: <code>create_coupon</code> (se missão e agente permitem) e ferramentas HTTP customizadas do lojista. As sete tools do catálogo TypeScript não existem aqui.</li>
+  <li><strong>Teto por turno:</strong> 8 chamadas LLM somando chat, juiz e embedding (<code>metering.py</code>). <strong>Não há teto mensal</strong>.</li>
+  <li><strong>Segurança de prompt:</strong> não há regex ou classificador de injeção/PII; isso fica a cargo dos critérios críticos do Juiz 1 (<code>nao-revela-prompt</code>, <code>nao-obedece-injecao</code>, em <code>runtime/evals/rubrics/seguranca.json</code>).</li>
+</ul>
+
+<h3>6.3 Juiz 1 (pré-envio, obrigatório)</h3>
+<p><code>judges/pre_send.py:332-428</code>. Falha crítica: nada é enviado e não há regeneração. Falha padrão: regenera até 2 vezes com os critérios reprovados como feedback; esgotando, envia o melhor rascunho. Saída ilegível do juiz conta como reprovação (fail-closed). Sem nenhum julgamento usável, nada sai e abre alerta <code>critical_violation</code> com o rascunho guardado. Cada tentativa vai para <code>internal.judge_scores</code>. Os dois alertas abertos em produção são exatamente esse caso.</p>
+
+<h3>6.4 Missões, toques, momentos, incentivos</h3>
+<ul>
+  <li><strong>Missões</strong> (<code>ai_missions</code>): catálogo por evento. A dona da conversa ou a de descoberta (<code>whatsapp.received</code>) vence a arbitragem.</li>
+  <li><strong>Toques</strong> (<code>toucher.py</code>): mensagens proativas vindas de <code>q_domain_events</code> via <code>emit_ai_mission_job</code>; mesmos guards, chave e juiz. Se o toque pede concessão, o cupom é criado antes da geração. <strong>O toque não tem laço de ferramentas</strong> (checklist item 73).</li>
+  <li><strong>Momentos</strong> (<code>commercial_moments</code>): janelas de data calculadas na leitura; fatos somam, a alegação promocional vem do momento de maior prioridade; o sender re-checa.</li>
+  <li><strong>Incentivos</strong> (<code>commerce/offer_engine.py</code>): único emissor (reuso, depois momento ou concessão da missão com teto, senão nega). Grants e ledger auditáveis; cupom materializado via Shopify (<code>connectors/shopify.py</code>).</li>
+</ul>
+
+<h3>6.5 Deploy</h3>
+<p><code>render.yaml</code> descreve um web service Docker (plano starter, região <code>ohio</code>, embora o Supabase esteja em <code>sa-east-1</code>), health check <code>/healthz</code>, com os segredos <code>SUPABASE_DB_URL</code>, <code>AGENTS_OPENROUTER_API_KEY</code>, <code>ENCRYPTION_KEY</code>, <code>AGENTS_PREVIEW_TOKEN</code> e <code>AGENTS_LOGFIRE_TOKEN</code>. <strong>Segundo o STATUS (etapa 8.1), esse deploy nunca foi conectado.</strong> O runbook <code>docs/runbooks/2026-09-17-piloto-runtime.md</code> diz explicitamente que nenhum passo gated pelo usuário foi executado. Rollback (8.7) nunca foi testado.</p>
+
+<h3>6.6 Testes do runtime</h3>
+<p>66 testes unitários, 70 de banco (schema, RLS, lease/CAS, outbox, guards, tool loop, conhecimento, llm_calls), 14 de pipeline (engine loop, cenários, gate do juiz, replay de DLQ, responder real com LLM simulado), 1 de contrato OpenRouter. Há gates de arquitetura (import-linter, sem SQL fora de <code>repository</code>, sem relógio/aleatoriedade direta). Pacotes de cenários em <code>runtime/evals/pack</code>, mas <strong>não existe runner de evals</strong>: <code>q_evals</code> sem consumidor e <code>internal.eval_runs</code> sem código.</p>
+
+<!-- ===================================================== -->
+<h2 id="conhecimento">7. Conhecimento (RAG)</h2>
+
+<table>
+  <tr><th>Etapa</th><th>Onde</th><th>Como</th><th>Estado</th></tr>
+  <tr><td>Fontes</td><td>Next.js, <code>ai_agent_sources</code></td><td>texto e URL (<code>/sources</code>), arquivo (<code>/sources/upload</code>, bucket <code>AI_SOURCES_BUCKET</code>), produtos Shopify (<code>/integrations/{id}/sync</code>). Todos chamam internamente <code>/api/ai/process/document</code>.</td><td>UI só expõe texto, URL e FAQ (U-bug). 0 fontes em produção.</td></tr>
+  <tr><td>Extração</td><td><code>processors/file-extractor.ts</code>, <code>crawler.ts</code></td><td>pdf-parse ou mammoth com fallback regex; crawler com guarda SSRF, até 20 páginas por sitemap ou 8 por links, 40s. <code>source_type='products'</code> não é suportado nessa rota.</td><td>OK</td></tr>
+  <tr><td>Chunking</td><td><code>text-processor.ts</code></td><td>500 tokens com 50 de sobreposição.</td><td>OK</td></tr>
+  <tr><td>Embeddings</td><td><code>embeddings.ts</code></td><td>fetch direto à OpenAI, lotes de 100, modelo <code>text-embedding-3-small</code>, espaço <code>openai:text-embedding-3-small</code>. Chave <strong>só</strong> de <code>organization_api_keys</code> com provider <code>openai</code>, sem fallback de env. Passa por <code>checkAiBudget</code> e <code>trackAiUsage('embedding')</code>.</td><td><span class="tag bad">bloqueado</span> por <code>ai_budgets</code> ausente; e a org piloto não tem chave OpenAI.</td></tr>
+  <tr><td>Armazenamento</td><td><code>ai_agent_chunks</code> (pgvector 1536, HNSW)</td><td>coluna <code>embedding_model</code> para proveniência.</td><td>0 chunks</td></tr>
+  <tr><td>Busca (legado)</td><td><code>rag.ts</code> → RPC <code>search_agent_knowledge</code></td><td>top 5, limiar 0,7, escopo por org. Injetado no prompt, ou sob demanda se a tool <code>search_knowledge</code> estiver ativa.</td><td>OK</td></tr>
+  <tr><td>Busca (runtime)</td><td><code>repository/knowledge.py</code>, <code>tools/knowledge.py</code></td><td>embeda a consulta via OpenRouter (chave de plataforma), cosseno em <code>ai_agent_chunks</code> filtrando <code>embedding_model</code> e org, top 5, <strong>sem limiar</strong>. Só roda se <code>search_knowledge</code> estiver habilitada no agente.</td><td>Agente piloto tem tools vazias, então o runtime nunca consulta conhecimento.</td></tr>
+  <tr><td>Shopify sync</td><td><code>integrations/[id]/sync/route.ts</code></td><td>apaga todos os chunks e reinsere sem checar erro de insert (<code>:152</code>, <code>:179</code>).</td><td><span class="tag warn">não atômico</span></td></tr>
+  <tr><td>Fontes travadas</td><td><code>stale-sources.ts</code></td><td>pending/processing há mais de 1h vira erro ao listar.</td><td>OK</td></tr>
+</table>
+<p class="small">O runtime tem <code>ingest_chunk</code> sem chamadores: a ingestão é 100% Next.js e a leitura é feita pelas duas pilhas.</p>
+
+<!-- ===================================================== -->
+<h2 id="telemetria">8. Telemetria: está em tudo?</h2>
+
+<div class="callout"><strong>Resposta curta: não.</strong> A trilha em Postgres do runtime cobre bem o turno (LLM, tools, juiz, trace aceito, alertas, passos). Fora disso há três buracos grandes: (1) spans de domínio do runtime desligados na configuração de produção, (2) nenhum APM no Next.js (sem Sentry, sem OpenTelemetry, sem Logfire, sem <code>instrumentation.ts</code>), e (3) caminhos de IA no Next.js que não registram custo nem budget.</div>
+
+<h3>8.1 Runtime Python</h3>
+<table>
+  <tr><th>Sinal</th><th>Onde grava</th><th>Estado</th></tr>
+  <tr><td>Chamadas LLM (propósito, provedor, modelo, tokens, custo, latência)</td><td><code>internal.llm_calls</code> → trigger copia para <code>ai_usage_logs</code></td><td><span class="tag ok">sempre</span> Custo só vem do OpenRouter; chaves diretas gravam custo nulo. Chamada que falha não gera linha; falha de escrita é engolida em nível debug (<code>responder.py:1027-1035</code>).</td></tr>
+  <tr><td>Chamadas de ferramenta</td><td><code>internal.tool_calls</code></td><td><span class="tag ok">sempre</span></td></tr>
+  <tr><td>Notas do juiz por tentativa</td><td><code>internal.judge_scores</code></td><td><span class="tag ok">sempre</span> Os rascunhos reprovados não são guardados, só nota e justificativa.</td></tr>
+  <tr><td>Trace aceito por resposta</td><td><code>public.agent_traces</code> via <code>record_accepted_trace</code>, payloads sanitizados</td><td><span class="tag ok">sempre</span> (o FORK.md item 23 dizendo o contrário está desatualizado)</td></tr>
+  <tr><td>Alertas com dedup</td><td><code>public.alerts</code></td><td><span class="tag ok">sempre</span> Mas nada na UI consome alertas; os dois críticos estão abertos desde 17/08.</td></tr>
+  <tr><td>Passos ao vivo</td><td><code>whatsapp_ai_run_steps</code></td><td><span class="tag ok">sempre</span></td></tr>
+  <tr><td>Heartbeat e profundidade das filas</td><td><code>internal.runtime_heartbeats</code>, log</td><td><span class="tag ok">sempre</span></td></tr>
+  <tr><td>Spans <code>coalesce_pass</code>, <code>turn</code>, <code>mission_touch</code>, <code>send</code> com propagação W3C pelo payload/outbox</td><td>OTel, exportador OTLP</td><td><span class="tag bad">no-op em produção</span> <code>span()</code> só cria span se <code>_tracer</code> foi definido, e isso só acontece com <code>OTEL_EXPORTER_OTLP_ENDPOINT</code> (<code>obs/telemetry.py:78-107</code>). O <code>render.yaml</code> define apenas <code>AGENTS_LOGFIRE_TOKEN</code>; <code>configure_logfire</code> instrumenta httpx, psycopg e métricas de sistema, mas não liga o tracer de domínio (<code>obs/logfire_setup.py:51-85</code>). Confirmado no código, não em execução.</td></tr>
+  <tr><td>Logs JSON com allowlist de atributos (cinto de PII)</td><td>stdout</td><td><span class="tag ok">sempre</span></td></tr>
+  <tr><td>Propagação de trace vindo do Next.js</td><td>-</td><td><span class="tag bad">não existe</span> O webhook não carrega traceparent; o nó de fluxo manda <code>p_otel: null</code>.</td></tr>
+  <tr><td>Chamadas Shopify, mark-read/typing, housekeeping, replay de DLQ, preview-prompt</td><td>-</td><td><span class="tag warn">sem registro</span> além dos spans automáticos de httpx quando o Logfire está ligado.</td></tr>
+  <tr><td>Sentry</td><td>-</td><td><span class="tag bad">não existe</span></td></tr>
+</table>
+
+<h3>8.2 Next.js</h3>
+<table>
+  <tr><th>Caminho</th><th>Custo/tokens em <code>ai_usage_logs</code></th><th>Trace</th><th>Gate de budget</th></tr>
+  <tr><td>Motor legado (resposta única)</td><td><code>whatsapp_agent</code> (<code>engine.ts:316</code>)</td><td><code>agent_traces</code> (<code>cloud-runner.ts:969</code>)</td><td>sim</td></tr>
+  <tr><td>Laço de ferramentas</td><td>por rodada (<code>loop.ts:164,179</code>)</td><td>tool_calls dentro do trace</td><td>sim</td></tr>
+  <tr><td>Embeddings</td><td><code>embedding</code></td><td>nenhum</td><td>sim</td></tr>
+  <tr><td>Transcrição de áudio</td><td><code>transcription</code></td><td>nenhum</td><td>sim</td></tr>
+  <tr><td>Juiz de evals</td><td><code>eval_judge</code></td><td><code>ai_eval_results</code></td><td>sim</td></tr>
+  <tr><td>Juiz do test-runner (<code>judgeTranscript</code>)</td><td><span class="tag bad">não registra</span> (<code>test-runner.ts:261</code>)</td><td><code>ai_scenario_runs</code></td><td>parcial</td></tr>
+  <tr><td>Turnos do test-run</td><td>registrados como <code>whatsapp_agent</code> cobrável (rótulo errado)</td><td>nenhum</td><td>sim</td></tr>
+  <tr><td>Propostas de prompt</td><td><code>proposals_generate</code></td><td>nenhum</td><td>sim</td></tr>
+  <tr><td>Copiloto do inbox</td><td><code>copilot</code>, não cobrável, chave de plataforma</td><td>nenhum</td><td><span class="tag bad">não</span></td></tr>
+  <tr><td>Segmentação por IA</td><td><code>segment_generation</code>, não cobrável, chave de plataforma</td><td>nenhum</td><td><span class="tag bad">não</span></td></tr>
+  <tr><td>Targeting de popups/forms</td><td><span class="tag bad">não registra</span></td><td>nenhum</td><td><span class="tag bad">não</span></td></tr>
+  <tr><td>Rota <code>/api/whatsapp/ai</code></td><td><span class="tag bad">não registra</span></td><td>nenhum</td><td>não</td></tr>
+  <tr><td>Processamento de documento</td><td>só console.log</td><td>status da fonte</td><td>sim</td></tr>
+  <tr><td>Envio de mensagem</td><td>n/a</td><td><code>whatsapp_cloud_messages</code></td><td>-</td></tr>
+</table>
+<p>Infra de observabilidade no Next.js hoje: <code>wlog</code> (JSON no console, <code>observability/whatsapp-logger.ts</code>), <code>sendAlert</code> (<code>whatsapp_alerts</code> + Slack) e os passos do inbox. Não há <code>@sentry/nextjs</code>, <code>@vercel/otel</code> nem <code>instrumentation.ts</code> no <code>package.json</code> ou em <code>src</code>. O plano <code>docs/OBSERVABILIDADE-PLANO-V3.md</code> (fases 0 a 3: Grafana, role somente leitura, runbooks, OTel na Vercel, Sentry, export duplo do runtime) continua com status "proposto, aguarda decisão".</p>
+<p>Outros pontos: a página de Atividade lê só as views do runtime e chama <code>agent_traces</code> de congelado, mas orgs legadas ainda escrevem lá, então a atividade delas fica invisível. As RPCs <code>update_agent_stats</code> e <code>increment_agent_conversations</code> não estão nas migrations versionadas e geram warning a cada chamada (<code>engine.ts:347-380</code>). Os quatro contadores de <code>ai_agents</code> (total_messages etc.) não têm escritor no runtime (checklist item 67).</p>
+
+<!-- ===================================================== -->
+<h2 id="schema">9. Schema e migrations</h2>
+
+<h3>9.1 Tabelas usadas no código sem migration na cadeia ativa</h3>
+<table>
+  <tr><th>Tabela</th><th>Situação</th><th>Impacto</th></tr>
+  <tr><td><code>ai_budgets</code></td><td>Só em <code>supabase/migrations-archive/20260616_ai_budgets.sql</code>. <strong>Ausente em produção</strong> (confirmado via <code>to_regclass</code>).</td><td><span class="tag bad">P0</span> Bloqueia embeddings, ingestão de documentos, motor legado, evals e propostas (todos chamam <code>checkAiBudget</code>).</td></tr>
+  <tr><td><code>ai_test_scenarios</code>, <code>ai_prompt_proposals</code>, <code>ai_scenario_runs</code>, <code>ai_eval_criteria</code>, <code>ai_eval_cases</code>, <code>ai_eval_results</code></td><td>Existem em produção, definidas só em arquivos arquivados (<code>20260612</code> a <code>20260614</code>).</td><td>Um banco limpo não reproduz produção; a suíte db não cobre essas tabelas.</td></tr>
+  <tr><td><code>ai_agent_integrations</code>, <code>whatsapp_ai_configs</code>, <code>agent_status</code></td><td>Existem em produção, definidas só em <code>sql/*.sql</code> solto.</td><td>Idem.</td></tr>
+</table>
+
+<h3>9.2 Tabelas definidas e não usadas</h3>
+<p><code>ai_agent_actions</code> (morta por decisão D8), <code>ai_agent_usage_logs</code>, <code>whatsapp_ai_agents</code>, <code>ai_models</code>, <code>internal.eval_runs</code>, <code>internal.scenarios</code> (o pack de evals lê de arquivos), <code>whatsapp_ai_interactions</code> (lida pela rota de analytics, nunca escrita).</p>
+
+<h3>9.3 O que está certo</h3>
+<p>A cadeia a partir de <code>20260812000001_agents_baseline_prereqs.sql</code> cria de forma coerente <code>ai_agents</code>, <code>ai_agent_versions</code> (uma versão "produção" por agente), <code>ai_agent_sources</code>/<code>ai_agent_chunks</code>, <code>agent_traces</code> + anotações, <code>ai_missions</code> (índice one-active), <code>commercial_moments</code>, <code>incentive_grants</code>/<code>ledger</code>, <code>ai_agent_custom_tools</code>, identidade canônica (<code>conversations</code>, <code>messages</code>, <code>channel_identities</code>), <code>internal.message_outbox</code>, <code>alerts</code>, <code>ai_runtime_rollout</code>, trilha <code>internal.llm_calls</code>/<code>tool_calls</code>/<code>judge_scores</code>, views <code>ai_runtime_activity*</code>, <code>whatsapp_ai_run_steps</code>, oito filas pgmq. RLS vem majoritariamente da migration genérica <code>20260909100000_enable_rls_org_tables.sql</code> (toda tabela com <code>organization_id</code>); as tabelas <code>internal</code> têm RLS e grants próprios. Fases B/C da remediação de RLS continuam como gate pendente.</p>
+
+<!-- ===================================================== -->
+<h2 id="docs">10. Planejado vs entregue</h2>
+
+<p>Doc-fonte: <code>core/agentes-por-evento.md</code> (agente por evento, runtime Python, pgmq, cascata de chaves BYO, Logfire+Grafana, UI radial, tools customizadas). O plano de 30 commits (<code>core/STATUS-agentes-por-evento.md</code>) foi executado; as etapas 9 e 10 (divergências do motor, IA Hub real) estão marcadas como feitas. A auditoria <code>docs/AUDITORIA-IA-2026-08-28-CHECKLIST.md</code> tem 89 itens, 47 ainda abertos; o fechamento de ondas 0-4 (<code>docs/audits/2026-09-17-fechamento-waves-0-4.md</code>) deixa a onda 4 parcial e as ondas 5-7 intocadas.</p>
+
+<table>
+  <tr><th>Item planejado</th><th>Estado</th></tr>
+  <tr><td>Runtime no Render com smoke end-to-end (STATUS 8.1/8.6, runbook de 8 passos)</td><td><span class="tag bad">não feito</span> Piloto rodou de um PC e morreu em 25/09.</td></tr>
+  <tr><td>Rollback testado (8.7)</td><td><span class="tag bad">não feito</span></td></tr>
+  <tr><td>Observabilidade V3 fases 0-3 (Grafana, role RO, runbooks, OTel/Sentry no Next, export duplo)</td><td><span class="tag bad">não iniciado</span> Status "proposto".</td></tr>
+  <tr><td>Consumidor de <code>q_scheduled</code> e de <code>q_evals</code>; runner de evals assíncrono</td><td><span class="tag bad">não existe</span></td></tr>
+  <tr><td>Laço de ferramentas no toque de missão (item 73)</td><td><span class="tag bad">não existe</span></td></tr>
+  <tr><td>Runtime executar as 6 tools oferecidas na UI (item 87)</td><td><span class="tag bad">não existe</span> A UI esconde as tools em modo runtime.</td></tr>
+  <tr><td>Drain da DLQ com reprocesso (81)</td><td><span class="tag warn">parcial</span> Replay automático existe (<code>app.py:402-412</code>), mas 4 mensagens seguem na DLQ e não há visão na UI.</td></tr>
+  <tr><td>Shadow mode (83), contabilidade de gasto não cobrado (85), contadores do agente (67)</td><td><span class="tag bad">abertos</span></td></tr>
+  <tr><td>Migration de <code>ai_budgets</code> e das tabelas de eval/propostas na cadeia ativa</td><td><span class="tag bad">não feito</span></td></tr>
+  <tr><td><code>prompt_mode</code> guiado/custom e prompt XML em camadas (<code>docs/plano-prompt-*.md</code>)</td><td><span class="tag bad">não implementado</span> (os próprios docs dizem isso)</td></tr>
+  <tr><td>Adaptadores de e-mail e Instagram</td><td><span class="tag bad">não existem</span></td></tr>
+  <tr><td>Tela de lista de agentes antes do radial (STATUS :195)</td><td><span class="tag bad">parado</span></td></tr>
+  <tr><td>Roadmap AI-native (sentimento, resumo, churn, autopilot de campanha)</td><td><span class="tag bad">nada no código</span></td></tr>
+  <tr><td>Docs legados (<code>SISTEMA-AGENTES-GUIA</code>, <code>INTEGRACAO-AGENTES-V2</code>, <code>ANALISE-CODIGO-AI-AGENTS</code>, <code>PROGRESSO.md</code>)</td><td><span class="tag warn">desatualizados</span> Citam componentes e rotas que não existem mais (<code>CreateAgentFlow</code>, <code>AIAgentList</code>, <code>AIAgentEditor</code>, <code>/api/whatsapp/ai-agents</code>).</td></tr>
+</table>
+
+<!-- ===================================================== -->
+<h2 id="problemas">11. Problemas priorizados</h2>
+
+<h3><span class="tag bad">P0</span> Impedem o produto de funcionar</h3>
+<ol>
+  <li><strong>Runtime fora do ar com a org em modo runtime.</strong> Sem processo consumindo <code>q_inbound</code>, nenhuma mensagem é respondida. Opções: subir o Render de verdade (render.yaml pronto, runbook pronto) ou apagar a linha de <code>ai_runtime_rollout</code> para voltar ao legado.</li>
+  <li><strong><code>ai_budgets</code> inexistente bloqueia toda chamada paga do Next.js.</strong> Criar a migration (há modelo no archive) ou fazer <code>checkAiBudget</code> tratar "tabela ausente" como "sem linha, usar padrão de $50".</li>
+  <li><strong>UI não permite criar agente nem ver conhecimento</strong> (U1, U2). Dois fixes pequenos: passar <code>organization_id</code> no fetch e ligar o botão a <code>POST /api/ai/agents</code> ou a um fluxo de criação.</li>
+</ol>
+
+<h3><span class="tag warn">P1</span> Degradam ou enganam</h3>
+<ol>
+  <li>Spans de domínio do runtime no-op sem OTLP: definir <code>OTEL_EXPORTER_OTLP_ENDPOINT</code> (Logfire aceita OTLP) ou fazer <code>telemetry.span</code> usar o tracer global que o Logfire configura.</li>
+  <li>Nenhum APM no Next.js; caminhos de IA sem custo registrado (copiloto sem budget, segmentação, targeting de popups, rota <code>/api/whatsapp/ai</code>, juiz do test-runner).</li>
+  <li>Alertas críticos sem consumidor na UI; DLQ com 4 mensagens sem visibilidade.</li>
+  <li>Página de Atividade cega para orgs legadas.</li>
+  <li><code>window_closed</code> tratado como transitório no legado; copiloto lendo tabela legada de conversas.</li>
+  <li>Seleção de agente que muda de aba (U3); conhecimento sempre "0 fontes" no radial (U4); upload e sync Shopify sem botão.</li>
+  <li>Sync Shopify não atômico (apaga antes de garantir reinserção).</li>
+  <li>Tabelas de produção (evals, propostas, integrações) sem migration versionada.</li>
+</ol>
+
+<h3><span class="tag info">P2</span> Dívida e limpeza</h3>
+<ol>
+  <li>Código morto: <code>/api/whatsapp/ai</code>, <code>processWithAI</code>/<code>handleAIResponse</code>, <code>useWhatsAppAIAnalytics</code>, <code>processors/index.ts</code>, <code>action_whatsapp_ai</code>, encaminhador do webhook antigo, tabelas órfãs listadas em 9.2.</li>
+  <li>Divergências de produto entre legado e runtime (áudio/visão, tools, teto mensal, limiar de RAG) sem aviso na UI.</li>
+  <li><code>AGENTS_WORKERS</code> ignorado; teto por tenant só vale com um processo; região do Render distante do banco.</li>
+  <li>Docs desatualizados e FORK.md com itens já resolvidos (23, 26).</li>
+  <li>Textos da UI apontando para abas inexistentes; cabeçalho em inglês; validações fracas no cliente.</li>
+</ol>
+
+<!-- ===================================================== -->
+<h2 id="proximos">12. Próximos passos sugeridos</h2>
+<ol>
+  <li><strong>Decidir o motor</strong> antes de qualquer coisa: ou o runtime Python sobe no Render e vira o caminho oficial (e o legado passa a ser só fallback de rollback), ou a org piloto volta ao legado e o runtime fica em pausa declarada. Manter os dois "meio vivos" é o que produziu o estado atual.</li>
+  <li><strong>Destravar o banco:</strong> migration de <code>ai_budgets</code> na cadeia ativa, mais as tabelas de eval/propostas/integrações; rodar a suíte db do runtime contra um banco limpo.</li>
+  <li><strong>Consertar a aba IA</strong> nos quatro pontos U1-U4 e expor upload e sync Shopify.</li>
+  <li><strong>Fechar a telemetria:</strong> ligar OTLP no runtime, adotar o mínimo do plano V3 no Next.js (instrumentation.ts com OTel e Sentry), registrar custo nos quatro caminhos descobertos, dar uma tela ou notificação aos alertas e à DLQ.</li>
+  <li><strong>Canais novos</strong> (e-mail, Instagram) só depois do item 1: hoje o runtime tem a porta <code>ChannelPort</code> e o campo <code>preferred_channel</code> prontos, mas nenhum adaptador; e no e-mail falta até a ingestão de recebidos.</li>
+</ol>
+
+<p class="small" style="margin-top:40px">Fontes: leitura do código em <code>src/</code>, <code>runtime/</code>, <code>supabase/migrations</code>, <code>core/</code> e <code>docs/</code>; consultas somente leitura ao banco de produção em 15/10/2026. Itens marcados como "confirmado no código, não em execução" não foram reproduzidos com o processo rodando.</p>
+
+</div>
+</body>
+</html>
