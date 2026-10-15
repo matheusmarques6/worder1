@@ -341,6 +341,15 @@
 "updated_at",
 "when_to_use"
 ],
+"ai_agent_entries": [
+"active",
+"agent_id",
+"created_at",
+"id",
+"kind",
+"organization_id",
+"ref_id"
+],
 "ai_agent_integrations": [
 "agent_id",
 "allow_price_info",
@@ -425,12 +434,15 @@
 "is_active",
 "max_tokens",
 "model",
+"monthly_cap_usd",
 "name",
 "organization_id",
 "persona",
 "presentation_mode",
 "provider",
+"role",
 "settings",
+"status",
 "system_prompt",
 "temperature",
 "total_conversations",
@@ -525,6 +537,7 @@
 ],
 "ai_missions": [
 "activated_at",
+"agent_id",
 "change_summary",
 "concession",
 "context_fields",
@@ -1449,6 +1462,7 @@
 "zip"
 ],
 "conversations": [
+"agent_id",
 "closed_at",
 "contact_id",
 "created_at",

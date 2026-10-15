@@ -34,13 +34,15 @@ afterEach(async () => {
 })
 
 it('loads Knowledge Base sources once after choosing its fallback agent', async () => {
-  const fetchMock = vi.fn(async (input: RequestInfo | URL) => String(input) === '/api/ai/agents'
+  // M0 passo 2: a lista exige organization_id (400 sem ele).
+  const agentsUrl = '/api/ai/agents?organization_id=org-1'
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => String(input) === agentsUrl
     ? { json: async () => [{ id: 'agent-1', name: 'Agent', description: '', is_active: true }] }
     : { ok: true, json: async () => [] })
   vi.stubGlobal('fetch', fetchMock)
   await act(async () => { root.render(<KnowledgeBasePanel organizationId="org-1" />) })
   await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/ai/agents/agent-1/sources'))
-  expect(fetchMock.mock.calls.filter(([url]) => String(url) === '/api/ai/agents')).toHaveLength(1)
+  expect(fetchMock.mock.calls.filter(([url]) => String(url) === agentsUrl)).toHaveLength(1)
   expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/sources'))).toHaveLength(1)
 })
 

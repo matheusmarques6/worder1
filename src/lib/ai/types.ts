@@ -19,6 +19,11 @@ export interface AIAgent {
   temperature: number
   max_tokens: number
   is_active: boolean
+  /** draft | active | paused (20261016000008) — fonte; is_active é espelho. */
+  status?: 'draft' | 'active' | 'paused'
+  /** Função do agente como o lojista a descreve. */
+  role?: string | null
+  monthly_cap_usd?: number | null
   persona: AgentPersona
   settings: AgentSettings
   total_messages: number

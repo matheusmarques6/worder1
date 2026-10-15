@@ -1,11 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-// W3-GD-07 aplicação: ai_agents_single_active_per_org (unique index parcial,
-// 20260917050000_single_active_agent.sql) recusa a SEGUNDA linha ativa na
-// mesma organização com um 23505 cru. As três rotas abaixo ativam sem
-// arquivar os demais primeiro — o merchant que liga um segundo agente na AI
-// Hub via PUT, PATCH ou "criar já ativo" ganha um 500, não uma troca limpa.
-// Mesma semântica que o canônico (api/ai/agents/canonical/route.ts) já tem.
+// Plano IA M2 (20261016000008): o índice ai_agents_single_active_per_org
+// caiu — vários agentes ativos por organização. As três rotas de escrita
+// deixam de arquivar os demais ao ativar um agente; quem atende cada número
+// é decidido por ai_agent_entries (runtime, alteração 2026-10-15-09).
 
 const { getSupabaseAdmin } = vi.hoisted(() => ({ getSupabaseAdmin: vi.fn() }))
 
@@ -78,8 +76,8 @@ beforeEach(() => {
   getSupabaseAdmin.mockReset()
 })
 
-describe('um agente ativo por organização — aplicação nas rotas de escrita', () => {
-  it('PUT ativando o segundo agente arquiva o primeiro (não 500)', async () => {
+describe('vários agentes ativos por organização — rotas de escrita', () => {
+  it('PUT ativando o segundo agente mantém o primeiro ativo', async () => {
     const table = fakeAgentsTable([
       { id: 'agent-a', organization_id: 'org-1', is_active: true, provider: 'openai' },
       { id: 'agent-b', organization_id: 'org-1', is_active: false, provider: 'openai' },
@@ -89,12 +87,10 @@ describe('um agente ativo por organização — aplicação nas rotas de escrita
     const response = await PUT(jsonRequest('PUT', { is_active: true }), { params: { id: 'agent-b' } })
 
     expect(response.status).toBe(200)
-    expect(activeCount(table)).toBe(1)
-    expect(table.rows.find((r) => r.id === 'agent-b')!.is_active).toBe(true)
-    expect(table.rows.find((r) => r.id === 'agent-a')!.is_active).toBe(false)
+    expect(activeCount(table)).toBe(2)
   })
 
-  it('PATCH ativando o segundo agente arquiva o primeiro (não 500)', async () => {
+  it('PATCH ativando o segundo agente mantém o primeiro ativo', async () => {
     const table = fakeAgentsTable([
       { id: 'agent-a', organization_id: 'org-1', is_active: true, provider: 'openai' },
       { id: 'agent-b', organization_id: 'org-1', is_active: false, provider: 'openai' },
@@ -104,12 +100,10 @@ describe('um agente ativo por organização — aplicação nas rotas de escrita
     const response = await PATCH(jsonRequest('PATCH', { is_active: true }), { params: { id: 'agent-b' } })
 
     expect(response.status).toBe(200)
-    expect(activeCount(table)).toBe(1)
-    expect(table.rows.find((r) => r.id === 'agent-b')!.is_active).toBe(true)
-    expect(table.rows.find((r) => r.id === 'agent-a')!.is_active).toBe(false)
+    expect(activeCount(table)).toBe(2)
   })
 
-  it('POST criando já-ativo arquiva o agente ativo existente (não 500)', async () => {
+  it('POST criando já-ativo não mexe no agente ativo existente e grava status', async () => {
     const table = fakeAgentsTable([
       { id: 'agent-a', organization_id: 'org-1', is_active: true, provider: 'openai' },
     ])
@@ -118,7 +112,19 @@ describe('um agente ativo por organização — aplicação nas rotas de escrita
     const response = await POST(jsonRequest('POST', { name: 'Novo agente', is_active: true }))
 
     expect(response.status).toBe(201)
-    expect(activeCount(table)).toBe(1)
-    expect(table.rows.find((r) => r.id === 'agent-a')!.is_active).toBe(false)
+    expect(activeCount(table)).toBe(2)
+    expect(table.rows[1].status).toBe('active')
+  })
+
+  it('POST sem is_active nasce rascunho', async () => {
+    const table = fakeAgentsTable([])
+    getSupabaseAdmin.mockReturnValue(table)
+
+    const response = await POST(jsonRequest('POST', { name: 'Rascunho', role: 'Vendas' }))
+
+    expect(response.status).toBe(201)
+    expect(table.rows[0].status).toBe('draft')
+    expect(table.rows[0].role).toBe('Vendas')
+    expect(table.rows[0].is_active).toBe(false)
   })
 })

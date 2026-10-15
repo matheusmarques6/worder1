@@ -6,16 +6,20 @@ import { EVENT_FAMILIES, pickEditableMissionFields } from '@/lib/ai/missions'
 export const dynamic = 'force-dynamic'
 
 // GET /api/ai/missions — o catálogo da org, agrupável por família na UI.
-export async function GET() {
+// ?agent_id= filtra as missões DESTE agente (plano IA M2 passo 15).
+export async function GET(request: NextRequest) {
   const auth = await getAuthClient()
   if (!auth) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
-  const { data, error } = await getSupabaseAdmin()
+  const agentId = new URL(request.url).searchParams.get('agent_id')
+  let query = getSupabaseAdmin()
     .from('ai_missions')
     .select('*')
     .eq('organization_id', auth.user.organization_id)
     .order('event_type', { ascending: true })
     .order('created_at', { ascending: false })
+  if (agentId) query = query.eq('agent_id', agentId)
+  const { data, error } = await query
 
   if (error) {
     console.error('Error fetching missions:', error)
@@ -44,6 +48,7 @@ export async function POST(request: NextRequest) {
       event_type: String(body.event_type),
       origin: 'lojista',
       status: 'draft',
+      agent_id: typeof body.agent_id === 'string' && body.agent_id ? body.agent_id : null,
       parent_version_id: body.parent_version_id ?? null,
       ...pickEditableMissionFields(body),
       objective: String(body.objective),
