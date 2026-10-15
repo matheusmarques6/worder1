@@ -6,9 +6,8 @@ MESMA função: a marca no espelho legado (`internal.mark_ai_handoff`), o
 alerta deduplicado e o booleano que diz se a marca pegou.
 """
 
+from typing import Any
 from uuid import UUID
-
-import psycopg
 
 from agents_runtime.repository import agent as agent_repo
 from agents_runtime.repository import alerts as alerts_repo
@@ -21,7 +20,7 @@ UNMIRRORED_DETAIL = " — a IA não foi desligada (conversa sem espelho no inbox
 
 
 async def transfer_to_human(
-    conn: psycopg.AsyncConnection,
+    conn: Any,
     *,
     organization_id: UUID,
     conversation_id: UUID,
