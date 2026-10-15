@@ -121,6 +121,7 @@ from agents_runtime.repository import llm_calls as llm_repo
 from agents_runtime.repository import missions as missions_repo
 from agents_runtime.repository import moments as moments_repo
 from agents_runtime.repository import orders as orders_repo
+from agents_runtime.repository import outcomes as outcomes_repo
 from agents_runtime.repository import provider_keys as keys_repo
 from agents_runtime.repository.scope import (
     WORKER_ROLE,
@@ -926,6 +927,9 @@ def build_responder(
                         conn, job, query, "blocked", version.agent_id
                     )
 
+                if outcome.draft is None and outcome.blocked_by != "budget_exceeded":
+                    await _record_blocked(conn, job, version.agent_id, outcome.blocked_by)
+
                 if outcome.draft is None:
                     # Item 41: se o motivo foi o teto do turno (e não o juiz),
                     # o título tem de dizer isso — um alerta que culpa o Judge
@@ -1300,8 +1304,42 @@ async def _record_gap(
                 agent_id=agent_id,
                 conversation_id=job.conversation_id,
             )
+            # Alteração 2026-10-15-14: a lacuna também é desfecho e evento.
+            await outcomes_repo.mark(
+                conn, organization_id=job.organization_id,
+                conversation_id=job.conversation_id, gap=True, agent_id=agent_id,
+            )
+            await outcomes_repo.record_event(
+                conn, organization_id=job.organization_id, kind="gap",
+                conversation_id=job.conversation_id, agent_id=agent_id,
+                text=question[:300], metadata={"outcome": outcome},
+            )
     except Exception:
         logger.debug("knowledge gap write failed", exc_info=True)
+
+
+async def _record_blocked(
+    conn: psycopg.AsyncConnection,
+    job: InboundJob | MissionTouchJob,
+    agent_id: UUID | None,
+    blocked_by: str | None,
+) -> None:
+    """A revisão segurou a resposta (alteração 2026-10-15-14). Telemetria:
+    nunca derruba o turno."""
+    try:
+        async with conn.transaction():
+            await scope_to_organization(conn, job.organization_id)
+            await outcomes_repo.mark(
+                conn, organization_id=job.organization_id,
+                conversation_id=job.conversation_id, blocked=True, agent_id=agent_id,
+            )
+            await outcomes_repo.record_event(
+                conn, organization_id=job.organization_id, kind="blocked",
+                conversation_id=job.conversation_id, agent_id=agent_id,
+                text="Resposta retida pela revisão", metadata={"blocked_by": blocked_by},
+            )
+    except Exception:
+        logger.debug("blocked outcome write failed", exc_info=True)
 
 
 async def _knowledge(

@@ -72,3 +72,49 @@ class TestVocabulary:
                 " values (%s, 'party')",
                 (tenant,),
             )
+
+
+class TestClosing:
+    def test_an_idle_conversation_closes_as_solved_unless_transferred(self, admin, tenant) -> None:
+        agent = create_agent(admin, tenant, status="active")
+        solved = create_thread(admin, tenant)
+        handed = create_thread(admin, tenant)
+        for thread, transferred in ((solved, False), (handed, True)):
+            admin.execute(
+                "update public.conversations set agent_id = %s,"
+                " last_inbound_at = now() - interval '2 days' where id = %s",
+                (agent, thread.conversation_id),
+            )
+            admin.execute(
+                "insert into public.ai_conversation_outcomes"
+                " (conversation_id, organization_id, agent_id, transferred, updated_at)"
+                " values (%s, %s, %s, %s, now() - interval '2 days')",
+                (thread.conversation_id, tenant, agent, transferred),
+            )
+
+        rows = admin.execute(
+            "select conversation_id, transferred from public.close_idle_ai_conversations(24, 500)"
+            " where organization_id = %s",
+            (tenant,),
+        ).fetchall()
+        assert dict(rows) == {solved.conversation_id: False, handed.conversation_id: True}
+
+        flags = dict(admin.execute(
+            "select conversation_id, resolved_without_human from public.ai_conversation_outcomes"
+            " where organization_id = %s",
+            (tenant,),
+        ).fetchall())
+        assert flags == {solved.conversation_id: True, handed.conversation_id: False}
+        (events,) = admin.execute(
+            "select count(*) from public.ai_activity_events"
+            " where organization_id = %s and kind = 'solved'",
+            (tenant,),
+        ).fetchone()
+        assert events == 1
+        # Já fechadas não fecham de novo.
+        again = admin.execute(
+            "select count(*) from public.close_idle_ai_conversations(24, 500)"
+            " where organization_id = %s",
+            (tenant,),
+        ).fetchone()
+        assert again == (0,)

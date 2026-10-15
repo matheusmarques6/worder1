@@ -27,6 +27,7 @@ from agents_runtime.obs.telemetry import annotate, span
 from agents_runtime.queueing.jobs import InboundJob, MissionTouchJob
 from agents_runtime.repository import agent as agent_repo
 from agents_runtime.repository import agent_traces, engine, whatsapp_accounts
+from agents_runtime.repository import outcomes as outcomes_repo
 from agents_runtime.repository.queue import PgmqQueue
 from agents_runtime.repository.scope import abort_connection
 
@@ -350,6 +351,7 @@ async def _turn(
             await agent_repo.assign_conversation_agent(
                 conn, conversation_id=job.conversation_id, agent_id=draft.trace.agent_id
             )
+            await _record_outcome(conn, job.organization_id, job.conversation_id, draft.trace)
 
     if outcome.committed:
         return TurnResult.DONE
@@ -503,6 +505,7 @@ async def _touch(
             await agent_repo.assign_conversation_agent(
                 conn, conversation_id=job.conversation_id, agent_id=draft.trace.agent_id
             )
+            await _record_outcome(conn, job.organization_id, job.conversation_id, draft.trace)
 
     if outcome.committed:
         return TurnResult.DONE
@@ -511,3 +514,30 @@ async def _touch(
         await engine.scope_to_organization(conn, job.organization_id)
         await engine.release_lease(conn, job.conversation_id, token)
     return TurnResult.SUPERSEDED
+
+
+async def _record_outcome(conn, organization_id, conversation_id, trace) -> None:
+    """Alteração 2026-10-15-14: o turno aceito alimenta o desfecho da conversa
+    e o feed de atividade (cupom concedido vira evento `incentive`). Roda
+    num savepoint: falha de telemetria nunca desfaz o CAS do turno."""
+    try:
+        async with conn.transaction():
+            await outcomes_repo.record_turn(
+                conn, organization_id=organization_id, conversation_id=conversation_id,
+                agent_id=trace.agent_id, tokens=trace.tokens,
+            )
+            for offer in outcomes_repo.coupon_offers(trace.tool_calls):
+                await outcomes_repo.mark(
+                    conn, organization_id=organization_id, conversation_id=conversation_id,
+                    incentive_offered=True, agent_id=trace.agent_id,
+                )
+                await outcomes_repo.record_event(
+                    conn, organization_id=organization_id, kind="incentive",
+                    conversation_id=conversation_id, agent_id=trace.agent_id,
+                    text="Cupom oferecido na conversa",
+                    metadata={
+                        k: offer.get(k) for k in ("decision", "code", "grant_id") if k in offer
+                    },
+                )
+    except Exception:
+        LOGGER.debug("outcome write failed", exc_info=True)

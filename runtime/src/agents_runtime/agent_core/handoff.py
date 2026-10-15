@@ -11,6 +11,7 @@ from uuid import UUID
 
 from agents_runtime.repository import agent as agent_repo
 from agents_runtime.repository import alerts as alerts_repo
+from agents_runtime.repository import outcomes as outcomes_repo
 from agents_runtime.repository.scope import scope_to_organization
 
 #: O que o passo e o título dizem quando a marca NÃO pegou. A transferência
@@ -78,4 +79,21 @@ async def transfer_to_human(
                 f"handoff:{reason}:{'mirrored' if marked else 'unmirrored'}:{conversation_id}"
             ),
         )
+    # Alteração 2026-10-15-14: a transferência é desfecho e é evento da
+    # aba Atividade. Telemetria de produto: nunca muda o resultado acima.
+    try:
+        async with conn.transaction():
+            await scope_to_organization(conn, organization_id)
+            code = outcomes_repo.handoff_code(reason)
+            await outcomes_repo.mark(
+                conn, organization_id=organization_id, conversation_id=conversation_id,
+                transferred_reason=code,
+            )
+            await outcomes_repo.record_event(
+                conn, organization_id=organization_id, kind="handoff",
+                conversation_id=conversation_id, text=title,
+                metadata={"reason": code, "mirrored": marked},
+            )
+    except Exception:
+        pass
     return marked
