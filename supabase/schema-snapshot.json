@@ -625,6 +625,8 @@
 "title"
 ],
 "ai_runtime_activity": [
+"agent_id",
+"agent_name",
 "contact_id",
 "conversation_id",
 "cost_usd",

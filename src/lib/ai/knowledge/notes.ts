@@ -1,0 +1,152 @@
+// Conhecimento da loja — regras puras da API (plano IA M3 passo 21):
+// árvore por pasta, links entre notas, grafo, uso por nota e as edições de
+// texto que a resolução de lacunas faz. Sem banco: as rotas leem, isto
+// decide.
+
+import { extractLinks } from '../processors/markdown-processor'
+
+/** As ações da tela Lacunas (POST /api/ai/knowledge/gaps/[id]/resolve). */
+export const GAP_ACTIONS = ['create_source', 'append_to', 'add_limit', 'ignore'] as const
+export type GapAction = (typeof GAP_ACTIONS)[number]
+
+export interface NoteRow {
+  id: string
+  name: string
+  folder: string | null
+  kind: string
+  status: string | null
+  read_only?: boolean | null
+  tags?: string[] | null
+  links?: string[] | null
+  updated_at?: string | null
+}
+
+export interface FolderNode {
+  folder: string
+  notes: Array<NoteRow & { readers: string[] }>
+}
+
+/** Pastas em ordem alfabética ('geral' primeiro); notas por nome. */
+export function buildTree(notes: NoteRow[], readers: Map<string, string[]>): FolderNode[] {
+  const byFolder = new Map<string, Array<NoteRow & { readers: string[] }>>()
+  for (const note of notes) {
+    const folder = (note.folder || 'geral').trim() || 'geral'
+    const list = byFolder.get(folder) ?? []
+    list.push({ ...note, readers: readers.get(note.id) ?? [] })
+    byFolder.set(folder, list)
+  }
+  return [...byFolder.entries()]
+    .sort(([a], [b]) => (a === 'geral' ? -1 : b === 'geral' ? 1 : a.localeCompare(b, 'pt-BR')))
+    .map(([folder, list]) => ({
+      folder,
+      notes: list.sort((x, y) => x.name.localeCompare(y.name, 'pt-BR')),
+    }))
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/** Renomear uma nota reescreve [[Antigo]] e [[Antigo|rótulo]] nas outras. */
+export function renameLinks(body: string, oldTitle: string, newTitle: string): string {
+  const pattern = new RegExp(`\\[\\[\\s*${escapeRegExp(oldTitle)}\\s*(\\|[^\\]]*)?\\]\\]`, 'gi')
+  return body.replace(pattern, (_m, label?: string) => `[[${newTitle}${label ?? ''}]]`)
+}
+
+/** Acrescenta uma resposta pronta ao fim da nota (resolver lacuna). */
+export function appendAnswer(body: string | null | undefined, question: string, answer: string): string {
+  const quoted = answer.trim().replace(/\r?\n/g, '\n> ')
+  const block = `## ${question.trim()}\n\n> [!resposta]\n> ${quoted}`
+  const base = (body ?? '').trimEnd()
+  return base ? `${base}\n\n${block}\n` : `${block}\n`
+}
+
+/** Nota nova a partir de uma lacuna: título = pergunta, corpo = resposta. */
+export function noteFromGap(question: string, answer: string): string {
+  return appendAnswer(`# ${question.trim()}`, question, answer)
+}
+
+export interface GraphNode { id: string; label: string; type: 'note' | 'agent' | 'gap'; folder?: string }
+export interface GraphEdge { from: string; to: string; type: 'link' | 'reads' | 'gap' }
+
+/**
+ * O grafo do protótipo: notas ligadas por [[links]] (resolvidos por título,
+ * sem diferenciar maiúsculas), agentes ligados às notas que leem, lacunas
+ * abertas ligadas aos agentes que as tiveram. Link para título inexistente
+ * não vira aresta (é uma nota que ainda não existe).
+ */
+export function buildGraph(input: {
+  notes: Array<Pick<NoteRow, 'id' | 'name' | 'folder' | 'links'> & { body_markdown?: string | null }>
+  readers: Array<{ source_id: string; agent_id: string }>
+  agents: Array<{ id: string; name: string | null }>
+  gaps: Array<{ id: string; question: string; agent_ids: string[] | null }>
+}): { nodes: GraphNode[]; edges: GraphEdge[] } {
+  const byTitle = new Map(input.notes.map((n) => [n.name.trim().toLowerCase(), n.id]))
+  const nodes: GraphNode[] = [
+    ...input.notes.map((n) => ({ id: n.id, label: n.name, type: 'note' as const, folder: n.folder ?? 'geral' })),
+    ...input.agents.map((a) => ({ id: a.id, label: a.name || 'Agente', type: 'agent' as const })),
+    ...input.gaps.map((g) => ({ id: g.id, label: g.question, type: 'gap' as const })),
+  ]
+  const edges: GraphEdge[] = []
+  const seen = new Set<string>()
+  const push = (e: GraphEdge) => {
+    const key = `${e.type}:${e.from}:${e.to}`
+    if (!seen.has(key) && e.from !== e.to) { seen.add(key); edges.push(e) }
+  }
+  for (const note of input.notes) {
+    const titles = note.links && note.links.length > 0 ? note.links : extractLinks(note.body_markdown ?? '')
+    for (const title of titles) {
+      const target = byTitle.get(title.trim().toLowerCase())
+      if (target) push({ from: note.id, to: target, type: 'link' })
+    }
+  }
+  const agentIds = new Set(input.agents.map((a) => a.id))
+  const noteIds = new Set(input.notes.map((n) => n.id))
+  for (const r of input.readers) {
+    if (agentIds.has(r.agent_id) && noteIds.has(r.source_id)) push({ from: r.agent_id, to: r.source_id, type: 'reads' })
+  }
+  for (const gap of input.gaps) {
+    for (const agentId of gap.agent_ids ?? []) {
+      if (agentIds.has(agentId)) push({ from: gap.id, to: agentId, type: 'gap' })
+    }
+  }
+  return { nodes, edges }
+}
+
+/** Notas que apontam para esta (backlinks), por título. */
+export function backlinks(target: string, notes: Array<{ id: string; name: string; links?: string[] | null }>): Array<{ id: string; name: string }> {
+  const t = target.trim().toLowerCase()
+  return notes
+    .filter((n) => (n.links ?? []).some((l) => l.trim().toLowerCase() === t))
+    .map((n) => ({ id: n.id, name: n.name }))
+}
+
+/**
+ * Uso de uma nota nos últimos dias, a partir das chamadas `search_knowledge`
+ * registradas (output.chunks[].source_id). `days` contagens, a mais antiga
+ * primeiro, para o sparkline.
+ */
+export function usageByDay(
+  calls: Array<{ created_at: string; output: any; conversation_id?: string | null }>,
+  sourceId: string,
+  now: Date,
+  days = 7,
+): { series: number[]; total: number; conversations: string[] } {
+  const series = Array.from({ length: days }, () => 0)
+  const start = new Date(now)
+  start.setUTCHours(0, 0, 0, 0)
+  start.setUTCDate(start.getUTCDate() - (days - 1))
+  const conversations = new Set<string>()
+  let total = 0
+  for (const call of calls) {
+    const chunks: any[] = Array.isArray(call.output?.chunks) ? call.output.chunks : []
+    if (!chunks.some((c) => c?.source_id === sourceId)) continue
+    const at = new Date(call.created_at)
+    const index = Math.floor((at.getTime() - start.getTime()) / 86_400_000)
+    if (index < 0 || index >= days) continue
+    series[index] += 1
+    total += 1
+    if (call.conversation_id) conversations.add(call.conversation_id)
+  }
+  return { series, total, conversations: [...conversations] }
+}
