@@ -210,6 +210,18 @@ async def load_tenant_policy(
     )
 
 
+async def canonical_conversation_for_mirror(
+    conn: psycopg.AsyncConnection, *, organization_id: UUID, mirror_conversation_id: UUID
+) -> UUID | None:
+    """Alteração 2026-10-15-07: id do espelho (inbox) → conversa canônica."""
+    cursor = await conn.execute(
+        "select internal.canonical_conversation_for_mirror(%s, %s)",
+        (organization_id, mirror_conversation_id),
+    )
+    row = await cursor.fetchone()
+    return row[0] if row else None
+
+
 async def load_conversation_view(
     conn: psycopg.AsyncConnection, *, conversation_id: UUID
 ) -> ConversationState | None:

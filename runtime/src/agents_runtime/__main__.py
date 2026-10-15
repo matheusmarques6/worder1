@@ -18,6 +18,7 @@ import signal
 import sys
 
 from agents_runtime import server
+from agents_runtime.agent_core import openrouter
 from agents_runtime.app import _connect, run
 from agents_runtime.channels.port import ChannelPort
 from agents_runtime.config import config_from_env
@@ -55,6 +56,15 @@ def _factory_from_env(variable: str, dsn: str, *, required: bool = False):
     module_name, _, attribute = spec.partition(":")
     factory = getattr(importlib.import_module(module_name), attribute)
     return factory(dsn)
+
+
+def _platform_llm_optional():
+    """O cliente de plataforma para o listener (copiloto: embeddings). Sem a
+    chave, o copiloto responde 503 e o resto do processo sobe igual — quem
+    EXIGE a chave na partida é o responder (`agent_responder`), não o HTTP."""
+    if not os.environ.get(openrouter.API_KEY_VARIABLE):
+        return None
+    return openrouter.from_env()
 
 
 def _workers_from_env(default: int = 2) -> int:
@@ -138,6 +148,10 @@ async def _serve(dsn: str) -> None:
                 preview_token=os.environ.get("AGENTS_PREVIEW_TOKEN") or None,
                 set_role=os.environ.get("AGENTS_WORKER_SET_ROLE"),
                 config=config,
+                # Alteração 2026-10-15-07: o copiloto do inbox usa o cliente de
+                # plataforma só para embeddings; a resposta sai pela chave da org.
+                platform_llm=_platform_llm_optional(),
+                base_secret=os.environ.get("ENCRYPTION_KEY") or None,
             )
         await run(
             dsn,

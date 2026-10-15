@@ -31,6 +31,7 @@ from uuid import UUID
 
 import psycopg
 
+from agents_runtime.agent_core.copilot import CopilotUnavailable, suggest_reply
 from agents_runtime.agent_core.mission_resolver import merge_mission
 from agents_runtime.agent_core.prompt_compiler import (
     ChannelBlock,
@@ -65,9 +66,15 @@ DEFAULT_EVENT = "whatsapp.received"
 
 def _response(status: int, payload: dict) -> bytes:
     body = json.dumps(payload, ensure_ascii=False).encode()
-    reason = {200: "OK", 400: "Bad Request", 401: "Unauthorized", 404: "Not Found",
-              405: "Method Not Allowed", 422: "Unprocessable Entity",
-              503: "Service Unavailable"}.get(status, "Error")
+    reason = {
+        200: "OK",
+        400: "Bad Request",
+        401: "Unauthorized",
+        404: "Not Found",
+        405: "Method Not Allowed",
+        422: "Unprocessable Entity",
+        503: "Service Unavailable",
+    }.get(status, "Error")
     head = (
         f"HTTP/1.1 {status} {reason}\r\n"
         "content-type: application/json; charset=utf-8\r\n"
@@ -234,10 +241,7 @@ class HealthConnection:
         self._expired_probes.discard(probe)
 
     def _probe_expired(self) -> bool:
-        return (
-            self._active_probe is not None
-            and self._active_probe in self._expired_probes
-        )
+        return self._active_probe is not None and self._active_probe in self._expired_probes
 
     async def beat_age_seconds(self, *, probe: object | None = None) -> float | None:
         """A idade do beat, reabrindo a conexão uma vez se ela tiver caído."""
@@ -331,6 +335,7 @@ async def _healthz(
     probe = object()
     try:
         async with asyncio.timeout(None) as budget:
+
             def expire() -> None:
                 health.expire(probe, owner)
                 budget.reschedule(0)
@@ -378,9 +383,7 @@ async def _preview(
     except (KeyError, ValueError):
         return _response(400, {"error": "organization_id (uuid) é obrigatório"})
     event_type = str(body.get("event_type") or DEFAULT_EVENT)
-    transcript = tuple(
-        (str(author), str(text)) for author, text in (body.get("transcript") or ())
-    )
+    transcript = tuple((str(author), str(text)) for author, text in (body.get("transcript") or ()))
 
     async with _connection(dsn, set_role, config=config) as conn:
         async with conn.transaction():
@@ -445,12 +448,64 @@ async def _preview(
     return _response(200, _serialize(compiled))
 
 
+async def _suggest(
+    dsn: str,
+    *,
+    set_role: str | None,
+    body: dict[str, Any],
+    platform_llm: Any,
+    base_secret: str | None,
+    config: QueueingConfig | None = None,
+) -> bytes:
+    """Alteração 2026-10-15-07: `POST /internal/suggest-reply`, o copiloto do
+    inbox pelo runtime. Mesmo bearer do preview."""
+    try:
+        organization_id = UUID(str(body["organization_id"]))
+    except (KeyError, ValueError):
+        return _response(400, {"error": "organization_id (uuid) é obrigatório"})
+    mirror = body.get("mirror_conversation_id")
+    canonical = body.get("conversation_id")
+    try:
+        mirror_id = UUID(str(mirror)) if mirror else None
+        canonical_id = UUID(str(canonical)) if canonical else None
+    except ValueError:
+        return _response(400, {"error": "conversation_id/mirror_conversation_id (uuid) inválido"})
+    if mirror_id is None and canonical_id is None:
+        return _response(400, {"error": "conversation_id ou mirror_conversation_id é obrigatório"})
+    last_message = str(body.get("last_message") or "")
+    if platform_llm is None:
+        return _response(503, {"error": "copiloto sem cliente de plataforma"})
+
+    async with _connection(dsn, set_role, config=config) as conn:
+        try:
+            suggestion = await suggest_reply(
+                conn,
+                organization_id=organization_id,
+                mirror_conversation_id=mirror_id,
+                conversation_id=canonical_id,
+                last_message=last_message,
+                platform_llm=platform_llm,
+                base_secret=base_secret,
+            )
+        except CopilotUnavailable as reason:
+            return _response(422, {"error": str(reason)})
+    return _response(
+        200,
+        {
+            "suggestion": suggestion.text,
+            "model": suggestion.model,
+            "provider": suggestion.provider,
+            "cost_usd": suggestion.cost_usd,
+        },
+    )
+
+
 def _authorized(headers: dict, token: str) -> bool:
     provided = headers.get("authorization", "")
     prefix = "bearer "
     if not provided.lower().startswith(prefix):
         return False
-    return hmac.compare_digest(provided[len(prefix):], token)
+    return hmac.compare_digest(provided[len(prefix) :], token)
 
 
 async def serve(
@@ -463,6 +518,8 @@ async def serve(
     set_role: str | None = "worker_role",
     health_max_age_s: float = 180.0,
     config: QueueingConfig | None = None,
+    platform_llm: Any = None,
+    base_secret: str | None = None,
 ) -> asyncio.AbstractServer:
     """Sobe o listener e devolve o server (o chamador fecha no shutdown).
 
@@ -516,12 +573,43 @@ async def serve(
                     writer.write(_response(400, {"error": f"JSON inválido: {exc}"}))
                     return
                 try:
-                    writer.write(
-                        await _preview(dsn, set_role=set_role, body=body, config=config)
-                    )
+                    writer.write(await _preview(dsn, set_role=set_role, body=body, config=config))
                 except Exception:
                     logger.exception("preview falhou")
                     writer.write(_response(503, {"error": "preview indisponível"}))
+                return
+
+            if path == "/internal/suggest-reply":
+                if not preview_token:
+                    writer.write(_response(404, {"error": "not found"}))
+                    return
+                if method != "POST":
+                    writer.write(_response(405, {"error": "POST only"}))
+                    return
+                if not _authorized(headers, preview_token):
+                    writer.write(_response(401, {"error": "token de serviço inválido"}))
+                    return
+                try:
+                    body = json.loads(raw.decode() or "{}")
+                    if not isinstance(body, dict):
+                        raise ValueError("o corpo é um objeto JSON")
+                except ValueError as exc:
+                    writer.write(_response(400, {"error": f"JSON inválido: {exc}"}))
+                    return
+                try:
+                    writer.write(
+                        await _suggest(
+                            dsn,
+                            set_role=set_role,
+                            body=body,
+                            platform_llm=platform_llm,
+                            base_secret=base_secret,
+                            config=config,
+                        )
+                    )
+                except Exception:
+                    logger.exception("copiloto falhou")
+                    writer.write(_response(503, {"error": "copiloto indisponível"}))
                 return
 
             writer.write(_response(404, {"error": "not found"}))

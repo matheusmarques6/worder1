@@ -465,7 +465,9 @@ chave direta responde — vai para o host certo, no formato que já era falado.
 
 ### Trilha, custo e visibilidade
 
-**23. `agent_traces` não é escrito.** TS: `cloud-runner.ts:900-925` grava uma linha por turno
+**23. `agent_traces` não é escrito.** **Resolvido antes de 2026-10-15** (verificado no passo 10 do
+plano IA): `internal.record_accepted_trace` grava uma linha por resposta aceita
+(`worker.py`, `repository/agent_traces.py`). O texto abaixo descreve o estado anterior. TS: `cloud-runner.ts:900-925` grava uma linha por turno
 (input, output, tool_calls, tokens, latência). Runtime: a trilha vai para
 `internal.{llm_calls,tool_calls,judge_scores}` (item 7 acima) e `agent_traces` fica vazia. Quem lê
 `agent_traces`: as anotações do lojista (bom/ruim/corrigir) e, por cima delas, os datasets de eval
@@ -523,7 +525,11 @@ impediria que a SOMA do mês passasse do combinado com o lojista. Ver item 41 ab
 lê `internal.monthly_ai_spend` antes de qualquer gasto, por org (`ai_budgets`) e por agente
 (`ai_agents.monthly_cap_usd`); estouro abre `budget_exceeded` e cala o turno e o toque.
 
-**26. Falha permanente não vira sinal para o lojista.** TS: chave inválida, erro permanente ou
+**26. Falha permanente não vira sinal para o lojista.** **Resolvido antes de 2026-10-15** (verificado
+no passo 10): `queueing/sender.py` classifica (`failures.classify`), marca a outbox como `failed`
+com o motivo e a dead letter abre `send_failed`/`mission_touch_failed` em `alerts`
+(`engine_loop.py`); `app.py` religa o replay automático da DLQ. O texto abaixo descreve o estado
+anterior. TS: chave inválida, erro permanente ou
 tentativas esgotadas desativam a conversa com `ai_disabled_reason` e disparam `sendAlert` mais uma
 linha em `notifications` (`cloud-runner.ts:54-80,867-890`;
 `src/app/api/workers/whatsapp-ai-respond/route.ts:245-276`). Runtime: a mensagem vai para a DLQ com
