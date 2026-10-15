@@ -151,6 +151,13 @@ function isAdminOnlyApi(pathname: string): boolean {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Comparação visual da aba IA (scripts/ui-compare): só em `next dev` e só
+  // com IA_UI_COMPARE=1. A API é simulada no navegador pelo Playwright; no
+  // build de produção NODE_ENV é 'production' e este desvio nem existe.
+  if (process.env.NODE_ENV === 'development' && process.env.IA_UI_COMPARE === '1') {
+    return NextResponse.next();
+  }
+
   if (pathname === '/auditoria-motor-ia.html') {
     return process.env.NODE_ENV === 'production'
       ? new NextResponse(null, { status: 404 })
