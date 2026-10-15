@@ -2,6 +2,10 @@
   "ignoreCommand": "[ \"$VERCEL_GIT_COMMIT_REF\" = \"claude/debug-console-error-0tshhm\" ] || git diff --quiet HEAD^ HEAD -- ':(exclude)runtime' ':(exclude)core' ':(exclude).github' ':(exclude)observability' ':(exclude)supabase/migrations-archive'",
   "crons": [
     {
+      "path": "/api/cron/ai-knowledge-gaps",
+      "schedule": "30 5 * * *"
+    },
+    {
       "path": "/api/cron/ai-site-pages-refresh",
       "schedule": "0 3 * * 1"
     },
