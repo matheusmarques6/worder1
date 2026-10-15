@@ -434,3 +434,28 @@ describe('checkAiBudget', () => {
     expect(orgB.allowed).toBe(false)
   })
 })
+
+describe('checkAiBudget quando a tabela ai_budgets nao existe (M0 passo 1)', () => {
+  it('usa o limite padrao em vez de bloquear', async () => {
+    const { supabaseAdmin } = await import('@/lib/supabase-admin')
+    const fromMock = vi.fn()
+    ;(supabaseAdmin as any).from = fromMock
+    ;(supabaseAdmin as any).rpc = vi
+      .fn()
+      .mockResolvedValue({ data: [{ spent_usd: 1.25, has_unknown_cost: false }], error: null })
+
+    fromMock.mockReturnValueOnce(
+      makeChain({
+        data: null,
+        error: { code: 'PGRST205', message: "Could not find the table 'public.ai_budgets' in the schema cache" },
+      })
+    )
+
+    const result = await checkAiBudget('org-no-table-' + Date.now(), { skipCache: true })
+
+    expect(result.allowed).toBe(true)
+    expect(result.unknownReason).toBe('no_table')
+    expect(result.spentUsd).toBe(1.25)
+    expect(result.budgetUsd).toBeGreaterThan(0)
+  })
+})

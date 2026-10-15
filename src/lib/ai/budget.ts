@@ -49,7 +49,7 @@ export interface BudgetCheckResult {
    */
   hasUnknownCost: boolean
   /** Motivo explícito quando o gate não consegue afirmar o gasto total. */
-  unknownReason?: 'lookup_error' | 'unpriced_model'
+  unknownReason?: 'lookup_error' | 'unpriced_model' | 'no_table'
 }
 
 export interface CheckAiBudgetOptions {
@@ -188,7 +188,15 @@ export async function checkAiBudget(
       .eq('organization_id', organizationId)
       .maybeSingle()
 
-    if (budgetErr) {
+    // Tabela ausente (banco sem a migration 20261016000001) não é indisponibilidade:
+    // é "sem linha configurada", e o padrão de US$ 50/mês vale. Bloquear aqui
+    // travava embeddings, ingestão e motor em produção (relatório 15/10/2026).
+    const missingTable = budgetErr != null && _isMissingTableError(budgetErr)
+    if (missingTable) {
+      console.warn('[checkAiBudget] ai_budgets ausente; usando limite padrao')
+    }
+
+    if (budgetErr && !missingTable) {
       console.warn('[checkAiBudget] erro ao ler ai_budgets:', budgetErr?.message)
       const result: BudgetCheckResult = {
         allowed: false,
@@ -204,7 +212,7 @@ export async function checkAiBudget(
 
     // Sem linha → usa DEFAULT_MONTHLY_LIMIT_USD (padrão $50/mês)
     const budgetUsd: number =
-      budgetRow?.monthly_limit_usd != null
+      !missingTable && budgetRow?.monthly_limit_usd != null
         ? Number(budgetRow.monthly_limit_usd)
         : _defaultBudgetUsd()
 
@@ -243,7 +251,11 @@ export async function checkAiBudget(
       budgetUsd,
       spentUsd,
       hasUnknownCost,
-      ...(hasUnknownCost ? { unknownReason: 'unpriced_model' as const } : {}),
+      ...(hasUnknownCost
+        ? { unknownReason: 'unpriced_model' as const }
+        : missingTable
+          ? { unknownReason: 'no_table' as const }
+          : {}),
     }
     _setCached(organizationId, result)
 
@@ -264,6 +276,15 @@ export async function checkAiBudget(
     _throwIfBlocked(result, throwOnExceeded)
     return result
   }
+}
+
+/** PostgREST devolve PGRST205 ("Could not find the table") ou o 42P01 do
+ *  Postgres ("relation ... does not exist") quando a tabela não existe. */
+function _isMissingTableError(err: any): boolean {
+  const code = String(err?.code ?? '')
+  if (code === 'PGRST205' || code === '42P01') return true
+  const msg = String(err?.message ?? '')
+  return /ai_budgets/.test(msg) && /(does not exist|could not find|not found)/i.test(msg)
 }
 
 function _throwIfBlocked(result: BudgetCheckResult, throwOnExceeded: boolean) {
