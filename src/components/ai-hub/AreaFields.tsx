@@ -10,7 +10,7 @@ import {
   type HubAreaId,
   type HubState,
 } from '@/lib/ai/agent-hub'
-import { toolCatalogForRuntimeMode } from '@/lib/ai/tools/catalog'
+import { TOOL_CATALOG } from '@/lib/ai/tools/catalog'
 import type { RuntimeMode } from '@/lib/ai/runtime-rollout'
 import MissionEditorModal from '@/components/flow-builder/panels/MissionEditorModal'
 import { describeConcession, type Mission } from '@/lib/ai/missions'
@@ -243,7 +243,7 @@ export default function AreaFields({ area, hub, onChange, organizationId, agentI
   }
 
   if (area === 'tools') {
-    const catalog = toolCatalogForRuntimeMode(runtimeMode)
+    const catalog = TOOL_CATALOG
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {catalog.map((tool) => {
@@ -265,7 +265,7 @@ export default function AreaFields({ area, hub, onChange, organizationId, agentI
         })}
         {runtimeMode === 'runtime' && (
           <div style={{ fontSize: 11.5, color: 'var(--text-3)' }}>
-            No runtime novo, só aparecem ferramentas compatíveis com esse modo.
+            Consultar produtos e Status de pedido só ficam disponíveis com a loja Shopify conectada.
           </div>
         )}
         {/* 10.7 — as tools custom, no mesmo drawer */}

@@ -160,6 +160,81 @@ async def load_purchase_history(
     )
 
 
+@dataclass(frozen=True, slots=True)
+class OrderLookup:
+    """Uma linha de `order_status` (alteração 2026-10-15-06)."""
+
+    label: str
+    financial_status: str | None
+    fulfillment_status: str | None
+    total: Decimal
+    currency: str
+    placed_at: object
+    items_count: int
+
+
+async def find_orders(
+    conn: psycopg.AsyncConnection,
+    *,
+    organization_id: UUID,
+    contact_id: UUID | None,
+    order_number: str | None,
+    email: str | None,
+    phone_digits: str | None,
+    limit: int = 3,
+) -> tuple[OrderLookup, ...]:
+    """Por número do pedido; senão por e-mail; senão pelos últimos 11 dígitos
+    do telefone (a régua de privacidade do TS: DDD + número completo, para
+    não devolver pedido de outro cliente). Sempre dentro da org; quando há
+    `contact_id`, o pedido também precisa ser do contato OU bater pelo
+    identificador dado — nunca um pedido alheio por coincidência de dígitos
+    curtos."""
+    where = ["o.organization_id = %(organization_id)s"]
+    params: dict = {"organization_id": organization_id, "limit": limit}
+    if order_number:
+        where.append(
+            "(o.order_number = %(order_number)s or o.shopify_order_number = %(order_number)s"
+            " or o.name = %(name)s)"
+        )
+        params["order_number"] = order_number
+        params["name"] = f"#{order_number}"
+    elif email:
+        where.append("lower(o.email) = lower(%(email)s)")
+        params["email"] = email
+    elif phone_digits:
+        where.append("regexp_replace(coalesce(o.phone, ''), '\\D', '', 'g') like %(phone)s")
+        params["phone"] = f"%{phone_digits[-11:]}"
+    else:
+        return ()
+    cursor = await conn.execute(
+        f"""
+        select coalesce(o.name, '#' || o.order_number, o.shopify_order_id),
+               o.financial_status, o.fulfillment_status,
+               coalesce(o.total_price, 0), coalesce(o.currency, 'BRL'),
+               coalesce(o.shopify_created_at, o.created_at),
+               coalesce(jsonb_array_length(case when jsonb_typeof(o.line_items) = 'array'
+                                                then o.line_items else '[]'::jsonb end), 0)
+          from public.shopify_orders o
+         where {" and ".join(where)}
+         order by coalesce(o.shopify_created_at, o.created_at) desc nulls last
+         limit %(limit)s
+        """,
+        params,
+    )
+    return tuple(
+        OrderLookup(
+            label=row[0],
+            financial_status=row[1],
+            fulfillment_status=row[2],
+            total=Decimal(row[3]),
+            currency=row[4],
+            placed_at=row[5],
+            items_count=int(row[6]),
+        )
+        for row in await cursor.fetchall()
+    )
+
+
 # Vocabulário Shopify → o que o agente pode dizer em português.
 _FINANCIAL = {
     "paid": "pago",

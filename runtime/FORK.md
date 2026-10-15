@@ -256,7 +256,11 @@ que não der para ler (sem chave de STT, provedor sem visão, download falhou, >
 
 ### O que o agente sabe operar
 
-**12. Seis das sete tools do catálogo não existem.**
+**12. Seis das sete tools do catálogo não existem.** **Resolvido em 2026-10-15**
+(`docs/alteracoes/2026-10-15-06-ferramentas-do-catalogo.md`): `tools/builtin.py` traz
+`transfer_to_human`, `save_customer`, `save_interests`, `timeline`, `product_lookup` e
+`order_status`, oferecidas ao modelo pelas tools do agente (`settings.tools.enabled`); as duas de
+Shopify só com loja conectada. O texto abaixo descreve o estado anterior.
 TS: `src/lib/ai/tools/catalog.ts` + `tools/registry.ts` expõem 7 tools na aba Ferramentas (área
 **Ferramentas** da órbita, `agent-hub.ts:40,169`). Runtime: o turno oferece ao modelo apenas
 `create_coupon` e as tools HTTP custom (`agent_core/responder.py:512-531`), mais

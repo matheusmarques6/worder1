@@ -42,6 +42,12 @@ class ToolContext:
 
     organization_id: UUID
     conversation_id: UUID
+    # Alteração 2026-10-15-06: o que as ferramentas de CRM e pedidos precisam
+    # saber sobre QUEM está na conversa — vem do estado lido pelo responder.
+    contact_id: UUID | None = None
+    agent_id: UUID | None = None
+    channel_account_id: UUID | None = None
+    phone: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

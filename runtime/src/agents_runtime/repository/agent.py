@@ -118,6 +118,9 @@ class ConversationState:
     """Etiquetas que o LOJISTA pôs no contato ("vip", "atacado") — dado fixo
     do prompt (E3), nunca texto que o contato escreveu."""
     contact_since: datetime | None = None
+    contact_phone: str | None = None
+    """O telefone do contato (alteração 2026-10-15-06) — só para as
+    ferramentas acharem pedido/contato; nunca entra no prompt."""
 
 
 def contact_fact_pairs(state: ConversationState) -> tuple[tuple[str, str], ...]:
@@ -216,7 +219,7 @@ async def load_conversation_view(
                conversation.owner_mission_version_id, conversation.contact_id,
                nullif(trim(contact.full_name), ''),
                conversation.last_processed_seq, conversation.last_inbound_at,
-               contact.tags, contact.created_at
+               contact.tags, contact.created_at, contact.phone
           from public.conversations conversation
           join public.contacts contact on contact.id = conversation.contact_id
          where conversation.id = %s
@@ -237,6 +240,7 @@ async def load_conversation_view(
         last_inbound_at=row[6],
         contact_tags=tuple(row[7] or ()),
         contact_since=row[8],
+        contact_phone=row[9] if len(row) > 9 else None,
     )
 
 
