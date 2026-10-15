@@ -1,6 +1,6 @@
 'use client'
 
-import { Fragment, type ReactNode } from 'react'
+import React, { Fragment, type ReactNode } from 'react'
 import { parseMd, type MdBlock } from '@/lib/ai/processors/markdown-processor'
 
 /**
