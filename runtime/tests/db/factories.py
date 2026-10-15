@@ -332,8 +332,14 @@ def create_agent(
     model: str | None = None,
     base_prompt: str = "Você é o atendente da loja.",
     is_active: bool = False,
+    status: str | None = None,
+    role: str | None = None,
 ) -> uuid.UUID:
     """The org's agent row (Worder: ai_agents). `model` None exercises the default.
+
+    `status` ('draft' | 'active' | 'paused', 20261016000008) is the new source
+    of truth; when given, it wins over `is_active` (the trigger mirrors one
+    into the other). Callers that still speak `is_active` keep working.
 
     `is_active` defaults to `False` — the same default the application posts
     (`is_active: body.is_active ?? false`) and the one W3-GD-07
@@ -348,6 +354,12 @@ def create_agent(
     if model is not None:
         columns.append("model")
         values.append(model)
+    if status is not None:
+        columns.append("status")
+        values.append(status)
+    if role is not None:
+        columns.append("role")
+        values.append(role)
 
     placeholders = ", ".join(["%s"] * len(values))
     with conn.cursor() as cur:
@@ -672,15 +684,22 @@ def create_mission(
     forbidden: list[str] | None = None,
     promote_moment: bool = False,
     max_turns: int = 3,
+    agent_id: uuid.UUID | None = None,
 ) -> uuid.UUID:
-    """Uma versão de missão. `concession` ausente exercita o default do banco."""
+    """Uma versão de missão. `concession` ausente exercita o default do banco.
+
+    `agent_id` (20261016000008) liga a missão ao agente dono; ausente, a
+    missão fica sem dono — o estado de uma org sem agente.
+    """
     columns = [
         "organization_id", "event_type", "status", "origin", "objective",
         "parent_version_id", "enabled_tools", "forbidden", "promote_moment", "max_turns",
+        "agent_id",
     ]
     values: list[object] = [
         organization_id, event_type, status, origin, objective,
         parent_version_id, enabled_tools or [], forbidden or [], promote_moment, max_turns,
+        agent_id,
     ]
     if concession is not None:
         columns.append("concession")
@@ -866,3 +885,31 @@ def create_whatsapp_template(
         )
         (template_id,) = cur.fetchone()
     return template_id
+
+
+def create_agent_entry(
+    conn: psycopg.Connection,
+    organization_id: uuid.UUID,
+    agent_id: uuid.UUID,
+    *,
+    kind: str = "whatsapp_account",
+    ref_id: uuid.UUID,
+    active: bool = True,
+) -> uuid.UUID:
+    """Onde o agente atua (Worder: ai_agent_entries, 20261016000008).
+
+    `whatsapp_account` aponta para `whatsapp_business_accounts.id`; uma
+    entrada ativa por (org, kind, ref) — o índice parcial recusa a segunda.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            insert into public.ai_agent_entries
+                (organization_id, agent_id, kind, ref_id, active)
+            values (%s, %s, %s, %s, %s)
+            returning id
+            """,
+            (organization_id, agent_id, kind, ref_id, active),
+        )
+        (entry_id,) = cur.fetchone()
+    return entry_id
