@@ -15,6 +15,7 @@ import RadialView from './RadialView'
 import ClassicView from './ClassicView'
 import { STATUS_LABEL, initials } from './AgentsList'
 import AgentTestPanel from './AgentTestPanel'
+import AgentVersionsPanel from './AgentVersionsPanel'
 
 /**
  * O editor de UM agente (plano IA, M2 passo 16): cabeçalho com nome, função,
@@ -69,6 +70,7 @@ export default function AgentEditor({ organizationId, agentId }: { organizationI
   const [entriesModal, setEntriesModal] = useState(false)
   const [busy, setBusy] = useState(false)
   const [testing, setTesting] = useState(false)
+  const [versionsOpen, setVersionsOpen] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -223,7 +225,7 @@ export default function AgentEditor({ organizationId, agentId }: { organizationI
             <Check size={14} />Salvo
           </span>
         )}
-        <button type="button" className="btn btn-soft btn-sm" disabled title="Versões chegam no M4">
+        <button type="button" className="btn btn-soft btn-sm" onClick={() => setVersionsOpen(true)}>
           <History size={14} />Versões
         </button>
         <button type="button" className="btn btn-soft btn-sm" onClick={() => setTesting(true)}>
@@ -293,6 +295,10 @@ export default function AgentEditor({ organizationId, agentId }: { organizationI
             </button>
           </div>
         </Modal>
+      )}
+
+      {versionsOpen && (
+        <AgentVersionsPanel agentId={agent.id} onClose={() => setVersionsOpen(false)} onRestored={load} />
       )}
 
       {testing && (

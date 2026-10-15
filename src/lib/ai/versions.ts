@@ -7,6 +7,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { diffLines, hasVersionableChanges, type DiffLine, type VersionableField } from './diff'
+import { labelFromSummary, summarizeChanges } from './version-summary'
 
 export type VersionStatus = 'produção' | 'rascunho' | 'arquivada'
 
@@ -21,6 +22,11 @@ export interface VersionListItem {
   current: boolean
   /** diff do system_prompt vs a versão anterior (a mais antiga compara com '') */
   diff: DiffLine[]
+  /** Plano IA M4 passo 25: o que mudou por área (null nas versões antigas). */
+  summary: string[] | null
+  restored_from: string | null
+  eval_score: number | null
+  eval_grave: number | null
 }
 
 interface AgentVersionableState {
@@ -118,10 +124,25 @@ export async function snapshotIfChanged(
     next = 2
   }
 
+  const after = {
+    system_prompt: incoming.system_prompt !== undefined ? (incoming.system_prompt as string | null) : agent.system_prompt ?? null,
+    persona: (incoming.persona !== undefined ? incoming.persona : agent.persona ?? null) as Record<string, any> | null,
+    settings: (incoming.settings !== undefined ? incoming.settings : agent.settings ?? null) as Record<string, any> | null,
+  }
+  const summary = summarizeChanges(
+    {
+      system_prompt: agent.system_prompt ?? null,
+      persona: (agent.persona ?? null) as Record<string, any> | null,
+      settings: (agent.settings ?? null) as Record<string, any> | null,
+    },
+    after,
+  )
   const label =
     typeof versionLabel === 'string' && versionLabel.trim()
       ? versionLabel.trim()
-      : `Alteração de ${changed.map((f) => FIELD_LABELS[f]).join(', ')}`
+      : summary.length > 0
+        ? labelFromSummary(summary)
+        : `Alteração de ${changed.map((f) => FIELD_LABELS[f]).join(', ')}`
 
   await archivePreviousProduction(supabase, agent.id)
 
@@ -136,13 +157,16 @@ export async function snapshotIfChanged(
     persona: incoming.persona !== undefined ? incoming.persona : agent.persona ?? null,
     settings: incoming.settings !== undefined ? incoming.settings : agent.settings ?? null,
     created_by: author,
+    change_summary: { lines: summary },
   })
   if (insertError) throw insertError
 }
 
 /**
  * Restaura o snapshot em ai_agents e registra uma nova versão 'produção'
- * "Reverte para v{n}" (arquivando a produção anterior).
+ * "Restaura v{n}" (arquivando a produção anterior). Plano IA M4 passo 25:
+ * a versão nova aponta para a de origem (restored_from) e carrega o resumo
+ * do que mudou em relação ao estado de antes da restauração.
  */
 export async function rollbackToVersion(
   supabase: SupabaseClient,
@@ -150,7 +174,7 @@ export async function rollbackToVersion(
   organizationId: string,
   versionId: string,
   userId: string | null
-): Promise<void> {
+): Promise<{ id: string; version_number: number; summary: string[] }> {
   const { data: version, error: versionError } = await supabase
     .from('ai_agent_versions')
     .select('id, version_number, system_prompt, persona, settings')
@@ -162,6 +186,14 @@ export async function rollbackToVersion(
   if (versionError || !version) {
     throw new Error('Versão não encontrada')
   }
+
+  const { data: current } = await supabase
+    .from('ai_agents')
+    .select('system_prompt, persona, settings')
+    .eq('id', agentId)
+    .eq('organization_id', organizationId)
+    .single()
+  const summary = summarizeChanges(current ?? {}, version)
 
   const { error: updateError } = await supabase
     .from('ai_agents')
@@ -180,18 +212,51 @@ export async function rollbackToVersion(
 
   await archivePreviousProduction(supabase, agentId)
 
-  const { error: insertError } = await supabase.from('ai_agent_versions').insert({
-    organization_id: organizationId,
-    agent_id: agentId,
-    version_number: next,
-    label: `Reverte para v${version.version_number}`,
-    status: 'produção',
-    system_prompt: version.system_prompt,
-    persona: version.persona,
-    settings: version.settings,
-    created_by: author,
-  })
+  const { data: created, error: insertError } = await supabase
+    .from('ai_agent_versions')
+    .insert({
+      organization_id: organizationId,
+      agent_id: agentId,
+      version_number: next,
+      label: `Restaura v${version.version_number}`,
+      status: 'produção',
+      system_prompt: version.system_prompt,
+      persona: version.persona,
+      settings: version.settings,
+      created_by: author,
+      restored_from: version.id,
+      change_summary: { lines: summary },
+    })
+    .select('id, version_number')
+    .single()
   if (insertError) throw insertError
+  return { id: created?.id as string, version_number: next, summary }
+}
+
+/** O que mudaria ao restaurar `versionId` — sem gravar nada. */
+export async function previewRestore(
+  supabase: SupabaseClient,
+  agentId: string,
+  organizationId: string,
+  versionId: string
+): Promise<{ version_number: number; summary: string[] } | null> {
+  const [{ data: version }, { data: current }] = await Promise.all([
+    supabase
+      .from('ai_agent_versions')
+      .select('version_number, system_prompt, persona, settings')
+      .eq('id', versionId)
+      .eq('agent_id', agentId)
+      .eq('organization_id', organizationId)
+      .maybeSingle(),
+    supabase
+      .from('ai_agents')
+      .select('system_prompt, persona, settings')
+      .eq('id', agentId)
+      .eq('organization_id', organizationId)
+      .maybeSingle(),
+  ])
+  if (!version || !current) return null
+  return { version_number: version.version_number, summary: summarizeChanges(current, version) }
 }
 
 /**
@@ -205,7 +270,7 @@ export async function listVersions(
 ): Promise<VersionListItem[]> {
   const { data: rows, error } = await supabase
     .from('ai_agent_versions')
-    .select('id, version_number, label, status, system_prompt, created_by, created_at')
+    .select('id, version_number, label, status, system_prompt, created_by, created_at, change_summary, restored_from, eval_score, eval_grave')
     .eq('agent_id', agentId)
     .eq('organization_id', organizationId)
     .order('version_number', { ascending: true })
@@ -240,6 +305,10 @@ export async function listVersions(
       status: v.status as VersionStatus,
       current: v.version_number === maxNumber,
       diff: diffLines(idx > 0 ? versions[idx - 1].system_prompt ?? '' : '', v.system_prompt ?? ''),
+      summary: Array.isArray((v as any).change_summary?.lines) ? (v as any).change_summary.lines : null,
+      restored_from: ((v as any).restored_from as string | null) ?? null,
+      eval_score: (v as any).eval_score === null || (v as any).eval_score === undefined ? null : Number((v as any).eval_score),
+      eval_grave: ((v as any).eval_grave as number | null) ?? null,
     }))
     .reverse()
 }
