@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Check, Plus, Power, ShieldCheck, X } from 'lucide-react'
+import { Check, Plus, ShieldCheck, X } from 'lucide-react'
 import KnowledgeBasePanel from '@/components/agents/KnowledgeBasePanel'
 import ApiKeysManager from '@/components/whatsapp/ApiKeysManager'
 import CustomToolsSection from './CustomToolsSection'
@@ -156,10 +156,9 @@ export default function AreaFields({ area, hub, onChange, organizationId, agentI
   }
 
   if (area === 'discovery') {
-    // Correção 13/08: missão é a ESPECIFICAÇÃO do evento — aqui o evento é
-    // "o cliente chamou a loja direto no WhatsApp", e o que se edita é o
-    // playbook completo dele, não um seletor de persona.
-    return <DiscoveryMissionArea />
+    // Plano IA M2 passo 16: a área lista TODAS as missões deste agente com
+    // status, e a do WhatsApp direto continua editável pelo editor completo.
+    return <AgentMissionsArea agentId={agentId} />
   }
 
   if (area === 'adapt') {
@@ -293,7 +292,6 @@ export default function AreaFields({ area, hub, onChange, organizationId, agentI
           </div>
         </div>
         {/* Corte 13/08: a aba Limites morreu — o interruptor mora aqui agora. */}
-        <AgentPowerSwitch />
       </div>
     )
   }
@@ -356,6 +354,17 @@ export default function AreaFields({ area, hub, onChange, organizationId, agentI
           Provedor: <b>{hub.budget.provider}</b> — sem chave da organização (BYO), o agente não ativa no runtime novo.
         </div>
       </div>
+      <div>
+        <Label>Teto mensal deste agente (USD)</Label>
+        <input className="field" type="number" min={0} step="1" placeholder="sem teto"
+          value={hub.budget.cap_usd ?? ''}
+          onChange={(e) => patch('budget', { ...hub.budget, cap_usd: e.target.value === '' ? null : Number(e.target.value) })} />
+        <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 7 }}>
+          Atingido o teto, o agente para de gerar (alerta <code>budget_exceeded</code>) até o mês virar. O teto da
+          organização em Configurações › Uso de IA vale por cima.
+        </div>
+      </div>
+      {agentId && <AgentSpendBar agentId={agentId} capUsd={hub.budget.cap_usd} />}
       <EmbeddingKeyNotice />
       {/* 10.3: API Keys absorvida pela área Motor — o gerenciador real, aqui. */}
       <ApiKeysManager />
@@ -403,12 +412,11 @@ function EmbeddingKeyNotice() {
   )
 }
 
-// A missão do evento "cliente chamou a loja direto no WhatsApp"
-// (whatsapp.received). Correção 13/08: missão é especificação POR EVENTO —
-// esta área mostra a especificação vigente e abre o MESMO editor completo do
-// nó de fluxo (MissionEditorModal). Salvar cria rascunho; ativar é explícito
-// e arquiva a anterior. Sem ativa, o agente não responde inbound.
-export function DiscoveryMissionArea() {
+// As missões DESTE agente (plano IA M2 passo 16): a lista com status e a
+// especificação do evento "cliente chamou a loja direto no WhatsApp"
+// (whatsapp.received), editável pelo MESMO editor completo do nó de fluxo.
+// Salvar cria rascunho; ativar é explícito e arquiva a anterior da família.
+export function AgentMissionsArea({ agentId }: { agentId: string | null }) {
   const FAMILY = 'whatsapp.received'
   const [missions, setMissions] = useState<Mission[]>([])
   const [loading, setLoading] = useState(true)
@@ -418,12 +426,10 @@ export function DiscoveryMissionArea() {
 
   const load = async () => {
     try {
-      const res = await fetch('/api/ai/missions')
+      const res = await fetch(agentId ? `/api/ai/missions?agent_id=${agentId}` : '/api/ai/missions')
       const body = await res.json()
-      if (!res.ok) throw new Error(body.error || 'Falha ao carregar a missão')
-      setMissions(
-        (body.missions ?? []).filter((m: Mission) => m.event_type === FAMILY)
-      )
+      if (!res.ok) throw new Error(body.error || 'Falha ao carregar as missões')
+      setMissions(body.missions ?? [])
       setError(null)
     } catch (e: any) {
       setError(e.message)
@@ -435,10 +441,12 @@ export function DiscoveryMissionArea() {
   useEffect(() => {
     void load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [agentId])
 
-  const active = missions.find((m) => m.status === 'active') ?? null
-  const latestDraft = missions.find((m) => m.status === 'draft') ?? null
+  const direct = missions.filter((m) => m.event_type === FAMILY)
+  const active = direct.find((m) => m.status === 'active') ?? null
+  const latestDraft = direct.find((m) => m.status === 'draft') ?? null
+  const others = missions.filter((m) => m.event_type !== FAMILY && m.status !== 'archived')
 
   const activate = async (missionId: string) => {
     setBusy(true)
@@ -459,6 +467,25 @@ export function DiscoveryMissionArea() {
     }
   }
 
+  const seed = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/ai/missions/seed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agent_id: agentId }),
+      })
+      const body = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(body?.error || 'Falha ao semear')
+      await load()
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   if (loading) {
     return <Loader2AreaSpinner />
   }
@@ -466,15 +493,15 @@ export function DiscoveryMissionArea() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div style={{ fontSize: 12, color: 'var(--text-3)', lineHeight: 1.5 }}>
-        A especificação deste <b>evento</b>: o cliente chamou a loja direto no
-        WhatsApp. É ela que dirige a resposta — objetivo, critérios, o que
-        nunca fazer, concessão, insistência.
+        A missão do evento <b>cliente chamou a loja no WhatsApp</b> dirige a
+        resposta espontânea. As demais são disparadas por fluxos (toques) e
+        cada uma tem o seu nó.
       </div>
 
       {active ? (
         <div className="act-row on" style={{ alignItems: 'flex-start' }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="act-t">{active.display_name || 'Missão ativa'}</div>
+            <div className="act-t">{active.display_name || 'WhatsApp direto · ativa'}</div>
             <div className="act-d" style={{ marginTop: 2 }}>{active.objective}</div>
             <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 6 }}>
               {describeConcession(active.concession)} · até {active.max_turns} turnos ·{' '}
@@ -487,7 +514,7 @@ export function DiscoveryMissionArea() {
         </div>
       ) : (
         <div className="callout red" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
-          <p style={{ fontWeight: 700 }}>Sem missão ativa para este evento</p>
+          <p style={{ fontWeight: 700 }}>Sem missão ativa para o WhatsApp direto</p>
           <p>O agente NÃO responde quem chama a loja — de propósito: sem especificação, silêncio e alerta, nunca improviso.</p>
         </div>
       )}
@@ -502,7 +529,12 @@ export function DiscoveryMissionArea() {
         {!active && !latestDraft && (
           <button type="button" className="btn btn-primary btn-sm" disabled={busy}
             onClick={() => setEditorOpen({ mission: null })}>
-            <Plus size={14} />Criar a missão deste evento
+            <Plus size={14} />Criar a missão do WhatsApp direto
+          </button>
+        )}
+        {missions.length === 0 && agentId && (
+          <button type="button" className="btn btn-soft btn-sm" disabled={busy} onClick={() => void seed()}>
+            Semear as missões padrão (rascunho)
           </button>
         )}
       </div>
@@ -524,18 +556,41 @@ export function DiscoveryMissionArea() {
         </div>
       )}
 
+      {others.length > 0 && (
+        <div>
+          <Label>Missões de fluxo deste agente</Label>
+          <div style={{ display: 'grid', gap: 8 }}>
+            {others.map((m) => (
+              <div key={m.id} className={`act-row${m.status === 'active' ? ' on' : ''}`}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="act-t">{m.display_name || m.event_type}</div>
+                  <div className="act-d">{m.objective}</div>
+                </div>
+                <span className={`chip ${m.status === 'active' ? 'chip-green' : 'chip-outline'}`}>
+                  {m.status === 'active' ? 'Ativa' : 'Rascunho'}
+                </span>
+                {m.status === 'draft' && (
+                  <button type="button" className="btn btn-soft btn-sm" disabled={busy}
+                    onClick={() => void activate(m.id)}>Ativar</button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {error && <p style={{ fontSize: 12, color: 'var(--red)' }}>{error}</p>}
 
       <div style={{ fontSize: 11.5, color: 'var(--text-3)' }}>
         Mesma lei das missões dos fluxos: editar cria uma versão rascunho;
-        ativar arquiva a anterior. Toques disparados por fluxo têm cada um a
-        SUA missão, no próprio nó.
+        ativar arquiva a anterior da família.
       </div>
 
       {editorOpen && (
         <MissionEditorModal
           family={FAMILY}
           mission={editorOpen.mission}
+          agentId={agentId}
           onClose={() => setEditorOpen(null)}
           onSaved={async () => {
             setEditorOpen(null)
@@ -547,68 +602,37 @@ export function DiscoveryMissionArea() {
   )
 }
 
-function Loader2AreaSpinner() {
+// A barra de consumo do mês (plano IA M2 passo 16) — GET /api/ai/agents/[id]/spend.
+function AgentSpendBar({ agentId, capUsd }: { agentId: string; capUsd: number | null }) {
+  const [spend, setSpend] = useState<{ spent_usd: number; has_unknown_cost: boolean; calls: number } | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    fetch(`/api/ai/agents/${agentId}/spend`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (!cancelled && d) setSpend(d) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [agentId])
+  if (!spend) return null
+  const ratio = capUsd && capUsd > 0 ? Math.min(1, spend.spent_usd / capUsd) : 0
   return (
-    <div style={{ display: 'flex', justifyContent: 'center', padding: '22px 0' }}>
-      <span className="animate-spin" style={{ width: 20, height: 20, border: '2px solid var(--border-strong)', borderTopColor: 'var(--brand)', borderRadius: '50%' }} />
+    <div>
+      <Label>Consumo do mês</Label>
+      <div style={{ height: 8, borderRadius: 999, background: 'var(--border)', overflow: 'hidden' }}>
+        <div style={{ width: `${Math.round(ratio * 100)}%`, height: '100%', background: ratio >= 1 ? 'var(--red)' : ratio > 0.8 ? 'var(--amber, #E0930B)' : 'var(--green)', transition: 'width .3s' }} />
+      </div>
+      <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 6 }}>
+        US$ {spend.spent_usd.toFixed(2)}{capUsd ? ` de US$ ${capUsd.toFixed(2)}` : ' (sem teto)'} · {spend.calls} chamada(s)
+        {spend.has_unknown_cost && ' · há chamadas sem custo conhecido (soma é um piso)'}
+      </div>
     </div>
   )
 }
 
-// O interruptor do agente inteiro (ai_agents.is_active) — morava na aba
-// Limites, que morreu no corte 13/08. Kill-switch não espera Salvar: o PATCH
-// é imediato, como era lá.
-export function AgentPowerSwitch() {
-  const [agentId, setAgentId] = useState<string | null>(null)
-  const [active, setActive] = useState<boolean | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    fetch('/api/ai/agents/canonical')
-      .then((res) => res.json())
-      .then((data) => {
-        if (cancelled) return
-        setAgentId(data.canonical?.id ?? null)
-        setActive(data.canonical ? data.canonical.is_active !== false : null)
-      })
-      .catch(() => { if (!cancelled) setActive(null) })
-    return () => { cancelled = true }
-  }, [])
-
-  if (agentId === null || active === null) return null
-
-  const toggle = async () => {
-    setBusy(true)
-    setError(null)
-    try {
-      const res = await fetch(`/api/ai/agents/${agentId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ is_active: !active }),
-      })
-      const body = await res.json().catch(() => null)
-      if (!res.ok) throw new Error(body?.error || 'Falha ao mudar o estado do agente')
-      setActive(!active)
-    } catch (e: any) {
-      setError(e.message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
+function Loader2AreaSpinner() {
   return (
-    <div className={`act-row${active ? ' on' : ''}`}>
-      <Power size={17} style={{ color: active ? 'var(--green)' : 'var(--red)' }} />
-      <div style={{ flex: 1 }}>
-        <div className="act-t">{active ? 'Agente ligado' : 'Agente desligado'}</div>
-        <div className="act-d">
-          {error ?? 'Desligado, nenhuma missão responde — toque pedido vira alerta, nada sai.'}
-        </div>
-      </div>
-      <button type="button" className={`tog${active ? ' on' : ''}`} disabled={busy}
-        onClick={() => void toggle()} />
+    <div style={{ display: 'flex', justifyContent: 'center', padding: '22px 0' }}>
+      <span className="animate-spin" style={{ width: 20, height: 20, border: '2px solid var(--border-strong)', borderTopColor: 'var(--brand)', borderRadius: '50%' }} />
     </div>
   )
 }

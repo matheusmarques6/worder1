@@ -436,10 +436,14 @@ export function ChatPanel({
   const [aiAgentName, setAiAgentName] = useState<string | null>(null)
   useEffect(() => {
     let cancelled = false
-    fetch('/api/ai/agents/canonical')
+    if (!organizationId) return
+    fetch(`/api/ai/agents?organization_id=${encodeURIComponent(organizationId)}&status=active`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (!cancelled && d?.canonical?.name) setAiAgentName(d.canonical.name)
+        // Plano IA M2: vários agentes por org — o rótulo usa o primeiro ativo
+        // (o que atende ESTA conversa chega com conversations.agent_id no M5).
+        const first = d?.agents?.[0]
+        if (!cancelled && first?.name) setAiAgentName(first.name)
       })
       .catch(() => {})
     return () => {

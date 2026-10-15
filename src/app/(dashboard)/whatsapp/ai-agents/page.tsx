@@ -8,12 +8,13 @@ import { useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 
+// Plano IA M2 passo 16: o hub virou sub-rotas.
 const TAB_ALIASES: Record<string, string> = {
-  agents: 'agents',
-  reports: 'reports',
-  eval: 'eval',
-  knowledge: 'knowledge',
-  'api-keys': 'api-keys',
+  agents: '/ai/agentes',
+  reports: '/ai/atividade',
+  eval: '/ai/atividade',
+  knowledge: '/ai/conhecimento',
+  'api-keys': '/ai/agentes',
 }
 
 function LegacyRedirectInner() {
@@ -23,7 +24,7 @@ function LegacyRedirectInner() {
   useEffect(() => {
     const tab = searchParams?.get('tab')
     const mapped = tab ? TAB_ALIASES[tab] : undefined
-    router.replace(mapped ? `/ai?tab=${mapped}` : '/ai')
+    router.replace(mapped ?? '/ai/agentes')
   }, [router, searchParams])
 
   return (

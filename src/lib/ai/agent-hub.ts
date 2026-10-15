@@ -34,14 +34,14 @@ export type HubAreaId =
 // As 9 posições do protótipo (ORBIT_POS) — a ordem daqui é a ordem da órbita.
 export const HUB_AREAS: HubArea[] = [
   { id: 'identity', label: 'Identidade', sub: 'nome, voz, apresentação', color: 'var(--orange, #F97316)', tint: '#FFF3EA' },
-  { id: 'discovery', label: 'Missão · WhatsApp direto', sub: 'quando o cliente chama a loja', color: '#3B6EF6', tint: '#EEF3FF' },
+  { id: 'discovery', label: 'Missões', sub: 'as missões deste agente', color: '#3B6EF6', tint: '#EEF3FF' },
   { id: 'adapt', label: 'Adaptação', sub: 'ao jeito do cliente', color: '#7C5CFC', tint: '#F2EFFF' },
   { id: 'knowledge', label: 'Conhecimento', sub: 'fontes e catálogo', color: '#0E9384', tint: '#E6F5F3' },
   { id: 'tools', label: 'Ferramentas', sub: 'o que ele sabe operar', color: '#0B7285', tint: '#E3F3F6' },
   { id: 'limits', label: 'Limites', sub: 'o que nunca fazer', color: '#E5484D', tint: '#FDECEC' },
   { id: 'handoff', label: 'Handoff', sub: 'quando chamar humano', color: '#16A34A', tint: '#E9F7EE' },
-  { id: 'judges', label: 'Juízes', sub: 'quem avalia o agente', color: '#E0930B', tint: '#FCF3E0' },
-  { id: 'budget', label: 'Motor & budget', sub: 'modelo e custo', color: '#64748B', tint: '#EEF1F5' },
+  { id: 'judges', label: 'Revisão', sub: 'quem avalia o agente', color: '#E0930B', tint: '#FCF3E0' },
+  { id: 'budget', label: 'Motor e custo', sub: 'modelo, chave e teto', color: '#64748B', tint: '#EEF1F5' },
 ];
 
 export const ORBIT_POS: Array<{ x: number; y: number }> = [
@@ -124,17 +124,19 @@ export interface HubState {
   limits: { blocked: string[]; invariants: string[] };
   handoff: { keywords: string[]; message: string };
   judges: { custom: CustomJudge[] };
-  budget: { model: string; provider: string };
+  budget: { model: string; provider: string; cap_usd: number | null };
   delivery: DeliveryPrefs;
 }
 
 type AgentRow = {
   id: string;
   name?: string | null;
-  /** Fontes de conhecimento ligadas (preenchido por /api/ai/agents/canonical). */
+  /** Fontes de conhecimento prontas (contadas pelo editor do agente). */
   sources_count?: number | null;
   model?: string | null;
   provider?: string | null;
+  /** Teto mensal do agente (ai_agents.monthly_cap_usd, 20261016000004). */
+  monthly_cap_usd?: number | string | null;
   presentation_mode?: string | null;
   client_adaptation?: Record<string, unknown> | null;
   persona?: Record<string, any> | null;
@@ -181,6 +183,10 @@ export function agentToHub(agent: AgentRow): HubState {
     budget: {
       model: agent.model ?? 'gpt-4o-mini',
       provider: agent.provider ?? 'openai',
+      cap_usd:
+        agent.monthly_cap_usd === null || agent.monthly_cap_usd === undefined || agent.monthly_cap_usd === ''
+          ? null
+          : Number(agent.monthly_cap_usd),
     },
     delivery: sanitizeDelivery(settings.delivery),
   };
@@ -193,6 +199,7 @@ export interface AgentHubPatch {
   persona: Record<string, any>;
   settings: Record<string, any>;
   model: string;
+  monthly_cap_usd: number | null;
 }
 
 export function hubToAgentPatch(agent: AgentRow, hub: HubState): AgentHubPatch {
@@ -229,6 +236,10 @@ export function hubToAgentPatch(agent: AgentRow, hub: HubState): AgentHubPatch {
     persona,
     settings,
     model: hub.budget.model,
+    monthly_cap_usd:
+      hub.budget.cap_usd === null || !Number.isFinite(hub.budget.cap_usd) || hub.budget.cap_usd <= 0
+        ? null
+        : hub.budget.cap_usd,
   };
 }
 

@@ -1,45 +1,62 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Orbit } from 'lucide-react'
+import { Bot, Orbit } from 'lucide-react'
+import { useAuthStore } from '@/stores'
 import { AgentsTheme } from '@/components/agents/ui/AgentsTheme'
 import { Card } from '@/components/agents/ui/primitives'
-import { AgentPowerSwitch, DiscoveryMissionArea } from '@/components/ai-hub/AreaFields'
 
 /**
- * WhatsApp → Agente IA (pedido 17/08): a missão do WhatsApp direto se
- * configura DENTRO da aba WhatsApp. Mesma fonte de dados da órbita — um dado,
- * N portas: os componentes são os MESMOS da área "Missão · WhatsApp direto"
- * do IA Hub, então editar aqui ou lá edita a mesma especificação.
+ * WhatsApp → Agente IA. Plano IA M2 passo 16: com vários agentes por loja
+ * esta página deixa de editar "a" missão e vira a porta para os agentes que
+ * atuam no WhatsApp — a lista com quem atende cada número e o link para a
+ * configuração completa de cada um.
  */
 export default function WhatsappAgentePage() {
+  const { user } = useAuthStore()
+  const organizationId = user?.organization_id as string | undefined
+  const [agents, setAgents] = useState<Array<{ id: string; name: string | null; role: string | null; status: string; entries: Array<{ kind: string; label: string }> }>>([])
+
+  useEffect(() => {
+    if (!organizationId) return
+    fetch(`/api/ai/agents?organization_id=${encodeURIComponent(organizationId)}`)
+      .then((r) => (r.ok ? r.json() : { agents: [] }))
+      .then((d) => setAgents(d.agents ?? []))
+      .catch(() => {})
+  }, [organizationId])
+
+  const onWhatsApp = agents.filter((a) => a.entries.some((e) => e.kind === 'whatsapp_account'))
+
   return (
     <AgentsTheme>
       <div style={{ maxWidth: 720, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
         <div>
-          <h1 style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-.01em' }}>
-            Agente no WhatsApp
-          </h1>
+          <h1 style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-.01em' }}>Agentes no WhatsApp</h1>
           <p style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 2 }}>
-            Quando um cliente chama a loja direto no WhatsApp, o agente responde
-            seguindo a missão deste evento — configure-a aqui.
+            Quem responde cada número é o agente ligado a ele. A configuração mora em IA › Agentes.
           </p>
         </div>
 
-        <Card style={{ padding: 16 }}>
-          <AgentPowerSwitch />
+        <Card style={{ padding: 16, display: 'grid', gap: 8 }}>
+          {onWhatsApp.length === 0 ? (
+            <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: 0 }}>
+              Nenhum agente ligado a um número ainda{agents.length > 0 ? ' — abra um agente e use "Definir onde atua".' : '.'}
+            </p>
+          ) : onWhatsApp.map((a) => (
+            <Link key={a.id} href={`/ai/agentes/${a.id}`} className="act-row" style={{ textDecoration: 'none' }}>
+              <Bot size={16} style={{ color: 'var(--text-3)' }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="act-t">{a.name || 'Sem nome'}{a.status !== 'active' && ' · pausado'}</div>
+                <div className="act-d">{a.entries.filter((e) => e.kind === 'whatsapp_account').map((e) => e.label).join(' · ')}</div>
+              </div>
+            </Link>
+          ))}
         </Card>
 
-        <Card style={{ padding: 16 }}>
-          <div style={{ fontSize: 13.5, fontWeight: 800, marginBottom: 10 }}>
-            Missão · WhatsApp direto
-          </div>
-          <DiscoveryMissionArea />
-        </Card>
-
-        <Link href="/ai" className="btn btn-soft btn-sm" style={{ alignSelf: 'flex-start' }}>
+        <Link href="/ai/agentes" className="btn btn-soft btn-sm" style={{ alignSelf: 'flex-start' }}>
           <Orbit size={14} />
-          Configuração completa do agente (órbita)
+          Todos os agentes
         </Link>
       </div>
     </AgentsTheme>

@@ -111,9 +111,11 @@ export interface MissionEditorModalProps {
   onClose: () => void
   /** Recebe o rascunho salvo — quem chama recarrega e decide ativar. */
   onSaved: (draft: Mission) => void
+  /** Dono da missão (ai_missions.agent_id, 20261016000008); ausente = herda da versão anterior ou fica sem dono. */
+  agentId?: string | null
 }
 
-export default function MissionEditorModal({ family, mission, onClose, onSaved }: MissionEditorModalProps) {
+export default function MissionEditorModal({ family, mission, onClose, onSaved, agentId }: MissionEditorModalProps) {
   const asNewVersion = mission?.status === 'active'
   const [form, setForm] = useState<DraftForm>(mission ? formFrom(mission) : { ...EMPTY_FORM })
   const [saving, setSaving] = useState(false)
@@ -127,7 +129,9 @@ export default function MissionEditorModal({ family, mission, onClose, onSaved }
     setSaving(true)
     setError(null)
     try {
-      const payload = payloadFrom(form, family, asNewVersion ? mission!.id : null)
+      const payload: Record<string, unknown> = payloadFrom(form, family, asNewVersion ? mission!.id : null)
+      const owner = agentId ?? (mission as any)?.agent_id ?? null
+      if (owner) payload.agent_id = owner
       const editingDraft = mission && mission.status === 'draft'
       const res = editingDraft
         ? await fetch(`/api/ai/missions/${mission.id}`, {

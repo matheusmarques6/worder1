@@ -98,7 +98,14 @@ const navigation: NavSection[] = [
           { name: 'Monitoramento', href: '/automations/monitoring' },
         ],
       },
-      { name: 'IA', href: '/ai', icon: Sparkles },
+      {
+        name: 'IA', href: '/ai/agentes', icon: Sparkles,
+        children: [
+          { name: 'Agentes', href: '/ai/agentes' },
+          { name: 'Conhecimento', href: '/ai/conhecimento' },
+          { name: 'Atividade', href: '/ai/atividade' },
+        ],
+      },
     ],
   },
   {
