@@ -4,7 +4,7 @@ import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { getAuthClient } from '@/lib/api-utils';
 import { hasActiveProviderKey, providerKeyMissingResponse } from '@/lib/ai/provider-key-check';
 import { hasBooleanTransferCooldown } from '@/lib/ai/guards';
-import { findAgentTemplate } from '@/lib/ai/agent-templates';
+import { findAgentTemplate, templateJudges } from '@/lib/ai/agent-templates';
 import { listEntries } from '@/lib/ai/agent-entries';
 import { loadFlowTouchEntries } from '@/lib/ai/flow-touches';
 export const dynamic = 'force-dynamic';
@@ -160,8 +160,8 @@ export async function POST(request: NextRequest) {
     const organizationId = auth.user.organization_id
 
     // Plano IA M2 passo 15: origem do agente — modelo, cópia de outro agente
-    // da org, ou do zero. `source_ids` é aceito e ignorado até o M3 (hoje a
-    // fonte pertence a UM agente; ligar fontes a vários vem com ai_source_agents).
+    // da org, ou do zero. `source_ids` (passo 2 da tela, F3 da UI) liga as
+    // fontes escolhidas ao agente novo em ai_source_agents.
     const template = findAgentTemplate(body.template_id)
     if (body.template_id && !template) {
       return NextResponse.json({ error: 'template_id desconhecido' }, { status: 400 })
@@ -189,6 +189,7 @@ export async function POST(request: NextRequest) {
     const templateSettings = template
       ? {
           tools: { enabled: template.tools },
+          judges: { custom: templateJudges(template) },
           safety: {
             blocked_topics: template.blocked_topics,
             handoff_keywords: template.handoff_keywords,
@@ -219,6 +220,7 @@ export async function POST(request: NextRequest) {
         ...DEFAULT_PERSONA,
         ...(copied?.persona || {}),
         ...(template?.persona || {}),
+        ...(template?.rules.length ? { guidelines: template.rules } : {}),
         ...(body.persona || {}),
       },
       settings: {
@@ -269,9 +271,45 @@ export async function POST(request: NextRequest) {
       })
       if (seedError) console.error('Error seeding template missions (non-fatal):', seedError)
       else seeded = Number(created ?? 0)
+      // O seed cria todas as famílias; o agente é novo, então as que não são
+      // do modelo saem (o cartão "Missões prontas" promete só as do modelo).
+      if (!seedError) {
+        const { data: pruned, error: pruneError } = await supabase
+          .from('ai_missions')
+          .delete()
+          .eq('organization_id', organizationId)
+          .eq('agent_id', agent.id)
+          .eq('status', 'draft')
+          .not('event_type', 'in', `(${template.mission_families.map((f) => `"${f}"`).join(',')})`)
+          .select('id')
+        if (pruneError) console.error('Error pruning template missions (non-fatal):', pruneError)
+        else seeded = Math.max(0, seeded - (pruned?.length ?? 0))
+      }
     }
 
-    return NextResponse.json({ agent, seeded_missions: seeded }, { status: 201 })
+    // Fontes do passo 2: só as da própria org.
+    let linkedSources = 0
+    const wantedSources = Array.isArray(body.source_ids)
+      ? body.source_ids.filter((x: unknown): x is string => typeof x === 'string' && x.length > 0)
+      : []
+    if (agent?.id && wantedSources.length > 0) {
+      const { data: owned, error: ownedError } = await supabase
+        .from('ai_sources')
+        .select('id')
+        .eq('organization_id', organizationId)
+        .in('id', wantedSources)
+      if (ownedError) console.error('Error loading sources to link (non-fatal):', ownedError)
+      const rows = (owned ?? []).map((s: { id: string }) => ({
+        source_id: s.id, agent_id: agent.id, organization_id: organizationId,
+      }))
+      if (rows.length > 0) {
+        const { error: linkError } = await supabase.from('ai_source_agents').insert(rows)
+        if (linkError) console.error('Error linking sources (non-fatal):', linkError)
+        else linkedSources = rows.length
+      }
+    }
+
+    return NextResponse.json({ agent, seeded_missions: seeded, linked_sources: linkedSources }, { status: 201 })
 
   } catch (error: any) {
     console.error('Error in POST /api/ai/agents:', error)

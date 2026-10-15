@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { computeReadiness } from '../agent-readiness'
-import { AGENT_TEMPLATES, findAgentTemplate } from '../agent-templates'
+import { AGENT_TEMPLATES, findAgentTemplate, suggestSources, templateAreas, templateJudges, templateToolLabels } from '../agent-templates'
 
 const base = {
   hasProviderKey: true, provider: 'openai', missionsCount: 1,
@@ -62,8 +62,42 @@ describe('AGENT_TEMPLATES', () => {
   })
 
   it('findAgentTemplate aceita só ids conhecidos', () => {
-    expect(findAgentTemplate('vendas-whatsapp')?.role).toBe('Vendas no WhatsApp')
+    expect(findAgentTemplate('vendas-whatsapp')?.title).toBe('Vendas no WhatsApp')
+    expect(findAgentTemplate('vendas-whatsapp')?.role).toBe('Vendas')
     expect(findAgentTemplate('nope')).toBeNull()
     expect(findAgentTemplate(undefined)).toBeNull()
+  })
+})
+
+describe('áreas e cartão "O que vem pronto"', () => {
+  it('conta as áreas que o modelo preenche, sem conhecimento nem motor', () => {
+    for (const t of AGENT_TEMPLATES) {
+      const areas = templateAreas(t)
+      expect(areas).not.toContain('knowledge')
+      expect(areas).not.toContain('engine')
+      expect(areas).toEqual(expect.arrayContaining(['identity', 'missions', 'handoff', 'review']))
+    }
+    expect(templateAreas(findAgentTemplate('pos-compra')!)).toHaveLength(7)
+  })
+
+  it('ferramentas no cartão ficam sem as que todo agente tem; juízes viram critérios ativos', () => {
+    const rec = findAgentTemplate('recuperacao')!
+    expect(templateToolLabels(rec)).toContain('Criar cupom (só com autorização)')
+    expect(templateToolLabels(rec).some((l) => /humano/i.test(l))).toBe(false)
+    expect(templateJudges(rec)).toEqual([{ id: 'judge-recuperacao-1', name: expect.any(String), criterion: rec.review[0], active: true }])
+  })
+})
+
+describe('suggestSources', () => {
+  const sources = [
+    { id: '1', kind: 'note', name: 'Política de troca' },
+    { id: '2', kind: 'note', name: 'Formas de pagamento' },
+    { id: '3', kind: 'catalog', name: 'Catálogo Shopify' },
+    { id: '4', kind: 'note', name: 'Sobre a marca' },
+  ]
+  it('marca por tipo e por nome, nunca tudo', () => {
+    expect(suggestSources(findAgentTemplate('pos-compra')!, sources)).toEqual(['1'])
+    expect(suggestSources(findAgentTemplate('vendas-whatsapp')!, sources)).toEqual(['2', '3'])
+    expect(suggestSources(findAgentTemplate('recuperacao')!, sources)).toEqual(['2', '3'])
   })
 })

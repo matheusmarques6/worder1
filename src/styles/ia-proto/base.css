@@ -1,5 +1,6 @@
 /* GERADO por scripts/ia-proto/scope_css.py a partir de scripts/ia-proto/source/base.css.
    CSS do protótipo da aba IA, escopado em .wp. Não editar à mão. */
+.wp button,.wp input,.wp select,.wp textarea{line-height:normal}
 .wp{--pri:#F97316;--act:#C2410C;--act-h:#A8360A;--ink:#15181E;--sb:#1B1F23;--bg:#F4F5F7;--sf:#FFFFFF;--sf2:#FAFBFC;--sf3:#F0F1F3;--bd:#E6E8EC;--bd2:#D9DCE1;--tx2:#5B6270;--tx3:#80879A;--tint:#FFF1E6;--tint2:#FFF7F0;--tog:#EA580C;--info:#2548B8;
 --ok-bg:#E6F4EA;--ok:#166534;--wa-bg:#FDF1DC;--wa:#8A4B08;--er-bg:#FDECEC;--er:#B42318;--tm-bg:#EAF0FF;--tm:#2548B8;--ag-bg:#FFF1E6;--ag:#9A3412;--ne-bg:#F0F1F3;--ne:#454C57;
 --sh:0 1px 2px rgba(21,24,30,.05);--sh2:0 6px 20px rgba(21,24,30,.07);--sh3:0 24px 60px -12px rgba(21,24,30,.28);

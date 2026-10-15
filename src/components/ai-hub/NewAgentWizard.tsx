@@ -1,52 +1,81 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, ArrowRight, Check, Copy, FilePlus2, Loader2, Sparkles } from 'lucide-react'
-import { Card } from '@/components/agents/ui/primitives'
-import { AGENT_TEMPLATES, type AgentTemplate } from '@/lib/ai/agent-templates'
+import {
+  AGENT_AREAS, AGENT_TEMPLATES, suggestSources, templateAreas, templateMissionLabels, templateToolLabels,
+} from '@/lib/ai/agent-templates'
+import { Av, Icon } from './proto/ui'
 
 /**
- * "Novo agente" em dois passos (plano IA, M2 passo 16): origem (modelo,
- * cópia de outro agente, do zero) com o painel "o que vem pronto"; depois
- * nome e função. Cria via POST /api/ai/agents (passo 15) e abre o editor.
+ * "Novo agente" do protótipo (CreateAgent): 1 Por onde começar (modelo,
+ * cópia de um agente da loja ou do zero) · 2 Nome e conhecimento. Cria o
+ * rascunho via POST /api/ai/agents e abre o Construtor dele.
  */
 
-type Origin = { kind: 'template'; template: AgentTemplate } | { kind: 'copy'; agentId: string; name: string } | { kind: 'blank' }
+type Src = { t: 'model'; id: string } | { t: 'copy'; id: string } | { t: 'zero' }
 
-interface ExistingAgent { id: string; name: string | null; role: string | null }
+interface ExistingAgent { id: string; name: string | null; role: string | null; status: string; missions_count?: number }
+interface Source { id: string; name: string; kind: string; readers: string[] }
+
+const KIND_LABEL: Record<string, string> = {
+  catalog: 'Catálogo', document: 'Documento', faq: 'Perguntas e respostas',
+  site_page: 'Página da loja', url: 'Página da loja', note: 'Texto',
+}
 
 export default function NewAgentWizard({ organizationId }: { organizationId: string }) {
   const router = useRouter()
-  const [step, setStep] = useState<1 | 2>(1)
-  const [origin, setOrigin] = useState<Origin | null>(null)
-  const [existing, setExisting] = useState<ExistingAgent[]>([])
-  const [name, setName] = useState('')
-  const [role, setRole] = useState('')
+  const [src, setSrc] = useState<Src>({ t: 'model', id: 'pos-compra' })
+  const [step, setStep] = useState(0)
+  const [agents, setAgents] = useState<ExistingAgent[]>([])
+  const [sources, setSources] = useState<Source[]>([])
+  const [name, setName] = useState('Nina')
+  const [role, setRole] = useState('Pós-compra')
+  const [kb, setKb] = useState<Set<string>>(new Set())
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     fetch(`/api/ai/agents?organization_id=${encodeURIComponent(organizationId)}`)
       .then((r) => (r.ok ? r.json() : { agents: [] }))
-      .then((d) => setExisting(d.agents ?? []))
+      .then((d) => setAgents((d.agents ?? []).filter((a: ExistingAgent) => a.status !== 'archived')))
+      .catch(() => {})
+    fetch('/api/ai/knowledge')
+      .then((r) => (r.ok ? r.json() : { folders: [] }))
+      .then((d) => setSources((d.folders ?? []).flatMap((f: { notes: Source[] }) => f.notes)))
       .catch(() => {})
   }, [organizationId])
 
-  const pick = (next: Origin) => {
-    setOrigin(next)
-    if (next.kind === 'template') { setName((n) => n || next.template.name); setRole((r) => r || next.template.role) }
-    if (next.kind === 'copy') { setName((n) => n || `${next.name} (cópia)`) }
-  }
+  const m = src.t === 'model' ? AGENT_TEMPLATES.find((x) => x.id === src.id) ?? null : null
+  const copyA = src.t === 'copy' ? agents.find((a) => a.id === src.id) ?? null : null
+  const mAreas = useMemo(() => (m ? templateAreas(m) : []), [m])
+
+  // Ao trocar de origem: função e fontes sugeridas (o nome fica o que está).
+  useEffect(() => {
+    if (m) {
+      setRole(m.role)
+      setKb(new Set(suggestSources(m, sources)))
+    } else if (copyA) {
+      setRole(copyA.role || '')
+      setKb(new Set(sources.filter((s) => s.readers.includes(copyA.id)).map((s) => s.id)))
+    } else {
+      setKb(new Set())
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [src.t, (src as { id?: string }).id, sources])
+
+  const agentName = (id: string) => agents.find((a) => a.id === id)?.name || 'Agente'
+  const sourcesOf = (id: string) => sources.filter((s) => s.readers.includes(id)).length
+  const filled = m ? mAreas.length : copyA ? 8 : 1
+  const display = name.trim() || 'o agente'
 
   const create = async () => {
-    if (!origin) return
     setSaving(true)
     setError(null)
     try {
-      const body: Record<string, unknown> = { name: name.trim(), role: role.trim() || undefined }
-      if (origin.kind === 'template') body.template_id = origin.template.id
-      if (origin.kind === 'copy') body.copy_from = origin.agentId
+      const body: Record<string, unknown> = { name: name.trim(), role: role.trim() || undefined, source_ids: [...kb] }
+      if (m) body.template_id = m.id
+      if (copyA) body.copy_from = copyA.id
       const res = await fetch('/api/ai/agents', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       })
@@ -59,104 +88,141 @@ export default function NewAgentWizard({ organizationId }: { organizationId: str
     }
   }
 
-  const includes: string[] =
-    origin?.kind === 'template' ? origin.template.includes
-    : origin?.kind === 'copy' ? ['Persona, adaptação e limites copiados', 'Ferramentas e handoff copiados', 'Sem entradas: ligue um número depois']
-    : origin?.kind === 'blank' ? ['Só transfer_to_human ligada', 'Sem missões: semeie no editor', 'Nasce como rascunho']
-    : []
-
   return (
-    <div style={{ padding: 22, maxWidth: 980, width: '100%', margin: '0 auto' }}>
-      <button type="button" className="btn btn-ghost btn-sm" onClick={() => (step === 2 ? setStep(1) : router.push('/ai/agentes'))}>
-        <ArrowLeft size={14} />{step === 2 ? 'Origem' : 'Agentes'}
-      </button>
-      <div style={{ fontSize: 18, fontWeight: 800, margin: '10px 0 2px' }}>Novo agente</div>
-      <div style={{ fontSize: 12.5, color: 'var(--text-3)', marginBottom: 18 }}>
-        {step === 1 ? 'Passo 1 de 2 · de onde ele parte' : 'Passo 2 de 2 · nome e função'}
+    <div className="pin narrow">
+      <div className="ph"><div>
+        <h1 className="h1">Novo agente</h1>
+        <p className="lead">Comece por um modelo pronto ou copie um agente que já funciona. Tudo continua editável no editor.</p>
+      </div></div>
+
+      <div className="cr-steps">
+        {['Por onde começar', 'Nome e conhecimento'].map((s, i) => (
+          <button key={s} type="button" className={'cr-st' + (i === step ? ' on' : '') + (i < step ? ' done' : '')} onClick={() => i < step && setStep(i)}>
+            <span>{i < step ? <Icon n="check" s={12} sw={2.4} /> : i + 1}</span>{s}
+          </button>
+        ))}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 300px', gap: 18 }}>
-        <div>
-          {step === 1 ? (
-            <div style={{ display: 'grid', gap: 10 }}>
-              {AGENT_TEMPLATES.map((t) => (
-                <OriginCard key={t.id} on={origin?.kind === 'template' && origin.template.id === t.id}
-                  icon={<Sparkles size={16} />} title={t.name} sub={`${t.role} — ${t.summary}`}
-                  onClick={() => pick({ kind: 'template', template: t })} />
-              ))}
-              {existing.map((a) => (
-                <OriginCard key={a.id} on={origin?.kind === 'copy' && origin.agentId === a.id}
-                  icon={<Copy size={16} />} title={`Copiar "${a.name || 'Sem nome'}"`} sub={a.role || 'agente existente'}
-                  onClick={() => pick({ kind: 'copy', agentId: a.id, name: a.name || 'Agente' })} />
-              ))}
-              <OriginCard on={origin?.kind === 'blank'} icon={<FilePlus2 size={16} />}
-                title="Do zero" sub="Só o essencial; você configura cada área na órbita"
-                onClick={() => pick({ kind: 'blank' })} />
+      <div className="cr">
+        <div className="cr-l">
+          {step === 0 ? (
+            <div className="rise" key="s0">
+              <div className="lbl" style={{ marginBottom: 10 }}>Modelos</div>
+              <div className="cr-models">
+                {AGENT_TEMPLATES.map((x) => {
+                  const on = src.t === 'model' && src.id === x.id
+                  return (
+                    <button key={x.id} type="button" className={'cr-m' + (on ? ' on' : '')} onClick={() => setSrc({ t: 'model', id: x.id })} aria-pressed={on}>
+                      <span className="cr-mi"><Icon n={x.icon} s={18} /></span>
+                      <b>{x.title}</b><p>{x.summary}</p>
+                      <span className="cr-mf">{templateAreas(x).length} de 9 áreas prontas</span>
+                    </button>
+                  )
+                })}
+              </div>
+              {agents.length > 0 && <>
+                <div className="lbl" style={{ margin: '26px 0 10px' }}>Copiar um agente da loja</div>
+                <div className="cr-copy">
+                  {agents.map((a) => {
+                    const n = a.missions_count ?? 0
+                    return (
+                      <button key={a.id} type="button" className={'cr-c' + (src.t === 'copy' && src.id === a.id ? ' on' : '')} onClick={() => setSrc({ t: 'copy', id: a.id })}>
+                        <Av name={a.name} />
+                        <div><b>{a.name || 'Sem nome'}</b><span>{a.role || 'Agente'} · {sourcesOf(a.id)} fontes · {n} {n === 1 ? 'missão' : 'missões'}</span></div>
+                        <span className="cr-radio" />
+                      </button>
+                    )
+                  })}
+                </div>
+              </>}
+              <button type="button" className="cr-zero" onClick={() => setSrc({ t: 'zero' })} aria-pressed={src.t === 'zero'}>
+                <span className={'cr-radio' + (src.t === 'zero' ? ' on' : '')} />Começar do zero, com todas as áreas vazias
+              </button>
             </div>
           ) : (
-            <Card style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: 'var(--text-2)', marginBottom: 7 }}>Nome</label>
-                <input className="field" value={name} placeholder="ex.: Duda" autoFocus onChange={(e) => setName(e.target.value)} />
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: 'var(--text-2)', marginBottom: 7 }}>Função</label>
-                <input className="field" value={role} placeholder="ex.: Vendas no WhatsApp" onChange={(e) => setRole(e.target.value)} />
-                <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 6 }}>
-                  Aparece na lista e nas transferências entre agentes.
+            <div className="rise card cr-form" key="s1">
+              <div className="cr-row">
+                <div>
+                  <label className="flbl" htmlFor="nm">Nome</label>
+                  <input id="nm" className="field" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+                  <div className="help">É assim que {display} se apresenta. Se perguntarem, sempre confirma que é uma IA.</div>
+                </div>
+                <div>
+                  <label className="flbl" htmlFor="rl">Função</label>
+                  <input id="rl" className="field" value={role} onChange={(e) => setRole(e.target.value)} />
                 </div>
               </div>
-              {error && <p style={{ fontSize: 12, color: 'var(--red)', margin: 0 }}>{error}</p>}
-            </Card>
+              <div style={{ marginTop: 22 }}>
+                <div className="flbl">Conhecimento que {display} pode consultar</div>
+                <div className="help" style={{ marginTop: 0, marginBottom: 10 }}>
+                  {sources.length === 0
+                    ? 'A loja ainda não tem fontes. Você cria no Conhecimento depois, e liga no Construtor.'
+                    : `Fontes do catálogo da loja. Marcamos as que ${copyA ? `${copyA.name || 'o agente'} usa` : 'combinam com o modelo'}.`}
+                </div>
+                <div className="cr-kb">
+                  {sources.map((s) => {
+                    const on = kb.has(s.id)
+                    const readers = s.readers.map(agentName)
+                    return (
+                      <label key={s.id} className={'cr-k' + (on ? ' on' : '')}>
+                        <input type="checkbox" checked={on} onChange={() => setKb((k) => { const n = new Set(k); if (n.has(s.id)) n.delete(s.id); else n.add(s.id); return n })} />
+                        <div><b>{s.name}</b><span>{KIND_LABEL[s.kind] ?? s.kind} · {readers.length ? `usada por ${readers.join(', ')}` : 'nenhum agente usa ainda'}</span></div>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+              <div className="note" style={{ marginTop: 20 }}>
+                <Icon n="alert" s={16} />
+                <span>{name.trim() || 'O agente'} nasce <b style={{ color: 'var(--ink)' }}>pausado</b>. Nada é enviado a clientes até você passar pelo checklist de publicação.</span>
+              </div>
+              {error && <div className="note" role="alert" style={{ marginTop: 10, color: 'var(--er)', background: 'var(--er-bg)' }}><Icon n="alert" s={16} /><span>{error}</span></div>}
+            </div>
           )}
-
-          <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-            <div style={{ flex: 1 }} />
-            {step === 1 ? (
-              <button type="button" className="btn btn-primary" disabled={!origin} onClick={() => setStep(2)}>
-                Continuar<ArrowRight size={15} />
-              </button>
-            ) : (
-              <button type="button" className="btn btn-primary" disabled={saving || !name.trim()} onClick={() => void create()}>
-                {saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}Criar agente
-              </button>
-            )}
-          </div>
         </div>
 
-        <Card style={{ padding: 16, alignSelf: 'start' }}>
-          <div style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--text-3)', marginBottom: 10 }}>
-            O que vem pronto
-          </div>
-          {includes.length === 0 ? (
-            <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: 0 }}>Escolha uma origem para ver.</p>
-          ) : (
-            <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'grid', gap: 8 }}>
-              {includes.map((item) => (
-                <li key={item} style={{ display: 'flex', gap: 8, fontSize: 12.5 }}>
-                  <Check size={14} style={{ color: 'var(--green)', flexShrink: 0, marginTop: 2 }} />{item}
+        <aside className="cr-r card">
+          <div className="lbl">O que vem pronto</div>
+          <div className="cr-prev-h">{src.t === 'zero' ? 'Agente em branco' : m ? m.title : `Cópia de ${copyA?.name || 'agente'}`}</div>
+          <div className="cr-bar"><i style={{ width: `${(filled / 9) * 100}%` }} /></div>
+          <div className="cr-cnt">{filled} de 9 áreas preenchidas</div>
+          <ul className="cr-areas">
+            {AGENT_AREAS.map((a) => {
+              const on = src.t === 'zero' ? a.id === 'engine' : m ? mAreas.includes(a.id) || a.id === 'engine' : a.id !== 'missions'
+              return (
+                <li key={a.id} className={on ? 'on' : ''}>
+                  <span>{on ? <Icon n="check" s={12} sw={2.4} /> : null}</span>{a.label}
+                  {a.id === 'engine' && on && <em>chave da conta</em>}
+                  {a.id === 'knowledge' && !on && <em>no próximo passo</em>}
+                  {copyA && a.id === 'missions' && <em>missões não são copiadas</em>}
                 </li>
-              ))}
-            </ul>
+              )
+            })}
+          </ul>
+          {m && (
+            <div className="cr-det">
+              <div><span>Missões prontas</span>{templateMissionLabels(m).map((x) => <em key={x} className="chip sm">{x}</em>)}</div>
+              {templateToolLabels(m).length > 0 && <div><span>Ferramentas</span><p>{templateToolLabels(m).join(', ')}</p></div>}
+              {m.rules.length > 0 && <div><span>Regras que nunca quebra</span><p>{m.rules.join('. ')}.</p></div>}
+            </div>
           )}
-          <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 12 }}>
-            Todo agente nasce como rascunho. Ativar exige chave do provedor, uma missão e um caminho para humano.
+          {copyA && (
+            <div className="cr-det">
+              <p style={{ margin: 0 }}>Copia voz, adaptação, ferramentas, limites, transferência e revisão de {copyA.name || 'o agente'}. Missões ficam de fora porque cada situação tem um só agente responsável.</p>
+            </div>
+          )}
+          <div className="cr-foot">
+            {step === 0
+              ? <button type="button" className="btn pri" style={{ width: '100%' }} onClick={() => setStep(1)}>Continuar<Icon n="arrowR" s={16} /></button>
+              : <>
+                <button type="button" className="btn" onClick={() => setStep(0)}>Voltar</button>
+                <button type="button" className="btn pri" style={{ flex: 1 }} disabled={!name.trim() || saving} onClick={() => void create()}>
+                  {saving ? 'Criando…' : 'Criar e abrir editor'}
+                </button>
+              </>}
           </div>
-        </Card>
+        </aside>
       </div>
     </div>
-  )
-}
-
-function OriginCard({ on, icon, title, sub, onClick }: { on: boolean; icon: React.ReactNode; title: string; sub: string; onClick: () => void }) {
-  return (
-    <button type="button" className={`act-row${on ? ' on' : ''}`} style={{ textAlign: 'left', cursor: 'pointer' }} onClick={onClick}>
-      <span style={{ color: on ? 'var(--brand)' : 'var(--text-3)' }}>{icon}</span>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div className="act-t">{title}</div>
-        <div className="act-d">{sub}</div>
-      </div>
-      {on && <Check size={16} style={{ color: 'var(--green)' }} />}
-    </button>
   )
 }

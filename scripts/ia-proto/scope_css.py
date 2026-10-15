@@ -35,6 +35,14 @@ DROP = re.compile(r"^(#root|\.app|\.main|\.sb(-[\w-]+)?|\.scrim-sb)(?![\w-])")
 
 ANIM_NAMES: set[str] = set()
 
+# O protótipo roda sem reset: botões e campos ficam com a altura de linha do
+# navegador (normal). O preflight do Tailwind faz eles herdarem 1.45, o que
+# deixa títulos de cartão (que são <button>) mais altos. Vem antes das regras
+# do protótipo, que continuam podendo definir line-height próprio.
+PREFLIGHT_UNDO = {
+    "base.css": ".wp button,.wp input,.wp select,.wp textarea{line-height:normal}\n",
+}
+
 
 def strip_comments(css: str) -> str:
     return re.sub(r"/\*.*?\*/", "", css, flags=re.S)
@@ -148,7 +156,7 @@ def main() -> None:
     for css in sources.values():
         ANIM_NAMES.update(re.findall(r"@keyframes\s+([\w-]+)", css))
     for name, wrap in FILES.items():
-        body = emit(parse(sources[name]), wrap)
+        body = PREFLIGHT_UNDO.get(name, "") + emit(parse(sources[name]), wrap)
         header = (
             f"/* GERADO por scripts/ia-proto/scope_css.py a partir de scripts/ia-proto/source/{name}.\n"
             "   CSS do protótipo da aba IA, escopado em .wp. Não editar à mão. */\n"
