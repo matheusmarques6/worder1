@@ -749,6 +749,22 @@ async function processOrderCreated(store: ShopifyStoreConfig, order: any) {
     } catch (attribErr) {
       console.error('[Shopify Webhook] Attribution failed (orders/create):', attribErr);
     }
+    // Plano IA M5 passo 27: o pedido também credita a conversa que um agente
+    // de IA atendeu (receita atribuída por agente na aba Atividade).
+    // Idempotente por pedido; falha aqui nunca afeta o webhook.
+    try {
+      const settings = await getAttributionSettings(store.organization_id);
+      const { attributeAiConversation } = await import('@/lib/ai/outcomes');
+      await attributeAiConversation({
+        organizationId: store.organization_id,
+        contactId: contact.id,
+        orderId: String(order.id),
+        orderValue,
+        windowDays: Math.max(settings.whatsapp_window_days, 7),
+      });
+    } catch (aiAttribErr) {
+      console.error('[Shopify Webhook] AI conversation attribution failed:', aiAttribErr);
+    }
   }
 
   // ======================================

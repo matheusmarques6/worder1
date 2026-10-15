@@ -268,6 +268,18 @@
 "updated_at",
 "user_id"
 ],
+"ai_activity_events": [
+"agent_id",
+"amount",
+"contact_id",
+"conversation_id",
+"created_at",
+"id",
+"kind",
+"metadata",
+"organization_id",
+"text"
+],
 "ai_agent_actions": [
 "actions",
 "agent_id",
@@ -461,6 +473,33 @@
 "total_conversations",
 "total_messages",
 "total_tokens_used",
+"updated_at"
+],
+"ai_conversation_outcomes": [
+"agent_id",
+"blocked_count",
+"closed_at",
+"contact_id",
+"conversation_id",
+"cost_unknown",
+"cost_usd",
+"discount_total",
+"entry_id",
+"first_inbound_at",
+"first_response_ms",
+"gap",
+"handoff_reason",
+"incentives_offered",
+"incentives_used",
+"messages_sent",
+"order_id",
+"organization_id",
+"resolved_without_human",
+"revenue",
+"started_at",
+"tokens",
+"topic",
+"transferred",
 "updated_at"
 ],
 "ai_eval_cases": [
