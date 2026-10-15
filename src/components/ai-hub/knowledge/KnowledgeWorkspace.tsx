@@ -63,6 +63,11 @@ export default function KnowledgeWorkspace({ organizationId }: { organizationId:
   }, [])
 
   useEffect(() => { void loadTree() }, [loadTree])
+  // /ai/conhecimento?note=<id> (vindo do Construtor) abre a nota direto.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('note')
+    if (id) { setTabs((t) => (t.includes(id) ? t : [...t, id])); setCurrent(id) }
+  }, [])
   useEffect(() => {
     fetch(`/api/ai/agents?organization_id=${encodeURIComponent(organizationId)}`)
       .then((r) => (r.ok ? r.json() : { agents: [] }))

@@ -242,6 +242,9 @@ export default function AgentEditor({ organizationId, agentId }: { organizationI
             <Check size={14} />Salvo
           </span>
         )}
+        <Link href={`/ai/construtor/${agent.id}`} className="btn btn-soft btn-sm">
+          <Workflow size={14} />Construtor
+        </Link>
         <button type="button" className="btn btn-soft btn-sm" onClick={() => setVersionsOpen(true)}>
           <History size={14} />Versões
         </button>

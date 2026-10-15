@@ -29,10 +29,12 @@ const PROFILES = [
   { v: 'carrinho', t: 'Carrinho aberto' },
 ] as const
 
-export default function AgentTestPanel({ agentId, draft, onClose }: {
+export default function AgentTestPanel({ agentId, draft, onClose, onTrace }: {
   agentId: string
   draft: Record<string, unknown> | null
   onClose: () => void
+  /** Construtor (passo 32): recebe o trace de cada resposta para acender o caminho. */
+  onTrace?: (trace: any) => void
 }) {
   const [turns, setTurns] = useState<Turn[]>([])
   const [input, setInput] = useState('')
@@ -72,6 +74,7 @@ export default function AgentTestPanel({ agentId, draft, onClose }: {
       })
       const body = await res.json().catch(() => null)
       if (!res.ok) throw new Error(body?.error || 'A simulação falhou')
+      onTrace?.(body)
       setTurns((prev) => [...prev, {
         author: 'agent',
         text: body.reply ?? body.last_draft ?? '(nenhuma resposta)',

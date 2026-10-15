@@ -102,6 +102,7 @@ const navigation: NavSection[] = [
         name: 'IA', href: '/ai/agentes', icon: Sparkles,
         children: [
           { name: 'Agentes', href: '/ai/agentes' },
+          { name: 'Construtor', href: '/ai/construtor' },
           { name: 'Conhecimento', href: '/ai/conhecimento' },
           { name: 'Atividade', href: '/ai/atividade' },
         ],

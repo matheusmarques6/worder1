@@ -24,7 +24,7 @@ export function useAiOrganizationId(): string {
 
 export const AI_ROUTES = [
   { href: '/ai/agentes', label: 'Agentes', icon: Bot },
-  { href: '/ai/construtor', label: 'Construtor', icon: Hammer, disabled: true, hint: 'Em breve (M6)' },
+  { href: '/ai/construtor', label: 'Construtor', icon: Hammer },
   { href: '/ai/conhecimento', label: 'Conhecimento', icon: BookOpen },
   { href: '/ai/atividade', label: 'Atividade', icon: BarChart3 },
 ] as const
@@ -72,14 +72,6 @@ export default function AiShell({ children }: { children: ReactNode }) {
           {AI_ROUTES.map((route) => {
             const Icon = route.icon
             const on = pathname === route.href || pathname.startsWith(route.href + '/')
-            if ('disabled' in route && route.disabled) {
-              return (
-                <span key={route.href} className="tab" aria-disabled title={route.hint}
-                  style={{ opacity: 0.45, cursor: 'not-allowed' }}>
-                  <Icon />{route.label}
-                </span>
-              )
-            }
             return (
               <Link key={route.href} href={route.href} className={`tab${on ? ' on' : ''}`}>
                 <Icon />{route.label}
