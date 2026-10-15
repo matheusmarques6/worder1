@@ -18,8 +18,10 @@ services:
     runtime: docker
     rootDir: runtime
     dockerfilePath: ./Dockerfile
-    # Região do Render mais próxima do Supabase sa-east-1 (São Paulo).
-    region: ohio
+    # Região do Render mais próxima do Supabase sa-east-1 (São Paulo): entre
+    # oregon/ohio/virginia/frankfurt/singapore, virginia é a de menor RTT
+    # até a costa leste da América do Sul (plano IA 15/10/2026, M0 passo 5).
+    region: virginia
     plan: starter
     healthCheckPath: /healthz
     autoDeploy: true
