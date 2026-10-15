@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plano de Implementação IA</title>
+<meta name="description" content="Plano passo a passo para migrar os agentes de IA totalmente para o runtime Python e implementar a nova aba IA (agentes, construtor, conhecimento, atividade).">
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#1a1d23;--muted:#5b6472;--line:#e3e6ea;--accent:#2f5bea;--ok:#1e8e4d;--warn:#b7791f;--bad:#c93b3b;--soft:#eef2ff;--okbg:#e8f6ee;--warnbg:#fff6e5;--badbg:#fdeaea;--code:#f1f3f5}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1115;--card:#171a21;--ink:#e8eaee;--muted:#9aa3b2;--line:#272c36;--accent:#7c9cff;--ok:#4fc37f;--warn:#e3a94a;--bad:#ef6a6a;--soft:#1d2440;--okbg:#15291d;--warnbg:#2d2413;--badbg:#2f1717;--code:#1f232b}}
+:root[data-theme="dark"]{--bg:#0f1115;--card:#171a21;--ink:#e8eaee;--muted:#9aa3b2;--line:#272c36;--accent:#7c9cff;--ok:#4fc37f;--warn:#e3a94a;--bad:#ef6a6a;--soft:#1d2440;--okbg:#15291d;--warnbg:#2d2413;--badbg:#2f1717;--code:#1f232b}
+*{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:1040px;margin:0 auto;padding:32px 16px 80px} h1{font-size:30px;margin:0 0 6px} .sub{color:var(--muted);font-size:14px}
+h2{font-size:22px;margin:48px 0 10px;padding-top:14px;border-top:2px solid var(--line)} h3{font-size:16px;margin:26px 0 6px;display:flex;gap:10px;align-items:center}
+h3 .n{display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:26px;padding:0 8px;border-radius:999px;background:var(--accent);color:#fff;font-size:13px;font-weight:700}
+p{margin:8px 0} .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 18px;margin:10px 0}
+.tag{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap} .ok{background:var(--okbg);color:var(--ok)} .warn{background:var(--warnbg);color:var(--warn)} .bad{background:var(--badbg);color:var(--bad)} .info{background:var(--soft);color:var(--accent)}
+table{width:100%;border-collapse:collapse;margin:10px 0;font-size:14px} th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top} th{color:var(--muted);font-weight:600;font-size:13px}
+code{font:13px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:var(--code);padding:1px 5px;border-radius:4px} pre{background:var(--code);padding:10px 12px;border-radius:8px;overflow:auto;font-size:13px}
+ul,ol{padding-left:22px;margin:6px 0} li{margin:4px 0}
+.callout{border-left:4px solid var(--accent);background:var(--soft);padding:12px 14px;border-radius:6px;margin:14px 0} .callout.warn{border-color:var(--warn);background:var(--warnbg)} .callout.bad{border-color:var(--bad);background:var(--badbg)}
+.step{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 18px 14px;margin:10px 0}
+.step .meta{font-size:13px;color:var(--muted);margin-bottom:6px} .step dl{margin:6px 0;display:grid;grid-template-columns:110px 1fr;gap:4px 12px} .step dt{color:var(--muted);font-size:13px;font-weight:600} .step dd{margin:0}
+.toc{columns:2;gap:24px;font-size:14px} .toc a{color:var(--accent);text-decoration:none} .small{font-size:13px;color:var(--muted)}
+@media (max-width:640px){.toc{columns:1} h1{font-size:24px} .step dl{grid-template-columns:1fr} table{font-size:13px} th,td{padding:6px}}
+</style></head><body><div class="wrap">
+<header><h1>Plano de implementação: agentes de IA no runtime e a nova aba IA</h1>
+<div class="sub">Passo a passo · 15 de outubro de 2026 · branch <code>claude/debug-console-error-FWrLE</code> · base: relatório de estado e correlação de telas do mesmo dia</div></header>
+
+<div class="card"><strong>Como ler.</strong> O plano tem 8 marcos (M0 a M7) e 34 passos numerados. Cada passo diz o que entra (migration, arquivos, endpoint, módulo do runtime), como testar e o critério de aceite. Os passos de um marco podem andar em paralelo nas três trilhas (runtime Python, API e schema, UI) quando a tabela de dependências permitir. Decisões tomadas para fechar o plano: o runtime Python é o único motor; o legado TypeScript fica só como rollback até o M1 terminar e é apagado no M7; vários agentes por loja ligados a entradas; conhecimento da loja com vínculo por agente; edição inline mantida no editor em órbita.
+<div class="toc" style="margin-top:12px">
+<div><a href="#principios">Princípios e trilhas</a></div><div><a href="#m0">M0 · Destravar e subir o motor</a></div><div><a href="#m1">M1 · Paridade do runtime com o legado</a></div><div><a href="#m2">M2 · Vários agentes e entradas</a></div><div><a href="#m3">M3 · Conhecimento da loja</a></div><div><a href="#m4">M4 · Testar, versões e checklist</a></div><div><a href="#m5">M5 · Atividade e telemetria</a></div><div><a href="#m6">M6 · Construtor</a></div><div><a href="#m7">M7 · Limpeza e canais</a></div><div><a href="#deps">Dependências e paralelismo</a></div><div><a href="#riscos">Riscos</a></div>
+</div></div>
+
+<h2 id="principios">Princípios e trilhas</h2>
+<ul>
+<li><strong>Nada chega ao cliente sem o Juiz 1.</strong> Toda capacidade portada do legado passa pelo <code>guarded_reply</code>. Isso já é regra do runtime e vale para áudio, visão e tools novas.</li>
+<li><strong>Uma migration por passo, sempre reversível.</strong> Migrations em <code>supabase/migrations/</code> com <code>down</code> comentado; a suíte <code>runtime/tests/db</code> roda contra banco limpo no CI (<code>.github/workflows/runtime.yml</code>). Tabelas hoje fora da cadeia (evals, propostas, integrações) entram na cadeia no M0.</li>
+<li><strong>Trilhas.</strong> <span class="tag info">RT</span> runtime Python · <span class="tag warn">API</span> Next.js rotas e schema · <span class="tag ok">UI</span> telas. Um passo marcado com duas trilhas tem duas pessoas ou duas sessões.</li>
+<li><strong>Cada passo fecha com teste.</strong> Vitest para TS, pytest (unit, db, pipeline) para o runtime, Playwright para as telas críticas (criar agente, ativar, playground).</li>
+<li><strong>Commits e push só na branch indicada.</strong> Um commit por passo, prefixo <code>feat(ai)</code>, <code>feat(runtime)</code>, <code>feat(db)</code>, <code>feat(ui)</code>.</li>
+</ul>
+
+<!-- ============================ M0 ============================ -->
+<h2 id="m0">M0 · Destravar e subir o motor <span class="tag bad">semana 1</span></h2>
+<p>Objetivo: sair do estado "piloto morto". Ao final do M0 o runtime roda no Render, a org piloto responde WhatsApp de novo, a ingestão de conhecimento funciona e a telemetria chega ao Logfire com spans de domínio.</p>
+
+<div class="step"><h3><span class="n">1</span>Migration <code>ai_budgets</code> e tolerância no <code>checkAiBudget</code></h3>
+<div class="meta"><span class="tag warn">API</span> · P</div>
+<dl><dt>Entra</dt><dd>Nova migration <code>supabase/migrations/20261016000001_ai_budgets.sql</code> copiando <code>supabase/migrations-archive/20260616_ai_budgets.sql</code> (tabela, RLS genérica, grant para <code>worker_role</code> leitura). Em <code>src/lib/ai/budget.ts:191</code>, erro <code>42P01</code> (tabela ausente) passa a cair no padrão de US$ 50 com <code>unknownReason: 'no_table'</code>, em vez de bloquear.</dd>
+<dt>Também</dt><dd>Trazer para a cadeia ativa as tabelas usadas e sem migration: <code>ai_test_scenarios</code>, <code>ai_prompt_proposals</code>, <code>ai_scenario_runs</code>, <code>ai_eval_criteria</code>, <code>ai_eval_cases</code>, <code>ai_eval_results</code>, <code>ai_agent_integrations</code> (todas <code>create table if not exists</code>, lidas do snapshot).</dd>
+<dt>Teste</dt><dd><code>src/lib/ai/__tests__/budget.test.ts</code> ganha o caso "tabela ausente usa padrão"; suíte db do runtime contra banco limpo passa.</dd>
+<dt>Aceite</dt><dd>Em produção, <code>to_regclass('public.ai_budgets')</code> não é nulo; criar uma fonte de texto no hub chega a <code>status = ready</code> com chunks &gt; 0 (exige a chave OpenAI da org, passo 3).</dd></dl></div>
+
+<div class="step"><h3><span class="n">2</span>Correções P0 da UI atual</h3>
+<div class="meta"><span class="tag ok">UI</span> · P</div>
+<dl><dt>Entra</dt><dd><code>KnowledgeBasePanel.tsx:89</code> passa <code>organization_id</code>; <code>AgentSelect.tsx:376</code> deixa de navegar para <code>/whatsapp/ai-agents</code> e só muda estado local; <code>agent-hub.ts:168</code> lê a contagem real de fontes (<code>GET /api/ai/agents/[id]/sources</code> ou coluna agregada); botão "Criar agente" chama <code>POST /api/ai/agents</code> com um modal mínimo (nome e modelo) até o passo 16 existir.</dd>
+<dt>Teste</dt><dd>Playwright: abrir <code>/ai?tab=knowledge</code> lista fontes; criar agente pela UI e vê-lo no hub.</dd>
+<dt>Aceite</dt><dd>Nenhum fetch da aba IA devolve 400; nenhum link leva ao redirect circular.</dd></dl></div>
+
+<div class="step"><h3><span class="n">3</span>Chave OpenAI da org e teste de ingestão</h3>
+<div class="meta"><span class="tag ok">UI</span> · P</div>
+<dl><dt>Entra</dt><dd>A área Motor e custo avisa quando falta chave <code>openai</code> (os embeddings só usam ela, <code>embedding-key.ts</code>) e aponta para o gerenciador de chaves. Cadastrar a chave da org piloto.</dd>
+<dt>Aceite</dt><dd>Fonte processada com chunks; <code>ai_usage_logs</code> recebe linha <code>embedding</code>.</dd></dl></div>
+
+<div class="step"><h3><span class="n">4</span>Spans de domínio no Logfire</h3>
+<div class="meta"><span class="tag info">RT</span> · P</div>
+<dl><dt>Entra</dt><dd>Em <code>runtime/src/agents_runtime/obs/telemetry.py</code>, <code>configure_telemetry</code> passa a aceitar o tracer global já configurado pelo Logfire: se <code>_tracer</code> continuar nulo após <code>configure_logfire</code>, chamar <code>trace.get_tracer(service_name)</code> do provider global. Alternativa equivalente: definir <code>OTEL_EXPORTER_OTLP_ENDPOINT=https://logfire-api.pydantic.dev</code> e o header de token no <code>render.yaml</code>. Adicionar spans em <code>llm.py</code> (por chamada: provider, model, purpose, tokens) e em <code>tools/base.py</code> (por tool).</dd>
+<dt>Teste</dt><dd><code>tests/unit/test_telemetry.py</code>: com Logfire configurado em memória, <code>span("turn")</code> produz span.</dd>
+<dt>Aceite</dt><dd>No Logfire aparecem <code>turn</code> → <code>llm_call</code> → <code>judge</code> → <code>send</code> encadeados por traceparent.</dd></dl></div>
+
+<div class="step"><h3><span class="n">5</span>Subir o runtime no Render e fechar o piloto</h3>
+<div class="meta"><span class="tag info">RT</span> · P, mas com gate humano</div>
+<dl><dt>Entra</dt><dd>Seguir <code>docs/runbooks/2026-09-17-piloto-runtime.md</code> passos 1 a 8 com <code>runtime/scripts/piloto_check.py env</code>, <code>probe</code>, <code>smoke</code>. Blueprint do <code>render.yaml</code> com os 5 segredos. Mudar <code>region</code> para a mais próxima de <code>sa-east-1</code> que o Render oferecer. Drenar <code>q_inbound_dlq</code> (4 mensagens) com <code>internal.reprocess_dead_letters</code> depois de ler o erro de cada uma. Resolver os 2 alertas <code>critical_violation</code> abertos desde 17/08.</dd>
+<dt>Também</dt><dd>Apagar a linha <code>runtime-pc-piloto</code> de <code>internal.runtime_heartbeats</code> quando o processo do Render registrar o seu; <code>AGENTS_WORKERS</code> passa a ser lido em <code>__main__.py</code> (hoje ignorado).</dd>
+<dt>Aceite</dt><dd><code>/healthz</code> 200 por 24h; uma mensagem de teste no número piloto recebe resposta do agente; <code>internal.llm_calls</code> volta a receber linhas; rollback testado uma vez (apagar a linha de <code>ai_runtime_rollout</code> e ver o legado responder, depois recriar).</dd></dl></div>
+
+<!-- ============================ M1 ============================ -->
+<h2 id="m1">M1 · Paridade do runtime com o legado <span class="tag warn">semanas 2 a 3</span></h2>
+<p>Objetivo: tudo que hoje só o legado faz passa a existir no runtime, para que toda org possa migrar e o legado possa ser removido. Lista vinda do <code>runtime/FORK.md</code> e do relatório de estado.</p>
+
+<div class="step"><h3><span class="n">6</span>Áudio e visão no inbound</h3>
+<div class="meta"><span class="tag info">RT</span> · M</div>
+<dl><dt>Entra</dt><dd>Novo <code>agent_core/stt.py</code> portando <code>src/lib/ai/media/transcription.ts</code>: prioridade OpenAI <code>whisper-1</code>, depois Groq <code>whisper-large-v3</code>, com a chave da org (<code>repository/provider_keys.py</code>); custo por segundo registrado em <code>internal.llm_calls</code> com <code>purpose='stt'</code> via <code>MeteredLlm</code>. Visão: em <code>agent_core/llm.py</code>, mensagens com imagem viram conteúdo multimodal (<code>image_url</code> base64) quando o provedor suporta; caso contrário, cai na legenda, como <code>cloud-runner.ts:783-807</code>. <code>agent_core/media.py</code> deixa de responder "não ouço" quando há transcrição.</dd>
+<dt>Mídia</dt><dd>Download pelo <code>channels/cloud_api.py</code> com o token da conta (o legado usa <code>fetch-media.ts</code> com guarda de tamanho; portar os limites).</dd>
+<dt>Teste</dt><dd>unit: transcrição simulada entra no texto do turno; pipeline: áudio sem chave Groq/OpenAI mantém a degradação honesta atual.</dd>
+<dt>Aceite</dt><dd>Áudio no número piloto é transcrito e respondido; linha <code>stt</code> em <code>llm_calls</code> com custo.</dd></dl></div>
+
+<div class="step"><h3><span class="n">7</span>Teto mensal de gasto</h3>
+<div class="meta"><span class="tag info">RT</span> <span class="tag warn">API</span> · P</div>
+<dl><dt>Entra</dt><dd>Migration: <code>ai_agents.monthly_cap_usd numeric null</code>. No runtime, <code>agent_core/metering.py</code> ganha <code>MonthlyBudgetGate</code>: antes de gerar, lê <code>ai_monthly_cost_usd(org)</code> (RPC existente) e a soma de <code>llm_calls.cost_usd</code> do agente no mês; se estourou o da org (<code>ai_budgets</code>) ou do agente, não gera, abre alerta <code>budget_exceeded</code> (dedup por mês), emite <code>ai_run_step</code> e a conversa segue para a equipe. Chamadas com custo nulo (provedor direto) contam pela tabela de preços já usada no TS (<code>provider-cost-flow</code>): portar a tabela para <code>metering.py</code>.</dd>
+<dt>Teste</dt><dd>db: turno com orçamento estourado não grava outbox e abre alerta.</dd>
+<dt>Aceite</dt><dd>Órgão/agente com teto baixo para de responder e a tela mostra o motivo.</dd></dl></div>
+
+<div class="step"><h3><span class="n">8</span>RAG com limiar e proveniência</h3>
+<div class="meta"><span class="tag info">RT</span> · P</div>
+<dl><dt>Entra</dt><dd><code>repository/knowledge.py</code>: limiar de similaridade 0,7 (igual a <code>rag.ts</code>) e o output da tool <code>search_knowledge</code> passa a incluir <code>source_id</code>, <code>chunk_id</code> e <code>score</code> por chunk (a UI de "uso por nota" lê de <code>tool_calls</code>). Busca fica condicionada à tool habilitada OU ao agente ter fontes ligadas (hoje tools vazias desligam o conhecimento; checklist item 32).</dd>
+<dt>Aceite</dt><dd>Turno com pergunta coberta cita a fonte no trace; pergunta sem cobertura não injeta chunks irrelevantes.</dd></dl></div>
+
+<div class="step"><h3><span class="n">9</span>Catálogo de ferramentas no runtime</h3>
+<div class="meta"><span class="tag info">RT</span> <span class="tag warn">API</span> · M</div>
+<dl><dt>Entra</dt><dd>Portar para <code>runtime/src/agents_runtime/tools/</code> os handlers do legado: <code>product_lookup</code> (via <code>connectors/shopify.py</code> e <code>shopify_products</code>), <code>order_status</code>, <code>timeline</code>, <code>save_customer</code>, <code>save_interests</code>, <code>transfer_to_human</code> (com <code>reason</code> codificado: <code>asked_human</code>, <code>discount_over_limit</code>, <code>complaint</code>, <code>health_topic</code>, <code>no_knowledge</code>, <code>other</code>), e <code>send_cart_link</code> (novo, link do carrinho Shopify). Cada uma registra em <code>internal.tool_calls</code> pelo <code>run_tool</code>. O modelo escolhe as tools pelo <code>tool_loop.py</code> já existente. Fonte única do catálogo: <code>src/lib/ai/tools/catalog.ts</code> gera <code>runtime/evals/tool_catalog.json</code> (script) e o runtime valida <code>settings.tools.enabled</code> contra ele. Remover <code>toolCatalogForRuntimeMode</code>.</dd>
+<dt>Fora</dt><dd>Frete por CEP, novo PIX, rastreio e foto do produto ficam "em breve" no catálogo até existirem integrações.</dd>
+<dt>Teste</dt><dd>unit por tool com conexão falsa; pipeline: turno que pede status do pedido chama <code>order_status</code> e responde com o dado.</dd>
+<dt>Aceite</dt><dd>As 7 tools do catálogo aparecem e funcionam para orgs no runtime; <code>hub-runtime-parity.test.ts</code> estendido passa.</dd></dl></div>
+
+<div class="step"><h3><span class="n">10</span>Falhas permanentes no envio e paridade de guards</h3>
+<div class="meta"><span class="tag info">RT</span> · P</div>
+<dl><dt>Entra</dt><dd>Conferir no <code>queueing/sender.py</code> que janela fechada sem template vira <code>permanent</code> com alerta (não retry); conferir cooldown pós-transferência, limite de mensagens, parar em resposta humana e ativação manual contra <code>cloud-runner.ts:538-660</code>. Documentar divergências restantes no <code>FORK.md</code> e marcar os itens 23 e 26 como resolvidos.</dd>
+<dt>Aceite</dt><dd>Tabela de paridade em <code>runtime/FORK.md</code> sem item "só no legado" exceto os canais.</dd></dl></div>
+
+<div class="step"><h3><span class="n">11</span>Copiloto do inbox passa a usar o runtime</h3>
+<div class="meta"><span class="tag info">RT</span> <span class="tag warn">API</span> · P</div>
+<dl><dt>Entra</dt><dd>Novo <code>POST /internal/suggest-reply</code> no <code>server.py</code> (mesmo bearer do preview): recebe <code>conversation_id</code>, compila o prompt do agente da conversa em modo "sugestão para humano", gera sem Juiz 1 (não vai ao cliente) e registra <code>llm_calls</code> com <code>purpose='copilot'</code>. <code>src/app/api/whatsapp/ai/copilot/route.ts</code> vira proxy e deixa de ler <code>whatsapp_conversations</code> (legado) e a chave de plataforma.</dd>
+<dt>Aceite</dt><dd>Copiloto funciona em conversas da inbox Cloud; custo aparece em <code>/settings/ai-usage</code>.</dd></dl></div>
+
+<div class="step"><h3><span class="n">12</span>Cutover geral e congelamento do legado</h3>
+<div class="meta"><span class="tag warn">API</span> · P, gate humano</div>
+<dl><dt>Entra</dt><dd>Migration que insere <code>ai_runtime_rollout(mode='runtime')</code> para toda org com agente; <code>getRuntimeMode</code> passa a assumir <code>runtime</code> quando não há linha e só respeita <code>legacy</code> explícito (rollback por org continua possível). Marcar <code>cloud-runner.ts</code>, <code>engine.ts</code>, <code>ai-providers.ts</code> (parte de resposta), <code>whatsapp-ai-respond</code>, <code>reprocess-whatsapp-pending</code> e <code>ai-chatbot-service.ts</code> com cabeçalho "congelado, remoção no M7".</dd>
+<dt>Aceite</dt><dd>Nenhuma org em legado por 7 dias sem incidente; <code>ai_usage_logs</code> só recebe linhas via trigger de <code>llm_calls</code>.</dd></dl></div>
+
+<!-- ============================ M2 ============================ -->
+<h2 id="m2">M2 · Vários agentes e entradas <span class="tag warn">semanas 3 a 5</span></h2>
+<p>Objetivo: o modelo de dados do protótipo. Vários agentes por loja, cada um ligado a entradas (número de WhatsApp, toques de fluxo), missões pertencendo a um agente, e as telas Agentes, Novo agente e o editor com a barra nova.</p>
+
+<div class="step"><h3><span class="n">13</span>Migrations do modelo multiagente</h3>
+<div class="meta"><span class="tag warn">API</span> · P</div>
+<dl><dt>Entra</dt><dd>(a) <code>ai_agents</code>: <code>+ role text</code>, <code>+ status text check in ('draft','active','paused') default 'draft'</code> com backfill <code>is_active → active/paused</code> (manter <code>is_active</code> como coluna gerada por um release), <strong>drop index</strong> <code>ai_agents_single_active_per_org</code>. (b) <code>ai_agent_entries</code> (<code>id, organization_id, agent_id, kind, ref_id, active, created_at</code>, índice único parcial em <code>(organization_id, kind, ref_id) where active</code>); backfill: para cada org com agente ativo e conta WhatsApp, uma entrada <code>whatsapp_account</code>. (c) <code>ai_missions</code>: <code>+ agent_id uuid references ai_agents</code>, backfill com o agente ativo da org; índice one-active por <code>(organization_id, event_type)</code> permanece. (d) <code>conversations</code>: <code>+ agent_id uuid</code>; <code>ai_runtime_activity</code> recriada expondo <code>agent_id</code>. (e) <code>seed_default_missions(p_org, p_agent)</code>.</dd>
+<dt>Teste</dt><dd>suíte db: factories com dois agentes na mesma org; RLS continua por org.</dd>
+<dt>Aceite</dt><dd>Migration aplica em banco limpo e no snapshot de produção sem erro de duplicata.</dd></dl></div>
+
+<div class="step"><h3><span class="n">14</span>Runtime resolve o agente por entrada e missão</h3>
+<div class="meta"><span class="tag info">RT</span> · M</div>
+<dl><dt>Entra</dt><dd><code>repository/agent.py</code>: <code>load_active_version</code> dá lugar a <code>load_agent_for_entry(org, kind, ref_id)</code> (WhatsApp: <code>ref_id = whatsapp_business_accounts.id</code> resolvido pelo <code>channel_account_id</code> do job) e <code>load_agent_for_mission(mission_version_id)</code> (toques). Sem entrada ativa para o número: alerta <code>no_agent_for_entry</code> e silêncio (mesmo padrão de <code>no_active_mission</code>). <code>mission_resolver.arbitrate</code> só considera missões do agente resolvido. <code>conclude_turn</code> grava <code>conversations.agent_id</code>; <code>record_accepted_trace</code>, <code>llm_calls</code> e <code>tool_calls</code> já carregam <code>agent_id</code>. "Transferir para outro agente" (protótipo) = trocar <code>conversations.agent_id</code> e o <code>owner_mission_version_id</code>; entra como tool <code>transfer_to_agent</code>.</dd>
+<dt>Teste</dt><dd>pipeline: dois números, dois agentes, cada mensagem responde com a identidade certa; toque de fluxo usa o agente dono da missão.</dd>
+<dt>Aceite</dt><dd>Org piloto com um segundo agente em rascunho não muda o comportamento do primeiro.</dd></dl></div>
+
+<div class="step"><h3><span class="n">15</span>API de agentes, entradas, missões e estado</h3>
+<div class="meta"><span class="tag warn">API</span> · M</div>
+<dl><dt>Entra</dt><dd><code>GET /api/ai/agents</code> devolve <code>role, status, entries[], missions_count, conversations_7d, revenue_7d</code> (as duas últimas vêm de <code>ai_runtime_activity</code> por <code>agent_id</code> e, até o M5, receita = 0). <code>POST /api/ai/agents</code> aceita <code>template_id | copy_from | blank</code>, <code>role</code>, <code>source_ids</code>; templates em <code>src/lib/ai/agent-templates.ts</code> (Vendas no WhatsApp, Pós-compra, Recuperação de carrinho e PIX: persona, adaptação, tools, limites, handoff, juízes e missões a semear). Novas rotas: <code>GET/POST/DELETE /api/ai/agents/[id]/entries</code> (409 quando o número já tem agente ativo, com o nome dele), <code>POST /api/ai/agents/[id]/activate</code> (exige readiness verde, passo 26; até lá: chave + missão + handoff), <code>POST /api/ai/agents/[id]/pause</code> (marca conversas abertas do agente para a equipe via <code>takeover</code>), <code>GET /api/ai/agents/[id]/readiness</code>. <code>/api/ai/missions</code> filtra e cria por <code>agent_id</code>. <code>GET /api/ai/agents/canonical</code> e <code>POST canonical</code> são removidos.</dd>
+<dt>Teste</dt><dd>route tests para cada rota, incluindo o 409 de entrada duplicada.</dd></dl></div>
+
+<div class="step"><h3><span class="n">16</span>Telas Agentes, Novo agente e editor com barra nova</h3>
+<div class="meta"><span class="tag ok">UI</span> · M</div>
+<dl><dt>Entra</dt><dd>Rotas <code>/ai/agentes</code> (lista como o protótipo: avatar, nome, função, onde atua, chip de estado, conversas 7d, receita 7d, "Novo agente"), <code>/ai/agentes/novo</code> (dois passos: origem com modelos/cópia/zero e painel "o que vem pronto"; nome, função e fontes), <code>/ai/agentes/[id]</code> (a <code>RadialView</code>/<code>ClassicView</code> atuais com áreas renomeadas: Missões, Revisão, Motor e custo; área Missões lista todas as missões do agente com status; Motor e custo com select de modelo por provedor, chave mascarada, teto mensal e barra de consumo; cabeçalho com "onde atua"; barra com Versões e Testar desabilitados até M4, interruptor com modal de pausa e checklist mínimo). Menu lateral: IA com sub-itens Agentes, Construtor (desabilitado até M6), Conhecimento, Atividade. <code>/ai?tab=…</code> e <code>/whatsapp/ai-agents</code> redirecionam; <code>/whatsapp/agente</code> vira link.</dd>
+<dt>Teste</dt><dd>Playwright: criar agente por modelo, ver na lista como Rascunho, abrir editor, ativar com checklist mínimo.</dd>
+<dt>Aceite</dt><dd>As três telas funcionam com dados reais da org piloto; nenhuma referência a "canônico".</dd></dl></div>
+
+<div class="step"><h3><span class="n">17</span>Flow builder mostra o agente da missão</h3>
+<div class="meta"><span class="tag ok">UI</span> · P</div>
+<dl><dt>Entra</dt><dd><code>AiMissionActionConfig.tsx</code> exibe o agente dono da família escolhida e permite criar missão já ligada a um agente; <code>emit_ai_mission_job</code> não muda (a missão carrega o agente). A entrada "toque de fluxo" na lista de agentes é derivada dos nós que apontam para missões do agente (consulta em <code>automation_flows</code> ou a tabela de nós).</dd>
+<dt>Aceite</dt><dd>Lista de agentes mostra "2 fluxos" corretamente para o piloto.</dd></dl></div>
+
+<!-- ============================ M3 ============================ -->
+<h2 id="m3">M3 · Conhecimento da loja <span class="tag warn">semanas 5 a 8</span></h2>
+
+<div class="step"><h3><span class="n">18</span>Migrations do conhecimento</h3>
+<div class="meta"><span class="tag warn">API</span> · P</div>
+<dl><dt>Entra</dt><dd><code>ai_agent_sources</code> renomeada para <code>ai_sources</code> (view de compatibilidade com o nome antigo por um release); <code>agent_id</code> vira nulo; novas colunas <code>folder text default 'geral'</code>, <code>tags text[]</code>, <code>body_markdown text</code>, <code>kind text</code> (note, document, url, faq, catalog, site_page), <code>read_only bool</code>, <code>updated_by uuid</code>, <code>links text[]</code>. Nova <code>ai_source_agents(source_id, agent_id)</code> com backfill a partir do <code>agent_id</code> antigo. <code>ai_agent_chunks</code>: <code>+ chunk_kind text default 'text'</code>, <code>+ position int</code>. <code>search_agent_knowledge(p_org, p_agent, p_embedding, p_limit, p_threshold)</code> filtra por <code>ai_source_agents</code> e aplica peso 1,3 em <code>resposta</code>. Nova <code>ai_knowledge_gaps</code> (colunas da seção 13 da correlação).</dd>
+<dt>Teste</dt><dd>db: busca por agente só devolve chunks de fontes ligadas; RLS.</dd></dl></div>
+
+<div class="step"><h3><span class="n">19</span>Processamento: markdown, callouts, links, importações</h3>
+<div class="meta"><span class="tag warn">API</span> · M</div>
+<dl><dt>Entra</dt><dd><code>src/lib/ai/processors/markdown-processor.ts</code>: parser compatível com o do protótipo (<code>parseMd</code>: títulos, listas, callouts <code>[!regra]</code>, <code>[!resposta]</code>, <code>[!atencao]</code>, links <code>[[Título]]</code>); cada callout vira chunk próprio com <code>chunk_kind</code>; links resolvidos por título dentro da org e gravados em <code>links</code>. <code>process/document/route.ts</code> usa o parser para <code>kind='note'</code>. Importação CSV de P&amp;R (<code>POST /api/ai/knowledge/import/csv</code>) gera uma nota por linha ou uma FAQ. Página do site vira recorrente: cron <code>/api/cron/ai-site-pages-refresh</code> semanal para fontes <code>site_page</code>. Sync Shopify fica atômico (inserir em staging e trocar).</dd>
+<dt>Teste</dt><dd>unit do parser com as notas do protótipo como fixtures.</dd></dl></div>
+
+<div class="step"><h3><span class="n">20</span>Runtime: regras no prompt, pesos e emissão de lacunas</h3>
+<div class="meta"><span class="tag info">RT</span> · M</div>
+<dl><dt>Entra</dt><dd><code>prompt_compiler.py</code>: novo bloco <code>KNOWLEDGE_RULES</code> com os chunks <code>regra</code> das fontes ligadas ao agente (sempre, sem busca; limite de tamanho), ao lado de LIMITS. <code>tools/knowledge.py</code> chama a RPC com <code>agent_id</code>. Ao fim do turno, <code>responder.py</code> emite <code>ai_knowledge_gaps</code> quando: busca sem resultado acima do limiar e o modelo transferiu ou respondeu sem fonte; Juiz 1 reprovou por <code>factual</code>; tool <code>transfer_to_human</code> com <code>no_knowledge</code>. Guarda a pergunta normalizada, o agente, o desfecho e o <code>conversation_id</code>.</dd>
+<dt>Teste</dt><dd>pipeline: pergunta sem cobertura gera lacuna; regra em callout aparece no prompt.</dd></dl></div>
+
+<div class="step"><h3><span class="n">21</span>API de conhecimento</h3>
+<div class="meta"><span class="tag warn">API</span> · M</div>
+<dl><dt>Entra</dt><dd><code>/api/ai/knowledge</code>: <code>GET</code> (árvore por pasta), <code>POST</code> (nota), <code>GET/PATCH/DELETE /[id]</code> (renomear atualiza links nas outras notas), <code>PUT /[id]/agents</code>, <code>GET /search?q=</code> (ILIKE em título e <code>body_markdown</code>), <code>POST /ask</code> ({agent_id, question}: embeda, busca, devolve melhor trecho com fonte e se bateu em <code>regra</code>; sem LLM), <code>GET /graph</code> (notas, links, vínculos, lacunas), <code>GET /[id]/usage</code> (de <code>internal.tool_calls</code> por <code>source_id</code>, 7 dias por dia, mais as perguntas respondidas com agente e data), <code>GET /gaps</code>, <code>POST /gaps/[id]/resolve</code> ({action: create_source | append_to | add_limit | ignore, …}). As rotas antigas <code>/api/ai/agents/[id]/sources*</code> ficam como alias por um release.</dd>
+<dt>Teste</dt><dd>route tests; <code>ask</code> contra fixtures.</dd></dl></div>
+
+<div class="step"><h3><span class="n">22</span>Tela Conhecimento</h3>
+<div class="meta"><span class="tag ok">UI</span> · G</div>
+<dl><dt>Entra</dt><dd><code>/ai/conhecimento</code> em tela cheia como o protótipo: barra superior (busca/Ctrl K, Importar, Construtor, Fechar), trilho esquerdo (Arquivos, Buscar, Grafo, Lacunas, Nova nota), explorador por pastas, abas de notas, nota com título editável, Propriedades (lida por, tipo, situação, tags, atualizada, pasta), leitura com <code>MdView</code> (porte) e edição em textarea com dicas, painel direito (Detalhes: quem lê com interruptores, uso 7d em sparkline, perguntas respondidas; Links: para cá, desta nota, estrutura; Testar: perguntar a um agente), Grafo (porte do componente de força do protótipo, SVG puro) e Lacunas em painel. Importar: arquivo, URL, CSV. Fontes sincronizadas somente leitura com aviso.</dd>
+<dt>Teste</dt><dd>Playwright: criar nota com callout e link, ligar a um agente, perguntar no Testar e ver a fonte.</dd>
+<dt>Aceite</dt><dd>Org piloto com ao menos 6 notas reais ingeridas e consultadas pelo agente em conversa.</dd></dl></div>
+
+<div class="step"><h3><span class="n">23</span>Rotina de lacunas e tela Lacunas</h3>
+<div class="meta"><span class="tag warn">API</span> <span class="tag ok">UI</span> · M</div>
+<dl><dt>Entra</dt><dd>Cron <code>/api/cron/ai-knowledge-gaps</code> diário: agrupa lacunas abertas por similaridade de embedding (≥ 0,85) em um <code>cluster_key</code>, soma contagens, coleta exemplos, busca respostas humanas nas mesmas conversas e gera uma sugestão com uma chamada LLM (chave da org, <code>purpose='gap_suggestion'</code>, passa pelo budget); marca <code>safe=true</code> quando o tema bate em lista sensível. <code>/ai/conhecimento/lacunas</code>: lista com filtro por agente, detalhe com exemplos, resposta da equipe, sugestão editável, quem pode usar, ações Ignorar 30 dias / Criar fonte / Adicionar à fonte / Adicionar aos limites.</dd>
+<dt>Aceite</dt><dd>Uma lacuna real do piloto resolvida pela tela vira nota e a próxima pergunta igual é respondida com a fonte.</dd></dl></div>
+
+<!-- ============================ M4 ============================ -->
+<h2 id="m4">M4 · Testar, versões e checklist <span class="tag warn">semanas 8 a 10</span></h2>
+
+<div class="step"><h3><span class="n">24</span>Simulação de turno e Playground</h3>
+<div class="meta"><span class="tag info">RT</span> <span class="tag warn">API</span> <span class="tag ok">UI</span> · M</div>
+<dl><dt>Entra</dt><dd>Runtime: <code>POST /internal/simulate-turn</code> em <code>server.py</code> (bearer do preview) recebendo <code>agent_draft</code> (persona/settings não salvos), <code>mission_version_id</code>, <code>contact_profile</code> (novo, recorrente, carrinho aberto com valor), <code>history[]</code> e <code>message</code>; roda <code>responder</code> em modo sandbox: sem lease, sem outbox, cupom simulado pelo <code>offer_engine</code> sem criar no Shopify, tools com <code>dry_run</code>; devolve o trace (fontes com <code>source_id</code>, tools, tentativas do juiz com critérios, autorização, custo). <code>llm_calls</code> grava com <code>purpose='playground'</code>. Next.js: <code>POST /api/ai/agents/[id]/simulate</code> proxy; <code>POST /api/ai/agents/[id]/scenarios</code> salva o diálogo em <code>ai_test_scenarios</code>. UI: painel Testar do editor como no protótipo (canal, perfil, missão, sugestões, "Por dentro da resposta", salvar como cenário, total). Canal E-mail desabilitado.</dd>
+<dt>Teste</dt><dd>pipeline: simulate não grava outbox nem <code>incentive_grants</code>; unit da UI com trace fixo.</dd></dl></div>
+
+<div class="step"><h3><span class="n">25</span>Versões com resumo, nota e restauração</h3>
+<div class="meta"><span class="tag warn">API</span> <span class="tag ok">UI</span> · P</div>
+<dl><dt>Entra</dt><dd>Migration: <code>ai_agent_versions + change_summary jsonb, restored_from uuid, eval_score numeric, eval_grave int</code>. <code>versions.ts</code> calcula o resumo por área ao salvar ("Ferramentas: ligou X", "Limites: nova regra Y"). <code>GET /api/ai/agents/[id]/versions</code>, <code>POST …/versions/[vid]/restore</code> (cria versão nova a partir da antiga). UI: painel Versões no editor com lista, "em uso", nota, Grave, expandir mudanças, restaurar com modal "o que muda em relação a hoje".</dd></dl></div>
+
+<div class="step"><h3><span class="n">26</span>Avaliação automática e checklist completo</h3>
+<div class="meta"><span class="tag info">RT</span> <span class="tag warn">API</span> <span class="tag ok">UI</span> · M</div>
+<dl><dt>Entra</dt><dd>Runtime: consumidor de <code>q_evals</code> no <code>engine_loop</code> (hoje sem handler): roda os packs de <code>runtime/evals/pack</code> (Conversação e Segurança) pelo simulate interno, julga com as rubricas, grava <code>internal.eval_runs</code> (nota, aprovados, graves com transcrição) e atualiza <code>ai_agent_versions.eval_score/eval_grave</code>. API: <code>POST /api/ai/evals/run</code> enfileira e <code>GET /api/ai/evals/[runId]</code> devolve o estado. <code>readiness</code> ganha o item "avaliação sem Grave". UI: modal "Antes de ativar" com os cinco itens, "Rodar avaliação" com progresso, caso Grave com "Adicionar regra e rodar de novo", select de número de WhatsApp com aviso de conflito. <code>EvalView</code> e <code>TestRunView</code> legados saem; cenários salvos pelo playground entram no pack da org.</dd>
+<dt>Aceite</dt><dd>Ativar um agente novo exige avaliação verde; um cenário Grave bloqueia.</dd></dl></div>
+
+<!-- ============================ M5 ============================ -->
+<h2 id="m5">M5 · Atividade e telemetria <span class="tag warn">semanas 10 a 13</span></h2>
+
+<div class="step"><h3><span class="n">27</span>Migrations de desfecho e eventos</h3>
+<div class="meta"><span class="tag warn">API</span> · P</div>
+<dl><dt>Entra</dt><dd><code>ai_conversation_outcomes</code> e <code>ai_activity_events</code> (colunas da correlação, seção 13), ambas com RLS por org e grant de escrita ao <code>worker_role</code>/<code>sender_role</code>. RPC <code>attribute_ai_conversation(p_org, p_contact, p_order, p_value, p_window_days)</code>: encontra a conversa com agente nos últimos N dias e grava <code>order_id/revenue</code> no outcome, emitindo evento <code>sale</code>. Chamada em <code>src/app/api/webhooks/shopify</code> junto da atribuição de WhatsApp existente.</dd></dl></div>
+
+<div class="step"><h3><span class="n">28</span>Runtime escreve desfechos e eventos</h3>
+<div class="meta"><span class="tag info">RT</span> · M</div>
+<dl><dt>Entra</dt><dd>Em <code>conclude_turn</code> (SQL) e no <code>worker.py</code>: upsert do outcome com <code>first_response_ms</code> (primeira resposta do agente menos primeira inbound), <code>messages_sent</code>, <code>blocked_count</code>, custo e tokens acumulados, incentivos; eventos <code>solved</code> (conversa fechada sem takeover), <code>handoff</code> (com <code>handoff_reason</code> da tool), <code>incentive</code>, <code>blocked</code> (juiz crítico), <code>gap</code>. Fechamento: o cron <code>close-expired-whatsapp-windows</code> passa a fechar também <code>conversations</code> ociosas e enfileirar em <code>q_domain_events</code> um job <code>conversation.closed</code>; o runtime classifica o assunto com uma chamada barata (<code>purpose='topic'</code>, lista fixa de assuntos por loja + "outro") e marca <code>resolved_without_human</code>.</dd>
+<dt>Teste</dt><dd>pipeline: conversa completa produz outcome coerente; transferência grava motivo.</dd></dl></div>
+
+<div class="step"><h3><span class="n">29</span>API de atividade e tela completa</h3>
+<div class="meta"><span class="tag warn">API</span> <span class="tag ok">UI</span> · G</div>
+<dl><dt>Entra</dt><dd><code>GET /api/ai/activity/summary?period=1|7|30|90&amp;agent=&amp;compare=1</code> devolvendo KPIs atuais e anteriores, série por dia (ou hora), tabela por agente, funil, motivos de transferência, assuntos, conhecimento mais usado, incentivos, qualidade, mapa de calor e motor/custo; <code>GET /api/ai/activity/events?kind=&amp;agent=</code>; <code>GET /api/ai/activity/export.csv</code>. UI <code>/ai/atividade</code> reproduzindo o protótipo com <code>recharts</code> e o feed abrindo a conversa no Inbox. <code>/settings/ai-usage</code> ganha agrupamento por agente. <code>ReportsView</code> e propostas de prompt saem da aba (as propostas migram para um botão "Sugerir melhorias" dentro de Versões, ou são removidas).</dd>
+<dt>Aceite</dt><dd>Os dez KPIs do protótipo são computados de dados reais do piloto; export CSV com as mesmas colunas.</dd></dl></div>
+
+<div class="step"><h3><span class="n">30</span>Telemetria do Next.js e visibilidade de alertas</h3>
+<div class="meta"><span class="tag warn">API</span> <span class="tag ok">UI</span> · M</div>
+<dl><dt>Entra</dt><dd><code>instrumentation.ts</code> com <code>@vercel/otel</code> exportando para o mesmo Logfire; <code>@sentry/nextjs</code> para erros; o webhook de WhatsApp e o nó <code>action_ai_mission</code> passam <code>traceparent</code> em <code>p_otel</code> (hoje nulo) para o trace continuar no runtime. Custo registrado nos caminhos sem rastro: segmentação, targeting de popups, <code>judgeTranscript</code>. Badge de alertas abertos na aba Atividade com lista (<code>public.alerts</code>) e ação de reconhecer; contagem de DLQ no painel de saúde (<code>/api/admin/whatsapp-health</code>).</dd>
+<dt>Aceite</dt><dd>Um trace no Logfire vai do webhook até o envio; alerta crítico aparece na UI em até 1 minuto.</dd></dl></div>
+
+<!-- ============================ M6 ============================ -->
+<h2 id="m6">M6 · Construtor <span class="tag warn">semanas 13 a 17</span></h2>
+
+<div class="step"><h3><span class="n">31</span>Métricas por bloco e diagnóstico</h3>
+<div class="meta"><span class="tag warn">API</span> · M</div>
+<dl><dt>Entra</dt><dd><code>GET /api/ai/agents/[id]/block-metrics?period=7d</code>: por entrada (conversas, 1ª resposta, % compraram), por fonte (usos), por tool (chamadas, % sucesso, emitidos/recusados para cupom), agente (conversas, receita, custo por conversa, nota), adaptação (% respostas ajustadas, do trace), limites (bloqueios), revisão (% aprovadas, reprovadas), precisa de pessoa (transferidas, %), transferir (espera média, no prazo), enviar (respostas, % resolvidas). <code>GET /api/ai/agents/[id]/diagnostics</code>: regras: fonte sincronizando ou com erro; critério que reprovou &gt; N em 7 dias; missão com concessão e <code>create_coupon</code> desligada; sem chave; sem missão ativa; sem transferência; teto mensal acima de 80%.</dd></dl></div>
+
+<div class="step"><h3><span class="n">32</span>Canvas do Construtor</h3>
+<div class="meta"><span class="tag ok">UI</span> · G</div>
+<dl><dt>Entra</dt><dd><code>/ai/construtor/[id]</code> em tela cheia sobre <code>@xyflow/react</code> com layout determinístico (porte de <code>layout2</code>): entradas no topo com slot, colunas Conhecimento e Ferramentas com slots, nó Agente, cadeia Adaptação → Limites → Revisão → Precisa de uma pessoa? → Transferir | Enviar. Paleta com busca (Entradas, Conhecimento, Ferramentas, Regras, Transferência), arrastar e clicar para adicionar, inspector por nó editando os mesmos campos do hub (<code>hubToAgentPatch</code>), Métricas liga/desliga, Diagnosticar com lista e foco no nó, Histórico (painel de Versões), Testar (Playground acendendo o caminho a partir do trace do simulate), desfazer/refazer, "Salvar" único que cria versão, minimapa, zoom, Ctrl+S/Z. Itens da paleta sem integração (Instagram, chat do site, frete, PIX, rastreio) aparecem desabilitados com "em breve".</dd>
+<dt>Teste</dt><dd>Playwright: adicionar fonte pela paleta, salvar, ver versão nova; testar e ver o caminho aceso.</dd></dl></div>
+
+<!-- ============================ M7 ============================ -->
+<h2 id="m7">M7 · Limpeza e canais <span class="tag warn">depois do M6</span></h2>
+
+<div class="step"><h3><span class="n">33</span>Remover o legado e as tabelas órfãs</h3>
+<div class="meta"><span class="tag warn">API</span> · P</div>
+<dl><dt>Entra</dt><dd>Apagar <code>src/lib/ai/cloud-runner.ts</code>, <code>engine.ts</code>, <code>run-steps.ts</code> (legado), <code>tools/loop.ts</code> e handlers TS, <code>ai-providers.ts</code> (manter só o que embeddings/propostas usarem, ou mover), <code>src/app/api/workers/whatsapp-ai-respond</code>, <code>cron/reprocess-whatsapp-pending</code>, <code>api/whatsapp/ai/route.ts</code>, <code>ai-chatbot-service.ts</code>, <code>useWhatsAppAIAnalytics</code>, <code>/api/whatsapp/ai/analytics</code>, <code>action_whatsapp_ai</code>, encaminhador <code>/api/whatsapp/webhook</code>, <code>ai_runtime_rollout</code> (o fork no webhook some). Migration dropando <code>ai_agent_actions</code>, <code>ai_agent_usage_logs</code>, <code>whatsapp_ai_agents</code>, <code>ai_models</code>, <code>whatsapp_ai_interactions</code>, <code>whatsapp_ai_configs</code>, <code>internal.scenarios</code>. Atualizar <code>FORK.md</code>, <code>STATUS</code>, apagar os docs desatualizados listados no relatório de estado.</dd>
+<dt>Aceite</dt><dd><code>pnpm typecheck</code>, <code>vitest</code> e a suíte do runtime verdes; nenhuma referência a <code>runtimeMode</code> no código.</dd></dl></div>
+
+<div class="step"><h3><span class="n">34</span>Canais e-mail e Instagram</h3>
+<div class="meta"><span class="tag info">RT</span> <span class="tag warn">API</span> · G, design à parte</div>
+<dl><dt>Entra</dt><dd>E-mail: ingestão de recebidos (webhook inbound da Resend ou IMAP) para <code>messages</code> com <code>channel='email'</code>, adaptador <code>channels/email.py</code> no <code>ChannelPort</code>, humanização desligada, templates e assinatura, entrada <code>email_inbox</code> em <code>ai_agent_entries</code>, canal E-mail no Playground. Instagram: <code>channels/instagram.py</code> sobre a API de mensagens da Meta, reaproveitando o webhook existente, entrada <code>instagram_account</code>. Cada canal é um plano próprio com tela e testes.</dd></dl></div>
+
+<!-- ============================ DEPS ============================ -->
+<h2 id="deps">Dependências e paralelismo</h2>
+<table><tr><th>Passo</th><th>Depende de</th><th>Pode andar junto com</th></tr>
+<tr><td>1, 2, 3, 4</td><td>nada</td><td>entre si</td></tr>
+<tr><td>5</td><td>1, 4</td><td>6, 7, 8, 9 (desenvolvimento local)</td></tr>
+<tr><td>6, 7, 8, 9, 10, 11</td><td>5 para validar em produção</td><td>entre si (trilha RT)</td></tr>
+<tr><td>12</td><td>6 a 11</td><td>13</td></tr>
+<tr><td>13</td><td>1</td><td>6 a 11</td></tr>
+<tr><td>14</td><td>13</td><td>15</td></tr>
+<tr><td>15, 16, 17</td><td>13 (15 e 16 podem usar dados fictícios até 14)</td><td>14</td></tr>
+<tr><td>18, 19, 21</td><td>13</td><td>14 a 17</td></tr>
+<tr><td>20</td><td>14, 18</td><td>21, 22</td></tr>
+<tr><td>22</td><td>21</td><td>20, 23</td></tr>
+<tr><td>23</td><td>20, 21</td><td>24, 25</td></tr>
+<tr><td>24</td><td>14, 20</td><td>25</td></tr>
+<tr><td>25</td><td>15</td><td>24</td></tr>
+<tr><td>26</td><td>24</td><td>27, 28</td></tr>
+<tr><td>27, 28</td><td>14</td><td>24 a 26</td></tr>
+<tr><td>29</td><td>27, 28</td><td>30</td></tr>
+<tr><td>30</td><td>4</td><td>qualquer um</td></tr>
+<tr><td>31</td><td>27, 28, 20</td><td>29</td></tr>
+<tr><td>32</td><td>16, 22, 24, 25, 31</td><td>33</td></tr>
+<tr><td>33</td><td>12 estável por 30 dias</td><td>32</td></tr>
+<tr><td>34</td><td>14, 32</td><td>-</td></tr>
+</table>
+<p class="small">Com três pessoas (RT, API, UI) o caminho crítico é RT: 5 → 14 → 20 → 24 → 28, cerca de 10 semanas. UI e API ficam esperando dados do runtime em dois pontos (14 e 28); nesses pontos usam fixtures e mock para não parar.</p>
+
+<h2 id="riscos">Riscos e como tratar</h2>
+<table><tr><th>Risco</th><th>Tratamento</th></tr>
+<tr><td>Render não consegue falar com o Supabase (IPv4 × IPv6, pooler)</td><td>Já documentado no <code>render.yaml</code>: session pooler na porta 5432. O <code>piloto_check.py probe</code> valida antes do deploy.</td></tr>
+<tr><td>Dropar o índice de um agente ativo por org reabre o bug W3-GD-07 (guard escolhendo agente arbitrário)</td><td>O índice é substituído pela unicidade por entrada (passo 13b) e o guard passa a resolver por entrada (passo 14). Fazer 13 e 14 no mesmo release.</td></tr>
+<tr><td>Renomear <code>ai_agent_sources</code> quebra código que não foi encontrado</td><td>View de compatibilidade com o nome antigo por um release; grep de referências antes de dropar.</td></tr>
+<tr><td>Custo do LLM em classificação de assunto, sugestões de lacuna e avaliações</td><td>Tudo passa pelo <code>MonthlyBudgetGate</code> com <code>purpose</code> próprio; avaliações usam a chave de plataforma do Juiz 1 e têm teto diário.</td></tr>
+<tr><td>Playground cria efeitos colaterais (cupom, mensagem)</td><td>Modo sandbox com <code>dry_run</code> nas tools e teste de pipeline que falha se outbox ou grants forem tocados.</td></tr>
+<tr><td>Telas grandes (Conhecimento, Atividade, Construtor) atrasam</td><td>Cada uma entrega por fatias: Conhecimento sem grafo primeiro; Atividade só com KPIs e tabela; Construtor somente leitura antes dos inspectors.</td></tr>
+<tr><td>Reais × dólares</td><td>Trilha em USD; exibição em BRL com taxa configurável em <code>organization_settings</code>, rótulo "estimado".</td></tr>
+</table>
+
+<p class="small" style="margin-top:40px">Referências: <code>docs/audits/2026-10-15-estado-agentes-ia.html</code> (estado atual) e <code>docs/audits/2026-10-15-correlacao-aba-ia-prototipo.html</code> (telas e schema). Este plano substitui a ordem de fases sugerida na correlação.</p>
+</div></body></html>
