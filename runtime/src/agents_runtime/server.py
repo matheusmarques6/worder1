@@ -40,6 +40,11 @@ from agents_runtime.agent_core.prompt_compiler import (
     agent_block,
     compile_prompt,
 )
+from agents_runtime.agent_core.simulate import (
+    ContactProfile,
+    SimulationUnavailable,
+    simulate_turn,
+)
 from agents_runtime.app import _connect
 from agents_runtime.commerce.moments import apply_moment_restrictions, resolve_moments
 from agents_runtime.config import QueueingConfig
@@ -500,6 +505,60 @@ async def _suggest(
     )
 
 
+async def _simulate(
+    dsn: str,
+    *,
+    set_role: str | None,
+    body: dict[str, Any],
+    platform_llm: Any,
+    base_secret: str | None,
+    config: QueueingConfig | None = None,
+) -> bytes:
+    """Alteração 2026-10-15-12: `POST /internal/simulate-turn`, o painel
+    Testar do editor. Mesmo bearer do preview; nada é gravado além da trilha
+    de custo (`purpose='playground'`)."""
+    try:
+        organization_id = UUID(str(body["organization_id"]))
+        agent_id = UUID(str(body["agent_id"]))
+    except (KeyError, ValueError):
+        return _response(400, {"error": "organization_id e agent_id (uuid) são obrigatórios"})
+    message = str(body.get("message") or "")
+    if not message.strip():
+        return _response(400, {"error": "message é obrigatório"})
+    mission = body.get("mission_version_id")
+    try:
+        mission_id = UUID(str(mission)) if mission else None
+    except ValueError:
+        return _response(400, {"error": "mission_version_id (uuid) inválido"})
+    history = body.get("history") or []
+    if not isinstance(history, list):
+        return _response(400, {"error": "history deve ser uma lista"})
+    draft = body.get("agent_draft")
+    if draft is not None and not isinstance(draft, dict):
+        return _response(400, {"error": "agent_draft deve ser um objeto"})
+    if platform_llm is None:
+        return _response(503, {"error": "simulação sem cliente de plataforma"})
+
+    async with _connection(dsn, set_role, config=config) as conn:
+        try:
+            trace = await simulate_turn(
+                conn,
+                organization_id=organization_id,
+                agent_id=agent_id,
+                message=message,
+                history=[h for h in history if isinstance(h, dict)],
+                agent_draft=draft,
+                mission_version_id=mission_id,
+                event_type=str(body.get("event_type") or "whatsapp.received"),
+                profile=ContactProfile.parse(body.get("contact_profile")),
+                platform_llm=platform_llm,
+                base_secret=base_secret,
+            )
+        except SimulationUnavailable as reason:
+            return _response(422, {"error": str(reason)})
+    return _response(200, trace.as_dict())
+
+
 def _authorized(headers: dict, token: str) -> bool:
     provided = headers.get("authorization", "")
     prefix = "bearer "
@@ -610,6 +669,39 @@ async def serve(
                 except Exception:
                     logger.exception("copiloto falhou")
                     writer.write(_response(503, {"error": "copiloto indisponível"}))
+                return
+
+            if path == "/internal/simulate-turn":
+                if not preview_token:
+                    writer.write(_response(404, {"error": "not found"}))
+                    return
+                if method != "POST":
+                    writer.write(_response(405, {"error": "POST only"}))
+                    return
+                if not _authorized(headers, preview_token):
+                    writer.write(_response(401, {"error": "token de serviço inválido"}))
+                    return
+                try:
+                    body = json.loads(raw.decode() or "{}")
+                    if not isinstance(body, dict):
+                        raise ValueError("o corpo é um objeto JSON")
+                except ValueError as exc:
+                    writer.write(_response(400, {"error": f"JSON inválido: {exc}"}))
+                    return
+                try:
+                    writer.write(
+                        await _simulate(
+                            dsn,
+                            set_role=set_role,
+                            body=body,
+                            platform_llm=platform_llm,
+                            base_secret=base_secret,
+                            config=config,
+                        )
+                    )
+                except Exception:
+                    logger.exception("simulação falhou")
+                    writer.write(_response(503, {"error": "simulação indisponível"}))
                 return
 
             writer.write(_response(404, {"error": "not found"}))

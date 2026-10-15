@@ -678,3 +678,38 @@ async def mark_ai_handoff(
         (organization_id, conversation_id, reason, channel_account_id),
     )
     return bool((await cursor.fetchone())[0])
+
+
+async def load_version_for_preview(
+    conn: psycopg.AsyncConnection, *, organization_id: UUID, agent_id: UUID
+) -> ActiveVersion | None:
+    """A versão de um agente para SIMULAR (alteração 2026-10-15-12): ativo ou
+    não — rascunho também se testa. Prefere a versão em produção; senão a mais
+    recente; sem versão, a própria linha do agente."""
+    cursor = await conn.execute(
+        """
+        select coalesce(v.id, a.id), a.model, coalesce(v.system_prompt, a.system_prompt),
+               a.id, a.name, coalesce(v.persona, a.persona),
+               coalesce(v.settings, a.settings), coalesce(a.provider, 'openai'),
+               coalesce(a.presentation_mode, 'nome_funcao'), a.client_adaptation,
+               a.role
+          from public.ai_agents a
+          left join lateral (
+              select * from public.ai_agent_versions v
+               where v.agent_id = a.id
+               order by (v.status = 'produção') desc, v.created_at desc
+               limit 1
+          ) v on true
+         where a.id = %(agent)s and a.organization_id = %(org)s
+        """,
+        {"agent": agent_id, "org": organization_id},
+    )
+    row = await cursor.fetchone()
+    if row is None:
+        return None
+    row = list(row)
+    if not (row[2] or "").strip():
+        # AgentConfig recusa prompt vazio; um rascunho recém-criado pode não
+        # ter — o simulador usa um mínimo explícito em vez de quebrar.
+        row[2] = "Você é o atendente da loja."
+    return _as_version(tuple(row))

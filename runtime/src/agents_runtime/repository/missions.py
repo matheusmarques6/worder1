@@ -81,3 +81,16 @@ async def load_mission_event_type(
     )
     row = await cursor.fetchone()
     return None if row is None else row[0]
+
+
+async def load_mission_by_id(
+    conn: psycopg.AsyncConnection, *, mission_version_id: UUID
+) -> MissionVersion | None:
+    """Uma versão qualquer (rascunho incluído) — o simulador testa a missão
+    que o lojista escolheu, ativa ou não (alteração 2026-10-15-12)."""
+    cursor = await conn.execute(
+        f"select {_COLUMNS} from public.ai_missions where id = %s",
+        (mission_version_id,),
+    )
+    row = await cursor.fetchone()
+    return None if row is None else _as_mission(row)

@@ -14,6 +14,7 @@ import type { RuntimeMode } from '@/lib/ai/runtime-rollout'
 import RadialView from './RadialView'
 import ClassicView from './ClassicView'
 import { STATUS_LABEL, initials } from './AgentsList'
+import AgentTestPanel from './AgentTestPanel'
 
 /**
  * O editor de UM agente (plano IA, M2 passo 16): cabeçalho com nome, função,
@@ -67,6 +68,7 @@ export default function AgentEditor({ organizationId, agentId }: { organizationI
   const [pauseModal, setPauseModal] = useState(false)
   const [entriesModal, setEntriesModal] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [testing, setTesting] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -224,7 +226,7 @@ export default function AgentEditor({ organizationId, agentId }: { organizationI
         <button type="button" className="btn btn-soft btn-sm" disabled title="Versões chegam no M4">
           <History size={14} />Versões
         </button>
-        <button type="button" className="btn btn-soft btn-sm" disabled title="Testar chega no M4">
+        <button type="button" className="btn btn-soft btn-sm" onClick={() => setTesting(true)}>
           <FlaskConical size={14} />Testar
         </button>
         <button type="button" className="btn btn-primary btn-sm" onClick={save} disabled={!dirty || saving}>
@@ -291,6 +293,14 @@ export default function AgentEditor({ organizationId, agentId }: { organizationI
             </button>
           </div>
         </Modal>
+      )}
+
+      {testing && (
+        <AgentTestPanel
+          agentId={agent.id}
+          draft={dirty ? (hubToAgentPatch(agent, hub) as unknown as Record<string, unknown>) : null}
+          onClose={() => setTesting(false)}
+        />
       )}
 
       {entriesModal && (
