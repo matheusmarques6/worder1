@@ -71,7 +71,7 @@ const STATUS_CONFIG: Record<string, { label: string; chip: string; icon: any }> 
   error: { label: 'Erro', chip: 'chip-red', icon: XCircle },
 }
 
-export default function KnowledgeBasePanel({ organizationId: _organizationId }: { organizationId: string }) {
+export default function KnowledgeBasePanel({ organizationId }: { organizationId: string }) {
   const [agents, setAgents] = useState<Agent[]>([])
   const [selectedAgent, setSelectedAgent] = useState<string>('')
   const [sources, setSources] = useState<Source[]>([])
@@ -86,7 +86,10 @@ export default function KnowledgeBasePanel({ organizationId: _organizationId }: 
 
   // Load agents
   useEffect(() => {
-    fetch('/api/ai/agents')
+    // A rota exige organization_id (400 sem ele) e confere contra o usuário.
+    // Sem o parâmetro o painel mostrava sempre "Nenhum agente" (M0 passo 2).
+    if (!organizationId) return
+    fetch(`/api/ai/agents?organization_id=${encodeURIComponent(organizationId)}`)
       .then(r => r.json())
       .then(d => {
         const list = Array.isArray(d) ? d : (d.agents || [])
@@ -95,7 +98,7 @@ export default function KnowledgeBasePanel({ organizationId: _organizationId }: 
       })
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [])
+  }, [organizationId])
 
   // Load sources when agent changes
   const loadSources = useCallback(async () => {

@@ -35,8 +35,22 @@ export async function GET() {
 
     const agents = data ?? []
     const active = agents.filter((a) => a.is_active)
-    const canonical =
+    const canonicalRow =
       active.length === 1 ? active[0] : agents.length === 1 ? agents[0] : null
+
+    // A órbita mostra "Conhecimento: N fontes"; antes vinha fixo em 0
+    // (M0 passo 2). Conta só as fontes prontas, que são as que o agente lê.
+    let sourcesCount = 0
+    if (canonicalRow) {
+      const { count } = await supabase
+        .from('ai_agent_sources')
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', organizationId)
+        .eq('agent_id', canonicalRow.id)
+        .eq('status', 'ready')
+      sourcesCount = count ?? 0
+    }
+    const canonical = canonicalRow ? { ...canonicalRow, sources_count: sourcesCount } : null
 
     return NextResponse.json({
       agents: agents.map(({ id, name, model, is_active, created_at }) => ({

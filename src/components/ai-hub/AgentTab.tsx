@@ -63,6 +63,30 @@ export default function AgentTab({ organizationId }: { organizationId: string })
   const [saving, setSaving] = useState(false)
   const [savedFlash, setSavedFlash] = useState(false)
 
+  // /whatsapp/ai-agents virou redirect para cá, então o botão antigo girava em
+  // círculo. Cria o agente da loja direto (nasce pausado) e recarrega (M0 passo 2).
+  const [creating, setCreating] = useState(false)
+  const createFirstAgent = useCallback(async () => {
+    setCreating(true)
+    try {
+      const res = await fetch('/api/ai/agents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Agente da loja', provider: 'openai', model: 'gpt-4o-mini' }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body?.error || `HTTP ${res.status}`)
+      }
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Não foi possível criar o agente')
+    } finally {
+      setCreating(false)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -224,7 +248,14 @@ export default function AgentTab({ organizationId }: { organizationId: string })
               <p style={{ fontSize: 13, color: 'var(--text-3)', margin: '6px 0 14px' }}>
                 Crie o agente da loja no assistente e volte aqui para configurá-lo na órbita.
               </p>
-              <a className="btn btn-primary btn-sm" href="/whatsapp/ai-agents">Criar agente</a>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                disabled={creating}
+                onClick={createFirstAgent}
+              >
+                {creating ? 'Criando…' : 'Criar agente'}
+              </button>
             </Card>
           </div>
         ) : isDesktop ? (

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { Bot } from 'lucide-react'
 
 /**
@@ -26,6 +26,7 @@ interface AgentSelectProps {
 export default function AgentSelect({ organizationId, value, onChange, className }: AgentSelectProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const pathname = usePathname()
   const [agents, setAgents] = useState<AgentOption[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -66,7 +67,9 @@ export default function AgentSelect({ organizationId, value, onChange, className
     const params = new URLSearchParams(searchParams?.toString() || '')
     params.set('agent', agentId)
     const qs = params.toString()
-    router.replace(`/whatsapp/ai-agents${qs ? `?${qs}` : ''}`)
+    // Fica na página atual: o redirect de /whatsapp/ai-agents descartava o
+    // parâmetro `agent` e devolvia o usuário à aba Agente (M0 passo 2).
+    router.replace(`${pathname || '/ai'}${qs ? `?${qs}` : ''}`, { scroll: false })
   }
 
   return (

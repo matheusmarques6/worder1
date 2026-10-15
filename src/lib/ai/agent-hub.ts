@@ -131,6 +131,8 @@ export interface HubState {
 type AgentRow = {
   id: string;
   name?: string | null;
+  /** Fontes de conhecimento ligadas (preenchido por /api/ai/agents/canonical). */
+  sources_count?: number | null;
   model?: string | null;
   provider?: string | null;
   presentation_mode?: string | null;
@@ -165,7 +167,7 @@ export function agentToHub(agent: AgentRow): HubState {
       distinct_greeting_repeat_buyer: Boolean(adaptation.distinct_greeting_repeat_buyer),
       base_length: (persona.response_length as 'short' | 'medium' | 'long') ?? 'medium',
     },
-    knowledge: { sources: 0 },
+    knowledge: { sources: Number(agent.sources_count ?? 0) },
     tools: { enabled: [...(settings.tools?.enabled ?? [])] },
     limits: {
       blocked: [...(safety.blocked_topics ?? [])],

@@ -356,8 +356,49 @@ export default function AreaFields({ area, hub, onChange, organizationId, agentI
           Provedor: <b>{hub.budget.provider}</b> — sem chave da organização (BYO), o agente não ativa no runtime novo.
         </div>
       </div>
+      <EmbeddingKeyNotice />
       {/* 10.3: API Keys absorvida pela área Motor — o gerenciador real, aqui. */}
       <ApiKeysManager />
+    </div>
+  )
+}
+
+// Os embeddings do conhecimento usam SÓ a chave OpenAI da organização
+// (src/lib/ai/embedding-key.ts, sem fallback de env). Sem ela, toda fonte
+// cai em erro sem dizer por quê — este aviso diz (M0 passo 3).
+function EmbeddingKeyNotice() {
+  const [state, setState] = useState<'loading' | 'ok' | 'missing' | 'unknown'>('loading')
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/api-keys')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d) => {
+        if (cancelled) return
+        const keys: Array<{ provider: string; is_active?: boolean }> = d?.keys ?? []
+        const has = keys.some((k) => k.provider === 'openai' && k.is_active !== false)
+        setState(has ? 'ok' : 'missing')
+      })
+      .catch(() => !cancelled && setState('unknown'))
+    return () => {
+      cancelled = true
+    }
+  }, [])
+  if (state !== 'missing') return null
+  return (
+    <div
+      role="status"
+      style={{
+        fontSize: 12,
+        padding: '10px 12px',
+        borderRadius: 8,
+        background: 'var(--amber-50, #fff6e5)',
+        color: 'var(--amber-800, #7a4a00)',
+        border: '1px solid var(--amber-200, #f3d9a4)',
+      }}
+    >
+      <b>Sem chave OpenAI da organização.</b> A base de conhecimento usa essa chave
+      para gerar os embeddings; sem ela nenhuma fonte fica pronta para consulta.
+      Cadastre uma chave <b>OpenAI</b> abaixo, mesmo que o agente responda por outro provedor.
     </div>
   )
 }
