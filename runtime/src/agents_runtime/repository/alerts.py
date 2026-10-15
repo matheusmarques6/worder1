@@ -34,6 +34,10 @@ MOMENT_TEMPLATE_NOT_READY = "moment_template_not_ready"
 #: 2026-10-15-04): o turno/toque não gera; dedup por escopo e mês.
 BUDGET_EXCEEDED = "budget_exceeded"
 
+#: Vários agentes ativos e nenhuma entrada para o número que recebeu a
+#: mensagem (alteração 2026-10-15-09): sem saber quem atende, silêncio.
+NO_AGENT_FOR_ENTRY = "no_agent_for_entry"
+
 
 async def open_alert(
     conn: psycopg.AsyncConnection,

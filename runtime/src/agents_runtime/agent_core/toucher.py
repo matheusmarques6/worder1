@@ -187,17 +187,25 @@ def build_toucher(
                 settings = await agent_repo.load_tenant_policy(
                     conn, organization_id=job.organization_id
                 )
-                version = await agent_repo.load_active_version(
-                    conn, organization_id=job.organization_id
-                )
                 state = await agent_repo.load_conversation_view(
                     conn, conversation_id=job.conversation_id
                 )
                 if state is None:
                     raise LookupError(f"conversation {job.conversation_id} is not this tenant's")
+                # Alteração 2026-10-15-09: o toque fala com a voz do agente
+                # DONO da missão; uma conversa já atendida por outro agente
+                # ativo fica com ele e a missão precisa ser dele.
                 mission = await missions_repo.load_active_mission(
-                    conn, event_type=job.event_family
+                    conn, event_type=job.event_family, agent_id=state.agent_id
                 )
+                resolution = await agent_repo.resolve_agent_for_mission(
+                    conn,
+                    organization_id=job.organization_id,
+                    mission_agent_id=(
+                        UUID(mission.agent_id) if mission is not None and mission.agent_id else None
+                    ),
+                )
+                version = resolution.version
                 transcript = await agent_repo.load_recent_transcript(
                     conn, conversation_id=job.conversation_id, limit=TRANSCRIPT_LIMIT
                 )

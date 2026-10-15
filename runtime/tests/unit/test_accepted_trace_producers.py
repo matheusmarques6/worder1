@@ -53,6 +53,9 @@ def producer_env(request, monkeypatch):
     reads = {
         "load_tenant_policy": TenantSettings(TenantPolicy("pt-BR", True)),
         "load_active_version": version,
+        "resolve_agent_for_turn": module.agent_repo.AgentResolution(version, "single_active"),
+        "resolve_agent_for_mission": module.agent_repo.AgentResolution(version, "single_active"),
+        "list_active_agents": (),
         "load_conversation_view": ConversationState("open", "whatsapp", None, contact,
                                                      "PRIVATE CONTACT", 0, clock.now()),
         "load_pending_messages": (PendingMessage("contact", "question"),),
@@ -169,8 +172,9 @@ async def test_deterministic_replies_have_trace_without_llm_fields(producer_env,
         version = replace(env.version, settings={"safety": {
             "handoff_keywords": ["question"], "handoff_confirmation_message": "Human confirmation",
         }})
-        env.monkeypatch.setattr(responder.agent_repo, "load_active_version",
-                                AsyncMock(return_value=version))
+        env.monkeypatch.setattr(responder.agent_repo, "resolve_agent_for_turn",
+                                AsyncMock(return_value=responder.agent_repo.AgentResolution(
+                                    version, "single_active")))
         env.monkeypatch.setattr(responder, "transfer_to_human", AsyncMock(return_value=True))
     else:
         env.monkeypatch.setattr(responder.agent_repo, "load_pending_messages",

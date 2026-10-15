@@ -129,7 +129,11 @@ from agents_runtime.repository.scope import (
     set_statement_timeout,
 )
 from agents_runtime.tools.base import ToolContext, run_tool
-from agents_runtime.tools.builtin import builtin_tools_for
+from agents_runtime.tools.builtin import (
+    TransferToAgent,
+    builtin_tools_for,
+    transfer_to_agent_spec,
+)
 from agents_runtime.tools.coupon import BENEFIT_KINDS, OBJECT_KINDS, CreateCoupon
 from agents_runtime.tools.custom_http import CustomHttpTool, CustomToolRow, tool_spec_for
 from agents_runtime.tools.knowledge import SearchKnowledge
@@ -320,14 +324,21 @@ def build_responder(
                 settings = await agent_repo.load_tenant_policy(
                     conn, organization_id=job.organization_id
                 )
-                version = await agent_repo.load_active_version(
-                    conn, organization_id=job.organization_id
-                )
                 state = await agent_repo.load_conversation_view(
                     conn, conversation_id=job.conversation_id
                 )
                 if state is None:
                     raise LookupError(f"conversation {job.conversation_id} is not this tenant's")
+                # Alteração 2026-10-15-09: quem atende é resolvido por
+                # conversa > entrada do número > único agente ativo da org.
+                resolution = await agent_repo.resolve_agent_for_turn(
+                    conn,
+                    organization_id=job.organization_id,
+                    conversation_agent_id=state.agent_id,
+                    channel_account_id=job.channel_account_id,
+                )
+                version = resolution.version
+                agent_id_for_missions = version.agent_id if version is not None else None
                 pending = await agent_repo.load_pending_messages(
                     conn,
                     conversation_id=job.conversation_id,
@@ -354,10 +365,10 @@ def build_responder(
                         # A dona indica a FAMÍLIA; quem responde é a versão
                         # ativa dela (§3.2.2 passo 2).
                         owner_mission = await missions_repo.load_active_mission(
-                            conn, event_type=owner_event
+                            conn, event_type=owner_event, agent_id=agent_id_for_missions
                         )
                 discovery_mission = await missions_repo.load_active_mission(
-                    conn, event_type=DISCOVERY_EVENT
+                    conn, event_type=DISCOVERY_EVENT, agent_id=agent_id_for_missions
                 )
                 active_moments = await moments_repo.load_active_moments(conn)
                 # 9.3a — o dinheiro no inbound: o agente conhece o benefício
@@ -409,7 +420,33 @@ def build_responder(
                 # Alteração 2026-10-15-05: a base de conhecimento é consultada
                 # sempre que existe, não só com a tool ligada (FORK item 32).
                 org_has_knowledge = await knowledge_repo.has_knowledge(conn)
+                # Alteração 2026-10-15-09: com mais de um agente ativo, a
+                # transferência entre agentes entra como ferramenta do turno.
+                active_agents = await agent_repo.list_active_agents(
+                    conn, organization_id=job.organization_id
+                )
 
+            if version is None and resolution.reason == "ambiguous":
+                # Vários agentes ativos e nenhum ligado a este número: não há
+                # como escolher sem inventar. Alerta (dedup por número) e a
+                # conversa avança em silêncio — mesmo padrão de missão ausente.
+                async with conn.transaction():
+                    await scope_to_organization(conn, job.organization_id)
+                    await alerts_repo.open_alert(
+                        conn,
+                        organization_id=job.organization_id,
+                        type=alerts_repo.NO_AGENT_FOR_ENTRY,
+                        severity="warning",
+                        title="Número sem agente definido — nada foi respondido",
+                        payload={
+                            "conversation_id": str(job.conversation_id),
+                            "channel_account_id": (
+                                str(job.channel_account_id) if job.channel_account_id else None
+                            ),
+                        },
+                        dedup_key=f"no-agent-for-entry:{job.channel_account_id}",
+                    )
+                return ReplyDraft(None, None)
             if version is None:
                 raise NoActiveVersion(f"tenant {job.organization_id} has no active agent version")
 
@@ -764,6 +801,12 @@ def build_responder(
                 ):
                     turn_tools[name] = tool
                     tool_specs = (*tool_specs, spec)
+                if len(active_agents) > 1:
+                    turn_tools["transfer_to_agent"] = TransferToAgent()
+                    tool_specs = (
+                        *tool_specs,
+                        transfer_to_agent_spec(active_agents, exclude=version.agent_id),
+                    )
                 # 10.7 — tools custom LIGADAS (ligar exigiu teste ok, CHECK do
                 # schema). Read-only por construção: nunca abrem a porta do
                 # dinheiro, então entram por serem do agente, sem passar pela

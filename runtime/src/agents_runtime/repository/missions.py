@@ -13,7 +13,7 @@ from agents_runtime.agent_core.mission_resolver import MissionVersion
 _COLUMNS = """
     id, event_type, situation, objective, success_criteria, failure_criteria,
     context_fields, enabled_tools, forbidden, max_turns, topic_change_policy,
-    promote_moment, concession, tone_delta
+    promote_moment, concession, tone_delta, agent_id
 """
 
 
@@ -36,24 +36,32 @@ def _as_mission(row) -> MissionVersion:
         promote_moment=row[11],
         concession=dict(row[12] or {"kind": "none"}),
         tone_delta=row[13],
+        agent_id=None if row[14] is None else str(row[14]),
     )
 
 
 async def load_active_mission(
-    conn: psycopg.AsyncConnection, *, event_type: str
+    conn: psycopg.AsyncConnection, *, event_type: str, agent_id: UUID | None = None
 ) -> MissionVersion | None:
     """A versão ATIVA da família (org, event_type), ou None.
 
     None significa "esta família não responde" — nunca "improvise uma missão".
+
+    Alteração 2026-10-15-09: com `agent_id`, só a missão DESTE agente (ou uma
+    sem dono — as de antes do modelo multiagente) responde; a missão ativa de
+    outro agente da mesma org não é dele.
     """
     cursor = await conn.execute(
         f"""
         select {_COLUMNS}
           from public.ai_missions
-         where event_type = %s
+         where event_type = %(event_type)s
            and status = 'active'
+           and (%(agent_id)s::uuid is null or agent_id is null or agent_id = %(agent_id)s)
+         order by (agent_id is null)
+         limit 1
         """,
-        (event_type,),
+        {"event_type": event_type, "agent_id": agent_id},
     )
     row = await cursor.fetchone()
     return None if row is None else _as_mission(row)

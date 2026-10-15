@@ -74,6 +74,8 @@ class ActiveVersion:
     # ai_agents que a radial escreve e o compiler consome.
     presentation_mode: str = "nome_funcao"
     client_adaptation: dict | None = None
+    role: str | None = None
+    """Função do agente (`ai_agents.role`, 20261016000008) — só informativa."""
 
     @property
     def adaptation_flags(self) -> tuple[str, ...]:
@@ -121,6 +123,10 @@ class ConversationState:
     contact_phone: str | None = None
     """O telefone do contato (alteração 2026-10-15-06) — só para as
     ferramentas acharem pedido/contato; nunca entra no prompt."""
+    agent_id: UUID | None = None
+    """O agente que já atende esta conversa (alteração 2026-10-15-09):
+    gravado no fim de cada turno aceito e trocado por `transfer_to_agent`.
+    Quando existe (e o agente segue ativo), vence a entrada do número."""
 
 
 def contact_fact_pairs(state: ConversationState) -> tuple[tuple[str, str], ...]:
@@ -136,40 +142,24 @@ def contact_fact_pairs(state: ConversationState) -> tuple[tuple[str, str], ...]:
     return tuple(pairs)
 
 
-async def load_active_version(
-    conn: psycopg.AsyncConnection, *, organization_id: UUID
-) -> ActiveVersion | None:
-    """A versão em produção deste tenant, ou None — que significa "esta conta
-    não pode responder", nunca "improvise um prompt".
-
-    FORK: lê ai_agents + ai_agent_versions (status local 'produção'); tabelas
-    legadas têm RLS desligada, então o escopo por org é EXPLÍCITO na query
-    (FORK.md item 6). enabled_tools vem de settings->tools->enabled.
-    """
-    cursor = await conn.execute(
-        """
+_VERSION_SELECT = """
         select v.id, a.model, coalesce(v.system_prompt, a.system_prompt),
                a.id, a.name, coalesce(v.persona, a.persona),
                coalesce(v.settings, a.settings), coalesce(a.provider, 'openai'),
-               coalesce(a.presentation_mode, 'nome_funcao'), a.client_adaptation
+               coalesce(a.presentation_mode, 'nome_funcao'), a.client_adaptation,
+               a.role
           from public.ai_agent_versions v
           join public.ai_agents a on a.id = v.agent_id
          where v.status = 'produção'
            and a.is_active
-           and a.organization_id = %s
-         order by v.created_at desc
-         limit 1
-        """,
-        (organization_id,),
-    )
-    row = await cursor.fetchone()
-    if row is None:
-        return None
+           and a.organization_id = %(org)s
+"""
 
+
+def _as_version(row) -> ActiveVersion:
     persona = dict(row[5] or {})
     settings = dict(row[6] or {})
     enabled = tuple((settings.get("tools") or {}).get("enabled") or ())
-
     return ActiveVersion(
         id=row[0],
         config=AgentConfig(
@@ -187,7 +177,215 @@ async def load_active_version(
         settings=settings,
         presentation_mode=row[8],
         client_adaptation=dict(row[9] or {}),
+        role=row[10] if len(row) > 10 else None,
     )
+
+
+async def load_active_version(
+    conn: psycopg.AsyncConnection, *, organization_id: UUID
+) -> ActiveVersion | None:
+    """A versão em produção deste tenant, ou None — que significa "esta conta
+    não pode responder", nunca "improvise um prompt".
+
+    FORK: lê ai_agents + ai_agent_versions (status local 'produção'); tabelas
+    legadas têm RLS desligada, então o escopo por org é EXPLÍCITO na query
+    (FORK.md item 6). enabled_tools vem de settings->tools->enabled.
+
+    Alteração 2026-10-15-09: com vários agentes ativos por org esta função
+    devolve o mais recente — serve ao preview/copiloto (sem conversa nem
+    número); o turno usa `resolve_agent_for_turn`.
+    """
+    cursor = await conn.execute(
+        _VERSION_SELECT + " order by v.created_at desc limit 1",
+        {"org": organization_id},
+    )
+    row = await cursor.fetchone()
+    return None if row is None else _as_version(row)
+
+
+async def load_active_versions(
+    conn: psycopg.AsyncConnection, *, organization_id: UUID
+) -> tuple[ActiveVersion, ...]:
+    """Uma versão em produção por agente ATIVO da org (alteração 2026-10-15-09)."""
+    cursor = await conn.execute(
+        _VERSION_SELECT + " order by a.created_at, v.created_at desc",
+        {"org": organization_id},
+    )
+    rows = await cursor.fetchall()
+    seen: set[UUID] = set()
+    out: list[ActiveVersion] = []
+    for row in rows:
+        if row[3] in seen:
+            continue
+        seen.add(row[3])
+        out.append(_as_version(row))
+    return tuple(out)
+
+
+async def load_version_for_agent(
+    conn: psycopg.AsyncConnection, *, organization_id: UUID, agent_id: UUID
+) -> ActiveVersion | None:
+    """A versão em produção DESTE agente, se ele estiver ativo; senão None."""
+    cursor = await conn.execute(
+        _VERSION_SELECT + " and a.id = %(agent)s order by v.created_at desc limit 1",
+        {"org": organization_id, "agent": agent_id},
+    )
+    row = await cursor.fetchone()
+    return None if row is None else _as_version(row)
+
+
+async def load_entry_agent_id(
+    conn: psycopg.AsyncConnection, *, organization_id: UUID, kind: str, ref_id: UUID
+) -> UUID | None:
+    """O agente ligado a uma entrada (`ai_agent_entries`, 20261016000008):
+    `whatsapp_account` com ref = whatsapp_business_accounts.id."""
+    cursor = await conn.execute(
+        """
+        select e.agent_id
+          from public.ai_agent_entries e
+         where e.organization_id = %s and e.kind = %s and e.ref_id = %s and e.active
+         limit 1
+        """,
+        (organization_id, kind, ref_id),
+    )
+    row = await cursor.fetchone()
+    return None if row is None else row[0]
+
+
+@dataclass(frozen=True, slots=True)
+class AgentResolution:
+    """Quem atende este turno e POR QUÊ (alteração 2026-10-15-09).
+
+    reason: 'conversation' (a conversa já tem agente), 'entry' (o número tem
+    agente), 'single_active' (a org tem um só agente ativo — modelo antigo),
+    'ambiguous' (vários ativos e nenhuma entrada: alerta e silêncio) ou
+    'none' (nenhum agente ativo).
+    """
+
+    version: ActiveVersion | None
+    reason: str
+
+
+def choose_agent(
+    *,
+    conversation_version: ActiveVersion | None,
+    entry_version: ActiveVersion | None,
+    active_versions: tuple[ActiveVersion, ...],
+) -> AgentResolution:
+    """A regra pura, testável sem banco: conversa > entrada > único ativo."""
+    if conversation_version is not None:
+        return AgentResolution(conversation_version, "conversation")
+    if entry_version is not None:
+        return AgentResolution(entry_version, "entry")
+    if len(active_versions) == 1:
+        return AgentResolution(active_versions[0], "single_active")
+    if not active_versions:
+        return AgentResolution(None, "none")
+    return AgentResolution(None, "ambiguous")
+
+
+async def resolve_agent_for_turn(
+    conn: psycopg.AsyncConnection,
+    *,
+    organization_id: UUID,
+    conversation_agent_id: UUID | None,
+    channel_account_id: UUID | None,
+) -> AgentResolution:
+    """O agente do turno de RESPOSTA: a conversa já atendida por um agente
+    ativo fica com ele; senão a entrada do número; senão o único ativo."""
+    conversation_version = None
+    if conversation_agent_id is not None:
+        conversation_version = await load_version_for_agent(
+            conn, organization_id=organization_id, agent_id=conversation_agent_id
+        )
+    if conversation_version is not None:
+        return AgentResolution(conversation_version, "conversation")
+
+    entry_version = None
+    if channel_account_id is not None:
+        entry_agent = await load_entry_agent_id(
+            conn, organization_id=organization_id,
+            kind="whatsapp_account", ref_id=channel_account_id,
+        )
+        if entry_agent is not None:
+            entry_version = await load_version_for_agent(
+                conn, organization_id=organization_id, agent_id=entry_agent
+            )
+    if entry_version is not None:
+        return AgentResolution(entry_version, "entry")
+
+    actives = await load_active_versions(conn, organization_id=organization_id)
+    return choose_agent(
+        conversation_version=None, entry_version=None, active_versions=actives
+    )
+
+
+async def resolve_agent_for_mission(
+    conn: psycopg.AsyncConnection,
+    *,
+    organization_id: UUID,
+    mission_agent_id: UUID | None,
+) -> AgentResolution:
+    """O agente do TOQUE: o dono da missão (`ai_missions.agent_id`); sem dono,
+    o único ativo da org (missões de antes do modelo multiagente)."""
+    if mission_agent_id is not None:
+        version = await load_version_for_agent(
+            conn, organization_id=organization_id, agent_id=mission_agent_id
+        )
+        if version is not None:
+            return AgentResolution(version, "entry")
+    actives = await load_active_versions(conn, organization_id=organization_id)
+    return choose_agent(
+        conversation_version=None, entry_version=None, active_versions=actives
+    )
+
+
+async def assign_conversation_agent(
+    conn: psycopg.AsyncConnection,
+    *,
+    conversation_id: UUID,
+    agent_id: UUID,
+    reset_owner_mission: bool = False,
+) -> bool:
+    """Grava quem atende a conversa (`conversations.agent_id`). Com
+    `reset_owner_mission`, a dona é limpa para o novo agente arbitrar as
+    missões DELE no próximo turno (transferência entre agentes)."""
+    if reset_owner_mission:
+        cursor = await conn.execute(
+            """
+            update public.conversations
+               set agent_id = %s, owner_mission_version_id = null
+             where id = %s and agent_id is distinct from %s
+            """,
+            (agent_id, conversation_id, agent_id),
+        )
+    else:
+        cursor = await conn.execute(
+            """
+            update public.conversations
+               set agent_id = %s
+             where id = %s and agent_id is distinct from %s
+            """,
+            (agent_id, conversation_id, agent_id),
+        )
+    return cursor.rowcount > 0
+
+
+async def list_active_agents(
+    conn: psycopg.AsyncConnection, *, organization_id: UUID
+) -> tuple[tuple[UUID, str, str | None], ...]:
+    """(id, nome, função) de cada agente ativo da org — para a tool
+    `transfer_to_agent` escolher o destino pelo nome."""
+    cursor = await conn.execute(
+        """
+        select id, name, role
+          from public.ai_agents
+         where organization_id = %s and status = 'active'
+         order by created_at
+        """,
+        (organization_id,),
+    )
+    return tuple((row[0], row[1], row[2]) for row in await cursor.fetchall())
 
 
 async def load_tenant_policy(
@@ -231,7 +429,8 @@ async def load_conversation_view(
                conversation.owner_mission_version_id, conversation.contact_id,
                nullif(trim(contact.full_name), ''),
                conversation.last_processed_seq, conversation.last_inbound_at,
-               contact.tags, contact.created_at, contact.phone
+               contact.tags, contact.created_at, contact.phone,
+               conversation.agent_id
           from public.conversations conversation
           join public.contacts contact on contact.id = conversation.contact_id
          where conversation.id = %s
@@ -253,6 +452,7 @@ async def load_conversation_view(
         contact_tags=tuple(row[7] or ()),
         contact_since=row[8],
         contact_phone=row[9] if len(row) > 9 else None,
+        agent_id=row[10] if len(row) > 10 else None,
     )
 
 

@@ -25,6 +25,7 @@ from agents_runtime.config import QueueingConfig
 from agents_runtime.obs import carrier
 from agents_runtime.obs.telemetry import annotate, span
 from agents_runtime.queueing.jobs import InboundJob, MissionTouchJob
+from agents_runtime.repository import agent as agent_repo
 from agents_runtime.repository import agent_traces, engine, whatsapp_accounts
 from agents_runtime.repository.queue import PgmqQueue
 from agents_runtime.repository.scope import abort_connection
@@ -344,6 +345,11 @@ async def _turn(
                 conversation_id=job.conversation_id, channel_account_id=job.channel_account_id,
                 generation=job.generation, target_seq=job.target_seq, trace=draft.trace,
             )
+            # Alteração 2026-10-15-09: quem respondeu passa a atender a
+            # conversa (conversations.agent_id) — na mesma transação do CAS.
+            await agent_repo.assign_conversation_agent(
+                conn, conversation_id=job.conversation_id, agent_id=draft.trace.agent_id
+            )
 
     if outcome.committed:
         return TurnResult.DONE
@@ -493,6 +499,9 @@ async def _touch(
                 conn, organization_id=job.organization_id, outbox_id=outcome.outbox_id,
                 conversation_id=job.conversation_id, channel_account_id=job.channel_account_id,
                 generation=generation, target_seq=target_seq, trace=draft.trace,
+            )
+            await agent_repo.assign_conversation_agent(
+                conn, conversation_id=job.conversation_id, agent_id=draft.trace.agent_id
             )
 
     if outcome.committed:

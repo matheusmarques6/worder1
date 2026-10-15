@@ -27,6 +27,7 @@ from typing import Any
 
 from agents_runtime.agent_core.handoff import transfer_to_human
 from agents_runtime.agent_core.llm import ToolSpec
+from agents_runtime.repository import agent as agent_repo
 from agents_runtime.repository import catalog as catalog_repo
 from agents_runtime.repository import crm as crm_repo
 from agents_runtime.repository import orders as orders_repo
@@ -558,6 +559,106 @@ TRANSFER_TO_HUMAN_SPEC = ToolSpec(
         "required": ["reason"],
     },
 )
+
+
+class TransferToAgent:
+    """Passa a conversa para OUTRO agente ativo da loja (alteração
+    2026-10-15-09). Não desliga a IA: o próximo turno é atendido pelo agente
+    escolhido, que arbitra as missões DELE (a dona atual é limpa)."""
+
+    name = "transfer_to_agent"
+
+    async def __call__(
+        self, conn: Any, context: ToolContext, arguments: Mapping[str, Any]
+    ) -> ToolResult:
+        wanted = _text(arguments, "agent").strip().lower()
+        summary = _text(arguments, "summary")
+        async with conn.transaction():
+            await scope_to_organization(conn, context.organization_id)
+            agents = await agent_repo.list_active_agents(
+                conn, organization_id=context.organization_id
+            )
+            target = next(
+                (
+                    a for a in agents
+                    if str(a[0]).lower() == wanted or a[1].strip().lower() == wanted
+                ),
+                None,
+            )
+            if target is None or target[0] == context.agent_id:
+                return ToolResult(
+                    self.name,
+                    False,
+                    {
+                        "transferred": False,
+                        "reason": "unknown_agent" if target is None else "same_agent",
+                        "available": [
+                            {"name": a[1], "role": a[2]} for a in agents if a[0] != context.agent_id
+                        ],
+                    },
+                )
+            await agent_repo.assign_conversation_agent(
+                conn,
+                conversation_id=context.conversation_id,
+                agent_id=target[0],
+                reset_owner_mission=True,
+            )
+            if context.contact_id is not None:
+                try:
+                    await crm_repo.add_activity(
+                        conn,
+                        organization_id=context.organization_id,
+                        contact_id=context.contact_id,
+                        conversation_id=context.conversation_id,
+                        type="agent_assigned",
+                        title=f"Transferido para o agente {target[1]} (IA)",
+                        description=f"Resumo: {summary}" if summary else None,
+                        metadata={
+                            "source": "ai_agent",
+                            "from_agent_id": str(context.agent_id) if context.agent_id else None,
+                            "to_agent_id": str(target[0]),
+                            "conversation_id": str(context.conversation_id),
+                        },
+                    )
+                except Exception:  # registro, nunca condição da transferência
+                    pass
+        return ToolResult(
+            self.name,
+            True,
+            {
+                "transferred": True,
+                "to": {"name": target[1], "role": target[2]},
+                "instruction": (
+                    f"A conversa passa para {target[1]} a partir da próxima mensagem. "
+                    "Responda ao cliente em uma frase curta avisando quem continua."
+                ),
+            },
+        )
+
+
+def transfer_to_agent_spec(
+    agents: tuple[tuple[Any, str, str | None], ...], *, exclude: Any = None
+) -> ToolSpec:
+    """O spec lista os destinos possíveis pelo nome — o modelo escolhe entre
+    agentes reais, nunca inventa um."""
+    names = [a[1] for a in agents if a[0] != exclude]
+    return ToolSpec(
+        name="transfer_to_agent",
+        description=(
+            "Passa a conversa para outro agente da loja quando o assunto é dele "
+            "(ex.: pós-venda, cobrança). A IA continua ligada; quem responde a partir "
+            "da próxima mensagem é o agente escolhido. Destinos: "
+            + ", ".join(f"{a[1]} ({a[2]})" if a[2] else a[1] for a in agents if a[0] != exclude)
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "agent": {"type": "string", "enum": names},
+                "summary": {"type": "string", "description": "Resumo para quem assume."},
+            },
+            "required": ["agent"],
+        },
+    )
 
 
 # ----------------------------------------------------------------------------

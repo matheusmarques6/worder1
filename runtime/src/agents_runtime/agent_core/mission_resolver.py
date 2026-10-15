@@ -47,6 +47,9 @@ class MissionVersion:
     promote_moment: bool
     concession: Mapping
     tone_delta: str | None
+    agent_id: str | None = None
+    """Dono da missão (`ai_missions.agent_id`, 20261016000008); None nas
+    missões de antes do modelo multiagente."""
 
 
 @dataclass(frozen=True)
