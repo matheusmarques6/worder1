@@ -40,7 +40,14 @@ ANIM_NAMES: set[str] = set()
 # deixa títulos de cartão (que são <button>) mais altos. Vem antes das regras
 # do protótipo, que continuam podendo definir line-height próprio.
 PREFLIGHT_UNDO = {
-    "base.css": ".wp button,.wp input,.wp select,.wp textarea{line-height:normal}\n",
+    # E deixa svg e img como bloco; no protótipo são inline (ícone ao lado
+    # do texto dentro de botões como "Responder em …").
+    "base.css": (
+        ".wp button,.wp input,.wp select,.wp textarea{line-height:normal}\n"
+        ".wp svg,.wp img{display:inline;vertical-align:baseline}\n"
+    ),
+    # O preflight tira os marcadores de lista; a nota do protótipo tem.
+    "kb.css": ".wp.wp-b .kb-md ul{list-style:disc}.wp.wp-b .kb-md ol{list-style:decimal}\n",
 }
 
 

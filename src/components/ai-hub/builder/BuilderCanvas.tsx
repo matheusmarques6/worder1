@@ -20,6 +20,7 @@ import type { Diagnostic } from '@/lib/ai/block-metrics'
 import type { AgentEntry } from '@/lib/ai/agent-entries'
 import { USD_BRL_FALLBACK } from '@/lib/ai/brl'
 import { Icon, Modal, Toast } from '../proto/ui'
+import NewSource from './NewSource'
 import { AgentMissionsArea } from '../AreaFields'
 import Canvas, { type AgentHead, type RunState } from './Canvas'
 import { Diagnostics, Inspector, Palette } from './Panels'
@@ -409,60 +410,4 @@ function whenLabel(iso: string): string {
   if (d.toDateString() === today.toDateString()) return `Hoje, ${hm}`
   if (d.toDateString() === yesterday.toDateString()) return `Ontem, ${hm}`
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}, ${hm}`
-}
-
-/** Fonte nova a partir da paleta: página da loja, texto, documento ou P&R. */
-function NewSource({ kind, agentId, onClose, onDone }: {
-  kind: 'site' | 'text' | 'doc' | 'qa'
-  agentId: string
-  onClose: () => void
-  onDone: (msg: string) => Promise<void>
-}) {
-  const [name, setName] = useState('')
-  const [url, setUrl] = useState('')
-  const [text, setText] = useState('')
-  const [file, setFile] = useState<File | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const titles = { site: 'Página da loja', text: 'Texto', doc: 'Documento', qa: 'Perguntas e respostas' }
-
-  const submit = async () => {
-    setBusy(true); setError(null)
-    try {
-      let res: Response
-      if (kind === 'site') {
-        res = await fetch(`/api/ai/agents/${agentId}/sources`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source_type: 'url', name: name || url, url }) })
-      } else if (kind === 'text') {
-        res = await fetch('/api/ai/knowledge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, body_markdown: text, agent_ids: [agentId] }) })
-      } else if (kind === 'qa') {
-        res = await fetch('/api/ai/knowledge/import/csv', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ csv: text, mode: 'faq', agent_ids: [agentId] }) })
-      } else {
-        if (!file) throw new Error('Escolha um arquivo')
-        const form = new FormData()
-        form.append('file', file)
-        res = await fetch(`/api/ai/agents/${agentId}/sources/upload`, { method: 'POST', body: form })
-      }
-      const body = await res.json().catch(() => null)
-      if (!res.ok) throw new Error(body?.error || 'Não foi possível criar a fonte')
-      await onDone('Fonte adicionada. Processando…')
-    } catch (e: any) {
-      setError(e.message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <Modal title={`Nova fonte: ${titles[kind]}`} onClose={onClose} width={520}
-      sub="O agente passa a consultar o conteúdo assim que o processamento terminar."
-      footer={<><span className="l" style={{ color: 'var(--er)' }}>{error}</span><button type="button" className="btn" onClick={onClose}>Cancelar</button><button type="button" className="btn pri" disabled={busy} onClick={() => void submit()}>Adicionar</button></>}>
-      <div style={{ display: 'grid', gap: 12, paddingBottom: 8 }}>
-        {kind !== 'qa' && kind !== 'doc' && <div><label className="flbl">Nome</label><input className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder={kind === 'site' ? 'Tabela de medidas' : 'Garantia e assistência'} /></div>}
-        {kind === 'site' && <div><label className="flbl">Endereço da página</label><input className="field" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://sualoja.com.br/pages/medidas" /></div>}
-        {kind === 'text' && <div><label className="flbl">Texto</label><textarea className="field" rows={8} value={text} onChange={(e) => setText(e.target.value)} /></div>}
-        {kind === 'qa' && <div><label className="flbl">CSV com pergunta e resposta</label><textarea className="field" rows={8} value={text} onChange={(e) => setText(e.target.value)} placeholder={'pergunta,resposta\nQual o prazo?,De 2 a 4 dias úteis'} /></div>}
-        {kind === 'doc' && <div><label className="flbl">Arquivo PDF, DOCX ou TXT</label><input className="field" type="file" accept=".pdf,.docx,.txt" onChange={(e) => setFile(e.target.files?.[0] ?? null)} style={{ paddingTop: 8 }} /></div>}
-      </div>
-    </Modal>
-  )
 }

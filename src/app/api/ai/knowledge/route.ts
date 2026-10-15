@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { getAuthClient } from '@/lib/api-utils'
-import { buildTree } from '@/lib/ai/knowledge/notes'
+import { buildTree, usesBySource } from '@/lib/ai/knowledge/notes'
 import { NOTE_COLUMNS, ownAgentIds, readersBySource, setReaders } from '@/lib/ai/knowledge/server'
 import { extractLinks } from '@/lib/ai/processors/markdown-processor'
 import { triggerSourceProcessing } from '@/lib/ai/knowledge/process-trigger'
@@ -9,7 +9,8 @@ import { triggerSourceProcessing } from '@/lib/ai/knowledge/process-trigger'
 export const dynamic = 'force-dynamic'
 
 // Plano IA M3 passo 21 — conhecimento da LOJA.
-// GET: a árvore por pasta, cada nota com quem a lê.
+// GET: a árvore por pasta, cada nota com quem a lê e quantas buscas dos
+// últimos 7 dias a trouxeram (`uses_7d`, bolinha do grafo da UI F4).
 // POST: nota nova { name, body_markdown, folder?, tags?, agent_ids? }.
 export async function GET() {
   const auth = await getAuthClient()
@@ -23,8 +24,21 @@ export async function GET() {
     .order('name', { ascending: true })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   try {
-    const readers = await readersBySource(supabase, organizationId)
-    return NextResponse.json({ folders: buildTree((data ?? []) as any, readers), total: data?.length ?? 0 })
+    const since = new Date(Date.now() - 7 * 86_400_000).toISOString()
+    const [readers, calls] = await Promise.all([
+      readersBySource(supabase, organizationId),
+      supabase
+        .from('ai_runtime_activity_tools')
+        .select('output')
+        .eq('organization_id', organizationId)
+        .eq('tool_name', 'search_knowledge')
+        .eq('success', true)
+        .gte('created_at', since)
+        .limit(5000),
+    ])
+    const uses = usesBySource(calls.data ?? [])
+    const notes = (data ?? []).map((n: any) => ({ ...n, uses_7d: uses.get(n.id) ?? 0 }))
+    return NextResponse.json({ folders: buildTree(notes, readers), total: notes.length })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 })
   }

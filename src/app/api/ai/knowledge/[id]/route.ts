@@ -30,7 +30,7 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
   if (!note) return NextResponse.json({ error: 'Nota não encontrada' }, { status: 404 })
   const [readers, others] = await Promise.all([
     readersBySource(supabase, organizationId, [note.id]),
-    supabase.from('ai_sources').select('id, name, links').eq('organization_id', organizationId).neq('id', note.id),
+    supabase.from('ai_sources').select('id, name, links, body_markdown').eq('organization_id', organizationId).neq('id', note.id),
   ])
   return NextResponse.json({
     note: { ...note, readers: readers.get(note.id) ?? [] },

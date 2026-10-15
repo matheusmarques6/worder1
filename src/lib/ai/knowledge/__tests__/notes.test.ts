@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { appendAnswer, backlinks, buildGraph, buildTree, noteFromGap, renameLinks, usageByDay } from '../notes'
+import { appendAnswer, backlinks, buildGraph, buildTree, noteFromGap, renameLinks, suggestNoteForGap, usageByDay, usesBySource } from '../notes'
 import { markdownToChunks } from '../../processors/markdown-processor'
 
 describe('buildTree', () => {
@@ -62,6 +62,11 @@ describe('backlinks', () => {
     expect(backlinks('frete', [{ id: '1', name: 'Trocas', links: ['Frete'] }, { id: '2', name: 'X', links: [] }]))
       .toEqual([{ id: '1', name: 'Trocas' }])
   })
+
+  it('traz o trecho em volta da menção', () => {
+    const [hit] = backlinks('Prazos de entrega', [{ id: '1', name: 'Trocas', links: ['Prazos de entrega'], body_markdown: 'O envio da troca segue [[Prazos de entrega]] e **sempre** sai rápido.' }])
+    expect(hit).toMatchObject({ before: 'O envio da troca segue ', after: ' e sempre sai rápido.' })
+  })
 })
 
 describe('usageByDay', () => {
@@ -79,5 +84,29 @@ describe('usageByDay', () => {
     expect(usage.series).toEqual([1, 0, 0, 0, 0, 0, 2])
     expect(usage.total).toBe(3)
     expect(usage.conversations.sort()).toEqual(['c1', 'c2', 'c3'])
+  })
+})
+
+describe('usesBySource', () => {
+  it('conta uma vez por busca, mesmo com vários trechos da mesma fonte', () => {
+    const uses = usesBySource([
+      { output: { chunks: [{ source_id: 'a' }, { source_id: 'a' }, { source_id: 'b' }] } },
+      { output: { chunks: [{ source_id: 'a' }] } },
+      { output: null },
+    ])
+    expect(Object.fromEntries(uses)).toEqual({ a: 2, b: 1 })
+  })
+})
+
+describe('suggestNoteForGap', () => {
+  const notes = [
+    { id: 'troca', name: 'Política de troca', tags: ['pós-compra'], body_markdown: '30 dias para trocar' },
+    { id: 'pag', name: 'Formas de pagamento', tags: ['pix'], body_markdown: 'PIX e cartão em até 6x' },
+    { id: 'shop', name: 'Catálogo Shopify', tags: [], body_markdown: 'parcelado', read_only: true },
+  ]
+  it('prefere o título, usa tags e texto, e pula notas sincronizadas', () => {
+    expect(suggestNoteForGap('Posso trocar depois de 40 dias?', notes)?.id).toBe('troca')
+    expect(suggestNoteForGap('Aceitam PIX parcelado?', notes)?.id).toBe('pag')
+    expect(suggestNoteForGap('Vocês têm loja física?', notes)).toBeNull()
   })
 })

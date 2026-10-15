@@ -8,7 +8,8 @@ export const dynamic = 'force-dynamic'
 // Plano IA M3 passo 21 — uso de uma nota nos últimos 7 dias, das chamadas
 // search_knowledge do runtime (ai_runtime_activity_tools; o source_id está
 // em output.chunks desde a alteração 2026-10-15-05), mais as perguntas que
-// ela ajudou a responder (com agente e data).
+// ela ajudou a responder (com agente, data e se a conversa acabou
+// transferida, o ✓/✗ do painel da UI F4).
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   const auth = await getAuthClient()
   if (!auth) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
@@ -37,19 +38,32 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
     .map((c: any) => ({ question: c.input?.query ?? null, conversation_id: c.conversation_id, at: c.created_at }))
 
   let agentByConversation = new Map<string, string | null>()
+  let transferredByConversation = new Map<string, boolean>()
   const ids = [...new Set(questions.map((q) => q.conversation_id).filter(Boolean))] as string[]
   if (ids.length > 0) {
-    const { data: convs } = await supabase
-      .from('ai_runtime_activity')
-      .select('conversation_id, agent_name')
-      .eq('organization_id', organizationId)
-      .in('conversation_id', ids)
+    const [{ data: convs }, { data: outcomes }] = await Promise.all([
+      supabase
+        .from('ai_runtime_activity')
+        .select('conversation_id, agent_name')
+        .eq('organization_id', organizationId)
+        .in('conversation_id', ids),
+      supabase
+        .from('ai_conversation_outcomes')
+        .select('conversation_id, transferred')
+        .eq('organization_id', organizationId)
+        .in('conversation_id', ids),
+    ])
     agentByConversation = new Map((convs ?? []).map((c: any) => [c.conversation_id, c.agent_name]))
+    transferredByConversation = new Map((outcomes ?? []).map((o: any) => [o.conversation_id, Boolean(o.transferred)]))
   }
   return NextResponse.json({
     series: usage.series,
     total: usage.total,
     conversations: usage.conversations.length,
-    questions: questions.map((q) => ({ ...q, agent_name: q.conversation_id ? agentByConversation.get(q.conversation_id) ?? null : null })),
+    questions: questions.map((q) => ({
+      ...q,
+      agent_name: q.conversation_id ? agentByConversation.get(q.conversation_id) ?? null : null,
+      transferred: q.conversation_id ? transferredByConversation.get(q.conversation_id) ?? null : null,
+    })),
   })
 }

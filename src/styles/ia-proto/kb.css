@@ -1,5 +1,6 @@
 /* GERADO por scripts/ia-proto/scope_css.py a partir de scripts/ia-proto/source/kb.css.
    CSS do protótipo da aba IA, escopado em .wp. Não editar à mão. */
+.wp.wp-b .kb-md ul{list-style:disc}.wp.wp-b .kb-md ol{list-style:decimal}
 .wp.wp-b .kbd{font-family:var(--mono);font-size:11px;background:#F3F4F6;border:1px solid #E5E7EB;border-bottom-width:2px;border-radius:5px;padding:0 5px;color:#4B5563;line-height:16px;display:inline-block}
 .wp.wp-b .kb .w-body{background:#fff}
 .wp.wp-b .kb-cmdk{display:flex;align-items:center;gap:9px;height:34px;width:min(380px,32vw);padding:0 8px 0 12px;border-radius:8px;background:#1B1C1F;border:1px solid #2A2B2F;color:#9CA0A8;font-size:13px;transition:border-color .15s,background .15s}

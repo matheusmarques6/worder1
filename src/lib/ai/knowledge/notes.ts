@@ -114,11 +114,26 @@ export function buildGraph(input: {
 }
 
 /** Notas que apontam para esta (backlinks), por título. */
-export function backlinks(target: string, notes: Array<{ id: string; name: string; links?: string[] | null }>): Array<{ id: string; name: string }> {
+export function backlinks(
+  target: string,
+  notes: Array<{ id: string; name: string; links?: string[] | null; body_markdown?: string | null }>,
+): Array<{ id: string; name: string; before?: string; after?: string }> {
   const t = target.trim().toLowerCase()
   return notes
     .filter((n) => (n.links ?? []).some((l) => l.trim().toLowerCase() === t))
-    .map((n) => ({ id: n.id, name: n.name }))
+    .map((n) => {
+      // O trecho em volta da menção, para "Links para cá" (…antes [[alvo]] depois…).
+      const body = (n.body_markdown ?? '').replace(/\*\*/g, '')
+      const at = body.toLowerCase().indexOf(`[[${t}`)
+      if (at < 0) return { id: n.id, name: n.name }
+      const end = body.indexOf(']]', at)
+      const clean = (s: string) => s.replace(/\[\[|\]\]/g, '').replace(/\s+/g, ' ')
+      return {
+        id: n.id, name: n.name,
+        before: clean(body.slice(Math.max(0, at - 50), at)),
+        after: clean(body.slice(end < 0 ? at : end + 2, (end < 0 ? at : end + 2) + 30)),
+      }
+    })
 }
 
 /**
@@ -149,4 +164,51 @@ export function usageByDay(
     if (call.conversation_id) conversations.add(call.conversation_id)
   }
   return { series, total, conversations: [...conversations] }
+}
+
+/** Quantas buscas da janela trouxeram cada fonte (bolinha do grafo, "Uso"). */
+export function usesBySource(calls: Array<{ output: any }>): Map<string, number> {
+  const out = new Map<string, number>()
+  for (const call of calls) {
+    const chunks: any[] = Array.isArray(call.output?.chunks) ? call.output.chunks : []
+    for (const id of new Set(chunks.map((c) => c?.source_id).filter(Boolean))) {
+      out.set(id, (out.get(id) ?? 0) + 1)
+    }
+  }
+  return out
+}
+
+const GAP_STOP = new Set([
+  'para', 'como', 'qual', 'quais', 'quanto', 'quantos', 'voces', 'vocês', 'posso', 'pode', 'tenho', 'esse', 'essa',
+  'isso', 'sobre', 'ainda', 'mais', 'quero', 'minha', 'meu', 'tem', 'com', 'uma', 'que', 'dos', 'das', 'pra', 'pro',
+])
+const gapWords = (s: string) =>
+  s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, ' ')
+    .split(/\s+/).filter((w) => w.length >= 3 && !GAP_STOP.has(w))
+// "trocar" acha "troca", "entregue" acha "entrega": compara pelo começo.
+const stem = (w: string) => (w.length > 5 ? w.slice(0, w.length - 2) : w)
+
+/** A nota onde responder uma lacuna ("Responder em …"): a editável cujo
+ *  título, tags ou texto mais falam do assunto da pergunta. Título pesa 3,
+ *  tag 2, texto 1. Nenhuma palavra em comum = sem sugestão. */
+export function suggestNoteForGap<T extends { id: string; name: string; tags?: string[] | null; body_markdown?: string | null; read_only?: boolean | null }>(
+  question: string, notes: T[],
+): T | null {
+  const q = [...new Set(gapWords(question).map(stem))]
+  if (q.length === 0) return null
+  let best: { note: T; score: number } | null = null
+  for (const note of notes) {
+    if (note.read_only) continue
+    const title = gapWords(note.name)
+    const tags = (note.tags ?? []).flatMap(gapWords)
+    const body = new Set(gapWords(note.body_markdown ?? ''))
+    let score = 0
+    for (const s of q) {
+      if (title.some((w) => w.startsWith(s))) score += 3
+      else if (tags.some((w) => w.startsWith(s))) score += 2
+      else if ([...body].some((w) => w.startsWith(s))) score += 1
+    }
+    if (score > 0 && (!best || score > best.score)) best = { note, score }
+  }
+  return best?.note ?? null
 }
