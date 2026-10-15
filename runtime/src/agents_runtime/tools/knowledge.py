@@ -60,6 +60,10 @@ class SearchKnowledge:
                         "content": chunk.content,
                         "source": chunk.source,
                         "similarity": round(chunk.similarity, 4),
+                        # Alteração 2026-10-15-05: proveniência para "uso por
+                        # nota" (lido de internal.tool_calls.output).
+                        "source_id": str(chunk.source_id) if chunk.source_id else None,
+                        "chunk_id": str(chunk.id),
                     }
                     for chunk in chunks
                 ]

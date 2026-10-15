@@ -43,6 +43,9 @@ class KnowledgeChunk:
     #: 1.0 is identical, 0.0 is unrelated — the inverse of the cosine distance
     #: the index sorts by.
     similarity: float
+    #: Alteração 2026-10-15-05: a proveniência que a tela de "uso por nota" lê
+    #: de `internal.tool_calls`.
+    source_id: UUID | None = None
 
 
 def _vector_literal(embedding: Sequence[float]) -> str:
@@ -105,11 +108,36 @@ async def ingest_chunk(
     return row[0]
 
 
+#: Mesmo piso do motor legado (`rag.ts`, `threshold: 0.7`) — abaixo disso o
+#: chunk não é vizinho, é ruído que entrava no prompt (FORK.md item 30).
+DEFAULT_SIMILARITY_THRESHOLD = 0.7
+
+
+async def has_knowledge(conn: psycopg.AsyncConnection) -> bool:
+    """A org (escopada na conexão) tem algum chunk consultável? Barato, e
+    evita pagar um embedding por turno em loja sem base (alteração
+    2026-10-15-05)."""
+    cursor = await conn.execute(
+        """
+        select exists (
+          select 1 from public.ai_agent_chunks c
+           where c.embedding is not null
+             and c.embedding_model = any(%(spaces)s)
+             and c.organization_id = public.current_app_organization_id()
+        )
+        """,
+        {"spaces": list(SEARCHABLE_SPACES)},
+    )
+    row = await cursor.fetchone()
+    return bool(row and row[0])
+
+
 async def search_knowledge(
     conn: psycopg.AsyncConnection,
     *,
     embedding: Sequence[float],
     limit: int = 5,
+    threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
 ) -> tuple[KnowledgeChunk, ...]:
     """The nearest chunks first, bounded — the last layer of the prompt.
 
@@ -123,18 +151,21 @@ async def search_knowledge(
     cursor = await conn.execute(
         """
         select c.id, c.organization_id, s.name, null::text, c.content,
-               1 - (c.embedding <=> %(query)s::vector) as similarity
+               1 - (c.embedding <=> %(query)s::vector) as similarity,
+               c.source_id
           from public.ai_agent_chunks c
           left join public.ai_agent_sources s on s.id = c.source_id
          where c.embedding is not null
            and c.embedding_model = any(%(spaces)s)
            and c.organization_id = public.current_app_organization_id()
+           and 1 - (c.embedding <=> %(query)s::vector) >= %(threshold)s
          order by c.embedding <=> %(query)s::vector
          limit %(limit)s
         """,
         {
             "query": _vector_literal(embedding),
             "limit": limit,
+            "threshold": threshold,
             # Um chunk de OUTRO espaço vetorial não é um vizinho distante: é um
             # sem relação com esta query. A distância cosseno o rankeia do
             # mesmo jeito, sem erro — foi assim que a divergência
@@ -150,6 +181,7 @@ async def search_knowledge(
             title=row[3],
             content=row[4],
             similarity=float(row[5]),
+            source_id=row[6] if len(row) > 6 else None,
         )
         for row in await cursor.fetchall()
     )

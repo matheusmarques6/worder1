@@ -110,6 +110,85 @@ class TurnBudget:
         self.used += 1
 
 
+#: Preço por 1M de tokens (entrada, saída) em USD — porte de
+#: `src/lib/ai/cost-tracker.ts::PRICING` (alteração 2026-10-15-04). Só vale
+#: para chamadas em que o provedor NÃO devolve custo (chave direta); a
+#: OpenRouter devolve o cobrado e ele vence. Chave: `provedor/modelo`.
+PRICE_TABLE: dict[str, tuple[float, float]] = {
+    "openai/gpt-4o": (2.50, 10.00),
+    "openai/gpt-4o-mini": (0.15, 0.60),
+    "openai/gpt-4.1": (2.00, 8.00),
+    "openai/gpt-4.1-mini": (0.40, 1.60),
+    "openai/gpt-4-turbo": (10.00, 30.00),
+    "openai/gpt-3.5-turbo": (0.50, 1.50),
+    "openai/o1-preview": (15.00, 60.00),
+    "openai/o1-mini": (3.00, 12.00),
+    "openai/text-embedding-3-small": (0.02, 0.0),
+    "anthropic/claude-opus-4-6": (15.00, 75.00),
+    "anthropic/claude-sonnet-4-6": (3.00, 15.00),
+    "anthropic/claude-haiku-4-5": (0.80, 4.00),
+    "anthropic/claude-haiku-4.5": (0.80, 4.00),
+    "anthropic/claude-3-5-sonnet": (3.00, 15.00),
+    "anthropic/claude-3-5-haiku": (1.00, 5.00),
+    "anthropic/claude-3-opus": (15.00, 75.00),
+    "google/gemini-2.0-flash": (0.10, 0.40),
+    "gemini/gemini-2.0-flash": (0.10, 0.40),
+    "google/gemini-1.5-pro": (1.25, 5.00),
+    "gemini/gemini-1.5-pro": (1.25, 5.00),
+    "google/gemini-1.5-flash": (0.075, 0.30),
+    "gemini/gemini-1.5-flash": (0.075, 0.30),
+}
+
+
+def estimate_cost_usd(
+    provider: str, model: str, input_tokens: int | None, output_tokens: int | None
+) -> float | None:
+    """Custo pela tabela quando o provedor não disse; `None` se o modelo não
+    está na tabela ou os tokens são desconhecidos — nunca 0 (0 é "grátis")."""
+    if input_tokens is None or output_tokens is None:
+        return None
+    key = model if "/" in model else f"{provider}/{model}"
+    price = PRICE_TABLE.get(key) or PRICE_TABLE.get(key.lower())
+    if price is None:
+        return None
+    return (input_tokens / 1_000_000) * price[0] + (output_tokens / 1_000_000) * price[1]
+
+
+@dataclass(frozen=True, slots=True)
+class MonthlyBlock:
+    """Por que o turno não pode gastar: `scope` é 'org' ou 'agent'."""
+
+    scope: str
+    spent_usd: float
+    limit_usd: float
+
+    @property
+    def detail(self) -> str:
+        quem = "da loja" if self.scope == "org" else "do agente"
+        return (
+            f"Teto mensal de IA {quem} atingido "
+            f"(US$ {self.spent_usd:.2f} de US$ {self.limit_usd:.2f}) — nada respondido"
+        )
+
+
+def monthly_block(
+    *,
+    org_spent_usd: float,
+    org_limit_usd: float,
+    agent_spent_usd: float,
+    agent_cap_usd: float | None,
+) -> MonthlyBlock | None:
+    """Pura: a org estourou? senão, o agente estourou o seu teto próprio?
+    Custo desconhecido NÃO bloqueia (diferente do TS): uma linha sem preço
+    calar o agente da loja inteira seria pior que a imprecisão — ela fica
+    visível na tela de uso, que é o lugar dela."""
+    if org_limit_usd > 0 and org_spent_usd >= org_limit_usd:
+        return MonthlyBlock("org", org_spent_usd, org_limit_usd)
+    if agent_cap_usd is not None and agent_cap_usd > 0 and agent_spent_usd >= agent_cap_usd:
+        return MonthlyBlock("agent", agent_spent_usd, agent_cap_usd)
+    return None
+
+
 @dataclass(frozen=True, slots=True)
 class CallRecord:
     """One line of the invoice. Every field is a number or an identifier."""
@@ -182,6 +261,14 @@ class MeteredLlm:
         result: ChatResult | EmbeddingResult,
         started: datetime,
     ) -> None:
+        cost = result.usage.cost_usd
+        if cost is None:
+            # Alteração 2026-10-15-04: chave direta não devolve custo; a tabela
+            # estima para o teto mensal ter com o que contar. Modelo fora da
+            # tabela continua `None` (desconhecido, visível na tela de uso).
+            cost = estimate_cost_usd(
+                provider, model, result.usage.input_tokens, result.usage.output_tokens
+            )
         await self._record(
             CallRecord(
                 purpose=purpose,
@@ -189,7 +276,7 @@ class MeteredLlm:
                 model=model,
                 input_tokens=result.usage.input_tokens,
                 output_tokens=result.usage.output_tokens,
-                cost_usd=result.usage.cost_usd,
+                cost_usd=cost,
                 latency_ms=_elapsed_ms(started, self._clock.now()),
             )
         )

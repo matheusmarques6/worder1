@@ -16,3 +16,5 @@ de ambiente precisam sempre.
 | 2026-10-15 | [2026-10-15-01-spans-logfire.md](2026-10-15-01-spans-logfire.md) | Spans de domínio passam a gravar quando só o Logfire está ligado; spans por chamada LLM e por ferramenta |
 | 2026-10-15 | [2026-10-15-02-agents-workers.md](2026-10-15-02-agents-workers.md) | `AGENTS_WORKERS` passa a ser lida na partida |
 | 2026-10-15 | [2026-10-15-03-audio-e-visao.md](2026-10-15-03-audio-e-visao.md) | Áudio transcrito (STT pela chave da org) e imagem inline para o modelo; fecha FORK item 11 |
+| 2026-10-15 | [2026-10-15-04-teto-mensal.md](2026-10-15-04-teto-mensal.md) | Teto mensal de gasto por org e por agente; tabela de preços para chave direta; alerta `budget_exceeded` |
+| 2026-10-15 | [2026-10-15-05-rag-limiar-e-proveniencia.md](2026-10-15-05-rag-limiar-e-proveniencia.md) | Busca vetorial com piso 0,7, `source_id` na saída da tool e consulta à base sem depender da tool ligada |

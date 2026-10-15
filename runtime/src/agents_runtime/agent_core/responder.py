@@ -74,6 +74,7 @@ from agents_runtime.agent_core.metering import (
     CallRecord,
     MeteredLlm,
     TurnBudget,
+    monthly_block,
 )
 from agents_runtime.agent_core.mission_resolver import (
     DISCOVERY_EVENT,
@@ -109,10 +110,12 @@ from agents_runtime.obs.telemetry import annotate, span
 from agents_runtime.queueing.jobs import InboundJob, MissionTouchJob
 from agents_runtime.repository import agent as agent_repo
 from agents_runtime.repository import alerts as alerts_repo
+from agents_runtime.repository import budget as budget_repo
 from agents_runtime.repository import custom_tools as custom_tools_repo
 from agents_runtime.repository import engine as engine_repo
 from agents_runtime.repository import incentives as incentives_repo
 from agents_runtime.repository import judge_scores as scores_repo
+from agents_runtime.repository import knowledge as knowledge_repo
 from agents_runtime.repository import llm_calls as llm_repo
 from agents_runtime.repository import missions as missions_repo
 from agents_runtime.repository import moments as moments_repo
@@ -401,6 +404,9 @@ def build_responder(
                     if agent_llm_from_org_keys
                     else ()
                 )
+                # Alteração 2026-10-15-05: a base de conhecimento é consultada
+                # sempre que existe, não só com a tool ligada (FORK item 32).
+                org_has_knowledge = await knowledge_repo.has_knowledge(conn)
 
             if version is None:
                 raise NoActiveVersion(f"tenant {job.organization_id} has no active agent version")
@@ -539,6 +545,14 @@ def build_responder(
             # isto decide o QUE ela diz. E antes da arbitragem e da cascata de
             # chave BYO, porque nada aqui precisa de missão nem de LLM — a
             # chamada seria token queimado para gerar a partir de nada.
+            # --- alteração 2026-10-15-04: teto mensal (org, depois agente).
+            # DEPOIS dos guards (silêncio configurado explica antes do custo)
+            # e ANTES de qualquer gasto — STT, embedding, modelo, juiz.
+            if await _monthly_budget_stop(
+                conn, job.organization_id, job.conversation_id, version.agent_id, note_step
+            ):
+                return ReplyDraft(None, None)
+
             # --- alteração 2026-10-15-03: antes de degradar, tentar LER a
             # mídia — áudio vira texto (STT pela chave da org), imagem vira
             # anexo (quando o provedor enxerga). O que não der para ler cai na
@@ -662,6 +676,7 @@ def build_responder(
                     metered("embedding", version.agent_id),
                     clock,
                     knowledge_limit,
+                    has_knowledge=org_has_knowledge,
                 )
 
                 agent = agent_block(version, settings)
@@ -1005,6 +1020,66 @@ def agent_responder(dsn: str):
     )
 
 
+async def _monthly_budget_stop(
+    conn: psycopg.AsyncConnection,
+    organization_id: UUID,
+    conversation_id: UUID,
+    agent_id: UUID | None,
+    note_step: Callable[[str, str | None], Awaitable[None]],
+) -> bool:
+    """Alteração 2026-10-15-04: o teto mensal. Lê UMA linha
+    (`internal.monthly_ai_spend`), decide com `monthly_block`, e no estouro
+    abre `budget_exceeded` (dedup por escopo e mês) e registra o chip
+    `skipped`. Falha de leitura NÃO cala o turno: um teto que silencia a loja
+    por um soluço de banco é pior que um mês sem teto — fica no log."""
+    try:
+        async with conn.transaction():
+            await scope_to_organization(conn, organization_id)
+            spend = await budget_repo.load_monthly_spend(
+                conn, organization_id=organization_id, agent_id=agent_id
+            )
+    except Exception:
+        logger.warning("monthly spend read failed; turn proceeds", exc_info=True)
+        return False
+
+    block = monthly_block(
+        org_spent_usd=spend.org_spent_usd,
+        org_limit_usd=spend.org_limit_usd,
+        agent_spent_usd=spend.agent_spent_usd,
+        agent_cap_usd=spend.agent_cap_usd,
+    )
+    if block is None:
+        return False
+
+    try:
+        async with conn.transaction():
+            await scope_to_organization(conn, organization_id)
+            await alerts_repo.open_alert(
+                conn,
+                organization_id=organization_id,
+                type=alerts_repo.BUDGET_EXCEEDED,
+                severity="critical",
+                title=(
+                    "Teto mensal de IA da loja atingido — agente parado"
+                    if block.scope == "org"
+                    else "Teto mensal de IA do agente atingido — agente parado"
+                ),
+                payload={
+                    "scope": block.scope,
+                    "spent_usd": round(block.spent_usd, 4),
+                    "limit_usd": round(block.limit_usd, 4),
+                    "agent_id": str(agent_id) if agent_id else None,
+                    "conversation_id": str(conversation_id),
+                },
+                dedup_key=f"budget-exceeded:{block.scope}:{agent_id or organization_id}",
+            )
+    except Exception:
+        logger.debug("budget alert failed", exc_info=True)
+    await note_step("skipped", block.detail)
+    annotate(outcome="budget_exceeded")
+    return True
+
+
 def _default_stt(key_rows: tuple, base_secret: str | None) -> SttPort | None:
     """A cascata de STT (openai → groq) com as chaves BYO da org."""
     choice = select_stt_key(key_rows, base_secret=base_secret)
@@ -1188,6 +1263,8 @@ async def _knowledge(
     embedder: MeteredLlm,
     clock: Clock,
     limit: int,
+    *,
+    has_knowledge: bool = False,
 ) -> tuple[str, ...]:
     """A camada de conhecimento, buscada antes de gerar.
 
@@ -1197,7 +1274,9 @@ async def _knowledge(
     quando existir escolha a fazer (pedido por id, rastreio). O registro em
     `tool_calls` é o mesmo — quem executa é o `run_tool` do S7.
     """
-    if "search_knowledge" not in enabled_tools:
+    # Alteração 2026-10-15-05: a tool ligada OU a loja ter base consultável
+    # basta — antes, tools vazias calavam a base inteira (FORK item 32).
+    if "search_knowledge" not in enabled_tools and not has_knowledge:
         return ()
 
     if not query.strip():

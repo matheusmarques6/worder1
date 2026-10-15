@@ -297,6 +297,8 @@ a `similarity` é calculada e devolvida (`tools/knowledge.py:62`) e nunca filtra
 de medidas — recebe os 5 chunks *menos distantes* apresentados como fato da loja. O cliente recebe
 uma resposta confiante costurada de FAQ sem relação, onde o motor antigo dizia "não tenho essa
 informação". **Dívida — sem dono.**
+**Resolvido em 2026-10-15** (`docs/alteracoes/2026-10-15-05-rag-limiar-e-proveniencia.md`):
+`repository/knowledge.py::search_knowledge` filtra por similaridade ≥ 0,7 (`DEFAULT_SIMILARITY_THRESHOLD`).
 
 **32. A base de conhecimento só é consultada se `search_knowledge` estiver em
 `settings.tools.enabled`.**
@@ -311,6 +313,8 @@ passa a ser o interruptor da base inteira.
 e política de devolução. É a mesma tabela nos dois lados: o dado está lá e simplesmente não é lido.
 **Dívida — sem dono.** É a ausência que mais depende da configuração da org — confira
 `settings.tools.enabled` no bloco final.
+**Resolvido em 2026-10-15** (mesmo doc do item 30): a base é consultada quando a loja tem chunks
+(`knowledge.has_knowledge`), com ou sem `search_knowledge` em `settings.tools.enabled`.
 
 ### Como o agente fala
 
@@ -511,6 +515,9 @@ continuam sem chamador em Python. O item 41 é um teto de CHAMADAS de LLM por tu
 chamadas), não para o gasto mensal em dólar da organização — os dois podem conviver: o 41 impede que
 um turno individual fuja do controle; o teto de `ai_budgets` (se algum dia portado para o runtime)
 impediria que a SOMA do mês passasse do combinado com o lojista. Ver item 41 abaixo.
+**Resolvido em 2026-10-15** (`docs/alteracoes/2026-10-15-04-teto-mensal.md`): `responder._monthly_budget_stop`
+lê `internal.monthly_ai_spend` antes de qualquer gasto, por org (`ai_budgets`) e por agente
+(`ai_agents.monthly_cap_usd`); estouro abre `budget_exceeded` e cala o turno e o toque.
 
 **26. Falha permanente não vira sinal para o lojista.** TS: chave inválida, erro permanente ou
 tentativas esgotadas desativam a conversa com `ai_disabled_reason` e disparam `sendAlert` mais uma

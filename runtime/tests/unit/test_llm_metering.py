@@ -302,3 +302,78 @@ class TestTheSpanPerCall:
         assert name == "llm_call"
         assert attributes["kind"] == "agent_reply"
         assert "messages" not in attributes and "content" not in attributes
+
+
+class TestTheMonthlyBudget:
+    """Alteração 2026-10-15-04: teto mensal por org e por agente, e a tabela
+    de preços que preenche o custo quando o provedor não devolve."""
+
+    def test_the_org_cap_wins_over_the_agent_cap(self) -> None:
+        from agents_runtime.agent_core.metering import monthly_block
+
+        block = monthly_block(
+            org_spent_usd=50.0, org_limit_usd=50.0, agent_spent_usd=1.0, agent_cap_usd=10.0
+        )
+        assert block is not None and block.scope == "org"
+        assert "da loja" in block.detail and "50.00" in block.detail
+
+    def test_the_agent_cap_blocks_alone(self) -> None:
+        from agents_runtime.agent_core.metering import monthly_block
+
+        block = monthly_block(
+            org_spent_usd=5.0, org_limit_usd=50.0, agent_spent_usd=12.5, agent_cap_usd=12.0
+        )
+        assert block is not None and block.scope == "agent"
+
+    def test_under_the_caps_nothing_blocks(self) -> None:
+        from agents_runtime.agent_core.metering import monthly_block
+
+        assert (
+            monthly_block(
+                org_spent_usd=5.0, org_limit_usd=50.0, agent_spent_usd=1.0, agent_cap_usd=None
+            )
+            is None
+        )
+        # Teto zero ou negativo é "sem teto", nunca "bloqueia tudo".
+        assert (
+            monthly_block(
+                org_spent_usd=5.0, org_limit_usd=0.0, agent_spent_usd=1.0, agent_cap_usd=0.0
+            )
+            is None
+        )
+
+    def test_the_price_table_estimates_direct_providers(self) -> None:
+        from agents_runtime.agent_core.metering import estimate_cost_usd
+
+        assert estimate_cost_usd("openai", "gpt-4o-mini", 1_000_000, 1_000_000) == pytest.approx(
+            0.75
+        )
+        assert estimate_cost_usd("anthropic", "anthropic/claude-haiku-4.5", 0, 1_000_000) == (
+            pytest.approx(4.0)
+        )
+        assert estimate_cost_usd("deepseek", "deepseek-chat", 10, 10) is None
+        assert estimate_cost_usd("openai", "gpt-4o", None, 10) is None
+
+    async def test_a_direct_call_without_cost_is_priced_by_the_table(self) -> None:
+        clock, ledger = FrozenClock(START), Ledger()
+
+        class Direct:
+            async def chat(self, request):
+                return ChatResult(
+                    text="ok",
+                    usage=Usage(input_tokens=1_000_000, output_tokens=0, cost_usd=None),
+                    model="gpt-4o-mini",
+                    provider="openai",
+                )
+
+            async def embed(self, texts, *, model):
+                raise NotImplementedError
+
+        llm = MeteredLlm(Direct(), clock=clock, record=ledger, purpose="agent_reply")
+        await llm.chat(a_request(model="gpt-4o-mini"))
+        assert ledger.records[0].cost_usd == pytest.approx(0.15)
+
+    async def test_the_provider_cost_wins_over_the_table(self) -> None:
+        clock, ledger = FrozenClock(START), Ledger()
+        await metered(clock, ledger).chat(a_request())
+        assert ledger.records[0].cost_usd == pytest.approx(0.00018)

@@ -22,6 +22,7 @@ from agents_runtime.repository.agent import (
     TenantPolicy,
     TenantSettings,
 )
+from agents_runtime.repository.budget import MonthlySpend
 from tests.support.clock import FrozenClock
 
 
@@ -70,6 +71,11 @@ def producer_env(request, monkeypatch):
         (module.engine_repo, "emit_ai_run_step", None),
         (module.scores_repo, "record_pre_send_score", None),
         (module.alerts_repo, "open_alert", None),
+        # Alterações 2026-10-15-04/05: o teto mensal e a existência de base
+        # são lidos do banco; a conexão de mentira devolve MagicMock, cujo
+        # `__float__` é 1.0 — e 1.0 >= 1.0 "estourava" o teto nos testes.
+        (responder.budget_repo, "load_monthly_spend", MonthlySpend(0.0, 50.0, 0.0, None, False)),
+        (responder.knowledge_repo, "has_knowledge", False),
     ):
         monkeypatch.setattr(repo, name, AsyncMock(return_value=value))
     metered = []

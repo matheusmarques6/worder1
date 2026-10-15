@@ -30,6 +30,10 @@ HANDOFF = "handoff"
 #: entrega —, e a diferença exata está no `metadata`.
 MOMENT_TEMPLATE_NOT_READY = "moment_template_not_ready"
 
+#: Teto mensal de gasto da org ou do agente atingido (alteração
+#: 2026-10-15-04): o turno/toque não gera; dedup por escopo e mês.
+BUDGET_EXCEEDED = "budget_exceeded"
+
 
 async def open_alert(
     conn: psycopg.AsyncConnection,

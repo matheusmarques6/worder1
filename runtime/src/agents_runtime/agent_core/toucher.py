@@ -61,6 +61,7 @@ from agents_runtime.agent_core.responder import (
     _as_chat,
     _knowledge,
     _metered,
+    _monthly_budget_stop,
     default_turn_llm_call_limit,
     delivery_flags,
     transfer_to_human,
@@ -307,6 +308,13 @@ def build_toucher(
             ) or schedule_silence(version.settings, now=clock.now())
             if silence is not None:
                 await note_step("skipped", silence.detail)
+                return TouchDraft(None, (), None)
+
+            # Alteração 2026-10-15-04: o toque também respeita o teto mensal —
+            # e vale mais aqui, que é gasto proativo, sem cliente perguntando.
+            if await _monthly_budget_stop(
+                conn, job.organization_id, job.conversation_id, version.agent_id, note_step
+            ):
                 return TouchDraft(None, (), None)
 
             if mission is None:
