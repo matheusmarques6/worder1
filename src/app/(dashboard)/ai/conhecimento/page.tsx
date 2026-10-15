@@ -1,9 +1,11 @@
 'use client'
 
-import KnowledgeBasePanel from '@/components/agents/KnowledgeBasePanel'
+import KnowledgeWorkspace from '@/components/ai-hub/knowledge/KnowledgeWorkspace'
 import { useAiOrganizationId } from '@/components/ai-hub/AiShell'
 
+// Plano IA M3 passo 22: o conhecimento é da loja e ocupa a tela inteira
+// (era o KnowledgeBasePanel por agente).
 export default function AiKnowledgePage() {
   const organizationId = useAiOrganizationId()
-  return <KnowledgeBasePanel organizationId={organizationId} />
+  return <KnowledgeWorkspace organizationId={organizationId} />
 }
