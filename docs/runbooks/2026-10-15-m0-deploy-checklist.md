@@ -105,3 +105,26 @@ Com a linha apagada o webhook volta ao caminho legado (QStash +
 Aceite do M0: `/healthz` 200 por 24 h, uma conversa respondida, `llm_calls`
 recebendo linhas, rollback executado e revertido uma vez. Registrar data e
 hora de cada gate neste arquivo.
+
+## 7. Cutover geral (M1 passo 12) `[GATE]`
+
+Só depois do aceite do M0 (seção 6) e com `/healthz` verde.
+
+1. Aplicar `supabase/migrations/20261016000007_runtime_cutover.sql`: insere
+   `mode = 'runtime'` para toda org com agente e sem linha, e um trigger em
+   `ai_agents` passa a criar a linha no primeiro agente de uma org nova.
+   Orgs com linha explícita não mudam.
+2. Conferir: `select mode, count(*) from public.ai_runtime_rollout group by 1;`
+   e `select count(*) from public.ai_agents a where not exists (select 1 from
+   public.ai_runtime_rollout r where r.organization_id = a.organization_id);`
+   deve dar 0.
+3. Rollback por org: `update public.ai_runtime_rollout set mode = 'legacy'
+   where organization_id = '<org>';` (não apagar a linha; o trigger não a
+   recria, mas apagar e recriar o agente recriaria em runtime).
+4. Aceite: nenhuma org em legado por 7 dias sem incidente e
+   `ai_usage_logs` recebendo linhas só pelo espelho de `internal.llm_calls`
+   (`feature like 'runtime_%'` ou `transcription`/`copilot`).
+
+Os arquivos do caminho legado (`cloud-runner.ts`, `engine.ts`,
+`whatsapp-ai-respond`, `reprocess-whatsapp-pending`, `ai-chatbot-service.ts`)
+estão com cabeçalho "CONGELADO"; remoção no M7.

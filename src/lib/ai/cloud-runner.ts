@@ -1,4 +1,10 @@
 /**
+ * CONGELADO (cutover 2026-10-16, plano IA M1 passo 12) — caminho legado de
+ * resposta. Toda org com agente roda no runtime Python (runtime/); este
+ * arquivo só é alcançado por org com ai_runtime_rollout.mode = 'legacy'
+ * explícito (rollback). Não receber funcionalidade nova. Remoção no M7.
+ */
+/**
  * Cloud runner — religa a IA ao webhook Cloud (Fase 2a / P1.5).
  *
  * maybeRunAgentForCloudConversation() é chamado por

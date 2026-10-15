@@ -1,4 +1,10 @@
 /**
+ * CONGELADO (cutover 2026-10-16, plano IA M1 passo 12) — caminho legado de
+ * resposta. Toda org com agente roda no runtime Python (runtime/); este
+ * arquivo só é alcançado por org com ai_runtime_rollout.mode = 'legacy'
+ * explícito (rollback). Não receber funcionalidade nova. Remoção no M7.
+ */
+/**
  * WhatsApp AI respond worker — RUN dedicado da auto-resposta (Fase 2d / P4).
  *
  * Disparado por QStash (enqueueWhatsAppAiRespond) com delay = DEBOUNCE_SECONDS.
