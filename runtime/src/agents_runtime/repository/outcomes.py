@@ -157,6 +157,17 @@ async def record_event(
     )
 
 
+def blocked_metadata(blocked_by: str | None, failed: tuple[str, ...] | list[str]) -> dict[str, Any]:
+    """Metadados do evento `blocked` (alteração 2026-10-15-16): o motivo do
+    bloqueio e os critérios da revisão que reprovaram, sem repetir, até 5.
+    A Atividade conta as infrações por critério a partir daqui."""
+    out: dict[str, Any] = {"blocked_by": blocked_by}
+    criteria = list(dict.fromkeys(c for c in failed if isinstance(c, str) and c))[:5]
+    if criteria:
+        out["failed"] = criteria
+    return out
+
+
 def handoff_code(reason: str) -> str:
     """O motivo como a tela agrupa: `tool:complaint` → `complaint`;
     `keyword`, `blocked_topic`, `media` ficam como estão."""

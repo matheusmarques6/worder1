@@ -42,7 +42,9 @@ export interface Kpis {
   cost_per_conversation: number
 }
 
-export type Metric = 'conversations' | 'revenue' | 'orders' | 'transfers' | 'cost_usd'
+export type Metric = 'conversations' | 'revenue' | 'orders' | 'transfers' | 'cost_usd' | 'resolved' | 'first_response'
+/** Métricas que são taxa ou média no balde (não somam entre agentes). */
+export const RATE_METRICS: Metric[] = ['resolved', 'first_response']
 
 const num = (v: unknown) => (v === null || v === undefined || v === '' ? 0 : Number(v) || 0)
 
@@ -93,6 +95,7 @@ export function buildSeries(
   // Os últimos N dias terminando HOJE (no fuso da loja), o mais antigo primeiro.
   else for (let i = period.days - 1; i >= 0; i--) buckets.push(bucketKey(new Date(period.end.getTime() - i * 86_400_000).toISOString(), false, tzOffsetMinutes))
   const map = new Map(buckets.map((b) => [b, { bucket: b, total: 0, byAgent: {} as Record<string, number> }]))
+  if (RATE_METRICS.includes(metric)) return rateSeries(rows, metric, map, hourly, tzOffsetMinutes)
   for (const r of rows) {
     const point = map.get(bucketKey(r.started_at, hourly, tzOffsetMinutes))
     if (!point) continue
@@ -106,6 +109,38 @@ export function buildSeries(
     point.byAgent[agent] = (point.byAgent[agent] ?? 0) + value
   }
   return [...map.values()]
+}
+
+/** "Resolvidas sem humano" (% das conversas do balde) e "Tempo de 1ª
+ *  resposta" (média em segundos): razão por balde, por agente e no total. */
+function rateSeries(
+  rows: OutcomeRow[], metric: Metric,
+  map: Map<string, { bucket: string; total: number; byAgent: Record<string, number> }>,
+  hourly: boolean, tzOffsetMinutes: number,
+) {
+  const acc = new Map<string, { n: number; d: number; ag: Record<string, { n: number; d: number }> }>()
+  for (const r of rows) {
+    const key = bucketKey(r.started_at, hourly, tzOffsetMinutes)
+    if (!map.has(key)) continue
+    let n = 0
+    let d = 0
+    if (metric === 'resolved') { n = r.resolved_without_human ? 1 : 0; d = 1 }
+    else if (typeof r.first_response_ms === 'number') { n = r.first_response_ms / 1000; d = 1 }
+    if (!d) continue
+    const a = acc.get(key) ?? { n: 0, d: 0, ag: {} }
+    const agent = r.agent_id ?? 'sem-agente'
+    a.n += n; a.d += d
+    a.ag[agent] = { n: (a.ag[agent]?.n ?? 0) + n, d: (a.ag[agent]?.d ?? 0) + d }
+    acc.set(key, a)
+  }
+  const scale = metric === 'resolved' ? 100 : 1
+  return [...map.values()].map((p) => {
+    const a = acc.get(p.bucket)
+    if (!a) return p
+    const byAgent: Record<string, number> = {}
+    for (const [k, v] of Object.entries(a.ag)) byAgent[k] = round2((v.n / v.d) * scale)
+    return { ...p, total: round2((a.n / a.d) * scale), byAgent }
+  })
 }
 
 export function byAgent(rows: OutcomeRow[]) {

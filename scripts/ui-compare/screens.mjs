@@ -38,4 +38,10 @@ export const SCREENS = [
     app: { path: '/ai/conhecimento', act: async (x) => { await x.locator('.kr-tabs button', { hasText: 'Testar' }).click() } },
     proto: { hash: 'ia-conhecimento', frame: '.ia-full', act: async (x) => { await x.locator('.kr-tabs button', { hasText: 'Testar' }).click() } } },
   { name: 'atividade', app: { path: '/ai/atividade' }, proto: { hash: 'ia-atividade', frame: '.ia-frame' } },
+  { name: 'atividade-baixo',
+    app: { path: '/ai/atividade', act: async (x) => { await x.locator('.ac-grid').first().scrollIntoViewIfNeeded() } },
+    proto: { hash: 'ia-atividade', frame: '.ia-frame', act: async (x) => { await x.locator('.ac-grid').first().scrollIntoViewIfNeeded() } } },
+  { name: 'atividade-registro',
+    app: { path: '/ai/atividade', act: async (x) => { await x.locator('.ac-feed').first().scrollIntoViewIfNeeded() } },
+    proto: { hash: 'ia-atividade', frame: '.ia-frame', act: async (x) => { await x.locator('.ac-feed').first().scrollIntoViewIfNeeded() } } },
 ]

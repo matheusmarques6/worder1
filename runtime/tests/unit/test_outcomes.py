@@ -69,3 +69,23 @@ class TestWorkerHook:
         trace = SimpleNamespace(agent_id=None, tokens=None, tool_calls=())
         conn = SimpleNamespace(transaction=lambda: _Txn())
         await worker._record_outcome(conn, uuid4(), uuid4(), trace)
+
+
+class TestBlockedMetadata:
+    """Alteração 2026-10-15-16: o evento `blocked` diz quais critérios reprovaram."""
+
+    def test_keeps_reason_and_unique_criteria(self) -> None:
+        meta = outcomes.blocked_metadata(
+            "critical", ("sem-promessas-inventadas", "tom-da-marca", "sem-promessas-inventadas")
+        )
+        assert meta == {
+            "blocked_by": "critical",
+            "failed": ["sem-promessas-inventadas", "tom-da-marca"],
+        }
+
+    def test_without_criteria_has_only_reason(self) -> None:
+        assert outcomes.blocked_metadata("judge_unusable", ()) == {"blocked_by": "judge_unusable"}
+
+    def test_caps_at_five(self) -> None:
+        meta = outcomes.blocked_metadata("critical", tuple(f"c{i}" for i in range(9)))
+        assert meta["failed"] == ["c0", "c1", "c2", "c3", "c4"]

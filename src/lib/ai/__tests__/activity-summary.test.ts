@@ -29,6 +29,22 @@ describe('computeKpis', () => {
   })
 })
 
+describe('buildSeries (taxas)', () => {
+  it('resolvidas em % e 1ª resposta em segundos, por balde e por agente', () => {
+    const p = periodWindow(1, new Date('2026-10-14T20:00:00Z'))
+    const data = [
+      row({ conversation_id: 'x1', started_at: '2026-10-14T15:00:00Z', resolved_without_human: true, first_response_ms: 2000 }),
+      row({ conversation_id: 'x2', started_at: '2026-10-14T15:10:00Z', resolved_without_human: false, first_response_ms: 6000, agent_id: 'a2' }),
+    ]
+    const res = buildSeries(data, 'resolved', p, -180).find((b) => b.bucket === '12')!
+    expect(res.total).toBe(50)
+    expect(res.byAgent).toEqual({ a1: 100, a2: 0 })
+    const frt = buildSeries(data, 'first_response', p, -180).find((b) => b.bucket === '12')!
+    expect(frt.total).toBe(4)
+    expect(frt.byAgent).toEqual({ a1: 2, a2: 6 })
+  })
+})
+
 describe('buildSeries', () => {
   it('por dia no fuso da loja, empilhado por agente', () => {
     const p = periodWindow(3, new Date('2026-10-15T12:00:00Z'))

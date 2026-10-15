@@ -1,69 +1,71 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { AlertTriangle, ArrowDownRight, ArrowUpRight, Download, Loader2 } from 'lucide-react'
-import { Card } from '@/components/agents/ui/primitives'
+import { brl } from '@/lib/ai/brl'
+import { Icon } from './proto/ui'
+import AChart, { type ASeries } from './activity/AChart'
+import {
+  AGENT_COLORS, EVENT_KIND, ago, anf, apc, bucketLabel, criterionLabel, delta, handoffReasons, secs, weekRows,
+} from './activity/activity-view'
 
 /**
- * Atividade (plano IA M5 passo 29): o painel de negócio dos agentes, sobre
- * os desfechos por conversa (passos 27–28). Controles de período, agente,
- * comparação e CSV; dez KPIs; gráfico empilhado por agente; tabela por
- * agente; funil; motivos de transferência; assuntos; conhecimento mais
- * usado; incentivos; qualidade; mapa de calor; registro de atividade
- * abrindo a conversa no Inbox.
+ * Atividade, porte do protótipo (ActivityPage), sobre os desfechos por
+ * conversa: período, agentes em chips, comparação, dez indicadores com
+ * variação, gráfico de área com a métrica em abas, tabela por agente,
+ * funil, motivos de transferência, assuntos, conhecimento, incentivos,
+ * qualidade com infrações por critério, mapa de horários, motor e custo,
+ * registro de atividade e os alertas abertos (passo 30).
  */
 
-const PERIODS = [{ v: 1, t: 'Hoje' }, { v: 7, t: '7 dias' }, { v: 30, t: '30 dias' }, { v: 90, t: '90 dias' }]
-const METRICS = [
-  { v: 'conversations', t: 'Conversas' }, { v: 'revenue', t: 'Receita' }, { v: 'orders', t: 'Pedidos' },
-  { v: 'transfers', t: 'Transferências' }, { v: 'cost_usd', t: 'Custo' },
-]
-const COLORS = ['#F97316', '#3B6EF6', '#0E9384', '#7C5CFC', '#E0930B', '#E5484D', '#64748B']
-const EVENT_LABEL: Record<string, string> = {
-  sale: 'Venda', solved: 'Resolvida', handoff: 'Transferida', incentive: 'Incentivo', blocked: 'Bloqueada', gap: 'Lacuna',
+type MetKey = 'conv' | 'rev' | 'res' | 'tr' | 'ord' | 'cost' | 'frt'
+const MET: Record<MetKey, { label: string; api: string; sum: boolean }> = {
+  conv: { label: 'Conversas', api: 'conversations', sum: true },
+  rev: { label: 'Receita atribuída', api: 'revenue', sum: true },
+  res: { label: 'Resolvidas sem humano', api: 'resolved', sum: false },
+  tr: { label: 'Transferências', api: 'transfers', sum: true },
+  ord: { label: 'Pedidos', api: 'orders', sum: true },
+  cost: { label: 'Custo', api: 'cost_usd', sum: true },
+  frt: { label: 'Tempo de 1ª resposta', api: 'first_response', sum: false },
 }
-const WEEKDAYS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb']
+const FUNNEL_LABEL: Record<string, string> = {
+  Iniciadas: 'Conversas iniciadas', Responderam: 'IA respondeu', 'Receberam incentivo': 'Receberam incentivo', 'Pedido pago': 'Pedido pago',
+}
 
-const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-const pct = (v: number) => `${Math.round(v * 100)}%`
-const usd = (v: number) => `US$ ${v.toFixed(2)}`
-const secs = (ms: number | null) => (ms === null ? '—' : ms < 60_000 ? `${Math.round(ms / 1000)}s` : `${Math.round(ms / 60_000)} min`)
+function Delta({ d }: { d: ReturnType<typeof delta> }) {
+  return d ? <span className={`ac-dl ${d.tone}`}>{d.text}</span> : null
+}
 
 export default function ActivityDashboard() {
-  const [period, setPeriod] = useState(7)
-  const [agent, setAgent] = useState('')
-  const [compare, setCompare] = useState(true)
-  const [metric, setMetric] = useState('conversations')
+  const [per, setPer] = useState(7)
+  const [ag, setAg] = useState('all')
+  const [met, setMet] = useState<MetKey>('conv')
+  const [cmp, setCmp] = useState(true)
+  const [evf, setEvf] = useState('all')
   const [data, setData] = useState<any>(null)
   const [events, setEvents] = useState<any[]>([])
-  const [eventKind, setEventKind] = useState('')
   const [alerts, setAlerts] = useState<any[]>([])
-  const [alertsOpen, setAlertsOpen] = useState(false)
-  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    setLoading(true)
     try {
-      const qs = new URLSearchParams({ period: String(period), metric, compare: compare ? '1' : '0' })
-      if (agent) qs.set('agent', agent)
+      const qs = new URLSearchParams({ period: String(per), metric: MET[met].api, compare: cmp ? '1' : '0' })
+      if (ag !== 'all') qs.set('agent', ag)
       const res = await fetch(`/api/ai/activity/summary?${qs}`)
       const body = await res.json()
       if (!res.ok) throw new Error(body.error || 'Falha ao carregar a atividade')
       setData(body)
       setError(null)
-    } catch (e: any) { setError(e.message) } finally { setLoading(false) }
-  }, [period, agent, compare, metric])
+    } catch (e: any) { setError(e.message) }
+  }, [per, ag, met, cmp])
   useEffect(() => { void load() }, [load])
 
   useEffect(() => {
     const qs = new URLSearchParams({ limit: '40' })
-    if (eventKind) qs.set('kind', eventKind)
-    if (agent) qs.set('agent', agent)
+    if (evf !== 'all') qs.set('kind', evf)
+    if (ag !== 'all') qs.set('agent', ag)
     fetch(`/api/ai/activity/events?${qs}`).then((r) => (r.ok ? r.json() : { events: [] })).then((d) => setEvents(d.events ?? [])).catch(() => {})
-  }, [eventKind, agent])
+  }, [evf, ag])
 
   const loadAlerts = useCallback(() => {
     fetch('/api/ai/alerts?status=open').then((r) => (r.ok ? r.json() : { alerts: [] })).then((d) => setAlerts(d.alerts ?? [])).catch(() => {})
@@ -74,251 +76,283 @@ export default function ActivityDashboard() {
     const timer = setInterval(loadAlerts, 60_000)
     return () => clearInterval(timer)
   }, [loadAlerts])
-
   const settleAlert = async (id: string, status: 'acknowledged' | 'resolved') => {
     await fetch(`/api/ai/alerts/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) })
     loadAlerts()
   }
 
-  const agentName = useMemo(() => {
-    const m = new Map<string, string>((data?.agents ?? []).map((a: any) => [a.id, a.name || 'Agente']))
-    m.set('sem-agente', 'Sem agente')
-    return (id: string | null) => m.get(id ?? 'sem-agente') ?? 'Agente'
-  }, [data])
+  const rate: number = data?.usd_brl ?? 5
+  const agents: any[] = useMemo(() => (data?.agents ?? []).filter((a: any) => a.status !== 'archived'), [data])
+  const color = useCallback((id: string) => AGENT_COLORS[Math.max(0, agents.findIndex((a) => a.id === id)) % AGENT_COLORS.length], [agents])
+  const nameOf = useCallback((id: string | null) => agents.find((a) => a.id === id)?.name || 'Agente', [agents])
+  const ids: string[] = ag === 'all' ? agents.map((a) => a.id) : [ag]
+  const n = per
 
-  const chartAgents: string[] = useMemo(() => {
-    const ids = new Set<string>()
-    for (const p of data?.series?.points ?? []) for (const id of Object.keys(p.byAgent)) ids.add(id)
-    return [...ids]
-  }, [data])
-
-  const chartData = (data?.series?.points ?? []).map((p: any) => ({
-    bucket: data.period.hourly ? `${p.bucket}h` : p.bucket.slice(5).split('-').reverse().join('/'),
-    ...Object.fromEntries(chartAgents.map((id) => [agentName(id), p.byAgent[id] ?? 0])),
-  }))
+  const fmt = (v: number) => met === 'rev' ? brl(v, 0) : met === 'cost' ? brl(v) : met === 'res' ? apc(v) : met === 'frt' ? secs(v) : anf(v)
+  const series: ASeries[] = useMemo(() => {
+    const points: any[] = data?.series?.points ?? []
+    const k = met === 'cost' ? rate : 1
+    return ids.map((id) => ({ k: id, l: nameOf(id), c: color(id), v: points.map((p) => (p.byAgent?.[id] ?? 0) * k) }))
+      .filter((s) => s.v.some((x) => x > 0) || ids.length === 1)
+  }, [data, ids.join(','), met, rate, nameOf, color]) // eslint-disable-line react-hooks/exhaustive-deps
+  const labels: string[] = (data?.series?.points ?? []).map((p: any) => bucketLabel(p.bucket, data.period.hourly))
 
   const k = data?.kpis
-  const p = data?.previous
+  const p = cmp ? data?.previous : null
+  const resP = (x: any) => (x?.conversations ? (x.resolved_without_human / x.conversations) * 100 : 0)
+  const trP = (x: any) => (x ? x.transfer_rate * 100 : 0)
+  const convP = (x: any) => (x ? x.conversion * 100 : 0)
+  const frtS = (x: any) => (x?.first_response_ms != null ? x.first_response_ms / 1000 : null)
+  const costB = (x: any) => (x ? x.cost_usd * rate : 0)
+
+  const K: Array<[string, string, ReturnType<typeof delta>, string?]> = k ? [
+    ['Conversas', anf(k.conversations), delta(k.conversations, p?.conversations)],
+    ['Resolvidas sem humano', apc(resP(k)), delta(resP(k), p ? resP(p) : null, { pp: true })],
+    ['Transferências', anf(k.transfers), delta(trP(k), p ? trP(p) : null, { pp: true, inv: true }), `${apc(trP(k))} das conversas`],
+    ['Pedidos', anf(k.orders), delta(k.orders, p?.orders)],
+    ['Receita atribuída', brl(k.revenue, 0), delta(k.revenue, p?.revenue)],
+    ['Conversão', apc(convP(k)), delta(convP(k), p ? convP(p) : null, { pp: true }), 'conversa → pedido'],
+    ['Ticket médio', k.orders ? brl(k.avg_ticket, 0) : '—', k.orders ? delta(k.avg_ticket, p?.orders ? p.avg_ticket : null) : null],
+    ['1ª resposta', frtS(k) != null ? secs(frtS(k)!) : '—', delta(frtS(k), p ? frtS(p) : null, { inv: true }), 'mediana'],
+    ['Satisfação', '—', null, 'sem avaliações ainda'],
+    ['Custo', brl(costB(k)), delta(costB(k), p ? costB(p) : null, { inv: true }), `${brl(k.conversations ? costB(k) / k.conversations : 0, 3)} por conversa`],
+  ] : []
+
+  const perAgent = agents.map((a) => {
+    const s = (data?.by_agent ?? []).find((x: any) => x.agent_id === a.id)
+    const pv = (data?.by_agent_previous ?? []).find((x: any) => x.agent_id === a.id)
+    return { a, s, pv }
+  })
+  const selected = ag !== 'all' ? agents.find((a) => a.id === ag) : null
+  const reasons = handoffReasons(data?.handoff_reasons ?? [])
+  const maxReason = Math.max(1, ...reasons.map((r) => r.count))
+  const infractions: any[] = data?.quality?.infractions ?? []
+  const maxInf = Math.max(1, ...infractions.map((r) => r.count))
+  const heat = weekRows(data?.heatmap ?? [])
+  const hmax = Math.max(1, ...heat.flatMap((r) => r.values))
+  const engine = ids.map((id) => ({ a: agents.find((x) => x.id === id), e: (data?.engine ?? []).find((x: any) => x.agent_id === id), s: (data?.by_agent ?? []).find((x: any) => x.agent_id === id) })).filter((x) => x.a)
+  const totIncU = (data?.by_agent ?? []).reduce((t: number, x: any) => t + (x.incentives_used ?? 0), 0)
+  const csv = `/api/ai/activity/export.csv?period=${per}${ag !== 'all' ? `&agent=${ag}` : ''}`
 
   return (
-    <div style={{ padding: 22, maxWidth: 1240, width: '100%', margin: '0 auto', display: 'grid', gap: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <div style={{ fontSize: 18, fontWeight: 800 }}>Atividade</div>
-        {alerts.length > 0 && (
-          <button type="button" className="chip chip-red" style={{ cursor: 'pointer', border: 0 }} onClick={() => setAlertsOpen(!alertsOpen)}>
-            <AlertTriangle size={12} /> {alerts.length} alerta(s) aberto(s)
-          </button>
-        )}
-        <div style={{ flex: 1 }} />
-        <div className="seg-ctl">
-          {PERIODS.map((o) => <button key={o.v} type="button" className={period === o.v ? 'on' : ''} onClick={() => setPeriod(o.v)}>{o.t}</button>)}
+    <div className="pin ac">
+      <div className="ph ac-ph">
+        <div>
+          <h1 className="h1">Atividade dos agentes</h1>
+          <p className="lead">Tudo o que os agentes fizeram no período: conversas, vendas, transferências, qualidade e custo.</p>
         </div>
-        <select className="field" style={{ height: 32, width: 170, fontSize: 12.5 }} value={agent} onChange={(e) => setAgent(e.target.value)}>
-          <option value="">Todos os agentes</option>
-          {(data?.agents ?? []).map((a: any) => <option key={a.id} value={a.id}>{a.name || 'Agente'}</option>)}
-        </select>
-        <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12.5 }}>
-          <input type="checkbox" checked={compare} onChange={(e) => setCompare(e.target.checked)} />Comparar
-        </label>
-        <a className="btn btn-soft btn-sm" href={`/api/ai/activity/export.csv?period=${period}${agent ? `&agent=${agent}` : ''}`}><Download size={14} />CSV</a>
+        <div className="ac-ctl">
+          <div className="ac-seg" role="tablist" aria-label="Período">
+            {([[1, 'Hoje'], [7, '7 dias'], [30, '30 dias'], [90, '90 dias']] as const).map(([v, l]) => (
+              <button key={v} type="button" className={per === v ? 'on' : ''} onClick={() => setPer(v)}>{l}</button>
+            ))}
+          </div>
+          <a className="btn sm" href={csv}><Icon n="upload" s={14} style={{ transform: 'rotate(180deg)' }} />Exportar CSV</a>
+        </div>
       </div>
 
-      {alertsOpen && alerts.length > 0 && (
-        <Card style={{ padding: 14, display: 'grid', gap: 6 }}>
-          <div style={{ fontWeight: 800, fontSize: 13.5 }}>Alertas abertos</div>
-          {alerts.map((a) => (
-            <div key={a.id} style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 12.5, borderTop: '1px solid var(--border)', paddingTop: 6 }}>
-              <span className={`chip ${a.severity === 'critical' ? 'chip-red' : 'chip-outline'}`}>{a.severity}</span>
-              <span style={{ flex: 1 }}>{a.title}<span style={{ color: 'var(--text-3)' }}> · {a.type} · {new Date(a.created_at).toLocaleString('pt-BR')}</span></span>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => void settleAlert(a.id, 'acknowledged')}>Reconhecer</button>
-              <button type="button" className="btn btn-soft btn-sm" onClick={() => void settleAlert(a.id, 'resolved')}>Resolver</button>
-            </div>
+      <div className="ac-bar">
+        <div className="ac-agents">
+          <button type="button" className={ag === 'all' ? 'on' : ''} onClick={() => setAg('all')}>Todos os agentes</button>
+          {agents.map((a) => (
+            <button key={a.id} type="button" className={ag === a.id ? 'on' : ''} onClick={() => setAg(a.id)}>
+              <i style={{ background: color(a.id) }} />{a.name || 'Agente'}{a.status !== 'active' && <em>{a.status === 'draft' ? 'rascunho' : 'pausado'}</em>}
+            </button>
           ))}
-        </Card>
+        </div>
+        <label className="ac-cmp">
+          <button type="button" className={'sw' + (cmp ? ' on' : '')} role="switch" aria-checked={cmp} onClick={() => setCmp((c) => !c)} />
+          <span>Comparar com {n === 1 ? 'ontem' : `os ${n} dias anteriores`}</span>
+        </label>
+      </div>
+
+      {alerts.map((a) => (
+        <div key={a.id} className="ac-warn">
+          <Icon n="alert" s={15} />
+          <div style={{ flex: 1 }}><b>{a.title}</b>{a.severity === 'critical' ? 'Alerta crítico' : 'Alerta'} · {new Date(a.created_at).toLocaleString('pt-BR')}</div>
+          <button type="button" className="btn sm" onClick={() => void settleAlert(a.id, 'acknowledged')}>Reconhecer</button>
+          <button type="button" className="btn sm" onClick={() => void settleAlert(a.id, 'resolved')}>Resolver</button>
+        </div>
+      ))}
+      {selected && selected.status !== 'active' && (
+        <div className="ac-warn"><Icon n="pause" s={15} /><div><b>{selected.name} está {selected.status === 'draft' ? 'em rascunho' : 'pausado'}</b>Sem conversas novas enquanto não for ativado. Veja 30 ou 90 dias para o histórico.</div></div>
       )}
+      {error && <div className="ac-warn"><Icon n="alert" s={15} /><div><b>Não foi possível carregar</b>{error}</div></div>}
 
-      {error && <p style={{ color: 'var(--red)', fontSize: 13 }}>{error}</p>}
-      {loading && !data ? <Loader2 size={18} className="animate-spin" /> : k && (
-        <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 10 }}>
-            <Kpi label="Conversas" value={String(k.conversations)} now={k.conversations} prev={p?.conversations} />
-            <Kpi label="Resolvidas sem humano" value={String(k.resolved_without_human)} now={k.resolved_without_human} prev={p?.resolved_without_human} />
-            <Kpi label="Transferências" value={`${k.transfers} · ${pct(k.transfer_rate)}`} now={k.transfers} prev={p?.transfers} invert />
-            <Kpi label="Pedidos" value={String(k.orders)} now={k.orders} prev={p?.orders} />
-            <Kpi label="Receita atribuída" value={brl(k.revenue)} now={k.revenue} prev={p?.revenue} />
-            <Kpi label="Conversão" value={pct(k.conversion)} now={k.conversion} prev={p?.conversion} />
-            <Kpi label="Ticket médio" value={brl(k.avg_ticket)} now={k.avg_ticket} prev={p?.avg_ticket} />
-            <Kpi label="1ª resposta (mediana)" value={secs(k.first_response_ms)} now={k.first_response_ms ?? 0} prev={p?.first_response_ms ?? undefined} invert />
-            <Kpi label="Satisfação" value="—" hint="Sem avaliações coletadas ainda" />
-            <Kpi label="Custo" value={`${usd(k.cost_usd)} · ${usd(k.cost_per_conversation)}/conv.`} now={k.cost_usd} prev={p?.cost_usd} invert />
+      {k && <>
+        <div className="card ac-kpis">
+          {K.map(([l, v, d, sub]) => <div key={l} className="ac-k"><span>{l}</span><b>{v}</b><div>{cmp && <Delta d={d} />}{sub && <em>{sub}</em>}</div></div>)}
+        </div>
+
+        <div className="card">
+          <div className="ac-ch">
+            <h3 className="ct">{MET[met].label} {n === 1 ? 'por hora' : 'por dia'}</h3>
+            <div className="ac-mets">{(Object.keys(MET) as MetKey[]).map((m) => <button key={m} type="button" className={met === m ? 'on' : ''} onClick={() => setMet(m)}>{MET[m].label}</button>)}</div>
           </div>
+          <div className="ac-chb">
+            {series.length > 1 && <div className="ac-leg">{series.map((s) => <span key={s.k}><i style={{ background: s.c }} />{s.l}</span>)}{MET[met].sum ? <em>empilhado</em> : null}</div>}
+            <AChart series={series} labels={labels} fmt={fmt} stack={MET[met].sum} />
+          </div>
+        </div>
 
-          <Card style={{ padding: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10 }}>
-              <div style={{ fontWeight: 800, fontSize: 13.5 }}>{data.period.hourly ? 'Por hora' : 'Por dia'}, por agente</div>
-              <div style={{ flex: 1 }} />
-              <select className="field" style={{ height: 30, width: 160, fontSize: 12 }} value={metric} onChange={(e) => setMetric(e.target.value)}>
-                {METRICS.map((m) => <option key={m.v} value={m.v}>{m.t}</option>)}
-              </select>
-            </div>
-            <div style={{ height: 260 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="bucket" fontSize={11} />
-                  <YAxis fontSize={11} allowDecimals={metric === 'revenue' || metric === 'cost_usd'} />
-                  <Tooltip />
-                  <Legend />
-                  {chartAgents.map((id, i) => <Bar key={id} dataKey={agentName(id)} stackId="a" fill={COLORS[i % COLORS.length]} />)}
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </Card>
-
-          <Card style={{ padding: 16, overflowX: 'auto' }}>
-            <div style={{ fontWeight: 800, fontSize: 13.5, marginBottom: 8 }}>Por agente</div>
-            <table style={{ width: '100%', fontSize: 12.5, borderCollapse: 'collapse' }}>
-              <thead><tr style={{ textAlign: 'left', color: 'var(--text-3)' }}>
-                {['Agente', 'Conversas', 'Sem humano', 'Transferidas', 'Pedidos', 'Receita', 'Incentivos (usados/oferecidos)', 'Custo', 'Retorno'].map((h) => <th key={h} style={{ padding: '6px 8px' }}>{h}</th>)}
-              </tr></thead>
-              <tbody>{data.by_agent.map((r: any) => (
-                <tr key={r.agent_id} style={{ borderTop: '1px solid var(--border)' }}>
-                  <td style={{ padding: '6px 8px', fontWeight: 700 }}>{agentName(r.agent_id)}</td>
-                  <td style={{ padding: '6px 8px' }}>{r.conversations}</td>
-                  <td style={{ padding: '6px 8px' }}>{r.resolved_without_human}</td>
-                  <td style={{ padding: '6px 8px' }}>{r.transfers} ({pct(r.transfer_rate)})</td>
-                  <td style={{ padding: '6px 8px' }}>{r.orders}</td>
-                  <td style={{ padding: '6px 8px' }}>{brl(r.revenue)}</td>
-                  <td style={{ padding: '6px 8px' }}>{r.incentives_used}/{r.incentives_offered}</td>
-                  <td style={{ padding: '6px 8px' }}>{usd(r.cost_usd)}</td>
-                  <td style={{ padding: '6px 8px' }}>{r.roi === null ? '—' : `${r.roi}×`}</td>
+        <div className="card">
+          <div className="ac-ch"><h3 className="ct">Por agente</h3><span className="ac-hint">Clique para filtrar</span></div>
+          <div className="ac-ts">
+            <table className="ac-tbl">
+              <thead><tr><th>Agente</th><th className="r">Conversas</th><th className="r">Resolução</th><th className="r">Transf.</th><th className="r">Pedidos</th><th className="r">Receita</th><th className="r">Conversão</th><th className="r">Ticket</th><th className="r">1ª resp.</th><th className="r">Satisfação</th><th className="r">Incentivos</th><th className="r">Custo</th><th className="r">Retorno</th></tr></thead>
+              <tbody>
+                {perAgent.map(({ a, s, pv }) => {
+                  const c = s ? costB(s) : 0
+                  return (
+                    <tr key={a.id} className={ag === a.id ? 'on' : ''} onClick={() => setAg(ag === a.id ? 'all' : a.id)} tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && setAg(a.id)}>
+                      <td><div className="ac-an"><span style={{ background: color(a.id) }}>{(a.name || 'A')[0]}</span><div><b>{a.name || 'Agente'}</b><em>{a.role || 'Agente'}{a.status !== 'active' ? ` · ${a.status === 'draft' ? 'rascunho' : 'pausado'}` : ''}</em></div></div></td>
+                      <td className="r">{anf(s?.conversations ?? 0)}{cmp && <Delta d={delta(s?.conversations ?? 0, pv ? pv.conversations : (data?.by_agent_previous ? 0 : null))} />}</td>
+                      <td className="r">{s?.conversations ? apc(resP(s)) : '—'}</td>
+                      <td className="r">{anf(s?.transfers ?? 0)}</td>
+                      <td className="r">{anf(s?.orders ?? 0)}</td>
+                      <td className="r b">{brl(s?.revenue ?? 0, 0)}{cmp && <Delta d={delta(s?.revenue ?? 0, pv ? pv.revenue : (data?.by_agent_previous ? 0 : null))} />}</td>
+                      <td className="r">{s?.conversations ? apc(convP(s)) : '—'}</td>
+                      <td className="r">{s?.orders ? brl(s.avg_ticket, 0) : '—'}</td>
+                      <td className="r">{s && frtS(s) != null ? secs(frtS(s)!) : '—'}</td>
+                      <td className="r">—</td>
+                      <td className="r">{anf(s?.incentives_used ?? 0)}<em className="ac-sub">de {anf(s?.incentives_offered ?? 0)}</em></td>
+                      <td className="r">{brl(c)}</td>
+                      <td className="r b">{c > 0 ? `${Math.round((s?.revenue ?? 0) / c).toLocaleString('pt-BR')}×` : '—'}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td><b>Total</b></td><td className="r">{anf(k.conversations)}</td><td className="r">{apc(resP(k))}</td><td className="r">{anf(k.transfers)}</td>
+                  <td className="r">{anf(k.orders)}</td><td className="r b">{brl(k.revenue, 0)}</td><td className="r">{apc(convP(k))}</td>
+                  <td className="r">{k.orders ? brl(k.avg_ticket, 0) : '—'}</td><td className="r">{frtS(k) != null ? secs(frtS(k)!) : '—'}</td><td className="r">—</td>
+                  <td className="r">{anf(totIncU)}</td><td className="r">{brl(costB(k))}</td>
+                  <td className="r b">{costB(k) > 0 ? `${Math.round(k.revenue / costB(k)).toLocaleString('pt-BR')}×` : '—'}</td>
                 </tr>
-              ))}</tbody>
+              </tfoot>
             </table>
-            {data.by_agent.length === 0 && <p style={{ fontSize: 12.5, color: 'var(--text-3)' }}>Nenhuma conversa de agente no período.</p>}
-          </Card>
+          </div>
+        </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
-            <Panel title="Funil">
-              {data.funnel.map((f: any) => (
-                <BarRow key={f.step} label={f.step} value={f.value} max={data.funnel[0].value || 1} />
+        <div className="ac-grid">
+          <div className="card ac-c">
+            <h3 className="ct">Funil de conversão</h3>
+            <div className="ac-fun">
+              {(data.funnel ?? []).map((f: any, i: number) => (
+                <div key={f.step} className="ac-fr">
+                  <div className="ac-fl"><span>{FUNNEL_LABEL[f.step] ?? f.step}</span><b>{anf(f.value)}</b><em>{k.conversations ? apc((f.value / k.conversations) * 100, 0) : '—'}</em></div>
+                  <div className="ac-fb"><i style={{ width: `${k.conversations ? (f.value / k.conversations) * 100 : 0}%`, opacity: 1 - i * 0.14 }} /></div>
+                </div>
               ))}
-            </Panel>
-            <Panel title="Motivos de transferência">
-              {data.handoff_reasons.length === 0 ? <Muted>Nenhuma transferência.</Muted>
-                : data.handoff_reasons.map((r: any) => <BarRow key={r.key} label={r.key} value={r.count} max={data.handoff_reasons[0].count} />)}
-            </Panel>
-            <Panel title="Assuntos">
-              {data.topics.length === 0 ? <Muted>Assuntos aparecem quando as conversas fecham.</Muted>
-                : data.topics.map((t: any) => <BarRow key={t.topic} label={`${t.topic} · ${pct(t.resolved_rate)} resolvidas`} value={t.count} max={data.topics[0].count} />)}
-            </Panel>
-            <Panel title="Conhecimento mais usado">
-              {data.knowledge.top.length === 0 ? <Muted>Nenhuma consulta no período.</Muted>
-                : data.knowledge.top.map((s: any) => <BarRow key={s.source_id} label={s.name} value={s.count} max={data.knowledge.top[0].count} />)}
-              <Link href="/ai/conhecimento" style={{ fontSize: 12, color: 'var(--brand)' }}>{data.knowledge.open_gaps} lacuna(s) aberta(s)</Link>
-            </Panel>
-            <Panel title="Incentivos">
-              <Stat label="Oferecidos" value={data.incentives.offered} />
-              <Stat label="Usados" value={`${data.incentives.used} (${pct(data.incentives.rate)})`} />
-              <Stat label="Desconto concedido" value={brl(data.incentives.discount_total)} />
-            </Panel>
-            <Panel title="Qualidade e segurança">
-              <Stat label="Mensagens enviadas" value={data.quality.messages} />
-              <Stat label="Bloqueadas pela revisão" value={`${data.quality.blocked} em ${data.quality.conversations_with_block} conversa(s)`} />
-              <Stat label="Conversas com lacuna" value={data.quality.gaps} />
-            </Panel>
+            </div>
           </div>
-
-          <Card style={{ padding: 16 }}>
-            <div style={{ fontWeight: 800, fontSize: 13.5, marginBottom: 8 }}>Mapa de calor (início das conversas)</div>
-            <Heatmap grid={data.heatmap} />
-          </Card>
-        </>
-      )}
-
-      <Card style={{ padding: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8, gap: 8 }}>
-          <div style={{ fontWeight: 800, fontSize: 13.5 }}>Registro de atividade</div>
-          <div style={{ flex: 1 }} />
-          <select className="field" style={{ height: 30, width: 150, fontSize: 12 }} value={eventKind} onChange={(e) => setEventKind(e.target.value)}>
-            <option value="">Tudo</option>
-            {Object.entries(EVENT_LABEL).map(([k, t]) => <option key={k} value={k}>{t}</option>)}
-          </select>
+          <div className="card ac-c">
+            <h3 className="ct">Por que transferiram</h3>
+            <p className="ac-cs">{anf(k.transfers)} {k.transfers === 1 ? 'conversa passou' : 'conversas passaram'} para a equipe</p>
+            <div className="ac-bars">
+              {reasons.map((r) => <div key={r.label} className="ac-br"><span>{r.label}</span><div><i style={{ width: `${(r.count / maxReason) * 100}%` }} /></div><b>{anf(r.count)}</b></div>)}
+              {!reasons.length && <p className="ac-cs">Nenhuma transferência no período.</p>}
+            </div>
+          </div>
+          <div className="card ac-c">
+            <h3 className="ct">Assuntos mais frequentes</h3>
+            <div className="ac-list">
+              {(data.topics ?? []).slice(0, 7).map((t: any) => (
+                <div key={t.topic} className="ac-li"><i style={{ background: ids.length === 1 ? color(ids[0]) : '#9CA3AF' }} /><span>{t.topic}</span><b>{anf(t.count)}</b><em className={t.resolved_rate < 0.7 ? 'lo' : ''}>{apc(t.resolved_rate * 100, 0)} resolvidas</em></div>
+              ))}
+              {!(data.topics ?? []).length && <p className="ac-cs">Sem conversas classificadas no período.</p>}
+            </div>
+          </div>
+          <div className="card ac-c">
+            <h3 className="ct">Conhecimento mais usado</h3>
+            <div className="ac-list">
+              {(data.knowledge?.top ?? []).map((s: any) => (
+                <div key={s.source_id} className="ac-li"><Icon n="bookOpen" s={14} c="var(--tx3)" /><span>{s.name}</span><b>{anf(s.count)}<small> usos</small></b></div>
+              ))}
+              {!(data.knowledge?.top ?? []).length && <p className="ac-cs">Nenhuma busca no conhecimento no período.</p>}
+            </div>
+            <div className="ac-foot"><span><b>{anf(data.quality?.gaps ?? 0)}</b> perguntas sem resposta</span><Link href="/ai/conhecimento" className="btn sm">Ver lacunas</Link></div>
+          </div>
+          <div className="card ac-c">
+            <h3 className="ct">Incentivos</h3>
+            <div className="ac-mini">
+              {([['Oferecidos', anf(data.incentives?.offered ?? 0)], ['Usados', anf(data.incentives?.used ?? 0)], ['Taxa de uso', data.incentives?.offered ? apc(data.incentives.rate * 100, 0) : '—'], ['Desconto concedido', brl(data.incentives?.discount_total ?? 0, 0)]] as const).map(([l, v]) => <div key={l}><b>{v}</b><span>{l}</span></div>)}
+            </div>
+            <p className="ac-cs">Só com a autorização da missão de cada agente. A IA não cria desconto por conta própria.</p>
+          </div>
+          <div className="card ac-c">
+            <h3 className="ct">Qualidade e segurança</h3>
+            <div className="ac-mini">
+              {([['Mensagens enviadas', anf(data.quality?.messages ?? 0)], ['Bloqueadas pela revisão', anf(data.quality?.blocked ?? 0)], ['Conversas com bloqueio', anf(data.quality?.conversations_with_block ?? 0)], ['Perguntas sem resposta', anf(data.quality?.gaps ?? 0)]] as const).map(([l, v]) => <div key={l}><b>{v}</b><span>{l}</span></div>)}
+            </div>
+            <div className="ac-bars sm">
+              {infractions.slice(0, 6).map((r) => <div key={r.criterion} className="ac-br"><span>{criterionLabel(r.criterion, r.name)}</span><div><i className="er" style={{ width: `${(r.count / maxInf) * 100}%` }} /></div><b>{anf(r.count)}</b></div>)}
+            </div>
+          </div>
         </div>
-        {events.length === 0 ? <Muted>Nada registrado ainda.</Muted> : (
-          <div style={{ display: 'grid', gap: 2 }}>
-            {events.map((e) => (
-              <Link key={e.id} href={e.contact_id ? `/whatsapp/inbox?contact=${e.contact_id}` : '/whatsapp/inbox'}
-                style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '6px 4px', borderTop: '1px solid var(--border)', fontSize: 12.5, textDecoration: 'none', color: 'var(--text)' }}>
-                <span className="chip chip-outline" style={{ minWidth: 86, justifyContent: 'center' }}>{EVENT_LABEL[e.kind] ?? e.kind}</span>
-                <span style={{ flex: 1 }}>{e.text}{e.amount ? ` · ${brl(Number(e.amount))}` : ''}</span>
-                <span style={{ color: 'var(--text-3)' }}>{agentName(e.agent_id)}</span>
-                <span style={{ color: 'var(--text-3)', width: 120, textAlign: 'right' }}>{new Date(e.created_at).toLocaleString('pt-BR')}</span>
-              </Link>
-            ))}
-          </div>
-        )}
-      </Card>
-    </div>
-  )
-}
 
-function Kpi({ label, value, now, prev, invert, hint }: { label: string; value: string; now?: number; prev?: number; invert?: boolean; hint?: string }) {
-  let delta: number | null = null
-  if (typeof now === 'number' && typeof prev === 'number') delta = prev === 0 ? (now === 0 ? 0 : null) : (now - prev) / prev
-  const good = delta !== null && (invert ? delta < 0 : delta > 0)
-  return (
-    <div className="card" style={{ padding: 12 }} title={hint}>
-      <div style={{ fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.04em' }}>{label}</div>
-      <div style={{ fontSize: 17, fontWeight: 800, marginTop: 4 }}>{value}</div>
-      {delta !== null && delta !== 0 && (
-        <div style={{ fontSize: 11.5, color: good ? 'var(--green)' : 'var(--red)', display: 'flex', alignItems: 'center', gap: 2 }}>
-          {delta > 0 ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}{Math.abs(Math.round(delta * 100))}% vs anterior
+        <div className="ac-grid2">
+          <div className="card ac-c">
+            <div className="ac-ch0"><h3 className="ct">Quando os clientes chamam</h3><span className="ac-hint">conversas por dia da semana e hora</span></div>
+            <div className="ac-hm-w">
+              <div className="ac-hm">
+                <span />
+                {Array.from({ length: 24 }, (_, h) => <span key={h} className="ac-hh">{h % 3 === 0 ? `${h}h` : ''}</span>)}
+                {heat.map((row) => (
+                  <React.Fragment key={row.day}>
+                    <span className="ac-hd">{row.day}</span>
+                    {row.values.map((v, h) => <i key={h} title={`${row.day} ${h}h: ${anf(v)} conversas`} style={{ background: `color-mix(in oklab, var(--pri) ${Math.round((v / hmax) * 100)}%, var(--sf3))` }} />)}
+                  </React.Fragment>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="card ac-c">
+            <h3 className="ct">Motor e custo</h3>
+            <div className="ac-eng">
+              {engine.map(({ a, e, s }) => (
+                <div key={a.id} className="ac-er">
+                  <div className="ac-an sm"><span style={{ background: color(a.id) }}>{(a.name || 'A')[0]}</span><div><b>{a.name || 'Agente'}</b><em>{e?.model || a.model || '—'}</em></div></div>
+                  <div><b>{((e?.tokens ?? 0) / 1e6).toFixed(2).replace('.', ',')}M</b><em>tokens</em></div>
+                  <div><b>{e?.avg_latency_ms != null ? secs(e.avg_latency_ms / 1000) : '—'}</b><em>latência média</em></div>
+                  <div><b>{brl(s ? costB(s) : 0)}</b><em>custo</em></div>
+                </div>
+              ))}
+            </div>
+            <div className="ac-share">{engine.filter((x) => x.s && x.s.cost_usd > 0).map(({ a, s }) => <i key={a.id} style={{ flex: s.cost_usd, background: color(a.id) }} title={brl(costB(s))} />)}</div>
+            {data.budget?.limit_usd ? (
+              <p className="ac-cs">Orçamento mensal: {brl(data.budget.limit_usd * rate)} · usado {apc(Math.min(100, (data.budget.spent_month_usd / data.budget.limit_usd) * 100), 0)} neste mês.</p>
+            ) : null}
+          </div>
         </div>
-      )}
-    </div>
-  )
-}
 
-function Panel({ title, children }: { title: string; children: React.ReactNode }) {
-  return <Card style={{ padding: 14, display: 'grid', gap: 6, alignContent: 'start' }}><div style={{ fontWeight: 800, fontSize: 13.5 }}>{title}</div>{children}</Card>
-}
-
-function BarRow({ label, value, max }: { label: string; value: number; max: number }) {
-  return (
-    <div style={{ fontSize: 12 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>{label}</span><b>{value}</b></div>
-      <div style={{ height: 6, background: 'var(--border)', borderRadius: 99, overflow: 'hidden' }}>
-        <div style={{ width: `${Math.round((value / Math.max(max, 1)) * 100)}%`, height: '100%', background: 'var(--brand, #F97316)' }} />
-      </div>
-    </div>
-  )
-}
-
-function Stat({ label, value }: { label: string; value: string | number }) {
-  return <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}><span style={{ color: 'var(--text-3)' }}>{label}</span><b>{value}</b></div>
-}
-
-function Muted({ children }: { children: React.ReactNode }) {
-  return <p style={{ fontSize: 12, color: 'var(--text-3)', margin: 0 }}>{children}</p>
-}
-
-function Heatmap({ grid }: { grid: number[][] }) {
-  const max = Math.max(1, ...grid.flat())
-  return (
-    <div style={{ overflowX: 'auto' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '34px repeat(24, minmax(14px, 1fr))', gap: 2, fontSize: 10, minWidth: 420 }}>
-        <span />
-        {Array.from({ length: 24 }, (_, h) => <span key={h} style={{ textAlign: 'center', color: 'var(--text-3)' }}>{h % 3 === 0 ? h : ''}</span>)}
-        {grid.map((row, d) => (
-          <div key={d} style={{ display: 'contents' }}>
-            <span style={{ color: 'var(--text-3)' }}>{WEEKDAYS[d]}</span>
-            {row.map((v, h) => (
-              <span key={h} title={`${WEEKDAYS[d]} ${h}h: ${v}`} style={{ height: 14, borderRadius: 3, background: v ? `rgba(249,115,22,${0.15 + 0.85 * (v / max)})` : 'var(--border)' }} />
-            ))}
+        <div className="card">
+          <div className="ac-ch">
+            <h3 className="ct">Registro de atividade</h3>
+            <div className="ac-mets">
+              {[['all', 'Tudo'] as [string, string], ...Object.entries(EVENT_KIND).map(([kk, v]) => [kk, v[0]] as [string, string])].map(([kk, l]) => (
+                <button key={kk} type="button" className={evf === kk ? 'on' : ''} onClick={() => setEvf(kk)}>{l}</button>
+              ))}
+            </div>
           </div>
-        ))}
-      </div>
+          <div className="ac-feed">
+            {events.map((e) => {
+              const t = EVENT_KIND[e.kind] ?? ['Evento', 'sparkle', 'ne']
+              return (
+                <Link key={e.id} className="ac-ev" style={{ color: 'inherit' }} title={t[0]} href={e.contact_id ? `/whatsapp/inbox?contact=${e.contact_id}` : '/whatsapp/inbox'}>
+                  <span className={`ac-evi chip ${t[2]}`}><Icon n={t[1]} s={13} /></span>
+                  <div className="ac-evb"><b>{nameOf(e.agent_id)} <span>· {e.contact_name || t[0]}</span></b><em>{e.text}</em></div>
+                  {e.amount ? <strong>{brl(Number(e.amount))}</strong> : null}
+                  <span className="ac-evt">{ago(e.created_at)}</span>
+                  <Icon n="chevR" s={15} c="var(--tx3)" />
+                </Link>
+              )
+            })}
+            {!events.length && <div className="ac-empty">Nada deste tipo no período.</div>}
+          </div>
+        </div>
+      </>}
     </div>
   )
 }

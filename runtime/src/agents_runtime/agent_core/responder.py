@@ -933,7 +933,13 @@ def build_responder(
                     )
 
                 if outcome.draft is None and outcome.blocked_by != "budget_exceeded":
-                    await _record_blocked(conn, job, version.agent_id, outcome.blocked_by)
+                    await _record_blocked(
+                        conn,
+                        job,
+                        version.agent_id,
+                        outcome.blocked_by,
+                        outcome.judgement.failed_criteria if outcome.judgement else (),
+                    )
 
                 if outcome.draft is None:
                     # Item 41: se o motivo foi o teto do turno (e não o juiz),
@@ -1328,9 +1334,11 @@ async def _record_blocked(
     job: InboundJob | MissionTouchJob,
     agent_id: UUID | None,
     blocked_by: str | None,
+    failed: tuple[str, ...] = (),
 ) -> None:
     """A revisão segurou a resposta (alteração 2026-10-15-14). Telemetria:
-    nunca derruba o turno."""
+    nunca derruba o turno. Desde a 2026-10-15-16 o evento leva também os
+    critérios que reprovaram (`failed`)."""
     try:
         async with conn.transaction():
             await scope_to_organization(conn, job.organization_id)
@@ -1341,7 +1349,8 @@ async def _record_blocked(
             await outcomes_repo.record_event(
                 conn, organization_id=job.organization_id, kind="blocked",
                 conversation_id=job.conversation_id, agent_id=agent_id,
-                text="Resposta retida pela revisão", metadata={"blocked_by": blocked_by},
+                text="Resposta retida pela revisão",
+                metadata=outcomes_repo.blocked_metadata(blocked_by, failed),
             )
     except Exception:
         logger.debug("blocked outcome write failed", exc_info=True)
