@@ -128,3 +128,43 @@ Só depois do aceite do M0 (seção 6) e com `/healthz` verde.
 Os arquivos do caminho legado (`cloud-runner.ts`, `engine.ts`,
 `whatsapp-ai-respond`, `reprocess-whatsapp-pending`, `ai-chatbot-service.ts`)
 estão com cabeçalho "CONGELADO"; remoção no M7.
+
+## 8. Migrations do plano IA em produção `[GATE]` (15/10/2026)
+
+Leitura de produção (projeto `rqpmoavktzvxfcfsdkcc`) em 15/10: o histórico
+para em `instagram_direct` (10/09). Faltam 39 migrations de 28/08 a 18/09
+que o runtime e as 15 do plano (`20261016000001`..`015`) usam, entre elas
+`internal.llm_calls.agent_id`, o espelho para `ai_usage_logs`, o send guard,
+o bridge de conversa por conta e os traces aceitos.
+
+A ferramenta de banco desta sessão não executa nenhum `drop` (pede uma
+confirmação que não aparece e expira), e 24 das 54 migrations têm `drop`.
+Nada foi aplicado por ela; o banco está como estava.
+
+Rodar no SQL Editor do Supabase, nesta ordem:
+
+1. `docs/runbooks/sql/2026-10-15-ia-producao-ensaio.sql`: aplica as 54 numa
+   transação só e desfaz no fim. Esperado na última linha:
+   `ENSAIO COMPLETO`. Se parar antes, a mensagem mostra a migration (cada
+   uma imprime `<versão> ok`) e nada fica no banco.
+2. `docs/runbooks/sql/2026-10-15-ia-producao-aplicar.sql`: uma transação por
+   migration, com a linha em `supabase_migrations.schema_migrations`
+   (`created_by = 'manual-plano-ia-2026-10-15'`). Esperado: `APLICADO`.
+
+Ficaram de fora de propósito:
+
+| Migration | Por quê |
+|---|---|
+| `20260812000005_app_baseline_prereqs` | só cria tabela que falta (todas existem) e reescreveria `get_user_organization_id`, já corrigida por `enable_rls_org_tables` |
+| `20260909230000_app_baseline_forward_compat` | reconcilia o app inteiro; desfaria `views_security_invoker` e a policy `org_via_pai` corrigida em `rls_org_via_pai_fix` |
+| `20260905093000_lgpd_retention_policies_api_keys` | já aplicada como `lgpd_retention_policies_and_api_key_hash` |
+| `20260910000000_auth_user_created_trigger`, `20260910010000_verified_member_invites`, `20260910010100_oauth_states_service_only` | auth e convites, fora da IA; trigger e tabela já existem |
+| `20260904000001_attribution_v2_single_credit`, `20260910250000_popup_report_fixes`, `20260910340000_instagram_tenant_integrity` | fora da IA; revisar em separado |
+
+Não usar `supabase db push`: as versões no histórico de produção não batem
+com os nomes de arquivo, e o CLI tentaria reaplicar tudo.
+
+Depois de aplicar: `select to_regclass('public.ai_sources'),
+to_regclass('public.ai_budgets'), to_regclass('public.ai_agent_entries');`
+sem nulos. A 0007 (cutover) não muda nada hoje: a única org com agente já
+está em `runtime`.
