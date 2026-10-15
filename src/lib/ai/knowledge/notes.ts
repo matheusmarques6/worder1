@@ -1,9 +1,7 @@
 // Conhecimento da loja — regras puras da API (plano IA M3 passo 21):
-// árvore por pasta, links entre notas, grafo, uso por nota e as edições de
-// texto que a resolução de lacunas faz. Sem banco: as rotas leem, isto
-// decide.
-
-import { extractLinks } from '../processors/markdown-processor'
+// árvore por pasta, links entre notas, uso por nota, nota sugerida para uma
+// lacuna e as edições de texto que a resolução de lacunas faz. Sem banco:
+// as rotas leem, isto decide.
 
 /** As ações da tela Lacunas (POST /api/ai/knowledge/gaps/[id]/resolve). */
 export const GAP_ACTIONS = ['create_source', 'append_to', 'add_limit', 'ignore'] as const
@@ -64,53 +62,6 @@ export function appendAnswer(body: string | null | undefined, question: string, 
 /** Nota nova a partir de uma lacuna: título = pergunta, corpo = resposta. */
 export function noteFromGap(question: string, answer: string): string {
   return appendAnswer(`# ${question.trim()}`, question, answer)
-}
-
-export interface GraphNode { id: string; label: string; type: 'note' | 'agent' | 'gap'; folder?: string }
-export interface GraphEdge { from: string; to: string; type: 'link' | 'reads' | 'gap' }
-
-/**
- * O grafo do protótipo: notas ligadas por [[links]] (resolvidos por título,
- * sem diferenciar maiúsculas), agentes ligados às notas que leem, lacunas
- * abertas ligadas aos agentes que as tiveram. Link para título inexistente
- * não vira aresta (é uma nota que ainda não existe).
- */
-export function buildGraph(input: {
-  notes: Array<Pick<NoteRow, 'id' | 'name' | 'folder' | 'links'> & { body_markdown?: string | null }>
-  readers: Array<{ source_id: string; agent_id: string }>
-  agents: Array<{ id: string; name: string | null }>
-  gaps: Array<{ id: string; question: string; agent_ids: string[] | null }>
-}): { nodes: GraphNode[]; edges: GraphEdge[] } {
-  const byTitle = new Map(input.notes.map((n) => [n.name.trim().toLowerCase(), n.id]))
-  const nodes: GraphNode[] = [
-    ...input.notes.map((n) => ({ id: n.id, label: n.name, type: 'note' as const, folder: n.folder ?? 'geral' })),
-    ...input.agents.map((a) => ({ id: a.id, label: a.name || 'Agente', type: 'agent' as const })),
-    ...input.gaps.map((g) => ({ id: g.id, label: g.question, type: 'gap' as const })),
-  ]
-  const edges: GraphEdge[] = []
-  const seen = new Set<string>()
-  const push = (e: GraphEdge) => {
-    const key = `${e.type}:${e.from}:${e.to}`
-    if (!seen.has(key) && e.from !== e.to) { seen.add(key); edges.push(e) }
-  }
-  for (const note of input.notes) {
-    const titles = note.links && note.links.length > 0 ? note.links : extractLinks(note.body_markdown ?? '')
-    for (const title of titles) {
-      const target = byTitle.get(title.trim().toLowerCase())
-      if (target) push({ from: note.id, to: target, type: 'link' })
-    }
-  }
-  const agentIds = new Set(input.agents.map((a) => a.id))
-  const noteIds = new Set(input.notes.map((n) => n.id))
-  for (const r of input.readers) {
-    if (agentIds.has(r.agent_id) && noteIds.has(r.source_id)) push({ from: r.agent_id, to: r.source_id, type: 'reads' })
-  }
-  for (const gap of input.gaps) {
-    for (const agentId of gap.agent_ids ?? []) {
-      if (agentIds.has(agentId)) push({ from: gap.id, to: agentId, type: 'gap' })
-    }
-  }
-  return { nodes, edges }
 }
 
 /** Notas que apontam para esta (backlinks), por título. */

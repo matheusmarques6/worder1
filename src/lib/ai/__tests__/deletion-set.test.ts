@@ -87,6 +87,12 @@ const DELETION_SET_ROUTES: string[] = [
   'src/app/api/ai/agents/[id]/evals/route.ts',
   'src/app/api/ai/agents/[id]/reports/route.ts',
   'src/app/api/ai/agents/[id]/test-runs/route.ts',
+  // Onda 8 (UI F6): `api/ai/preview-prompt`, `api/ai/runtime-mode` e
+  // `api/ai/knowledge/graph` ficaram sem chamador com o porte do protótipo
+  // (a órbita e o editor antigo pediam o preview do prompt e o modo do motor;
+  // o grafo novo do Conhecimento usa a árvore e as lacunas). Entraram aqui
+  // com os arquivos no lugar, o teste provou que nada vivo cita as URLs, e
+  // saíram junto com `buildGraph`, que só a rota do grafo usava.
   // Onda 6 (item 61): `api/whatsapp/conversations/[id]/ai`, `api/ai/respond`,
   // `api/ai/knowledge` e `api/ai/agents/[id]/integrations` (só a base) passaram
   // por aqui. Cada uma entrou com o arquivo ainda no lugar — é essa rodada que prova o alcance, e ela passou —, e saiu da

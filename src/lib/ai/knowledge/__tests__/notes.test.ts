@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { appendAnswer, backlinks, buildGraph, buildTree, noteFromGap, renameLinks, suggestNoteForGap, usageByDay, usesBySource } from '../notes'
+import { appendAnswer, backlinks, buildTree, noteFromGap, renameLinks, suggestNoteForGap, usageByDay, usesBySource } from '../notes'
 import { markdownToChunks } from '../../processors/markdown-processor'
 
 describe('buildTree', () => {
@@ -33,27 +33,6 @@ describe('appendAnswer / noteFromGap', () => {
     const chunks = markdownToChunks(body)
     expect(chunks.find((c) => c.chunk_kind === 'resposta')?.content).toContain('Sim, com 5% de desconto.')
     expect(noteFromGap('Tem loja física?', 'Não, só online.')).toMatch(/^# Tem loja física\?/)
-  })
-})
-
-describe('buildGraph', () => {
-  it('liga notas por título, agentes às notas que leem e lacunas aos agentes', () => {
-    const graph = buildGraph({
-      notes: [
-        { id: 'n1', name: 'Trocas', folder: 'geral', links: ['Frete', 'Inexistente'] },
-        { id: 'n2', name: 'Frete', folder: 'geral', links: [], body_markdown: 'ver [[trocas]]' },
-      ],
-      readers: [{ source_id: 'n1', agent_id: 'a1' }, { source_id: 'n9', agent_id: 'a1' }],
-      agents: [{ id: 'a1', name: 'Duda' }],
-      gaps: [{ id: 'g1', question: 'Tem pix?', agent_ids: ['a1', 'a-alheio'] }],
-    })
-    expect(graph.edges).toEqual([
-      { from: 'n1', to: 'n2', type: 'link' },
-      { from: 'n2', to: 'n1', type: 'link' },
-      { from: 'a1', to: 'n1', type: 'reads' },
-      { from: 'g1', to: 'a1', type: 'gap' },
-    ])
-    expect(graph.nodes.map((n) => n.type)).toEqual(['note', 'note', 'agent', 'gap'])
   })
 })
 
