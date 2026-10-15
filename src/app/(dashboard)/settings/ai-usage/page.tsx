@@ -15,7 +15,7 @@ interface Resp {
   budget: { allowed: boolean; budgetUsd: number | null; spentUsd: number; usedPct?: number; hasUnknownCost?: boolean; unknownReason?: 'lookup_error' | 'unpriced_model' } | null
 }
 type Period = '24h' | '7d' | '30d' | '90d'
-type Group = 'day' | 'model' | 'feature'
+type Group = 'day' | 'model' | 'feature' | 'agent'
 
 export default function AiUsageSettingsPage() {
   const [period, setPeriod] = useState<Period>('30d')
@@ -42,17 +42,17 @@ export default function AiUsageSettingsPage() {
             {data.totals.platformUnknownCostCalls ? <div className="sc-f"><span className="hint">Custo da plataforma parcial: há chamadas sem custo conhecido neste período.</span></div> : null}
             {notice && <div className="sc-f"><span className="hint err">{notice}</span></div>}
           </Card>
-          <Card title="Detalhamento" desc="Custo por recurso, modelo ou dia." right={<Tabs value={group} onChange={setGroup} options={[["feature", "Recurso"], ["model", "Modelo"], ["day", "Dia"]]} />} flush>
+          <Card title="Detalhamento" desc="Custo por recurso, agente, modelo ou dia." right={<Tabs value={group} onChange={setGroup} options={[["feature", "Recurso"], ["agent", "Agente"], ["model", "Modelo"], ["day", "Dia"]]} />} flush>
             {data.grouped.length === 0 ? <div className="empty2"><b>Sem uso de IA no período</b>Ative um agente de IA ou use a geração de conteúdo para ver os custos aqui.</div> : (
               <div className="tw"><table className="stbl">
-                <thead><tr><th>{group === 'day' ? 'Dia' : group === 'model' ? 'Modelo' : 'Recurso'}</th><th className="r">Chamadas</th><th className="r hm">Tokens</th><th className="r">Organização</th><th className="r">Plataforma</th><th style={{ width: 200 }} className="hm"></th></tr></thead>
+                <thead><tr><th>{group === 'day' ? 'Dia' : group === 'model' ? 'Modelo' : group === 'agent' ? 'Agente' : 'Recurso'}</th><th className="r">Chamadas</th><th className="r hm">Tokens</th><th className="r">Organização</th><th className="r">Plataforma</th><th style={{ width: 200 }} className="hm"></th></tr></thead>
                 <tbody>
                   {data.grouped.map((g) => {
                     const total = g.billableCostUsd + g.platformCostUsd
                     const max = Math.max(...data.grouped.map((x) => x.billableCostUsd + x.platformCostUsd), 0.000001)
                     return (
                       <tr key={g.key}>
-                        <td className="fx"><span className="nm">{group === 'day' ? new Date(g.key).toLocaleDateString('pt-BR') : g.key}</span></td>
+                        <td className="fx"><span className="nm">{group === 'day' ? new Date(g.key).toLocaleDateString('pt-BR') : (g as any).label ?? g.key}</span></td>
                         <td className="r">{nf(g.calls)}</td>
                         <td className="r hm">{nf(g.tokens)}</td>
                         <td className="r">{usd(g.billableCostUsd)}</td>

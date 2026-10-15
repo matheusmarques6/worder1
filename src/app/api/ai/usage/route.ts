@@ -1,6 +1,6 @@
 // =============================================
 // WORDER: AI usage cost summary + budget status
-// GET /api/ai/usage?period=30d&group_by=model|feature|day
+// GET /api/ai/usage?period=30d&group_by=model|feature|day|agent
 // Task 17 (P1): inclui campo `budget` com limite/gasto/allowed.
 // =============================================
 
@@ -18,14 +18,14 @@ export async function GET(req: NextRequest) {
 
   const url = new URL(req.url)
   const period = url.searchParams.get('period') || '30d'
-  const groupBy = (url.searchParams.get('group_by') || 'day') as 'day' | 'model' | 'feature'
+  const groupBy = (url.searchParams.get('group_by') || 'day') as 'day' | 'model' | 'feature' | 'agent'
 
   const days = period === '24h' ? 1 : period === '7d' ? 7 : period === '30d' ? 30 : 90
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
 
   const { data, error } = await supabaseAdmin
     .from('ai_usage_logs')
-    .select('provider, model, feature, prompt_tokens, completion_tokens, total_tokens, cost_usd, duration_ms, success, created_at, metadata')
+    .select('provider, model, feature, agent_id, prompt_tokens, completion_tokens, total_tokens, cost_usd, duration_ms, success, created_at, metadata')
     .eq('organization_id', orgId)
     .gte('created_at', since)
     .limit(100000)
@@ -59,7 +59,9 @@ export async function GET(req: NextRequest) {
   }
 
   // Group
+  // Plano IA M5 passo 29: agrupamento por agente (nome resolvido abaixo).
   const groupKey = (r: any) =>
+    groupBy === 'agent' ? (r.agent_id ?? 'sem-agente') :
     groupBy === 'model' ? `${r.provider}:${r.model}` :
     groupBy === 'feature' ? r.feature :
     r.created_at.slice(0, 10) // day
@@ -82,6 +84,14 @@ export async function GET(req: NextRequest) {
     grouped.set(key, g)
   }
 
+  // Agrupado por agente: a chave é o id; a tela mostra o nome.
+  let agentNames = new Map<string, string>()
+  if (groupBy === 'agent' && grouped.size > 0) {
+    const { data: agents } = await supabaseAdmin
+      .from('ai_agents').select('id, name').eq('organization_id', orgId)
+    agentNames = new Map((agents ?? []).map((a: any) => [a.id as string, (a.name as string) || 'Agente']))
+  }
+
   // Budget status (skipCache=true para refletir gasto atual)
   let budget: Awaited<ReturnType<typeof checkAiBudget>> | null = null
   try {
@@ -101,6 +111,9 @@ export async function GET(req: NextRequest) {
     grouped: Array.from(grouped.values())
       .map((g) => ({
         ...g,
+        ...(groupBy === 'agent'
+          ? { label: g.key === 'sem-agente' ? 'Sem agente (geral)' : agentNames.get(g.key) ?? 'Agente removido' }
+          : {}),
         billableCostUsd: Math.round(g.billableCostUsd * 10000) / 10000,
         platformCostUsd: Math.round(g.platformCostUsd * 10000) / 10000,
       }))

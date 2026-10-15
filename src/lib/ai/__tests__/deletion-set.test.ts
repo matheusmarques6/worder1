@@ -62,6 +62,19 @@ const DELETION_SET: string[] = [
   // prefixo de diretório com os cinco arquivos ainda no lugar, o teste provou
   // que nenhuma entrada do Next os alcança, e saiu junto com a linha do barril
   // `analytics/index.ts:5`, sem a qual o `tsc --noEmit` quebraria.
+  //
+  // Onda 7 (plano IA M5 passo 29): a aba Atividade virou o painel de desfechos
+  // (ActivityDashboard) e a avaliação foi para o checklist de ativação (passo
+  // 26). Os relatórios, a avaliação e o test-run antigos saem da UI — de
+  // propósito, pelo plano — e entram aqui ainda no lugar; a remoção é do M7.
+  'src/components/agents/reports/ReportsView.tsx',
+  'src/components/agents/eval/EvalView.tsx',
+  'src/components/agents/ui/AgentSelect.tsx',
+  'src/components/agents/testrun/TestRunView.tsx',
+  // ... e o que só essas rotas alcançavam.
+  'src/lib/ai/evals.ts',
+  'src/lib/ai/activity.ts',
+  'src/lib/ai/test-runner.ts',
 ];
 
 /**
@@ -69,6 +82,11 @@ const DELETION_SET: string[] = [
  * código vivo cita a URL.
  */
 const DELETION_SET_ROUTES: string[] = [
+  // Onda 7 (plano IA M5 passo 29): as rotas que só a Atividade antiga chamava.
+  'src/app/api/ai/activity/route.ts',
+  'src/app/api/ai/agents/[id]/evals/route.ts',
+  'src/app/api/ai/agents/[id]/reports/route.ts',
+  'src/app/api/ai/agents/[id]/test-runs/route.ts',
   // Onda 6 (item 61): `api/whatsapp/conversations/[id]/ai`, `api/ai/respond`,
   // `api/ai/knowledge` e `api/ai/agents/[id]/integrations` (só a base) passaram
   // por aqui. Cada uma entrou com o arquivo ainda no lugar — é essa rodada que prova o alcance, e ela passou —, e saiu da
@@ -105,17 +123,10 @@ const DELETION_SET_PENDING_ROUTES: string[] = [];
  * a órbita sem perceber.
  */
 const PROTECTED_MODULES = [
-  // aba Atividade do hub (ai-hub/ActivityTab)
-  'src/components/agents/reports/ReportsView.tsx',
-  'src/components/agents/eval/EvalView.tsx',
-  'src/components/agents/ui/AgentSelect.tsx',
-  'src/components/agents/testrun/TestRunView.tsx',
-  'src/lib/ai/test-runner.ts',
+  // aba Atividade do hub — o que sobrou vivo depois da onda 7
   'src/lib/ai/test-run-shared.ts',
   'src/lib/ai/proposals.ts',
-  'src/lib/ai/evals.ts',
   'src/lib/ai/reports-metrics.ts',
-  'src/lib/ai/activity.ts',
   // Conhecimento (ingestão) — o caminho que o pacote B vai mexer
   'src/components/agents/KnowledgeBasePanel.tsx',
   'src/lib/ai/crawler.ts',
@@ -133,12 +144,8 @@ const PROTECTED_MODULES = [
 
 /** Rotas que precisam continuar sendo chamadas por código vivo. */
 const PROTECTED_ROUTES = [
-  'src/app/api/ai/activity/route.ts',
   'src/app/api/ai/process/document/route.ts',
-  'src/app/api/ai/agents/[id]/evals/route.ts',
-  'src/app/api/ai/agents/[id]/reports/route.ts',
   'src/app/api/ai/agents/[id]/sources/route.ts',
-  'src/app/api/ai/agents/[id]/test-runs/route.ts',
 ];
 
 /**
