@@ -81,6 +81,8 @@ function syncSupabase() {
         if (table === 'ai_agent_chunks') deleteChunks()
         return chain
       }),
+      // Passo 19: a troca remove os chunks SEM a marca do sync corrente.
+      neq: vi.fn(() => chain),
       then: (resolve: (value: unknown) => void) =>
         Promise.resolve({ data: null, error: null }).then(resolve),
     }

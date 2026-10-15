@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { chunkText, cleanTextForIndexing, extractTextMetadata } from '@/lib/ai/processors/text-processor'
+import { extractLinks, markdownToChunks } from '@/lib/ai/processors/markdown-processor'
 import { generateEmbeddingsBatch, EMBEDDING_SPACE } from '@/lib/ai/embeddings'
 import { resolveEmbeddingKey } from '@/lib/ai/embedding-key'
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
@@ -138,11 +139,24 @@ export async function POST(request: NextRequest) {
 
     console.log(`Extracted ${metadata.word_count} words from source ${sourceId}`)
 
-    // Dividir em chunks
-    const chunks = chunkText(cleanText, {
-      maxTokens: 500,
-      overlap: 50,
-    })
+    // Dividir em chunks. Plano IA M3 passo 19: nota da loja (kind note/faq
+    // com body_markdown) passa pelo parser de markdown — cada callout
+    // ([!regra] / [!resposta] / [!atencao]) vira chunk próprio com chunk_kind,
+    // e os links [[Título]] ficam gravados na fonte para o grafo (passo 21).
+    const isMarkdownNote =
+      typeof source.body_markdown === 'string' && source.body_markdown.trim().length > 0 &&
+      (source.kind === 'note' || source.kind === 'faq' || source.source_type === 'text')
+    const chunks = isMarkdownNote
+      ? markdownToChunks(source.body_markdown, { maxTokens: 500, overlap: 50 }).map((c) => ({
+          content: c.content,
+          tokens: c.tokens,
+          index: c.position,
+          metadata: { heading: c.metadata.heading, callout_title: c.metadata.callout_title ?? null },
+          chunk_kind: c.chunk_kind,
+          position: c.position,
+        }))
+      : chunkText(cleanText, { maxTokens: 500, overlap: 50 }).map((c) => ({ ...c, chunk_kind: 'text', position: c.index }))
+    const noteLinks = isMarkdownNote ? extractLinks(source.body_markdown) : null
 
     console.log(`Created ${chunks.length} chunks from source ${sourceId}`)
 
@@ -181,7 +195,14 @@ export async function POST(request: NextRequest) {
       // 20260828000001 recusa vetor sem procedência, e é este rótulo que a
       // busca do runtime filtra para não misturar espaços.
       embedding_model: EMBEDDING_SPACE,
+      chunk_kind: chunk.chunk_kind,
+      position: chunk.position,
     }))
+
+    // Reprocessar substitui a base anterior da fonte só depois de ter a nova
+    // pronta na memória (os embeddings já vieram); a troca em si é delete +
+    // insert em sequência — página do site recorrente passa por aqui.
+    await supabase.from('ai_agent_chunks').delete().eq('source_id', sourceId)
 
     // Inserir em batches para evitar timeout
     const batchSize = 50
@@ -207,6 +228,7 @@ export async function POST(request: NextRequest) {
         processed_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         error_message: null,
+        ...(noteLinks ? { links: noteLinks } : {}),
       })
       .eq('id', sourceId)
 

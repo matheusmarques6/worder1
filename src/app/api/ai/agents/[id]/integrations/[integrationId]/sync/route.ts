@@ -147,11 +147,11 @@ export async function POST(
       throw error
     }
 
-    // Só remover a base anterior depois de todos os substitutos existirem.
-    await supabase
-      .from('ai_agent_chunks')
-      .delete()
-      .eq('source_id', sourceId)
+    // Plano IA M3 passo 19 — sync atômico do ponto de vista de quem lê: os
+    // chunks novos entram marcados com este sync_run; só depois de TODOS
+    // existirem os antigos (sem a marca) saem. Uma busca no meio vê a base
+    // antiga ou as duas, nunca a base vazia.
+    const syncRun = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
     // Inserir chunks
     const chunks = productTexts.map((text, i) => ({
@@ -165,6 +165,7 @@ export async function POST(
         product_name: products[i].title || products[i].name,
         product_type: 'e-commerce',
         source_type: integration.integration_type,
+        sync_run: syncRun,
       },
       embedding: `[${embeddings[i].join(',')}]`,
       // Mesmo contrato do process/document: quem escreve declara o espaço
@@ -176,8 +177,20 @@ export async function POST(
     const batchSize = 50
     for (let i = 0; i < chunks.length; i += batchSize) {
       const batch = chunks.slice(i, i + batchSize)
-      await supabase.from('ai_agent_chunks').insert(batch)
+      const { error: insertError } = await supabase.from('ai_agent_chunks').insert(batch)
+      if (insertError) {
+        // Os novos até aqui saem; a base antiga fica inteira.
+        await supabase.from('ai_agent_chunks').delete().eq('source_id', sourceId).eq('metadata->>sync_run', syncRun)
+        throw new Error(`Falha ao gravar chunks: ${insertError.message}`)
+      }
     }
+
+    // Troca: só agora a base anterior sai.
+    await supabase
+      .from('ai_agent_chunks')
+      .delete()
+      .eq('source_id', sourceId)
+      .neq('metadata->>sync_run', syncRun)
 
     // Atualizar integração e fonte
     await supabase
