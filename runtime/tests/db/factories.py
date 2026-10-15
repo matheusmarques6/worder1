@@ -448,33 +448,41 @@ def create_knowledge_chunk(
     embedding: str | None = None,
     agent_id: uuid.UUID | None = None,
     embedding_space: str = "openai:text-embedding-3-small",
+    chunk_kind: str = "text",
+    source_id: uuid.UUID | None = None,
 ) -> uuid.UUID:
     """A RAG chunk (Worder: ai_agent_chunks — the base the merchant already
     feeds through SourcesTab). Creates the agent + source rows it hangs from.
 
     `embedding_space` é o espaço vetorial declarado (migration 20260828000001).
     O default é o que o app grava; passar outro é como se escreve o teste de um
-    chunk que a busca deve IGNORAR por ser de outro espaço."""
+    chunk que a busca deve IGNORAR por ser de outro espaço.
+
+    `chunk_kind` (20261016000010) é o callout da nota (text | regra | resposta |
+    atencao); `source_id` reaproveita uma fonte já criada (vários chunks da
+    mesma nota). A fonte nasce em `ai_sources` ligada ao agente pela M:N
+    (o trigger de compatibilidade faz isso a partir de agent_id)."""
     if agent_id is None:
         agent_id = create_agent(conn, organization_id)
 
     with conn.cursor() as cur:
-        cur.execute(
-            """
-            insert into public.ai_agent_sources
-                (organization_id, agent_id, source_type, name, status)
-            values (%s, %s, 'text', %s, 'ready')
-            returning id
-            """,
-            (organization_id, agent_id, source),
-        )
-        (source_id,) = cur.fetchone()
+        if source_id is None:
+            cur.execute(
+                """
+                insert into public.ai_sources
+                    (organization_id, agent_id, source_type, name, status)
+                values (%s, %s, 'text', %s, 'ready')
+                returning id
+                """,
+                (organization_id, agent_id, source),
+            )
+            (source_id,) = cur.fetchone()
         cur.execute(
             """
             insert into public.ai_agent_chunks
                 (organization_id, agent_id, source_id, content, embedding,
-                 embedding_model)
-            values (%s, %s, %s, %s, %s::vector, %s)
+                 embedding_model, chunk_kind)
+            values (%s, %s, %s, %s, %s::vector, %s, %s)
             returning id
             """,
             (
@@ -484,10 +492,43 @@ def create_knowledge_chunk(
                 content,
                 embedding if embedding is not None else an_embedding(),
                 embedding_space,
+                chunk_kind,
             ),
         )
         (chunk_id,) = cur.fetchone()
     return chunk_id
+
+
+def create_source(
+    conn: psycopg.Connection,
+    organization_id: uuid.UUID,
+    *,
+    name: str = "Política de trocas",
+    kind: str = "note",
+    folder: str = "geral",
+    body_markdown: str | None = None,
+    readers: tuple[uuid.UUID, ...] = (),
+) -> uuid.UUID:
+    """Uma nota da loja (ai_sources, 20261016000010) lida pelos agentes em
+    `readers` — sem agent_id: o modelo novo, só pela M:N."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            insert into public.ai_sources
+                (organization_id, source_type, name, status, kind, folder, body_markdown)
+            values (%s, 'text', %s, 'ready', %s, %s, %s)
+            returning id
+            """,
+            (organization_id, name, kind, folder, body_markdown),
+        )
+        (source_id,) = cur.fetchone()
+        for agent_id in readers:
+            cur.execute(
+                "insert into public.ai_source_agents (source_id, agent_id, organization_id)"
+                " values (%s, %s, %s) on conflict do nothing",
+                (source_id, agent_id, organization_id),
+            )
+    return source_id
 
 
 def create_alert(
