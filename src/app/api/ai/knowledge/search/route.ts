@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { getAuthClient } from '@/lib/api-utils'
+import { sanitizeSearchTerm } from '@/lib/db/search-term'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,8 +11,9 @@ export async function GET(request: NextRequest) {
   if (!auth) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
   const q = (new URL(request.url).searchParams.get('q') ?? '').trim()
   if (q.length < 2) return NextResponse.json({ results: [] })
-  // Vírgula e parênteses quebram a sintaxe do .or() do PostgREST.
-  const term = q.replace(/[%_,()]/g, ' ').slice(0, 100)
+  // Vírgula, parênteses e curingas quebram a sintaxe do .or() do PostgREST.
+  const term = sanitizeSearchTerm(q, 100)
+  if (term.length < 2) return NextResponse.json({ results: [] })
   const { data, error } = await getSupabaseAdmin()
     .from('ai_sources')
     .select('id, name, folder, kind, body_markdown')
