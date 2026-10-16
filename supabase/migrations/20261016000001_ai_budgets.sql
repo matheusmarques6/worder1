@@ -49,20 +49,27 @@ end $$;
 create index if not exists ai_usage_logs_org_created_idx
   on public.ai_usage_logs (organization_id, created_at desc);
 
+-- Mesma forma de 20260902000003 / 20260910040001 (que rodam antes na
+-- cadeia): tabela com `has_unknown_cost` e só o que é cobrável. Era
+-- `returns numeric`, e o CREATE OR REPLACE falhava com 42P13 ("cannot
+-- change return type") no ensaio de produção de 16/10/2026. `checkAiBudget`
+-- lê exatamente estas duas colunas.
 create or replace function public.ai_monthly_cost_usd(
   p_organization_id uuid,
   p_month_start     timestamptz
 )
-returns numeric
+returns table (spent_usd numeric, has_unknown_cost boolean)
 language sql
 stable
 security definer
 set search_path = public
 as $$
-  select coalesce(sum(cost_usd), 0)
+  select coalesce(sum(cost_usd), 0)                  as spent_usd,
+         coalesce(bool_or(cost_usd is null), false) as has_unknown_cost
     from public.ai_usage_logs
    where organization_id = p_organization_id
-     and created_at >= p_month_start;
+     and created_at >= p_month_start
+     and (metadata ->> 'billable') is distinct from 'false';
 $$;
 
 revoke execute on function public.ai_monthly_cost_usd(uuid, timestamptz) from public;

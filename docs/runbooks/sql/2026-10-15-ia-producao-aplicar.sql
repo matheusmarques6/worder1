@@ -1,3 +1,6 @@
+-- Corrigido em 16/10/2026: 20261016000001 redefinia ai_monthly_cost_usd como
+-- numeric e o ensaio parava em 42P13; agora mantém a tabela (spent_usd,
+-- has_unknown_cost) das migrations anteriores, que é o que o app lê.
 -- Gerado em 15/10/2026 a partir de supabase/migrations/ (sem linhas de
 -- comentário). APLICAÇÃO: uma transação por migration + linha no histórico.
 -- Um erro desfaz só a migration da vez; as anteriores ficam aplicadas.
@@ -3515,16 +3518,18 @@ create or replace function public.ai_monthly_cost_usd(
   p_organization_id uuid,
   p_month_start     timestamptz
 )
-returns numeric
+returns table (spent_usd numeric, has_unknown_cost boolean)
 language sql
 stable
 security definer
 set search_path = public
 as $$
-  select coalesce(sum(cost_usd), 0)
+  select coalesce(sum(cost_usd), 0)                  as spent_usd,
+         coalesce(bool_or(cost_usd is null), false) as has_unknown_cost
     from public.ai_usage_logs
    where organization_id = p_organization_id
-     and created_at >= p_month_start;
+     and created_at >= p_month_start
+     and (metadata ->> 'billable') is distinct from 'false';
 $$;
 revoke execute on function public.ai_monthly_cost_usd(uuid, timestamptz) from public;
 revoke execute on function public.ai_monthly_cost_usd(uuid, timestamptz) from anon;
