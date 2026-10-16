@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plano de mudanças da IA</title>
+<style>
+:root{--bg:#fafaf8;--card:#fff;--ink:#1d1d1b;--mut:#6b6b66;--line:#e6e4de;--acc:#c2410c;--acc-bg:#fff4ec;--ok:#15803d;--ok-bg:#ecfdf3;--wa:#a16207;--wa-bg:#fefce8;--code:#f2f1ed}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#151514;--card:#1e1e1c;--ink:#ecebe6;--mut:#a3a29c;--line:#33322f;--acc:#fb923c;--acc-bg:#2a1d14;--ok:#4ade80;--ok-bg:#132419;--wa:#facc15;--wa-bg:#262212;--code:#2a2a27}}
+:root[data-theme="dark"]{--bg:#151514;--card:#1e1e1c;--ink:#ecebe6;--mut:#a3a29c;--line:#33322f;--acc:#fb923c;--acc-bg:#2a1d14;--ok:#4ade80;--ok-bg:#132419;--wa:#facc15;--wa-bg:#262212;--code:#2a2a27}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:920px;margin:0 auto;padding:32px 16px 64px}
+h1{font-size:28px;margin:0 0 6px}
+h2{font-size:20px;margin:40px 0 12px;padding-top:12px;border-top:1px solid var(--line)}
+h3{font-size:16px;margin:22px 0 8px}
+p,li{color:var(--ink)}
+.lead{color:var(--mut);margin:0 0 20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:12px 0}
+.tag{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:99px;margin-right:6px;vertical-align:2px}
+.t-a{background:var(--acc-bg);color:var(--acc)}.t-ok{background:var(--ok-bg);color:var(--ok)}.t-wa{background:var(--wa-bg);color:var(--wa)}
+code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:13px}
+pre{background:var(--code);padding:12px;border-radius:8px;overflow-x:auto;font-size:13px;line-height:1.5}
+table{width:100%;border-collapse:collapse;font-size:14px;margin:8px 0}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--mut);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.03em}
+.wrap{overflow-x:auto}
+.dlg{border:1px solid var(--line);border-radius:10px;background:var(--card);padding:14px 16px;max-width:440px}
+.dlg b{display:block;margin-bottom:4px}
+.dlg .btns{display:flex;gap:8px;justify-content:flex-end;margin-top:12px;flex-wrap:wrap}
+.dlg .btns span{border:1px solid var(--line);border-radius:6px;padding:4px 10px;font-size:13px}
+.dlg .btns .d{background:#b91c1c;color:#fff;border-color:#b91c1c}
+ol.steps li{margin-bottom:6px}
+.muted{color:var(--mut)}
+</style>
+</head>
+<body>
+<main>
+<h1>Plano de mudanças da IA</h1>
+<p class="lead">Combinado em 16/10. Três frentes: duas mudanças de comportamento no Construtor e a suíte de testes. Nenhuma das duas mudanças mexe no runtime. Se um teste de paridade achar uma chave que o runtime não lê, a correção mexe no runtime e ganha documento em <code>runtime/docs/alteracoes/</code>, como sempre.</p>
+
+<div class="card">
+<h3 style="margin-top:0">Ordem de execução</h3>
+<div class="wrap"><table>
+<tr><th>#</th><th>O quê</th><th>Depende de</th><th>Esforço</th></tr>
+<tr><td>A</td><td>Construtor pede aprovação para sair com alterações não salvas</td><td>nada</td><td>~1 h</td></tr>
+<tr><td>B</td><td>Remover número de WhatsApp pede "tem certeza"</td><td>nada</td><td>~45 min</td></tr>
+<tr><td>C1</td><td>Teste de paridade: toda chave que o app grava, o runtime lê</td><td>nada</td><td>~½ dia</td></tr>
+<tr><td>C2</td><td>Jornadas de ponta a ponta (prioridade)</td><td><b>ambiente de teste, que vem de você</b></td><td>1–2 dias</td></tr>
+<tr><td>C3</td><td>Testes das rotas que ficaram sem cobertura</td><td>nada</td><td>~1 dia</td></tr>
+<tr><td>C4</td><td>Testes de tela (um arquivo por tela)</td><td>A e B prontos</td><td>1–2 dias</td></tr>
+</table></div>
+<p class="muted" style="margin-bottom:0">A e B vão juntos num commit, já com os testes de tela deles, o que começa C4. As jornadas (C2) são escritas logo depois da paridade. Elas pulam com uma mensagem clara enquanto o ambiente não existe; nesse intervalo eu sigo com C3.</p>
+</div>
+
+<h2><span class="tag t-a">A</span>Fechar com alterações não salvas</h2>
+<p><b>Hoje:</b> "Fechar" é um link direto para <code>/ai/agentes</code>. Quem editou e não salvou perde tudo sem aviso. O seletor de agente no topo também troca de página sem aviso, com o mesmo efeito.</p>
+<p><b>Combinado:</b> "aprovar para sair".</p>
+
+<h3>Comportamento</h3>
+<div class="wrap"><table>
+<tr><th>Situação</th><th>O que acontece</th></tr>
+<tr><td>Sem alterações pendentes</td><td>Sai direto, como hoje.</td></tr>
+<tr><td>Com alterações, clica em Fechar</td><td>Abre a confirmação abaixo.</td></tr>
+<tr><td>Com alterações, troca de agente no seletor</td><td>Mesma confirmação. Se o lojista confirmar, abre o outro agente.</td></tr>
+<tr><td>Com alterações, fecha a aba ou recarrega</td><td>O navegador mostra o aviso padrão dele (<code>beforeunload</code>). O texto desse aviso não pode ser trocado.</td></tr>
+<tr><td>Cancelar ou Esc</td><td>Fica no Construtor com tudo como estava, inclusive o Ctrl+Z.</td></tr>
+<tr><td>"Sair sem salvar"</td><td>Descarta o rascunho e sai.</td></tr>
+</table></div>
+<div class="dlg">
+<b>Sair sem salvar?</b>
+<span class="muted">Você tem alterações não salvas em Duda. Se sair agora, elas se perdem.</span>
+<div class="btns"><span>Continuar editando</span><span class="d">Sair sem salvar</span></div>
+</div>
+
+<h3>Como</h3>
+<ol class="steps">
+<li>Em <code>src/components/ai-hub/builder/BuilderCanvas.tsx</code>, criar uma função <code>leave(href)</code>.
+  <ul>
+  <li>Se <code>dirty</code> for falso, chama <code>router.push(href)</code>.</li>
+  <li>Senão, abre <code>useConfirm().confirm({ … destructive: true })</code> e só navega se a resposta for <code>true</code>.</li>
+  <li>O <code>ConfirmProvider</code> já envolve o Construtor, via <code>IaFullShell</code>. É o mesmo diálogo da tela de Conhecimento.</li>
+  </ul></li>
+<li>Trocar <code>&lt;Link className="w-close"&gt;</code> por um <code>&lt;button className="w-close"&gt;</code> que chama <code>leave('/ai/agentes')</code>. O <code>setAgent</code> do seletor passa a chamar <code>leave(`/ai/construtor/${id}`)</code>.</li>
+<li>Criar um <code>useEffect</code> que registra o <code>beforeunload</code> enquanto <code>dirty</code> for verdadeiro e o remove quando deixar de ser.</li>
+<li>Manter o link "Voltar" da tela de erro como está, porque ali não existe rascunho.</li>
+</ol>
+
+<h3>Aceite</h3>
+<ul>
+<li>Sem alterações, Fechar vai direto para Agentes, sem diálogo.</li>
+<li>Com alterações, Fechar mostra o diálogo. Cancelar mantém o rascunho e o botão Salvar continua visível. Sair navega.</li>
+<li>Depois de salvar, Fechar sai direto.</li>
+<li>Trocar de agente pelo seletor segue as mesmas regras.</li>
+</ul>
+<p><b>Teste:</b> <code>src/components/ai-hub/builder/__tests__/fechar.test.tsx</code> (jsdom, no padrão de <code>src/tests/media-library-image.test.tsx</code>). Ele cobre os quatro casos de aceite, com <code>next/navigation</code> simulado para conferir se <code>push</code> foi chamado ou não.</p>
+
+<h2><span class="tag t-a">B</span>Confirmação ao remover um número de WhatsApp</h2>
+<p><b>Hoje:</b> em <code>remove()</code>, uma entrada <code>e:</code> de WhatsApp dispara o <code>DELETE /api/ai/agents/{id}/entries</code> na hora. Ferramentas viram rascunho (Ctrl+Z desfaz) e fontes saem na hora.</p>
+<p><b>Combinado:</b> ferramenta e fonte ficam como estão. Só o WhatsApp pede "tem certeza".</p>
+
+<h3>Comportamento</h3>
+<div class="dlg">
+<b>Remover o número +55 11 9xxxx-0001?</b>
+<span class="muted">Tem certeza? Este número para de ser atendido por Duda assim que você confirmar.</span>
+<div class="btns"><span>Cancelar</span><span class="d">Remover número</span></div>
+</div>
+<p style="margin-top:12px">Quando é o único número do agente, a descrição ganha mais uma frase: <i>"Depois disso, ninguém chega até Duda pelo WhatsApp."</i></p>
+<ul>
+<li>Cancelar: nada é chamado, o bloco continua selecionado.</li>
+<li>Confirmar: faz o DELETE de hoje, recarrega e mostra o toast "Entrada removida".</li>
+<li>Toque de fluxo (<code>flow_touch</code>): continua só com o toast de hoje, sem diálogo.</li>
+<li>O inspector e o botão no próprio bloco passam pela mesma <code>remove()</code>. Por isso a confirmação vale nos dois.</li>
+</ul>
+
+<h3>Como</h3>
+<ol class="steps">
+<li>Na <code>remove()</code>, no ramo <code>e:</code> e depois do teste de <code>flow_touch</code>, chamar <code>await confirm({ title, description, confirmLabel: 'Remover número', destructive: true })</code>. Se a resposta for <code>false</code>, a função retorna.</li>
+<li>O título usa o rótulo do número, o mesmo que o bloco mostra. Para saber se é o único, contar as <code>entries</code> com <code>kind === 'whatsapp_account'</code>.</li>
+</ol>
+<p><b>Aceite e teste:</b> <code>builder/__tests__/remover-whatsapp.test.tsx</code> cobre quatro casos:</p>
+<ul>
+<li>Cancelar não chama o <code>fetch</code> DELETE.</li>
+<li>Confirmar chama o DELETE uma vez.</li>
+<li>Remover uma ferramenta não abre diálogo.</li>
+<li>Remover um toque de fluxo não abre diálogo nem chama a rede.</li>
+</ul>
+
+<p class="muted">A e B: um commit, <code>fix(ia): Construtor pede confirmação ao sair sem salvar e ao remover número</code>. Gates: tsc, eslint, vitest e a auditoria de controles mortos (<code>scripts/ui-compare/dead-controls.mjs</code>), que precisa continuar sem falsos novos.</p>
+
+<h2><span class="tag t-ok">C</span>Suíte de testes</h2>
+<p>A suíte segue o <code>docs/plano-testes-ia.html</code>, na ordem combinada: paridade, jornadas, rotas, telas.</p>
+
+<h3>C1 · Paridade app ↔ runtime</h3>
+<p><b>Por quê:</b> o app grava uma chave em <code>ai_agents</code> e o runtime lê de outro jeito, ou não lê. Nada quebra, o comportamento só fica errado em silêncio. Já aconteceu com o tom de voz, que era gravado e ignorado até a alteração 17.</p>
+<p><b>Arquivo novo:</b> <code>src/lib/ai/__tests__/settings-runtime-parity.test.ts</code>, que lê código, como o <code>hub-runtime-parity.test.ts</code>.</p>
+<ol class="steps">
+<li>Extrai de <code>src/lib/ai/agent-hub.ts</code> (<code>hubToAgentPatch</code>) cada chave gravada em <code>persona.*</code>, <code>settings.*</code> e nas colunas.</li>
+<li>Para cada uma, exige que apareça nos fontes Python em <code>runtime/src/agents_runtime/</code> no ponto de leitura esperado.</li>
+<li>Começa com estas chaves: <code>tone</code>, <code>response_length</code>, <code>guidelines</code>, <code>presentation_mode</code>, <code>client_adaptation</code>, <code>delivery</code>, <code>handoff_keywords</code>, <code>handoff_confirmation_message</code>, <code>handoff_destination</code>, <code>judges.custom</code>, <code>blocked_topics</code>, <code>tools.enabled</code>, <code>model</code>, <code>monthly_cap_usd</code>.</li>
+<li>Mantém uma lista curta de exceções. Cada exceção diz por que o runtime não precisa da chave, por exemplo um campo que só a tela usa.</li>
+<li>Faz o caminho inverso também: valores fechados (voz, tamanho, modo de apresentação) precisam ter o mesmo conjunto dos dois lados, como o <code>_TONE</code> do <code>prompt_compiler</code>.</li>
+</ol>
+<p><b>Se achar divergência:</b> corrijo do lado certo. Se for no runtime, a correção ganha documento em <code>runtime/docs/alteracoes/</code> no mesmo commit.</p>
+
+<h3>C2 · Jornadas de ponta a ponta <span class="tag t-wa">prioridade</span></h3>
+<p>Em <code>e2e/</code>, no Playwright que já existe (<code>auth.setup.ts</code>, <code>E2E_EMAIL</code>/<code>E2E_PASSWORD</code>, <code>E2E_BASE_URL</code>).</p>
+<div class="wrap"><table>
+<tr><th>Arquivo</th><th>Caminho do lojista</th><th>O que prova</th></tr>
+<tr><td><code>ia-criar-ativar.spec.ts</code></td><td>Novo agente → modelo Pós-compra → nome e fontes → Construtor → liga o número de teste → checklist → Ativo. Depois: editar sem salvar → Fechar pede aprovação. Remover o número pede confirmação.</td><td>O modelo vira agente de verdade, com missões, juízes e fontes ligadas. A ativação só passa com o checklist. A e B funcionam com o app inteiro rodando.</td></tr>
+<tr><td><code>ia-transferencia.spec.ts</code></td><td>Uma mensagem com palavra de transferência chega ao número de teste → o agente responde a mensagem de confirmação → a conversa vai para o destino configurado → a Atividade conta "transferidas".</td><td>Destino da transferência (alteração 15), entrada no desfecho, métricas.</td></tr>
+<tr><td><code>ia-lacuna.spec.ts</code></td><td>Uma pergunta sem resposta na base → aparece em Lacunas, com a fonte sugerida → "Virar nota" → a mesma pergunta passa a ser respondida.</td><td>O ciclo de aprendizado do Conhecimento.</td></tr>
+</table></div>
+<p><b>O que preciso de você para rodar (sem isso as jornadas pulam com o motivo escrito, não fingem que passaram):</b></p>
+<ul>
+<li>Um projeto Supabase de teste, com as 54 migrações aplicadas. Os testes criam e apagam agentes.</li>
+<li>Uma conta de teste (<code>E2E_EMAIL</code> / <code>E2E_PASSWORD</code>) numa organização de teste.</li>
+<li>Um número de WhatsApp de teste conectado a essa organização.</li>
+<li>O runtime rodando em staging, apontado para esse Supabase.</li>
+<li>Uma chave OpenRouter de teste com teto baixo.</li>
+</ul>
+<p class="muted">Para transferência e lacuna, a mensagem de entrada pode ser simulada pelo webhook de entrada, se o ambiente aceitar uma assinatura de teste. Senão, ela é enviada de um segundo número real. Decido isso ao montar o ambiente.</p>
+
+<h3>C3 · Rotas sem cobertura</h3>
+<p>Testes vitest no padrão das rotas que já têm teste: Supabase simulado e checagem de permissão.</p>
+<div class="wrap"><table>
+<tr><th>Rota</th><th>O que verificar</th></tr>
+<tr><td><code>GET /api/ai/openrouter-models</code></td><td>Exige login e permissão de admin. Faz cache de 1 h. Uma falha da OpenRouter vira erro legível, não 500 cru.</td></tr>
+<tr><td><code>POST /api/ai/knowledge/gaps</code></td><td>Cria uma lacuna manual só na própria organização. Valida o texto.</td></tr>
+<tr><td><code>GET /api/ai/knowledge/[id]/usage</code></td><td>A contagem de <code>transferred</code> bate com os desfechos.</td></tr>
+<tr><td><code>GET /api/ai/activity/summary</code> e <code>/events</code></td><td>Período anterior, orçamento, <code>contact_name</code>, isolamento entre organizações.</td></tr>
+<tr><td><code>POST /api/ai/agents</code> com modelo e fontes</td><td>Juízes e regras do modelo, poda das missões fora das famílias, só fontes da própria organização em <code>source_ids</code>, retorno <code>linked_sources</code>.</td></tr>
+<tr><td>Exportação CSV da Atividade</td><td>Cabeçalho, escape de vírgula e aspas, filtro de período.</td></tr>
+</table></div>
+
+<h3>C4 · Telas</h3>
+<p>Testes jsdom, um arquivo por tela, sem navegador. A API simulada reaproveita as fixtures de <code>scripts/ui-compare/</code>, para não manter dois conjuntos de dados.</p>
+<ul>
+<li><b>Construtor:</b> Fechar e remover WhatsApp (já feitos em A e B). Cada bloco abre o inspector certo. Os controles de voz, modelo e teto mudam o rascunho e acendem "Salvar".</li>
+<li><b>Novo agente:</b> trocar de modelo muda a função, as fontes marcadas e "O que vem pronto". Copiar um agente marca as fontes dele. O nome vazio desabilita "Criar".</li>
+<li><b>Conhecimento:</b> busca, abas da nota, "Virar limite" numa lacuna e o grafo com dados vazios.</li>
+<li><b>Atividade:</b> trocar o período recarrega. Os filtros mudam a lista. Não há aba de Satisfação.</li>
+</ul>
+<p class="muted">Fica de fora, como no plano de testes: pixel e cor (isso é da comparação visual), textos fixos e as bibliotecas de terceiros.</p>
+
+<h2>Antes de cada push</h2>
+<ul>
+<li>tsc, eslint e vitest verdes. As únicas falhas toleradas são as que já existiam: <code>audit-baseline-config</code>, e erros de tsc só em <code>cron-worker-auth.test.ts</code>.</li>
+<li>Se o runtime for tocado: <code>pytest tests/unit</code>, <code>lint-imports</code> e o documento da alteração com a linha no índice.</li>
+<li>Commits só em <code>claude/debug-console-error-FWrLE</code>.</li>
+</ul>
+</main>
+</body>
+</html>
