@@ -21,9 +21,12 @@ begin
   if not exists (
     select 1 from pg_policies where schemaname = 'public' and tablename = p_table and policyname = p_name
   ) then
+    -- Política FOR INSERT só aceita WITH CHECK (42601 com USING); a de
+    -- insert passa p_using só por simetria e ele é ignorado aqui.
     execute format(
-      'create policy %I on public.%I for %s to worker_role using (%s)%s',
-      p_name, p_table, p_cmd, p_using,
+      'create policy %I on public.%I for %s to worker_role%s%s',
+      p_name, p_table, p_cmd,
+      case when p_using is null or lower(p_cmd) = 'insert' then '' else ' using (' || p_using || ')' end,
       case when p_check is null then '' else ' with check (' || p_check || ')' end
     );
   end if;

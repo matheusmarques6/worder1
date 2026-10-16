@@ -1,6 +1,8 @@
 -- Corrigido em 16/10/2026: 20261016000001 redefinia ai_monthly_cost_usd como
 -- numeric e o ensaio parava em 42P13; agora mantém a tabela (spent_usd,
 -- has_unknown_cost) das migrations anteriores, que é o que o app lê.
+-- E 20261016000005 criava política FOR INSERT com USING (42601); agora só
+-- WITH CHECK.
 -- Gerado em 15/10/2026 a partir de supabase/migrations/ (sem linhas de
 -- comentário). ENSAIO: roda tudo numa transação e desfaz no fim (ROLLBACK).
 -- Se chegar ao fim sem erro, o script real aplica limpo.
@@ -3870,8 +3872,9 @@ begin
     select 1 from pg_policies where schemaname = 'public' and tablename = p_table and policyname = p_name
   ) then
     execute format(
-      'create policy %I on public.%I for %s to worker_role using (%s)%s',
-      p_name, p_table, p_cmd, p_using,
+      'create policy %I on public.%I for %s to worker_role%s%s',
+      p_name, p_table, p_cmd,
+      case when p_using is null or lower(p_cmd) = 'insert' then '' else ' using (' || p_using || ')' end,
       case when p_check is null then '' else ' with check (' || p_check || ')' end
     );
   end if;
