@@ -47,6 +47,21 @@ _PRESENTATION = {
     "discreta": "Não se apresente espontaneamente; responda direto. Se perguntarem quem é, diga.",
 }
 
+#: A voz escolhida no Construtor (persona.tone), descrita para o modelo
+#: (alteração 2026-10-15-17). A tela mostra o mesmo texto como exemplo;
+#: antes o prompt dizia só "Tom base: luxury.". Tom desconhecido segue cru.
+_TONE = {
+    "casual": "casual: leve e próximo, frases curtas, pode usar gírias leves e emoji",
+    "friendly": "amigável: caloroso e simples, trata o cliente pelo nome, sem formalidade",
+    "professional": (
+        "profissional: cordial e objetivo, sem gírias nem emoji, explica com clareza"
+    ),
+    "luxury": (
+        "sofisticado: vocabulário cuidado e frases completas, sem gírias, abreviações "
+        "ou emoji"
+    ),
+}
+
 _ADAPTATION_LINES = {
     "mirror_tone": "Espelhe o tom do cliente (formal com formal, leve com leve).",
     "mirror_length": "Espelhe o tamanho das mensagens do cliente.",
@@ -189,7 +204,7 @@ def _agent_block(agent: AgentBlock) -> RenderedBlock:
         _PRESENTATION.get(agent.presentation_mode, _PRESENTATION["nome_funcao"]).format(
             name=agent.name
         ),
-        f"Tom base: {agent.tone}.",
+        f"Tom base: {_TONE.get(agent.tone, agent.tone)}.",
     ]
     if agent.base_instructions:
         lines.append(agent.base_instructions)

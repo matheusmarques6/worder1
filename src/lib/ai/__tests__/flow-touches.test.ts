@@ -35,5 +35,7 @@ describe('flowTouchEntries', () => {
       ['agent-2', 'a', 'Fluxo a'],
     ])
     expect(entries.every((e) => e.kind === 'flow_touch' && e.active)).toBe(true)
+    // O Construtor acha a missão pela família e mostra quantos toques são.
+    expect(entries.map((e) => [e.families, e.touches])).toEqual([[['cart.abandoned'], 2], [['order.fulfilled'], 1]])
   })
 })

@@ -174,7 +174,7 @@ export default function NewAgentWizard({ organizationId }: { organizationId: str
               </div>
               <div className="note" style={{ marginTop: 20 }}>
                 <Icon n="alert" s={16} />
-                <span>{name.trim() || 'O agente'} nasce <b style={{ color: 'var(--ink)' }}>pausado</b>. Nada é enviado a clientes até você passar pelo checklist de publicação.</span>
+                <span>{name.trim() || 'O agente'} nasce como <b style={{ color: 'var(--ink)' }}>rascunho</b>. Nada é enviado a clientes até você passar pelo checklist de ativação.</span>
               </div>
               {error && <div className="note" role="alert" style={{ marginTop: 10, color: 'var(--er)', background: 'var(--er-bg)' }}><Icon n="alert" s={16} /><span>{error}</span></div>}
             </div>

@@ -21,6 +21,7 @@ export interface AgentTemplate {
   icon: string
   system_prompt: string
   persona: Partial<AgentPersona>
+  /** Chaves do runtime (agent-hub / prompt_compiler._ADAPTATION_LINES). */
   client_adaptation: Record<string, boolean>
   tools: string[]
   blocked_topics: string[]
@@ -51,7 +52,7 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
       'confirme o que o cliente procura antes de sugerir, e conduza para a compra sem ' +
       'pressionar. Nunca invente preço, prazo ou estoque: use as ferramentas.',
     persona: { tone: 'friendly', response_length: 'short', language: 'pt-BR' },
-    client_adaptation: { espelhar_tom: true, resumir_para_apressado: true },
+    client_adaptation: { mirror_tone: true, mirror_length: true },
     tools: ['transfer_to_human', 'search_knowledge', 'product_lookup', 'order_status', 'save_customer', 'save_interests'],
     blocked_topics: ['política', 'religião'],
     rules: ['Não promete prazo de entrega fora da tabela', 'Não fala de concorrentes'],
@@ -74,7 +75,7 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
       'reais das ferramentas. Nunca prometa prazo que a transportadora não deu. ' +
       'Reclamação vira transferência para a equipe.',
     persona: { tone: 'professional', response_length: 'medium', language: 'pt-BR' },
-    client_adaptation: { espelhar_tom: false, resumir_para_apressado: true },
+    client_adaptation: { mirror_tone: false, mirror_length: true },
     tools: ['transfer_to_human', 'search_knowledge', 'order_status', 'timeline'],
     blocked_topics: ['política', 'religião'],
     rules: ['Não aprova troca fora da política', 'Não altera endereço depois do envio'],
@@ -96,7 +97,7 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
       'Você retoma compras não concluídas. Uma mensagem curta, útil, sem insistir. ' +
       'Se a pessoa disser que não quer, respeite e encerre com simpatia.',
     persona: { tone: 'casual', response_length: 'short', language: 'pt-BR' },
-    client_adaptation: { espelhar_tom: true, resumir_para_apressado: true },
+    client_adaptation: { mirror_tone: true, mirror_length: true },
     tools: ['transfer_to_human', 'product_lookup', 'create_coupon'],
     blocked_topics: [],
     rules: ['Não insiste depois de 2 toques sem resposta', 'Não oferece incentivo sem autorização do fluxo'],

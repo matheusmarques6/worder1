@@ -133,7 +133,9 @@ export default function BuilderCanvas({ organizationId, agentId }: { organizatio
   useEffect(() => { void load() }, [load])
   useEffect(() => {
     fetch('/api/api-keys').then((r) => (r.ok ? r.json() : { keys: [] })).then((d) => {
-      const k = (d.keys ?? []).find((x: any) => x.is_active !== false && x.provider === (agent?.provider || 'openrouter')) ?? (d.keys ?? [])[0]
+      // Só a chave do provedor do agente; mostrar a de outro provedor fazia
+      // parecer conectado um agente que não tem chave.
+      const k = (d.keys ?? []).find((x: any) => x.is_active !== false && x.provider === (agent?.provider || 'openrouter'))
       setKeyMask(k?.api_key_hint ? `${String(k.api_key_hint).split('-')[0]}-••••${String(k.api_key_hint).slice(-4)}` : null)
     }).catch(() => {})
   }, [agent?.provider])
@@ -200,7 +202,7 @@ export default function BuilderCanvas({ organizationId, agentId }: { organizatio
     if (!f || !agent) return null
     const m = deriveModel({
       hub: f.hub, agentId, entries, missions, agents, metrics, usdBrl, handoffDest: f.dest,
-      notes: notes.map((n) => ({ ...n, preview: previews[n.id] ?? '' })),
+      notes: notes.map((n) => ({ ...n, preview: previews[n.id] })),
       spentBrl: spentUsd == null ? null : Math.round(spentUsd * usdBrl * 100) / 100,
     })
     return m
@@ -214,7 +216,7 @@ export default function BuilderCanvas({ organizationId, agentId }: { organizatio
     fetch(`/api/ai/knowledge/${id}`).then((r) => (r.ok ? r.json() : null)).then((d) => {
       const text = String(d?.note?.body_markdown ?? d?.note?.text_content ?? '').replace(/[#>*_[\]]/g, '').trim()
       setPreviews((p) => ({ ...p, [id]: text.slice(0, 280) }))
-    }).catch(() => {})
+    }).catch(() => setPreviews((p) => ({ ...p, [id]: '' })))
   }, [sel, previews])
 
   if (error && !agent) return <div style={{ padding: 24 }}>{error} · <Link href="/ai/agentes">Voltar</Link></div>
@@ -296,7 +298,7 @@ export default function BuilderCanvas({ organizationId, agentId }: { organizatio
   const left = diag
     ? <Diagnostics issues={issues} onClose={() => setDiag(false)} onPick={(node) => { setDiag(false); setSel(issueNode(node, model)) }} />
     : sel
-      ? <Inspector id={sel} f={model} agent={head} modelSlug={f.hub.budget.model} handoffMessage={f.hub.handoff.message} keyMask={keyMask}
+      ? <Inspector id={sel} f={model} agent={head} modelSlug={f.hub.budget.model} handoffMessage={f.hub.handoff.message} keyMask={keyMask} keyProvider={providerLabel(agent.provider)}
           monthLabel={MONTHS[now.getMonth()]} agents={agents} rejected={rejected} onClose={() => setSel(null)} onRemove={(id) => void remove(id)} onCopy={copyId}
           actions={{
             setVoice: (l) => updHub((h) => setVoice(h, l)),
@@ -410,4 +412,9 @@ function whenLabel(iso: string): string {
   if (d.toDateString() === today.toDateString()) return `Hoje, ${hm}`
   if (d.toDateString() === yesterday.toDateString()) return `Ontem, ${hm}`
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}, ${hm}`
+}
+
+const PROVIDER_LABEL: Record<string, string> = { openrouter: 'OpenRouter', openai: 'OpenAI', anthropic: 'Anthropic', google: 'Google', gemini: 'Google' }
+function providerLabel(p: string | null | undefined): string {
+  return PROVIDER_LABEL[p || 'openrouter'] ?? (p || 'OpenRouter')
 }

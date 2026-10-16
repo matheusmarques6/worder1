@@ -18,6 +18,8 @@ export interface EntryView {
   id: string
   entryId: string
   kind: 'whatsapp_account' | 'flow_touch'
+  /** Toque de fluxo: o fluxo de onde vem ("Abrir fluxo" leva até ele). */
+  flowId?: string
   ic: string
   tone: Tone
   t: string
@@ -27,7 +29,7 @@ export interface EntryView {
   mis: string
   incentive: string | null
 }
-export interface KbView { id: string; sourceId: string; t: string; s: string; st: 'ok' | 'sync' | 'proc' | 'error'; m: Mets; prev: string; others: string }
+export interface KbView { id: string; sourceId: string; t: string; s: string; st: 'ok' | 'sync' | 'proc' | 'error'; m: Mets; prev: string | null; others: string }
 export interface ToolView { id: string; name: string; t: string; s: string; lock: boolean; m: Mets }
 
 export interface BuilderModel {
@@ -51,6 +53,21 @@ export interface BuilderModel {
 export const VOICES: Array<[Voice, string]> = [
   ['casual', 'Casual'], ['friendly', 'Amigável'], ['professional', 'Profissional'], ['luxury', 'Sofisticada'],
 ]
+/** O que cada voz muda, com uma frase de exemplo. O texto da descrição é o
+ *  mesmo que o runtime põe no prompt (prompt_compiler._TONE, 2026-10-15-17). */
+export const VOICE_INFO: Record<string, { d: string; ex: string }> = {
+  Casual: { d: 'Leve e próximo, frases curtas, pode usar gírias leves e emoji.', ex: 'Opa! Tem sim, e tá saindo muito essa semana 😄 Quer que eu separe?' },
+  'Amigável': { d: 'Caloroso e simples, trata o cliente pelo nome, sem formalidade.', ex: 'Oi, Ana! Tem sim, e combina muito com o que você levou da última vez. Quer o link?' },
+  Profissional: { d: 'Cordial e objetivo, sem gírias nem emoji, explica com clareza.', ex: 'Olá, Ana. O produto está disponível em estoque. Posso enviar o link para finalizar a compra?' },
+  Sofisticada: { d: 'Vocabulário cuidado e frases completas, sem gírias, abreviações ou emoji.', ex: 'Boa tarde, Ana. Temos a peça disponível e posso reservá-la para a senhora. Deseja que eu envie o link?' },
+}
+/** Como o agente se apresenta em cada modo (prompt_compiler._PRESENTATION). */
+export function presentationExample(label: string, name: string, role: string | null): string {
+  if (label === 'Só o nome') return 'Não se apresenta sozinho; responde direto. Se perguntarem, diz o nome.'
+  if (label === 'Assistente virtual da loja') return '“Oi! Sou a assistente virtual da loja. Como posso ajudar?”'
+  return `“Oi! Aqui é ${name}, do time de ${(role || 'atendimento').toLowerCase()} da loja.”`
+}
+
 export const PRESENTATIONS: Array<[Presentation, string]> = [
   ['nome_funcao', 'Nome e função'], ['discreta', 'Só o nome'], ['transparente', 'Assistente virtual da loja'],
 ]
@@ -94,7 +111,7 @@ const TOOL_ICON: Record<string, string> = {
 
 export interface DeriveInput {
   hub: HubState
-  entries: Array<{ id: string; kind: string; label: string; ref_id?: string }>
+  entries: Array<{ id: string; kind: string; label: string; ref_id?: string; families?: string[]; touches?: number }>
   missions: Array<{ id: string; event_type: string; display_name?: string | null; status: string; concession?: any; version?: number | null }>
   notes: Array<{ id: string; name: string; status?: string | null; source_type?: string | null; kind?: string | null; chunks_count?: number | null; readers?: string[]; preview?: string | null }>
   agentId: string
@@ -159,12 +176,17 @@ export function deriveModel(input: DeriveInput): BuilderModel {
   const entries: EntryView[] = input.entries.map((e) => {
     const met = mEntry.get(e.id)
     if (e.kind === 'flow_touch') {
-      const mission = input.missions.find((m) => m.id === e.ref_id)
+      // ref_id é o FLUXO; a missão é a ativa de uma das famílias que os nós
+      // de IA dele chamam. As conversas de toque não guardam a entrada, então
+      // o bloco mostra o que existe de verdade: quantos toques e qual missão.
+      const families = e.families ?? []
+      const mission = input.missions.find((m) => m.status === 'active' && families.includes(m.event_type))
       const incentive = concessionText(mission?.concession)
+      const touches = e.touches ?? 1
       return {
-        id: `e:${e.id}`, entryId: e.id, kind: 'flow_touch', ic: 'zap', tone: 'amber', t: e.label,
-        s: incentive ?? 'Toque de fluxo', m: [[n0(met?.conversations), 'conversas'], [met?.purchase_rate == null ? dash : pct(met.purchase_rate), 'compraram']],
-        when: 'Quando o fluxo chamar', mis: mission ? misLabel(mission) : e.label, incentive,
+        id: `e:${e.id}`, entryId: e.id, kind: 'flow_touch', ic: 'zap', tone: 'amber', t: e.label, flowId: e.ref_id,
+        s: incentive ?? 'Toque de fluxo', m: [[String(touches), touches === 1 ? 'toque no fluxo' : 'toques no fluxo'], [mission ? 'ativa' : dash, 'missão']],
+        when: 'Quando o fluxo chamar', mis: mission ? misLabel(mission) : dash, incentive,
       }
     }
     return {
@@ -178,7 +200,7 @@ export function deriveModel(input: DeriveInput): BuilderModel {
     .filter((n) => (n.readers ?? []).includes(input.agentId))
     .map((n) => ({
       id: `k:${n.id}`, sourceId: n.id, t: n.name, s: sourceSubtitle(n), st: sourceState(n.status, n.source_type),
-      m: [[n0(mKb.get(n.id)?.uses ?? 0), 'usos']], prev: n.preview ?? '',
+      m: [[n0(mKb.get(n.id)?.uses ?? 0), 'usos']], prev: n.preview === undefined ? null : n.preview ?? '',
       others: (n.readers ?? []).filter((r) => r !== input.agentId).map((r) => agentName.get(r) ?? 'Agente').join(', ') || 'Nenhum',
     }))
 
@@ -213,11 +235,14 @@ export function deriveModel(input: DeriveInput): BuilderModel {
         [ag.cost_per_conversation_brl == null ? dash : brl(ag.cost_per_conversation_brl), 'por conversa'],
         [ag.eval_score == null ? dash : String(Math.round(ag.eval_score)), 'avaliação'],
       ],
-      adapt: [[M?.adaptation?.adjusted_rate == null ? dash : pct(M.adaptation.adjusted_rate), 'respostas ajustadas']],
+      // Nenhum dado diz quantas respostas a adaptação mudou: o bloco mostra
+      // quantos ajustes estão ligados, que é o que existe.
+      adapt: [[`${ADAPT_OPTIONS.filter(([, get]) => get(hub)).length} de ${ADAPT_OPTIONS.length}`, 'ajustes ligados']],
       limits: [[n0(M?.limits?.blocked), 'bloqueios em 7 dias']],
       review: [[M?.review?.approved_rate == null ? dash : pct(M.review.approved_rate, 1), 'aprovadas'], [n0(M?.review?.rejected), 'reprovadas']],
       split: [[n0(M?.needs_person?.transferred), 'transferidas']],
-      transfer: [[M?.transfer?.avg_wait_ms == null ? dash : `${Math.round(M.transfer.avg_wait_ms / 60000)} min`, 'espera média'], [dash, 'no prazo']],
+      // Espera da equipe não é medida; mostra quantas foram e para onde vão.
+      transfer: [[n0(M?.needs_person?.transferred), 'transferidas 7d'], [input.handoffDest && input.handoffDest !== 'team' ? (agentName.get(input.handoffDest) ?? 'Agente') : 'Equipe', 'destino']],
       send: [[n0(M?.send?.replies), 'respostas'], [M?.send?.resolved_rate == null ? dash : pct(M.send.resolved_rate), 'resolvidas']],
     },
   }

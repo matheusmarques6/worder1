@@ -21,7 +21,7 @@ const input = {
   agentId: 'a1',
   entries: [
     { id: 'e1', kind: 'whatsapp_account', label: 'Loja · +55 11 4000-1234' },
-    { id: 'e2', kind: 'flow_touch', label: 'Carrinho abandonado · toque 2', ref_id: 'm2' },
+    { id: 'e2', kind: 'flow_touch', label: 'Carrinho abandonado · toque 2', ref_id: 'flow-1', families: ['cart.abandoned'], touches: 2 },
   ],
   missions: [
     { id: 'm1', event_type: 'whatsapp.received', display_name: 'Atendimento direto', status: 'active', version: 6 },
@@ -51,8 +51,9 @@ describe('deriveModel', () => {
   it('entradas no texto do protótipo', () => {
     expect(f.entries[0]).toMatchObject({ id: 'e:e1', t: 'WhatsApp (11) 4000-1234', s: 'Cliente chamou a loja', mis: 'Atendimento direto · v6' })
     expect(f.entries[0].m).toEqual([['312', 'conversas'], ['8s', '1ª resposta']])
-    expect(f.entries[1]).toMatchObject({ t: 'Carrinho abandonado · toque 2', s: 'Autoriza cupom de até 10%', when: 'Quando o fluxo chamar' })
-    expect(f.entries[1].m[1]).toEqual(['—', 'compraram'])
+    // ref_id do toque é o FLUXO; a missão vem pela família que os nós chamam.
+    expect(f.entries[1]).toMatchObject({ t: 'Carrinho abandonado · toque 2', s: 'Autoriza cupom de até 10%', when: 'Quando o fluxo chamar', mis: 'Carrinho abandonado', flowId: 'flow-1' })
+    expect(f.entries[1].m).toEqual([['2', 'toques no fluxo'], ['ativa', 'missão']])
   })
   it('conhecimento só com o que o agente lê', () => {
     expect(f.kb.map((k) => k.t)).toEqual(['Política de troca', 'Catálogo Shopify'])
@@ -70,7 +71,9 @@ describe('deriveModel', () => {
     expect(f.agent).toMatchObject({ voice: 'Amigável', pres: 'Nome e função', model: 'GPT-4.1 mini', cap: 400, used: 212.4 })
     expect(f.fixed.agent).toEqual([['412', 'conversas'], ['R$ 18.420', 'receita'], ['R$ 0,04', 'por conversa'], ['92', 'avaliação']])
     expect(f.fixed.review).toEqual([['97,8%', 'aprovadas'], ['9', 'reprovadas']])
-    expect(f.fixed.adapt).toEqual([['—', 'respostas ajustadas']])
+    // Nada mede respostas ajustadas: o bloco mostra os ajustes ligados.
+    expect(f.fixed.adapt).toEqual([['3 de 5', 'ajustes ligados']])
+    expect(f.fixed.transfer[1]).toEqual(['Equipe', 'destino'])
   })
 })
 

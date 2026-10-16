@@ -114,7 +114,6 @@ export default function ActivityDashboard() {
     ['Conversão', apc(convP(k)), delta(convP(k), p ? convP(p) : null, { pp: true }), 'conversa → pedido'],
     ['Ticket médio', k.orders ? brl(k.avg_ticket, 0) : '—', k.orders ? delta(k.avg_ticket, p?.orders ? p.avg_ticket : null) : null],
     ['1ª resposta', frtS(k) != null ? secs(frtS(k)!) : '—', delta(frtS(k), p ? frtS(p) : null, { inv: true }), 'mediana'],
-    ['Satisfação', '—', null, 'sem avaliações ainda'],
     ['Custo', brl(costB(k)), delta(costB(k), p ? costB(p) : null, { inv: true }), `${brl(k.conversations ? costB(k) / k.conversations : 0, 3)} por conversa`],
   ] : []
 
@@ -199,7 +198,7 @@ export default function ActivityDashboard() {
           <div className="ac-ch"><h3 className="ct">Por agente</h3><span className="ac-hint">Clique para filtrar</span></div>
           <div className="ac-ts">
             <table className="ac-tbl">
-              <thead><tr><th>Agente</th><th className="r">Conversas</th><th className="r">Resolução</th><th className="r">Transf.</th><th className="r">Pedidos</th><th className="r">Receita</th><th className="r">Conversão</th><th className="r">Ticket</th><th className="r">1ª resp.</th><th className="r">Satisfação</th><th className="r">Incentivos</th><th className="r">Custo</th><th className="r">Retorno</th></tr></thead>
+              <thead><tr><th>Agente</th><th className="r">Conversas</th><th className="r">Resolução</th><th className="r">Transf.</th><th className="r">Pedidos</th><th className="r">Receita</th><th className="r">Conversão</th><th className="r">Ticket</th><th className="r">1ª resp.</th><th className="r">Incentivos</th><th className="r">Custo</th><th className="r">Retorno</th></tr></thead>
               <tbody>
                 {perAgent.map(({ a, s, pv }) => {
                   const c = s ? costB(s) : 0
@@ -214,7 +213,6 @@ export default function ActivityDashboard() {
                       <td className="r">{s?.conversations ? apc(convP(s)) : '—'}</td>
                       <td className="r">{s?.orders ? brl(s.avg_ticket, 0) : '—'}</td>
                       <td className="r">{s && frtS(s) != null ? secs(frtS(s)!) : '—'}</td>
-                      <td className="r">—</td>
                       <td className="r">{anf(s?.incentives_used ?? 0)}<em className="ac-sub">de {anf(s?.incentives_offered ?? 0)}</em></td>
                       <td className="r">{brl(c)}</td>
                       <td className="r b">{c > 0 ? `${Math.round((s?.revenue ?? 0) / c).toLocaleString('pt-BR')}×` : '—'}</td>
@@ -226,7 +224,7 @@ export default function ActivityDashboard() {
                 <tr>
                   <td><b>Total</b></td><td className="r">{anf(k.conversations)}</td><td className="r">{apc(resP(k))}</td><td className="r">{anf(k.transfers)}</td>
                   <td className="r">{anf(k.orders)}</td><td className="r b">{brl(k.revenue, 0)}</td><td className="r">{apc(convP(k))}</td>
-                  <td className="r">{k.orders ? brl(k.avg_ticket, 0) : '—'}</td><td className="r">{frtS(k) != null ? secs(frtS(k)!) : '—'}</td><td className="r">—</td>
+                  <td className="r">{k.orders ? brl(k.avg_ticket, 0) : '—'}</td><td className="r">{frtS(k) != null ? secs(frtS(k)!) : '—'}</td>
                   <td className="r">{anf(totIncU)}</td><td className="r">{brl(costB(k))}</td>
                   <td className="r b">{costB(k) > 0 ? `${Math.round(k.revenue / costB(k)).toLocaleString('pt-BR')}×` : '—'}</td>
                 </tr>

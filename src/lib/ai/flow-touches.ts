@@ -47,16 +47,20 @@ export function flowTouchEntries(
   touches: FlowTouchNode[],
   activeMissionOwner: Map<string, string | null>,
 ): AgentEntry[] {
-  const seen = new Set<string>()
+  const byKey = new Map<string, AgentEntry>()
   const out: AgentEntry[] = []
   for (const touch of touches) {
     if (!touch.active) continue
     const owner = activeMissionOwner.get(touch.event_family)
     if (!owner) continue
     const key = `${owner}:${touch.automation_id}`
-    if (seen.has(key)) continue
-    seen.add(key)
-    out.push({
+    const seen = byKey.get(key)
+    if (seen) {
+      seen.touches = (seen.touches ?? 0) + 1
+      if (!seen.families!.includes(touch.event_family)) seen.families!.push(touch.event_family)
+      continue
+    }
+    const entry: AgentEntry = {
       id: `flow:${touch.automation_id}:${owner}`,
       agent_id: owner,
       kind: 'flow_touch',
@@ -64,7 +68,11 @@ export function flowTouchEntries(
       active: true,
       label: touch.automation_name,
       created_at: '',
-    })
+      families: [touch.event_family],
+      touches: 1,
+    }
+    byKey.set(key, entry)
+    out.push(entry)
   }
   return out
 }

@@ -325,3 +325,22 @@ class TestPreviewIsTheSameFunction:
                 conversation=a_conversation_block(),
                 mode="turn",
             )
+
+
+class TestToneIsDescribed:
+    """Alteração 2026-10-15-17: a voz vira descrição em português no prompt."""
+
+    @pytest.mark.parametrize(
+        ("tone", "expected"),
+        [
+            ("luxury", "Tom base: sofisticado: vocabulário cuidado"),
+            ("professional", "Tom base: profissional: cordial e objetivo"),
+            ("casual", "Tom base: casual: leve e próximo"),
+            ("friendly", "Tom base: amigável: caloroso e simples"),
+        ],
+    )
+    def test_known_tone(self, tone: str, expected: str) -> None:
+        assert expected in full_compile(agent=an_agent_block(tone=tone)).text
+
+    def test_unknown_tone_passes_through(self) -> None:
+        assert "Tom base: pirata." in full_compile(agent=an_agent_block(tone="pirata")).text

@@ -4,11 +4,11 @@
 // protótipo, ligados aos dados reais. Controles sem suporte no runtime
 // ficam de fora em vez de fingir que funcionam.
 
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { brl } from '@/lib/ai/brl'
 import {
-  ADAPT_OPTIONS, MODELS, PRESENTATIONS, VOICES, layout2,
+  ADAPT_OPTIONS, MODELS, PRESENTATIONS, VOICES, VOICE_INFO, layout2, presentationExample,
   type BuilderModel, type LNode, type PaletteItem,
 } from '@/lib/ai/builder-model'
 import type { Diagnostic } from '@/lib/ai/block-metrics'
@@ -107,13 +107,15 @@ export interface InspectorActions {
   editMissions: () => void
 }
 
-export function Inspector({ id, f, agent, modelSlug, handoffMessage, keyMask, monthLabel, agents, rejected, actions, onClose, onRemove, onCopy }: {
+export function Inspector({ id, f, agent, modelSlug, handoffMessage, keyMask, keyProvider, monthLabel, agents, rejected, actions, onClose, onRemove, onCopy }: {
   id: string
   f: BuilderModel
   agent: AgentHead
   modelSlug: string
   handoffMessage: string
   keyMask: string | null
+  /** Provedor que o agente usa ("OpenRouter"): a chave mostrada é a dele. */
+  keyProvider: string
   monthLabel: string
   agents: Array<{ id: string; name: string | null; role: string | null }>
   rejected: Array<{ at: string; text: string }>
@@ -149,7 +151,7 @@ export function Inspector({ id, f, agent, modelSlug, handoffMessage, keyMask, mo
         </Sec>
         {d.kind === 'whatsapp_account'
           ? <div className="w-info"><Icon n="clock" s={14} />Fora da janela de 24h, {agent.name} só responde com template aprovado pela Meta.</div>
-          : <div className="w-info"><Icon n="zap" s={14} />Objetivo e autorização deste toque são editados no nó de IA do fluxo. <Link href="/automations">Abrir fluxo</Link></div>}
+          : <div className="w-info"><Icon n="zap" s={14} />Objetivo e autorização deste toque são editados no nó de IA do fluxo. <Link href={d.flowId ? `/automations/${d.flowId}` : '/automations'}>Abrir fluxo</Link></div>}
       </>
     )
   }
@@ -161,7 +163,9 @@ export function Inspector({ id, f, agent, modelSlug, handoffMessage, keyMask, mo
           <KV k="Situação">{d.st === 'error' ? <span className="w-pill off"><i></i>Erro</span> : <Pill k={d.st === 'ok' ? 'live' : d.st} />}</KV>
           <KV k="Outros agentes">{d.others}</KV>
         </Sec>
-        <Sec t="Prévia do conteúdo"><div className="w-prev">{d.prev || 'Conteúdo em processamento.'}</div></Sec>
+        <Sec t="Prévia do conteúdo">
+          <div className="w-prev">{d.prev === null ? 'Carregando…' : d.prev || (d.st === 'ok' ? 'Esta fonte não tem texto para mostrar (o conteúdo vem de arquivo ou catálogo).' : 'Conteúdo em processamento.')}</div>
+        </Sec>
         <div className="w-info"><Icon n="faqHelp" s={14} />Editar esta fonte muda a resposta de todos os agentes que a usam.</div>
       </>
     )
@@ -176,30 +180,38 @@ export function Inspector({ id, f, agent, modelSlug, handoffMessage, keyMask, mo
   }
   if (n.type === 'agent') {
     const capPct = f.agent.cap && f.agent.used != null ? Math.min(1, f.agent.used / f.agent.cap) : 0
-    const models = MODELS.some(([s]) => s === modelSlug) ? MODELS : [...MODELS, [modelSlug, f.agent.model] as [string, string]]
+    const voice = VOICE_INFO[f.agent.voice]
+    const spent = f.agent.used == null ? 'Sem gasto registrado' : `${brl(f.agent.used)} usados em ${monthLabel}`
     body = (
       <>
         <Sec t="Identidade">
-          <div className="w-seg">{VOICES.map(([, x]) => <button type="button" key={x} className={f.agent.voice === x ? 'on' : ''} onClick={() => actions.setVoice(x)}>{x}</button>)}</div>
+          <div className="w-seg" role="radiogroup" aria-label="Voz">{VOICES.map(([, x]) => <button type="button" role="radio" aria-checked={f.agent.voice === x} key={x} className={f.agent.voice === x ? 'on' : ''} onClick={() => actions.setVoice(x)}>{x}</button>)}</div>
+          {voice && (
+            <div className="w-help" style={{ marginTop: 8 }}>
+              {voice.d}
+              <div style={{ marginTop: 6, padding: '8px 10px', borderRadius: 10, background: '#F3F4F6', color: '#1F2937', fontStyle: 'normal' }}>{voice.ex}</div>
+            </div>
+          )}
           <KV k="Apresentação">
             <select className="w-select" value={f.agent.pres} onChange={(e) => actions.setPres(e.target.value)}>
               {PRESENTATIONS.map(([, l]) => <option key={l}>{l}</option>)}
             </select>
           </KV>
-          <div className="w-help">Se perguntarem, {agent.name} sempre confirma que é uma IA.</div>
+          <div className="w-help">{presentationExample(f.agent.pres, agent.name, agent.role)} Se perguntarem, {agent.name} sempre confirma que é uma IA.</div>
         </Sec>
         <Sec t="Motor e custo">
-          <KV k="Modelo">
-            <select className="w-select" value={modelSlug} onChange={(e) => actions.setModel(e.target.value)}>
-              {models.map(([s, l]) => <option key={s} value={s}>{l}</option>)}
-            </select>
-          </KV>
-          <KV k="Chave"><span className="mono">{keyMask ?? 'não conectada'}</span></KV>
+          <KV k="Modelo"><ModelField slug={modelSlug} onChange={actions.setModel} /></KV>
+          <KV k="Chave"><span className="mono">{keyMask ? `${keyProvider} · ${keyMask}` : `${keyProvider} não conectada`}</span></KV>
           <KV k="Limite do mês">
             <CapField cap={f.agent.cap} onChange={actions.setCapBrl} />
           </KV>
-          <div className="w-bar lg"><i style={{ width: capPct * 100 + '%' }}></i></div>
-          <div className="w-help">{f.agent.used == null ? 'Sem gasto registrado' : `${brl(f.agent.used)} usados em ${monthLabel}`}. Ao atingir o limite, {agent.name} pausa e avisa a equipe.</div>
+          {f.agent.cap != null && <div className="w-bar lg"><i style={{ width: capPct * 100 + '%' }}></i></div>}
+          <div className="w-help">
+            {f.agent.cap != null
+              ? `${spent}. Ao atingir o limite, ${agent.name} pausa e avisa a equipe.`
+              : `${spent}. Sem teto: ${agent.name} não pausa por gasto. Clique em “Sem limite” para definir um valor em R$.`}
+            {!keyMask && <> <Link href="/settings/api">Conectar chave</Link></>}
+          </div>
         </Sec>
       </>
     )
@@ -245,9 +257,16 @@ export function Inspector({ id, f, agent, modelSlug, handoffMessage, keyMask, mo
             </select>
           </KV>
         </Sec>
+        <div className="w-help" style={{ margin: '-4px 0 12px' }}>
+          {f.handoff.dest === 'team'
+            ? `Quando ${agent.name} decide que não deve seguir, a conversa vai para o Inbox e a IA para de responder nela.`
+            : `Quando ${agent.name} decide que não deve seguir, a conversa passa para ${f.handoff.destName ?? 'o agente escolhido'}, que responde a partir da próxima mensagem. Se esse agente estiver pausado, vai para a equipe.`}
+          {' '}Pedido de atendente, mídia que a IA não lê e assunto proibido sempre vão para a equipe.
+        </div>
         <Sec t="Mensagem ao transferir">
-          <textarea className="w-ta" rows={3} defaultValue={handoffMessage} placeholder={`Vou te passar para ${f.handoff.dest === 'team' ? 'alguém da equipe' : f.handoff.destName ?? 'outro agente'}. Já conto o que conversamos.`}
+          <textarea className="w-ta" rows={3} defaultValue={handoffMessage} placeholder="Claro! Já estou passando para uma pessoa da equipe."
             onBlur={(e) => actions.setMessage(e.target.value)} />
+          <div className="w-help">Enviada quando o cliente pede atendente com uma das frases do bloco “Precisa de uma pessoa?”. Na transferência decidida pela IA, ela mesma avisa o cliente.</div>
         </Sec>
       </>
     )
@@ -258,6 +277,11 @@ export function Inspector({ id, f, agent, modelSlug, handoffMessage, keyMask, mo
         <KV k="Agrupar mensagens"><span className="w-rng"><input type="range" min="3" max="60" value={f.send.debounce} onChange={(e) => actions.setDelivery({ debounce: Number(e.target.value) })} /><b className="mono">{f.send.debounce}s</b></span></KV>
         <KV k="Dividir em balões"><SwW on={f.send.split} set={(v) => actions.setDelivery({ split: v })} label="Dividir" /></KV>
         <KV k="Ritmo de digitação"><SwW on={f.send.typing} set={(v) => actions.setDelivery({ typing: v })} label="Ritmo" /></KV>
+        <div className="w-help">
+          Espera {f.send.debounce}s depois da última mensagem do cliente antes de responder, para ler a rajada inteira.
+          {f.send.split ? ' Respostas longas saem em balões curtos, como uma pessoa escreve.' : ' A resposta sai num balão só.'}
+          {f.send.typing ? ' Mostra “digitando…” e espaça os balões pelo tamanho do texto.' : ' Os balões saem sem pausa entre eles.'}
+        </div>
       </Sec>
     )
   }
@@ -278,11 +302,47 @@ export function Inspector({ id, f, agent, modelSlug, handoffMessage, keyMask, mo
   )
 }
 
+/** Modelo do agente: os slugs da OpenRouter (o runtime fala com ela), com
+ *  busca e o preço por 1M de tokens. Sem rede, a lista curta + o atual. */
+interface OrModel { id: string; name: string; prompt_per_m: number | null; completion_per_m: number | null }
+let modelsCache: OrModel[] | null = null
+function ModelField({ slug, onChange }: { slug: string; onChange: (slug: string) => void }) {
+  const [models, setModels] = useState<OrModel[]>(modelsCache ?? [])
+  const [q, setQ] = useState<string | null>(null)
+  useEffect(() => {
+    if (modelsCache) return
+    fetch('/api/ai/openrouter-models').then((r) => (r.ok ? r.json() : { models: [] })).then((d) => {
+      modelsCache = d.models ?? []
+      setModels(modelsCache!)
+    }).catch(() => {})
+  }, [])
+  const list: OrModel[] = models.length ? models : MODELS.map(([id, name]) => ({ id, name, prompt_per_m: null, completion_per_m: null }))
+  const cur = list.find((m) => m.id === slug)
+  const price = cur && cur.prompt_per_m != null ? `US$ ${cur.prompt_per_m} / ${cur.completion_per_m} por 1M tokens (entrada / saída)` : null
+  if (q === null) {
+    return (
+      <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+        <button type="button" className="w-select" style={{ textAlign: 'left', minWidth: 190 }} onClick={() => setQ('')} title="Trocar modelo">{cur?.name ?? slug}</button>
+        {price && <span className="w-help" style={{ margin: 0, fontSize: 11 }}>{price}</span>}
+      </span>
+    )
+  }
+  return (
+    <>
+      <input autoFocus list="or-models" className="w-select" style={{ minWidth: 230, backgroundImage: 'none' }} placeholder="Buscar: gemini, claude, gpt…" value={q}
+        onChange={(e) => setQ(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Escape') setQ(null) }}
+        onBlur={() => { const hit = list.find((m) => m.id === q?.trim()); if (hit && hit.id !== slug) onChange(hit.id); setQ(null) }} />
+      <datalist id="or-models">{list.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</datalist>
+    </>
+  )
+}
+
 /** "Limite do mês R$ 400,00": texto como no protótipo; clique para editar. */
 function CapField({ cap, onChange }: { cap: number | null; onChange: (v: number | null) => void }) {
   const [editing, setEditing] = useState(false)
   if (!editing) {
-    return <button type="button" onClick={() => setEditing(true)} title="Editar limite" style={{ fontWeight: 600 }}>{cap == null ? 'Sem limite' : brl(cap)}</button>
+    return <button type="button" onClick={() => setEditing(true)} title="Editar limite" style={{ fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 }}>{cap == null ? 'Sem limite' : brl(cap)}<Icon n="edit" s={13} c="#9CA3AF" /></button>
   }
   return (
     <input autoFocus className="w-select" style={{ width: 120, textAlign: 'right', backgroundImage: 'none', paddingRight: 10 }} inputMode="decimal" aria-label="Limite do mês em reais"

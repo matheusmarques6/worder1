@@ -13,6 +13,10 @@ export interface AgentEntry {
   active: boolean
   label: string
   created_at: string
+  /** Só em flow_touch: famílias de missão que os nós de IA do fluxo chamam
+   *  para este agente e quantos nós são (ref_id é o id do FLUXO). */
+  families?: string[]
+  touches?: number
 }
 
 export const ENTRY_KINDS: EntryKind[] = ['whatsapp_account', 'flow_touch']

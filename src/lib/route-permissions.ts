@@ -53,6 +53,7 @@ export const ADMIN_ONLY_APIS = [
   '/api/integrations',
   '/api/settings',
   '/api/ai/models',
+  '/api/ai/openrouter-models',
 ]
 
 // Verificar se rota é pública
