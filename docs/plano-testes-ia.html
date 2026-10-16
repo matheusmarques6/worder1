@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Suíte de testes da IA</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: uma coluna de leitura; cada tela é uma tabela de elementos com o comportamento esperado, o porquê, a camada e a situação. */
+:root {
+  --bg: #F7F7F4; --surface: #FFFFFF; --ink: #1B1E22; --muted: #5E6470; --line: #E3E3DC;
+  --accent: #C2410C; --accent-soft: #FDEBDD;
+  --ok: #166534; --ok-bg: #E4F3E8; --warn: #8A4B08; --warn-bg: #FBEFD9; --no: #4B5563; --no-bg: #EEF0F2; --crit: #B42318; --crit-bg: #FCE9E7;
+  --display: 'Fraunces', Georgia, 'Times New Roman', serif;
+  --body: 'Instrument Sans', -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #15171A; --surface: #1D2024; --ink: #ECEDEA; --muted: #A2A7B0; --line: #30343A;
+  --accent: #F28B4B; --accent-soft: #3A2417;
+  --ok: #7DD39A; --ok-bg: #18301F; --warn: #F2C27A; --warn-bg: #36280F; --no: #B6BCC6; --no-bg: #2A2E34; --crit: #F49A90; --crit-bg: #3A1D1A;
+  color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #15171A; --surface: #1D2024; --ink: #ECEDEA; --muted: #A2A7B0; --line: #30343A;
+  --accent: #F28B4B; --accent-soft: #3A2417;
+  --ok: #7DD39A; --ok-bg: #18301F; --warn: #F2C27A; --warn-bg: #36280F; --no: #B6BCC6; --no-bg: #2A2E34; --crit: #F49A90; --crit-bg: #3A1D1A;
+  color-scheme: dark }
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 var(--body); }
+.wrap { max-width: 1060px; margin: 0 auto; padding-block: 40px 72px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 40px; }
+h1, h2 { font-family: var(--display); font-weight: 600; letter-spacing: -0.01em; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(30px, 5vw, 42px); line-height: 1.1; }
+h2 { font-size: 24px; }
+h3 { font-size: 15px; font-weight: 600; margin: 0; }
+p { margin: 0; max-width: 68ch; }
+.lead { color: var(--muted); font-size: 16px; }
+header { display: grid; gap: 12px; }
+.eyebrow { font: 500 12px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+section { display: grid; gap: 14px; }
+.sub { color: var(--muted); }
+code { font-family: var(--mono); font-size: 12.5px; background: var(--no-bg); padding: 1px 5px; border-radius: 4px; }
+.scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; min-width: 760px; font-size: 13.5px; }
+th { text-align: left; font: 600 11.5px var(--body); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 10px 12px; border-bottom: 1px solid var(--line); background: var(--surface); }
+td { padding: 10px 12px; border-top: 1px solid var(--line); vertical-align: top; }
+tr:first-child td { border-top: 0; }
+td.el { font-weight: 600; width: 17%; }
+td.why { color: var(--muted); width: 30%; }
+td.ly, td.st { white-space: nowrap; width: 1%; }
+.chip { display: inline-block; font: 500 11.5px var(--body); padding: 2px 8px; border-radius: 999px; }
+.c-ok { background: var(--ok-bg); color: var(--ok); }
+.c-part { background: var(--warn-bg); color: var(--warn); }
+.c-miss { background: var(--crit-bg); color: var(--crit); }
+.c-ly { background: var(--no-bg); color: var(--no); font-family: var(--mono); font-size: 11px; }
+.layers { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.layer { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 6px; align-content: start; min-width: 0; }
+.layer .tag { font: 500 11px var(--mono); color: var(--accent); }
+.layer p { font-size: 13.5px; color: var(--muted); }
+.decide { display: grid; gap: 10px; }
+.dc { border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 10px 10px 0; padding: 12px 14px; display: grid; gap: 4px; }
+.dc p { font-size: 14px; }
+.not { display: grid; gap: 10px; }
+.ni { display: grid; grid-template-columns: minmax(0, 220px) minmax(0, 1fr); gap: 16px; padding: 12px 0; border-top: 1px solid var(--line); }
+.ni:first-child { border-top: 0; }
+.ni b { font-weight: 600; }
+.ni span { color: var(--muted); font-size: 14px; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: 13px; color: var(--muted); align-items: center; }
+.order { display: grid; gap: 8px; counter-reset: s; padding: 0; margin: 0; list-style: none; }
+.order li { counter-increment: s; display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 10px; }
+.order li::before { content: counter(s); font: 600 14px var(--mono); color: var(--accent); }
+@media (max-width: 640px) { .ni { grid-template-columns: 1fr; gap: 4px; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">Aba IA · Worder</span>
+    <h1>Suíte de testes da IA</h1>
+    <p class="lead">O que deve ser testado em cada tela (Agentes, Novo agente, Construtor, Conhecimento, Atividade) e no runtime, com o comportamento esperado e o motivo. No fim, o que não deve virar teste e por quê.</p>
+    <div class="legend">
+      <span><span class="chip c-ok">existe</span> já tem teste no repositório</span>
+      <span><span class="chip c-part">parcial</span> a regra tem teste, a tela não</span>
+      <span><span class="chip c-miss">falta</span> sem teste hoje</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>As cinco camadas</h2>
+    <p class="sub">Cada linha das tabelas diz em qual camada o teste mora. A regra é testar cada coisa na camada mais barata que consegue provar o que importa.</p>
+    <div class="layers">
+      <div class="layer"><span class="tag">unit</span><h3>Regras puras</h3><p>Funções sem banco nem tela (cálculos, rótulos, derivação do Construtor). Vitest, roda em segundos, entra no CI.</p></div>
+      <div class="layer"><span class="tag">api</span><h3>Rotas do app</h3><p>Cada rota com Supabase simulado: organização certa, permissão, formato da resposta, efeito gravado. Vitest.</p></div>
+      <div class="layer"><span class="tag">tela</span><h3>Tela com API simulada</h3><p>Playwright sobre o app em modo dev com a API simulada que já existe em <code>scripts/ui-compare</code>. Prova que clicar faz a tela mudar como deve, sem banco.</p></div>
+      <div class="layer"><span class="tag">paridade</span><h3>App ↔ runtime</h3><p>Lê o código dos dois lados: toda configuração que o Construtor grava tem que ser lida pelo runtime. É o teste que pega o controle morto de verdade.</p></div>
+      <div class="layer"><span class="tag">e2e</span><h3>Ponta a ponta</h3><p>Playwright em <code>e2e/</code>, num projeto Supabase de teste e com o runtime no ar. Poucos testes, só as jornadas que dão dinheiro ou prejuízo.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Decisões de 16/10</h2>
+    <p class="sub">As três respostas que definem o comportamento antes dos testes. As duas mudanças de tela estão anotadas para fazer em seguida.</p>
+    <div class="decide">
+      <div class="dc"><h3>1 · Fechar com alterações não salvas: pede aprovação</h3><p>“Fechar” no Construtor com alteração pendente pergunta “Sair sem salvar?”. Só sai se o lojista aprovar. Sem alteração pendente, sai direto. <b>Mudança a fazer.</b></p></div>
+      <div class="dc"><h3>2 · Remover fica como está, com confirmação no WhatsApp</h3><p>A ferramenta continua como rascunho (vale ao Salvar, Ctrl+Z desfaz). A fonte continua valendo na hora. O número de WhatsApp passa a pedir confirmação antes de remover: “Tem certeza? Este número para de ser atendido pelo agente.” <b>Mudança a fazer.</b></p></div>
+      <div class="dc"><h3>3 · Prioridade: as jornadas de ponta a ponta</h3><p>As três jornadas reais (criar e ativar, transferência, lacuna) sobem na ordem, logo depois do teste de paridade. Satisfação continua fora da Atividade enquanto não houver coleta.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Agentes</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>Elemento</th><th>Deve</th><th>Por quê</th><th>Camada</th><th>Situação</th></tr></thead>
+      <tbody>
+        <tr><td class="el">Linha do agente</td><td>Clicar abre <code>/ai/construtor/&lt;id&gt;</code>. O endereço antigo <code>/ai/agentes/&lt;id&gt;</code> redireciona para lá.</td><td class="why">A órbita foi removida. Se um link antigo voltar a abrir outra tela, é regressão.</td><td class="ly"><span class="chip c-ly">tela</span></td><td class="st"><span class="chip c-miss">falta</span></td></tr>
+        <tr><td class="el">“Onde atua”</td><td>WhatsApp com o número, nome do fluxo, ou “Sem canal”.</td><td class="why">É como o lojista sabe se o agente atende alguém.</td><td class="ly"><span class="chip c-ly">unit</span></td><td class="st"><span class="chip c-ok">existe</span></td></tr>
+        <tr><td class="el">Situação</td><td>Ativo, Pausado ou Rascunho conforme o status gravado.</td><td class="why">Um agente que parece ativo e não está deixa cliente sem resposta.</td><td class="ly"><span class="chip c-ly">unit</span></td><td class="st"><span class="chip c-part">parcial</span></td></tr>
+        <tr><td class="el">Números de 7 dias</td><td>Conversas e receita em R$ no formato BR (“R$ 18.420”), nunca “US$” nem “18420”.</td><td class="why">Foi um dos problemas do relatório de telas.</td><td class="ly"><span class="chip c-ly">unit · tela</span></td><td class="st"><span class="chip c-part">parcial</span></td></tr>
+        <tr><td class="el">Lista vazia</td><td>Mostra o estado vazio com “Novo agente”.</td><td class="why">Loja nova chega por aqui, e uma página em branco faz parecer erro.</td><td class="ly"><span class="chip c-ly">tela</span></td><td class="st"><span class="chip c-miss">falta</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>Novo agente</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>Elemento</th><th>Deve</th><th>Por quê</th><th>Camada</th><th>Situação</th></tr></thead>
+      <tbody>
+        <tr><td class="el">Cartão de modelo</td><td>Trocar o modelo muda o painel “O que vem pronto”: áreas, missões, ferramentas e regras daquele modelo.</td><td class="why">É o mesmo sintoma da voz: escolha que não muda nada parece quebrada.</td><td class="ly"><span class="chip c-ly">unit · tela</span></td><td class="st"><span class="chip c-part">parcial</span></td></tr>
+        <tr><td class="el">Copiar agente</td><td>As missões ficam de fora, e as fontes marcadas são as que o agente copiado lê.</td><td class="why">Cada situação tem um só agente responsável. Copiar missão criaria dois donos.</td><td class="ly"><span class="chip c-ly">unit · api</span></td><td class="st"><span class="chip c-part">parcial</span></td></tr>
+        <tr><td class="el">Fontes sugeridas</td><td>Marca por tipo e por nome do assunto, nunca todas.</td><td class="why">Marcar tudo fazia cada agente ler a loja inteira.</td><td class="ly"><span class="chip c-ly">unit</span></td><td class="st"><span class="chip c-ok">existe</span></td></tr>
+        <tr><td class="el">Criar e abrir editor</td><td>Sem nome, o botão fica desabilitado. Com nome, cria um rascunho, liga só fontes da própria loja, grava regras e critérios do modelo, deixa só as missões do modelo e abre o Construtor com o chip “Rascunho”.</td><td class="why">Cobre os erros já corrigidos: o seed criava as 6 missões, e o id de fonte de outra loja não pode ser aceito.</td><td class="ly"><span class="chip c-ly">api · tela</span></td><td class="st"><span class="chip c-miss">falta</span></td></tr>
+        <tr><td class="el">Adaptação dos modelos</td><td>Toda chave de adaptação que um modelo grava existe no runtime.</td><td class="why">Os modelos gravavam <code>espelhar_tom</code>, que o runtime ignora. Era controle morto.</td><td class="ly"><span class="chip c-ly">paridade</span></td><td class="st"><span class="chip c-miss">falta</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>Construtor: barra do topo e painéis</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>Elemento</th><th>Deve</th><th>Por quê</th><th>Camada</th><th>Situação</th></tr></thead>
+      <tbody>
+        <tr><td class="el">Salvar</td><td>Qualquer alteração mostra “Alterações não salvas” e o botão Salvar. Salvar grava e mostra “Salvo · versão N+1”. Sem alteração, o botão não aparece.</td><td class="why">Cada salvamento é uma versão que pode ir para produção. Salvar errado muda o agente no ar.</td><td class="ly"><span class="chip c-ly">tela · e2e</span></td><td class="st"><span class="chip c-miss">falta</span></td></tr>
+        <tr><td class="el">Fechar</td><td>Sem alteração pendente, volta direto para Agentes. Com alteração pendente, pergunta “Sair sem salvar?”: Cancelar fica no Construtor com tudo intacto; Sair descarta e volta.</td><td class="why">Decisão 1. Sair sem aviso perdia o trabalho em silêncio.</td><td class="ly"><span class="chip c-ly">tela</span></td><td class="st"><span class="chip c-miss">falta</span></td></tr>
+        <tr><td class="el">Desfazer e refazer</td><td>Voltam e avançam o rascunho. Depois de salvar, o histórico recomeça.</td><td class="why">Desfazer que perde passo é pior do que não ter desfazer.</td><td class="ly"><span class="chip c-ly">unit · tela</span></td><td class="st"><span class="chip c-miss">falta</span></td></tr>
+        <tr><td class="el">Renomear</td><td>O lápis edita o nome e o novo nome aparece no título e na lista.</td><td class="why">O nome é o que o agente usa para se apresentar.</td><td class="ly"><span class="chip c-ly">tela</span></td><td class="st"><span class="chip c-miss">falta</span></td></tr>
+        <tr><td class="el">Ativo</td><td>Ligar abre o checklist, e qualquer item bloqueante impede ativar. Desligar abre “Pausar?” e, confirmado, devolve as conversas ao Inbox.</td><td class="why">É o botão que põe a IA para falar com clientes de verdade.</td><td class="ly"><span class="chip c-ly">unit · api · e2e</span></td><td class="st"><span class="chip c-part">parcial</span></td></tr>
+        <tr><td class="el">Diagnosticar</td><td>O número no botão é igual aos itens de atenção. Clicar num item seleciona o bloco do problema.</td><td class="why">Um contador que não bate com a lista faz o lojista desconfiar de tudo.</td><td class="ly"><span class="chip c-ly">unit · tela</span></td><td class="st"><span class="chip c-part">parcial</span></td></tr>
+        <tr><td class="el">Métricas</td><td>Liga e desliga os números dos blocos sem mudar mais nada.</td><td class="why">É controle de visualização. Só precisa provar que funciona.</td><td class="ly"><span class="chip c-ly">tela</span></td><td class="st"><span class="chip c-miss">falta</span></td></tr>
+        <tr><td class="el">Histórico</td><td>Lista as versões. Restaurar cria uma versão nova com o conteúdo antigo e nunca apaga a atual.</td><td class="why">Restaurar não pode destruir histórico.</td><td class="ly"><span class="chip c-ly">api · tela</span></td><td class="st"><span class="chip c-part">parcial</span></td></tr>
+        <tr><td class="el">Testar</td><td>Enviar uma mensagem traz a resposta. “Por dentro” mostra fontes, ações e revisão. O caminho acende os blocos usados. Uma reprovação mostra “A revisão bloqueou a resposta”. O teste usa o rascunho, não a versão salva.</td><td class="why">É onde o lojista confia ou não antes de ativar. Se testar a versão errada, o teste engana.</td><td class="ly"><span class="chip c-ly">api · tela · e2e</span></td><td class="st"><span class="chip c-part">parcial</span></td></tr>
+        <tr><td class="el">Paleta</td><td>Arrastar ou clicar cria o item real (fonte, ferramenta, regra, destino). Itens “Em breve” não são clicáveis. O seletor de agente troca de agente.</td><td class="why">Item de paleta que não cria nada é controle morto.</td><td class="ly"><span class="chip c-ly">tela</span></td><td class="st"><span class="chip c-miss">falta</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>Construtor: blocos</h2>
+    <p class="sub">Para cada bloco, duas perguntas: a tela muda quando a opção muda? E o valor gravado chega ao runtime? A segunda é a que pegou a voz e as chaves de adaptação.</p>
+    <div class="scroll"><table>
+      <thead><tr><th>Bloco · elemento</th><th>Deve</th><th>Por quê</th><th>Camada</th><th>Situação</th></tr></thead>
+      <tbody>
+        <tr><td class="el">Agente · voz</td><td>Cada opção mostra sua descrição e exemplo, e grava <code>persona.tone</code>. O prompt descreve a voz em português.</td><td class="why">Foi o problema que você achou: parecia aba e não mudava nada.</td><td class="ly"><span class="chip c-ly">unit · paridade · tela</span></td><td class="st"><span class="chip c-part">parcial</span></td></tr>
+        <tr><td class="el">Agente · apresentação</td><td>Mostra a frase de apresentação e grava <code>presentation_mode</code>, que o prompt usa.</td><td class="why">Mesmo motivo da voz.</td><td class="ly"><span class="chip c-ly">unit · paridade</span></td><td class="st"><span class="chip c-part">parcial</span></td></tr>
+        <tr><td class="el">Agente · modelo</td><td>Lista os modelos da OpenRouter com busca e preço. Grava o identificador do modelo. Sem rede, cai na lista curta e mantém o modelo atual.</td><td class="why">O modelo do agente não estava na lista.</td><td class="ly"><span class="chip c-ly">api · tela</span></td><td class="st"><span class="chip c-miss">falta</span></td></tr>
+        <tr><td class="el">Agente · chave</td><td>Mostra só a chave do provedor do agente, ou “não conectada” com o link.</td><td class="why">Mostrava a chave de outro provedor e parecia conectado.</td><td class="ly"><span class="chip c-ly">unit</span></td><td class="st"><span class="chip c-miss">falta</span></td></tr>
+        <tr><td class="el">Agente · limite</td><td>R$ digitado vira o teto em US$ pela cotação. Campo vazio é sem limite. Sem limite, não há barra nem a frase “ao atingir”.</td><td class="why">Dinheiro. Um limite gravado errado pausa o agente cedo ou deixa gastar sem teto.</td><td class="ly"><span class="chip c-ly">unit · tela</span></td><td class="st"><span class="chip c-part">parcial</span></td></tr>
+        <tr><td class="el">Entrada · WhatsApp</td><td>“Editar” abre as missões. Ligar um número que já tem dono avisa e não liga. Remover pede confirmação (“Tem certeza? Este número para de ser atendido pelo agente.”): Cancelar não muda nada; Confirmar desliga o número.</td><td class="why">Cada número tem um agente só. Dois agentes no mesmo número respondem em dobro. Decisão 2: remover vale na hora, então pede certeza antes.</td><td class="ly"><span class="chip c-ly">api · tela</span></td><td class="st"><span class="chip c-part">parcial</span></td></tr>
+        <tr><td class="el">Entrada · toque de fluxo</td><td>Mostra a missão e o incentivo pela família de evento. “Abrir fluxo” vai ao fluxo certo. Remover explica que se tira no fluxo.</td><td class="why">Era bug: a missão era procurada pelo id do fluxo e nunca aparecia.</td><td class="ly"><span class="chip c-ly">unit · tela</span></td><td class="st"><span class="chip c-part">parcial</span></td></tr>
+        <tr><td class="el">Fonte</td><td>“Abrir” vai para a nota no Conhecimento. A prévia separa carregando, sem texto e processando. Remover tira só este agente dos leitores e nunca apaga a fonte.</td><td class="why">A fonte é da loja e outros agentes leem. Apagar aqui quebraria os outros.</td><td class="ly"><span class="chip c-ly">api · tela</span></td><td class="st"><span class="chip c-miss">falta</span></td></tr>
+        <tr><td class="el">Ferramenta · cupom</td><td>Mostra a trava dupla. Remover desliga a ferramenta no rascunho.</td><td class="why">Cupom é dinheiro. A trava existe no runtime e a tela não pode prometer outra coisa.</td><td class="ly"><span class="chip c-ly">unit · tela</span></td><td class="st"><span class="chip c-part">parcial</span></td></tr>
+        <tr><td class="el">Adaptação</td><td>Cada interruptor grava uma chave que o runtime lê, e o bloco mostra “N de 5 ajustes ligados”.</td><td class="why">Interruptor que grava chave desconhecida é controle morto silencioso.</td><td class="ly"><span class="chip c-ly">paridade · unit</span></td><td class="st"><span class="chip c-part">parcial</span></td></tr>
+        <tr><td class="el">Limites</td><td>Adicionar e remover assunto ou regra grava <code>blocked_topics</code> e <code>guidelines</code>, e as duas listas chegam ao prompt.</td><td class="why">É a proteção da loja: o que o agente nunca faz.</td><td class="ly"><span class="chip c-ly">unit · paridade</span></td><td class="st"><span class="chip c-part">parcial</span></td></tr>
+        <tr><td class="el">Revisão</td><td>Critério novo vira juiz ativo. O interruptor fica sempre ligado. “Reprovadas recentes” lista as de verdade.</td><td class="why">A revisão é a última barreira antes do cliente.</td><td class="ly"><span class="chip c-ly">unit · paridade</span></td><td class="st"><span class="chip c-part">parcial</span></td></tr>
+        <tr><td class="el">Precisa de uma pessoa?</td><td>Cada frase grava uma palavra-chave. A frase dita pelo cliente transfere para a equipe, nunca para outro agente.</td><td class="why">Quem pediu uma pessoa não pode cair em outro robô.</td><td class="ly"><span class="chip c-ly">unit · paridade</span></td><td class="st"><span class="chip c-part">parcial</span></td></tr>
+        <tr><td class="el">Transferir · destino</td><td>Equipe grava destino vazio. Agente grava o id dele. O texto explica para onde vai. No runtime, a transferência decidida pela IA vai para o agente se ele estiver ativo e para a equipe se não estiver.</td><td class="why">Mudança nova no runtime, com caminho de dinheiro e de atendimento.</td><td class="ly"><span class="chip c-ly">unit · paridade · e2e</span></td><td class="st"><span class="chip c-part">parcial</span></td></tr>
+        <tr><td class="el">Transferir · mensagem</td><td>Grava a mensagem de confirmação e é enviada na transferência por frase.</td><td class="why">O texto da tela promete exatamente isso.</td><td class="ly"><span class="chip c-ly">paridade</span></td><td class="st"><span class="chip c-part">parcial</span></td></tr>
+        <tr><td class="el">Enviar resposta</td><td>Agrupar fica entre 3 e 60 s. Dividir e Ritmo gravam as chaves de entrega que o runtime lê. O texto de ajuda muda com cada opção.</td><td class="why">Define quanto o cliente espera e como a mensagem chega.</td><td class="ly"><span class="chip c-ly">unit · paridade</span></td><td class="st"><span class="chip c-part">parcial</span></td></tr>
+        <tr><td class="el">Números dos blocos</td><td>Nenhum bloco mostra um número que nunca tem dado.</td><td class="why">“Espera média —” para sempre foi o que levou à sua pergunta.</td><td class="ly"><span class="chip c-ly">unit</span></td><td class="st"><span class="chip c-part">parcial</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>Conhecimento</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>Elemento</th><th>Deve</th><th>Por quê</th><th>Camada</th><th>Situação</th></tr></thead>
+      <tbody>
+        <tr><td class="el">Edição da nota</td><td>Digitar salva sozinho depois de 0,8 s e mostra “Salvando…” e depois “Salvo”. Fonte sincronizada não abre para edição.</td><td class="why">Salvamento automático que falha em silêncio perde texto.</td><td class="ly"><span class="chip c-ly">tela · api</span></td><td class="st"><span class="chip c-miss">falta</span></td></tr>
+        <tr><td class="el">Renomear</td><td>O novo título reescreve os <code>[[links]]</code> nas outras notas.</td><td class="why">Sem isso, os links quebram e a nota some do grafo.</td><td class="ly"><span class="chip c-ly">unit · api</span></td><td class="st"><span class="chip c-part">parcial</span></td></tr>
+        <tr><td class="el">Lida por</td><td>Adicionar ou tirar um agente muda quem consulta a nota. Nota sem leitor mostra o aviso.</td><td class="why">É o que decide o que cada agente sabe.</td><td class="ly"><span class="chip c-ly">api · tela</span></td><td class="st"><span class="chip c-miss">falta</span></td></tr>
+        <tr><td class="el">Link para nota que não existe</td><td>Clicar cria a nota com aquele título.</td><td class="why">É o jeito de escrever conhecimento sem sair do texto.</td><td class="ly"><span class="chip c-ly">tela</span></td><td class="st"><span class="chip c-miss">falta</span></td></tr>
+        <tr><td class="el">Detalhes</td><td>O uso de 7 dias vem das buscas reais. As perguntas mostram ✓ ou ✗ “transferiu” pelo desfecho da conversa.</td><td class="why">É a prova de que a nota serve para alguma coisa.</td><td class="ly"><span class="chip c-ly">unit · api</span></td><td class="st"><span class="chip c-part">parcial</span></td></tr>
+        <tr><td class="el">Links e Estrutura</td><td>“Links para cá” mostra o trecho em volta da menção. Estrutura pula para o título clicado.</td><td class="why">Navegação.</td><td class="ly"><span class="chip c-ly">unit · tela</span></td><td class="st"><span class="chip c-part">parcial</span></td></tr>
+        <tr><td class="el">Testar</td><td>Uma pergunta traz uma de três respostas: resposta com a fonte, regra que bloqueia, ou sem resposta com “Adicionar às lacunas”, que cria a lacuna. Sem chave OpenAI, explica isso.</td><td class="why">É o teste de conhecimento sem gastar uma conversa.</td><td class="ly"><span class="chip c-ly">api · tela</span></td><td class="st"><span class="chip c-miss">falta</span></td></tr>
+        <tr><td class="el">Lacunas</td><td>“Responder em” acrescenta a pergunta na nota sugerida e abre em edição. “Criar nota nova” cria e abre. “Virar limite” só aparece em tema de saúde. A lacuna resolvida some da lista.</td><td class="why">É o fluxo que transforma pergunta sem resposta em conhecimento.</td><td class="ly"><span class="chip c-ly">unit · api · tela</span></td><td class="st"><span class="chip c-part">parcial</span></td></tr>
+        <tr><td class="el">Grafo</td><td>Uma bolinha por nota, ligações pelos links e pelos leitores. O filtro de agente acende só as notas dele. Os interruptores tiram agentes e lacunas.</td><td class="why">Testar quem aparece e quem liga com quem. Posição não.</td><td class="ly"><span class="chip c-ly">unit · tela</span></td><td class="st"><span class="chip c-miss">falta</span></td></tr>
+        <tr><td class="el">Importar</td><td>Os quatro tipos funcionam. Página e documento exigem pelo menos um leitor.</td><td class="why">Página e documento entram pela rota do agente e falham sem leitor.</td><td class="ly"><span class="chip c-ly">api · tela</span></td><td class="st"><span class="chip c-part">parcial</span></td></tr>
+        <tr><td class="el">Ctrl K e busca</td><td>Ctrl K abre a paleta de comandos. A busca só roda com 2 letras ou mais e destaca o termo.</td><td class="why">Atalho que não abre parece app quebrado.</td><td class="ly"><span class="chip c-ly">tela</span></td><td class="st"><span class="chip c-miss">falta</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>Atividade</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>Elemento</th><th>Deve</th><th>Por quê</th><th>Camada</th><th>Situação</th></tr></thead>
+      <tbody>
+        <tr><td class="el">Período e agente</td><td>Trocar refaz indicadores, gráfico, tabela e registro com o mesmo filtro.</td><td class="why">Um bloco com outro período mente sobre o resultado.</td><td class="ly"><span class="chip c-ly">api · tela</span></td><td class="st"><span class="chip c-miss">falta</span></td></tr>
+        <tr><td class="el">Comparar</td><td>Liga e desliga a variação. Transferência, custo e tempo sobem em vermelho.</td><td class="why">Seta verde em custo subindo engana.</td><td class="ly"><span class="chip c-ly">unit</span></td><td class="st"><span class="chip c-ok">existe</span></td></tr>
+        <tr><td class="el">Abas do gráfico</td><td>As 7 métricas trocam o gráfico. As que somam empilham por agente. Taxa e tempo não empilham.</td><td class="why">Empilhar porcentagem dá número sem sentido.</td><td class="ly"><span class="chip c-ly">unit · tela</span></td><td class="st"><span class="chip c-part">parcial</span></td></tr>
+        <tr><td class="el">Valores em R$</td><td>O custo vem de US$ pela cotação do dia, e o retorno é receita ÷ custo em R$.</td><td class="why">Dinheiro.</td><td class="ly"><span class="chip c-ly">unit · api</span></td><td class="st"><span class="chip c-part">parcial</span></td></tr>
+        <tr><td class="el">Tabela por agente</td><td>Clicar numa linha filtra pelo agente. O total bate com os indicadores.</td><td class="why">Total diferente do indicador é a primeira coisa que o lojista confere.</td><td class="ly"><span class="chip c-ly">unit · tela</span></td><td class="st"><span class="chip c-miss">falta</span></td></tr>
+        <tr><td class="el">Qualidade</td><td>Infrações contadas pelos critérios que reprovaram. Critério da loja aparece pelo nome.</td><td class="why">Mudança nova no runtime. Sem o critério, só daria para mostrar o total.</td><td class="ly"><span class="chip c-ly">unit · api</span></td><td class="st"><span class="chip c-part">parcial</span></td></tr>
+        <tr><td class="el">Exportar CSV</td><td>Baixa só o período e o agente filtrados, só da própria loja.</td><td class="why">Vazamento entre lojas é o pior erro possível aqui.</td><td class="ly"><span class="chip c-ly">api</span></td><td class="st"><span class="chip c-miss">falta</span></td></tr>
+        <tr><td class="el">Alertas</td><td>Aparecem em até 1 minuto. Reconhecer e Resolver tiram o alerta da faixa.</td><td class="why">Alerta crítico é o aviso de agente falando errado com cliente.</td><td class="ly"><span class="chip c-ly">api · tela</span></td><td class="st"><span class="chip c-part">parcial</span></td></tr>
+        <tr><td class="el">Registro</td><td>Os filtros por tipo funcionam. Cada linha mostra o nome do cliente e abre a conversa no Inbox.</td><td class="why">É onde o lojista vai do número para a conversa.</td><td class="ly"><span class="chip c-ly">api · tela</span></td><td class="st"><span class="chip c-miss">falta</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>Runtime e as jornadas reais</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>Elemento</th><th>Deve</th><th>Por quê</th><th>Camada</th><th>Situação</th></tr></thead>
+      <tbody>
+        <tr><td class="el">Paridade de configurações</td><td>Um teste lê o que <code>agent-hub.ts</code> grava e o que o runtime lê, e falha se uma chave existir só de um lado. Entram: voz, apresentação, adaptação, entrega, frases, mensagem, destino, juízes, assuntos, regras, ferramentas, modelo e teto. A lista de dispensas é curta e cada linha diz por quê.</td><td class="why">É a versão para a IA do teste que o e-mail já tem (<code>nenhum-controle-morto</code>). Pega na hora o controle que salva e não faz nada.</td><td class="ly"><span class="chip c-ly">paridade</span></td><td class="st"><span class="chip c-miss">falta</span></td></tr>
+        <tr><td class="el">Entrada no desfecho</td><td>A conversa que chega por um número grava a entrada daquele número.</td><td class="why">Os números por entrada do Construtor dependem disso.</td><td class="ly"><span class="chip c-ly">db</span></td><td class="st"><span class="chip c-ok">existe</span></td></tr>
+        <tr><td class="el">Jornada: criar e ativar</td><td>Novo agente por modelo, ligar número, adicionar fonte, salvar, passar no checklist, ativar, mandar mensagem no WhatsApp de teste e receber resposta que usa a fonte.</td><td class="why">É o caminho completo do lojista. Se quebrar, nada mais importa.</td><td class="ly"><span class="chip c-ly">e2e</span></td><td class="st"><span class="chip c-miss">falta</span></td></tr>
+        <tr><td class="el">Jornada: transferência</td><td>Pedido de atendente vai para o Inbox e a IA para. Com destino num agente, a transferência decidida pela IA passa a conversa para ele.</td><td class="why">Atendimento perdido é cliente perdido.</td><td class="ly"><span class="chip c-ly">e2e</span></td><td class="st"><span class="chip c-miss">falta</span></td></tr>
+        <tr><td class="el">Jornada: lacuna</td><td>Pergunta sem fonte vira lacuna. “Responder em” grava a resposta. A mesma pergunta depois é respondida.</td><td class="why">Prova que o ciclo de aprender funciona.</td><td class="ly"><span class="chip c-ly">e2e</span></td><td class="st"><span class="chip c-miss">falta</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>O que não deve virar teste</h2>
+    <div class="not">
+      <div class="ni"><b>Igualdade de pixel com o protótipo</b><span>O protótipo roda num iframe mais estreito (2 colunas onde o app tem 3), com fontes e dados de mentira. Como teste, ficaria sempre vermelho por motivo falso. A comparação lado a lado continua como relatório para um olho humano.</span></div>
+      <div class="ni"><b>As palavras da resposta da IA</b><span>O modelo não responde igual duas vezes. Testa a estrutura: houve resposta, usou a fonte certa, a revisão rodou, a regra bloqueou. O que entra no prompt é testável. O que o modelo escreve não.</span></div>
+      <div class="ni"><b>A lista viva da OpenRouter</b><span>Depende da internet e de terceiro, e muda sem aviso. No teste, a chamada é simulada e o que se prova é o formato e a queda para a lista curta.</span></div>
+      <div class="ni"><b>Posição das bolinhas do grafo</b><span>A simulação começa aleatória. Testa quem aparece e quem liga com quem, nunca coordenadas.</span></div>
+      <div class="ni"><b>Cores, espaçamento e CSS gerado</b><span>O CSS sai de um script a partir do protótipo. Mudança visual se vê no relatório de comparação. Teste de cor quebra a cada ajuste e não pega bug de comportamento.</span></div>
+      <div class="ni"><b>Textos de ajuda palavra por palavra</b><span>Copy muda toda semana e o teste vira trabalho de manutenção. O que se testa é que o texto muda quando a opção muda, e os poucos textos que carregam regra (por exemplo, que pedido de atendente sempre vai para a equipe).</span></div>
+      <div class="ni"><b>Tempos exatos (toast, 0,8 s, animação)</b><span>Testes com relógio real ficam instáveis. Onde o tempo é regra, como o agrupamento entre 3 e 60 s, testa o limite com relógio simulado.</span></div>
+      <div class="ni"><b>Os números da API simulada</b><span>412 conversas e R$ 18.420 são dados de exemplo. Testar esses valores na tela só prova que a simulação não mudou.</span></div>
+      <div class="ni"><b>O detector de controle morto como bloqueio do CI</b><span>Ele tem falso positivo: botões que abrem algo fora do painel (Testar, Histórico, Ctrl K, Editar missões). Serve como varredura antes de entregar tela nova. Quem bloqueia o CI é o teste de paridade, que lê o código e não erra assim.</span></div>
+      <div class="ni"><b>Telas já marcadas para remoção</b><span>EvalView, ReportsView e as rotas antigas estão no inventário de remoção. Testar o que vai sair é trabalho jogado fora. O inventário já prova que nada vivo depende delas.</span></div>
+      <div class="ni"><b>Itens “Em breve”</b><span>Instagram e Chat do site: basta provar que não são clicáveis. Comportamento real entra quando existir.</span></div>
+      <div class="ni"><b>Migrations contra produção</b><span>Teste automático nunca escreve em produção. Migration se valida com os testes de banco num Postgres de teste, com o ensaio que desfaz no fim, e com leitura em produção depois de aplicar, como fizemos.</span></div>
+      <div class="ni"><b>Regras da Meta (janela de 24h)</b><span>Na tela é só texto informativo. A regra mora no envio do runtime e já é testada lá.</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Ordem sugerida</h2>
+    <ol class="order">
+      <li><p><b>Paridade de configurações.</b> Um arquivo só, pega a classe inteira de “controle que não faz nada” e roda em segundos no CI.</p></li>
+      <li><p><b>As três jornadas de ponta a ponta</b> (prioridade da decisão 3): criar e ativar, transferência, lacuna. Precisam de projeto Supabase de teste, número de WhatsApp de teste e runtime de staging.</p></li>
+      <li><p><b>Rotas que faltam:</b> modelos da OpenRouter, lacuna manual, uso com “transferiu”, resumo e registro da Atividade, criação com modelo e fontes, exportação CSV.</p></li>
+      <li><p><b>Testes de tela com a API simulada,</b> um arquivo por tela, reaproveitando <code>scripts/ui-compare/mock-api.mjs</code>. Inclui Fechar e a confirmação do WhatsApp.</p></li>
+    </ol>
+  </section>
+</div>
+
+</body>
+</html>
