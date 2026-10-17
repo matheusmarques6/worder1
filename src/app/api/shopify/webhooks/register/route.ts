@@ -1,3 +1,4 @@
+import { openIntegrationSecret } from '@/lib/integrations/credential-codec';
 // =============================================
 // API: Register/Fix Shopify Webhooks
 // src/app/api/shopify/webhooks/register/route.ts
@@ -70,7 +71,7 @@ export async function POST(request: NextRequest) {
       `https://${store.shop_domain}/admin/api/2026-04/webhooks.json`,
       {
         headers: {
-          'X-Shopify-Access-Token': store.access_token,
+          'X-Shopify-Access-Token': openIntegrationSecret(store.access_token),
         },
       }
     )
@@ -99,7 +100,7 @@ export async function POST(request: NextRequest) {
             `https://${store.shop_domain}/admin/api/2026-04/webhooks/${webhook.id}.json`,
             {
               method: 'DELETE',
-              headers: { 'X-Shopify-Access-Token': store.access_token },
+              headers: { 'X-Shopify-Access-Token': openIntegrationSecret(store.access_token) },
             }
           )
           results.push({ action: 'deleted', topic: webhook.topic, oldUrl: webhook.address })
@@ -132,7 +133,7 @@ export async function POST(request: NextRequest) {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'X-Shopify-Access-Token': store.access_token,
+              'X-Shopify-Access-Token': openIntegrationSecret(store.access_token),
             },
             body: JSON.stringify({
               webhook: {
@@ -245,7 +246,7 @@ export async function GET(request: NextRequest) {
       `https://${store.shop_domain}/admin/api/2026-04/webhooks.json`,
       {
         headers: {
-          'X-Shopify-Access-Token': store.access_token,
+          'X-Shopify-Access-Token': openIntegrationSecret(store.access_token),
         },
       }
     )

@@ -29,10 +29,8 @@ async function loadAgentInOrg(
 // Long-running: tudo bem (force-dynamic / nodejs).
 // =====================================================
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     // ✅ Validar autenticação
     const auth = await getAuthClient()

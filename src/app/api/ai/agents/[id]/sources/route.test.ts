@@ -86,7 +86,7 @@ afterEach(() => {
 describe('POST /api/ai/agents/[id]/sources — a credencial vazia vira falha legível (achado 6)', () => {
   it('sem INTERNAL_API_SECRET nem CRON_SECRET: nunca chama fetch, e o erro nomeia a env que falta', async () => {
     await POST(req({ source_type: 'url', name: 'Fonte', url: 'https://exemplo.com' }), {
-      params: { id: 'agent-1' },
+      params: Promise.resolve({ id: 'agent-1' }),
     })
     await flush()
 
@@ -104,7 +104,7 @@ describe('POST /api/ai/agents/[id]/sources — a credencial vazia vira falha leg
     ;(global.fetch as any).mockResolvedValue({ ok: true, json: async () => ({}) })
 
     await POST(req({ source_type: 'url', name: 'Fonte', url: 'https://exemplo.com' }), {
-      params: { id: 'agent-1' },
+      params: Promise.resolve({ id: 'agent-1' }),
     })
     await flush()
 

@@ -94,11 +94,13 @@ export async function fetchShopDomains(
   accessToken: string,
   apiVersion: string = '2026-04'
 ): Promise<ShopDomains | null> {
+  const { openIntegrationSecret } = await import('@/lib/integrations/credential-codec');
+  const providerToken = openIntegrationSecret(accessToken);
   try {
     const res = await fetch(`https://${shopDomain}/admin/api/${apiVersion}/graphql.json`, {
       method: 'POST',
       headers: {
-        'X-Shopify-Access-Token': accessToken,
+        'X-Shopify-Access-Token': providerToken,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({

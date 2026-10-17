@@ -1,3 +1,4 @@
+import { openIntegrationSecret } from '@/lib/integrations/credential-codec';
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/api-utils';
 export const dynamic = 'force-dynamic';
@@ -46,7 +47,6 @@ export async function GET(request: NextRequest) {
       name: store.shop_name,
       hasToken: !!store.access_token,
       tokenLength: store.access_token?.length || 0,
-      tokenPreview: store.access_token ? `${store.access_token.substring(0, 20)}...` : 'N/A',
     });
 
     // Step 2: Test shop.json endpoint (basic connection test)
@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
     const shopUrl = `https://${store.shop_domain}/admin/api/${SHOPIFY_API_VERSION}/shop.json`;
     const shopResponse = await fetch(shopUrl, {
       headers: {
-        'X-Shopify-Access-Token': store.access_token,
+        'X-Shopify-Access-Token': openIntegrationSecret(store.access_token),
         'Content-Type': 'application/json',
       },
     });
@@ -86,7 +86,7 @@ export async function GET(request: NextRequest) {
     const countUrl = `https://${store.shop_domain}/admin/api/${SHOPIFY_API_VERSION}/orders/count.json?status=any`;
     const countResponse = await fetch(countUrl, {
       headers: {
-        'X-Shopify-Access-Token': store.access_token,
+        'X-Shopify-Access-Token': openIntegrationSecret(store.access_token),
         'Content-Type': 'application/json',
       },
     });
@@ -112,7 +112,7 @@ export async function GET(request: NextRequest) {
     const ordersUrl = `https://${store.shop_domain}/admin/api/${SHOPIFY_API_VERSION}/orders.json?status=any&limit=10`;
     const ordersResponse = await fetch(ordersUrl, {
       headers: {
-        'X-Shopify-Access-Token': store.access_token,
+        'X-Shopify-Access-Token': openIntegrationSecret(store.access_token),
         'Content-Type': 'application/json',
       },
     });
@@ -145,7 +145,7 @@ export async function GET(request: NextRequest) {
     const scopesUrl = `https://${store.shop_domain}/admin/oauth/access_scopes.json`;
     const scopesResponse = await fetch(scopesUrl, {
       headers: {
-        'X-Shopify-Access-Token': store.access_token,
+        'X-Shopify-Access-Token': openIntegrationSecret(store.access_token),
         'Content-Type': 'application/json',
       },
     });

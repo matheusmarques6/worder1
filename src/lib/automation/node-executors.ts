@@ -1,3 +1,4 @@
+import { openIntegrationSecret } from '@/lib/integrations/credential-codec';
 /**
  * NODE EXECUTORS - COMPLETE VERSION
  * Specific execution logic for each node type with real integrations
@@ -1970,7 +1971,7 @@ const actionExecutors: Record<string, NodeExecutor> = {
           {
             method: 'PUT',
             headers: {
-              'X-Shopify-Access-Token': credentials?.accessToken,
+              'X-Shopify-Access-Token': openIntegrationSecret(credentials?.accessToken),
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({

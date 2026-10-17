@@ -61,7 +61,7 @@ async function patch(body: any) {
   const { PATCH } = await import('../route')
   const res = await PATCH(
     new NextRequest('https://app.test/api/email/domains/dom-1', { method: 'PATCH', body: JSON.stringify(body) }),
-    { params: { id: 'dom-1' } },
+    { params: Promise.resolve({ id: 'dom-1' }) },
   )
   return { res, body: await res.json() }
 }

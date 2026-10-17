@@ -1,79 +1,58 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+import { supabaseAdmin } from '@/lib/supabase-admin';
+import { requireOrgFromAuth } from '@/lib/auth/require-org';
+import { canRoleAccess } from '@/lib/auth/permissions';
+
 
 export const dynamic = 'force-dynamic';
 
 // GET - Buscar dados e permissões do agente logado
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
-    
-    // 1. Buscar usuário autenticado
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    // Sem sessão (ou erro do provedor de auth) é a mesma coisa pra quem
-    // chama: não sabemos quem é, então 401. "Assumir admin" aqui já foi
-    // fail-open puro — todo o gating de permissão do inbox se apoiava
-    // nisso, e um problema de sessão virava acesso total.
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    
-    // 2. Se não é agente, é admin - tem acesso total
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('organization_id')
-      .eq('id', user.id)
-      .single();
-
-    if (profileError) {
-      console.error('[/api/whatsapp/agents/me] Erro ao buscar perfil:', profileError);
-      return NextResponse.json(
-        { error: 'Erro ao buscar perfil', isAgent: false, isAdmin: false, permissions: null },
-        { status: 500 },
-      );
-    }
-    if (!profile?.organization_id) {
-      return NextResponse.json(
-        { error: 'Organization not found', isAgent: false, isAdmin: false, permissions: null },
-        { status: 404 },
-      );
-    }
-
-    if (!user.user_metadata?.is_agent) {
-      return NextResponse.json({
-        isAgent: false,
-        isAdmin: true,
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.user_metadata?.name || user.email?.split('@')[0],
+    const auth = await requireOrgFromAuth(request);
+    if (auth instanceof NextResponse) return NextResponse.json({ ...(await auth.json()), isAdmin: false, permissions: null }, { status: auth.status });
+    const supabase = supabaseAdmin;
+    const { data: profile, error: profileError } = await supabase.from('profiles')
+      .select('email, first_name, full_name').eq('id', auth.userId).single();
+    if (profileError || !profile) return NextResponse.json({ error: 'Perfil indisponível', isAdmin: false, permissions: null }, { status: 503 });
+    const user = { id: auth.userId, email: profile.email, user_metadata: { name: profile.full_name || profile.first_name } };
+    if (auth.role !== 'agent') {
+      const isAdmin = canRoleAccess(auth.role, 'org:members:role:change');
+      return NextResponse.json({ isAgent: false, isAdmin, user: { id: user.id, email: user.email, name: user.user_metadata.name }, agent: null,
+        permissions: isAdmin ? null : {
+          accessLevel: auth.role, canViewAllConversations: true, whatsappAccessAll: true,
+          canTransferConversations: canRoleAccess(auth.role, 'inbox:assign'),
+          canSendMedia: canRoleAccess(auth.role, 'inbox:reply'),
+          canUseQuickReplies: canRoleAccess(auth.role, 'inbox:reply'),
+          canUseAiSuggestions: canRoleAccess(auth.role, 'inbox:reply'),
+          canViewContactInfo: canRoleAccess(auth.role, 'contacts:view'),
+          canEditContactInfo: canRoleAccess(auth.role, 'contacts:edit'),
+          canAccessCrm: canRoleAccess(auth.role, 'crm:view'),
+          canAccessPipelines: canRoleAccess(auth.role, 'crm:view'),
+          canCreateDeals: canRoleAccess(auth.role, 'crm:edit'),
+          canViewAnalytics: canRoleAccess(auth.role, 'analytics:view'),
+          canViewReports: canRoleAccess(auth.role, 'reports:view'),
         },
-        agent: null,
-        permissions: null, // Admin não precisa de permissões específicas
       });
     }
-
-    // 3. É agente - buscar dados e permissões
-    const agentId = user.user_metadata.agent_id;
-    
-    if (!agentId) {
-      return NextResponse.json({ 
-        error: 'ID do agente não encontrado',
-        isAgent: true,
-        isAdmin: false,
-        permissions: null 
-      }, { status: 400 });
-    }
+    const agentId = auth.agentId;
+    if (!agentId) return NextResponse.json({ error: 'Agente não encontrado', isAgent: true, isAdmin: false, permissions: null }, { status: 403 });
 
     // 4. Buscar dados do agente
-    const { data: agent, error: agentError } = await supabase
+    let { data: agent, error: agentError } = await supabase
       .from('agents')
       .select('*')
       .eq('id', agentId)
-      .eq('organization_id', profile.organization_id)
+      .eq('organization_id', auth.orgId)
+      .eq('user_id', auth.userId)
+      .eq('is_active', true)
       .single();
+
+    if (['42P01', 'PGRST205'].includes(agentError?.code || '') || (!agentError && !agent)) {
+      const legacy = await supabase.from('whatsapp_agents').select('*').eq('id', agentId)
+        .eq('organization_id', auth.orgId).eq('user_id', auth.userId).eq('is_active', true).single();
+      agent = legacy.data; agentError = legacy.error;
+    }
 
     if (agentError) {
       console.error('[/api/whatsapp/agents/me] Erro ao buscar agente:', agentError);

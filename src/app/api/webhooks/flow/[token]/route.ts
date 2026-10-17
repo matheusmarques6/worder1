@@ -27,10 +27,8 @@ const supabase = new Proxy({} as any, {
 // POST - Receive webhook
 // ============================================
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { token: string } }
-) {
+export async function POST(request: NextRequest, props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   const token = params.token;
 
   if (!token) {
@@ -204,10 +202,8 @@ export async function POST(
 // GET - Webhook verification (for some providers)
 // ============================================
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { token: string } }
-) {
+export async function GET(request: NextRequest, props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   const token = params.token;
   const searchParams = request.nextUrl.searchParams;
 

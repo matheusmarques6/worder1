@@ -13,23 +13,24 @@ import { getAuthClient, authError } from '@/lib/api-utils';
 export const dynamic = 'force-dynamic';
 
 interface RouteParams {
-  params: { id: string; ruleId: string };
+  params: Promise<{ id: string; ruleId: string }>;
 }
 
 // =============================================
 // GET - Buscar regra específica
 // =============================================
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(request: NextRequest, props: RouteParams) {
+  const params = await props.params;
   const auth = await getAuthClient();
   if (!auth) return authError();
   const { supabase } = auth;
 
   const { id: pipelineId, ruleId } = params;
-  
+
   if (!pipelineId || !ruleId) {
     return NextResponse.json({ error: 'Pipeline ID and Rule ID required' }, { status: 400 });
   }
-  
+
   try {
     // RLS filtra automaticamente por organization_id
     const { data: rule, error } = await supabase
@@ -59,17 +60,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 // =============================================
 // PUT - Atualizar regra
 // =============================================
-export async function PUT(request: NextRequest, { params }: RouteParams) {
+export async function PUT(request: NextRequest, props: RouteParams) {
+  const params = await props.params;
   const auth = await getAuthClient();
   if (!auth) return authError();
   const { supabase } = auth;
 
   const { id: pipelineId, ruleId } = params;
-  
+
   if (!pipelineId || !ruleId) {
     return NextResponse.json({ error: 'Pipeline ID and Rule ID required' }, { status: 400 });
   }
-  
+
   try {
     const body = await request.json();
     const {
@@ -170,17 +172,18 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 // =============================================
 // DELETE - Deletar regra
 // =============================================
-export async function DELETE(request: NextRequest, { params }: RouteParams) {
+export async function DELETE(request: NextRequest, props: RouteParams) {
+  const params = await props.params;
   const auth = await getAuthClient();
   if (!auth) return authError();
   const { supabase } = auth;
 
   const { id: pipelineId, ruleId } = params;
-  
+
   if (!pipelineId || !ruleId) {
     return NextResponse.json({ error: 'Pipeline ID and Rule ID required' }, { status: 400 });
   }
-  
+
   try {
     // Verificar se regra existe - RLS filtra automaticamente
     const { data: existingRule, error: findError } = await supabase

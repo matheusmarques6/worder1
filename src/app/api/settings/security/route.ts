@@ -13,7 +13,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
-import { getAuthClient, authError } from '@/lib/api-utils'
+import { getAuthClientForMfaSetup, authError } from '@/lib/api-utils'
+import { changePasswordWithReauthentication, verifyCurrentPassword } from '@/lib/auth/change-password'
 import { supabaseAdmin, isSupabaseConfigured } from '@/lib/supabase-admin'
 import { validatePassword } from '@/lib/password-validation'
 import { canRoleAccess } from '@/lib/auth/permissions'
@@ -21,8 +22,8 @@ import { requestMeta, jwtSessionId } from '@/lib/settings/request-meta'
 import { gotrue, jwtAal } from '@/lib/settings/gotrue'
 export const dynamic = 'force-dynamic'
 
-function token(): string {
-  return cookies().get('sb-access-token')?.value || ''
+async function token(): Promise<string> {
+  return (await cookies()).get('sb-access-token')?.value || ''
 }
 
 function cookieOpts(maxAge: number) {
@@ -30,12 +31,12 @@ function cookieOpts(maxAge: number) {
 }
 
 export async function GET() {
-  const auth = await getAuthClient()
+  const auth = await getAuthClientForMfaSetup()
   if (!auth) return authError()
   if (!isSupabaseConfigured()) return NextResponse.json({ error: 'DB not configured' }, { status: 503 })
   const userId = auth.user.id
   const orgId = auth.user.organization_id
-  const tk = token()
+  const tk = await token()
   const currentSid = jwtSessionId(tk)
   try {
     const since = new Date(Date.now() - 30 * 86400_000).toISOString()
@@ -84,14 +85,17 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await getAuthClient()
+  const auth = await getAuthClientForMfaSetup()
   if (!auth) return authError()
   if (!isSupabaseConfigured()) return NextResponse.json({ error: 'DB not configured' }, { status: 503 })
   const userId = auth.user.id
   const orgId = auth.user.organization_id
-  const tk = token()
+  const tk = await token()
   const body = await request.json().catch(() => ({}))
   const action = String(body.action || '')
+  if (!auth.user.mfa_satisfied && !['mfa-enroll', 'mfa-verify'].includes(action)) {
+    return NextResponse.json({ error: 'Verificação em duas etapas necessária.', code: 'mfa_required' }, { status: 403 })
+  }
   try {
     if (action === 'change-password') {
       const cur = String(body.current_password || '')
@@ -100,14 +104,11 @@ export async function POST(request: NextRequest) {
       const v = validatePassword(nw)
       if (!v.isValid) return NextResponse.json({ error: 'A nova senha não atende aos requisitos.', details: v.errors }, { status: 400 })
       if (cur === nw) return NextResponse.json({ error: 'A nova senha precisa ser diferente da atual.' }, { status: 400 })
-      const { error: pwErr } = await supabaseAdmin.auth.signInWithPassword({ email: auth.user.email, password: cur })
-      if (pwErr) return NextResponse.json({ error: 'Senha atual incorreta.' }, { status: 400 })
-      const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, { password: nw })
-      if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+      const result = await changePasswordWithReauthentication(supabaseAdmin, auth.user, cur, nw, jwtSessionId(tk))
+      if (result.error) return NextResponse.json({ error: result.error }, { status: result.status })
       const { data: prof } = await supabaseAdmin.from('profiles').select('preferences').eq('id', userId).single()
       await supabaseAdmin.from('profiles').update({ preferences: { ...(prof?.preferences || {}), password_changed_at: new Date().toISOString() }, must_change_password: false, updated_at: new Date().toISOString() }).eq('id', userId)
       // Outras sessões saem — só quem trocou a senha continua logado.
-      await supabaseAdmin.rpc('revoke_other_auth_sessions', { p_user_id: userId, p_keep_session_id: jwtSessionId(tk) }).then(() => {}, () => {})
       await audit(orgId, userId, auth.user.email, 'security.password_changed', {}, request)
       return NextResponse.json({ ok: true })
     }
@@ -147,10 +148,9 @@ export async function POST(request: NextRequest) {
       if (!factorId) return NextResponse.json({ error: 'factor_id é obrigatório' }, { status: 400 })
       const password = String(body.password || '')
       if (!password) return NextResponse.json({ error: 'Confirme sua senha para desativar a verificação em duas etapas.' }, { status: 400 })
-      const { error: pwErr } = await supabaseAdmin.auth.signInWithPassword({ email: auth.user.email, password })
-      if (pwErr) return NextResponse.json({ error: 'Senha incorreta.' }, { status: 400 })
+      if (!await verifyCurrentPassword(supabaseAdmin, auth.user, password)) return NextResponse.json({ error: 'Senha incorreta.' }, { status: 400 })
       const { data: org } = await supabaseAdmin.from('organizations').select('settings').eq('id', orgId).single()
-      if ((org?.settings as any)?.require_2fa && auth.user.role !== 'owner') {
+      if ((org?.settings as any)?.require_2fa) {
         return NextResponse.json({ error: 'Sua organização exige verificação em duas etapas. Peça ao proprietário para desligar a exigência primeiro.' }, { status: 400 })
       }
       const { error } = await supabaseAdmin.auth.admin.mfa.deleteFactor({ id: factorId, userId })
@@ -161,6 +161,7 @@ export async function POST(request: NextRequest) {
 
     if (action === 'require-2fa') {
       if (!canRoleAccess(auth.user.role, 'org:settings:edit')) return NextResponse.json({ error: 'Só administradores alteram esta regra.' }, { status: 403 })
+      if (auth.user.aal !== 'aal2') return NextResponse.json({ error: 'Confirme o código 2FA antes de alterar esta regra.' }, { status: 403 })
       const enabled = !!body.enabled
       if (enabled) {
         // Quem liga a exigência precisa já ter 2FA — senão perderia o próprio acesso.

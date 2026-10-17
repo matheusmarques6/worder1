@@ -1,3 +1,4 @@
+import { openIntegrationSecret } from '@/lib/integrations/credential-codec';
 import { NextRequest, NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 import { getSupabaseClient } from '@/lib/api-utils';
@@ -66,7 +67,7 @@ export async function GET(request: NextRequest) {
         const testUrl = `https://${store.shop_domain}/admin/api/2026-04/shop.json`;
         const response = await fetch(testUrl, {
           headers: {
-            'X-Shopify-Access-Token': store.access_token,
+            'X-Shopify-Access-Token': openIntegrationSecret(store.access_token),
             'Content-Type': 'application/json',
           },
           signal: controller.signal,

@@ -30,10 +30,11 @@ export const runtime = 'nodejs';
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> | { id: string } },
+  props: { params: Promise<{ id: string }> }
 ) {
+  const params = await props.params;
   try {
-    const resolved = await Promise.resolve(params as Promise<{ id: string }>);
+    const resolved = params;
     const accountId = resolved.id;
 
     const auth = await requireOrgFromAuth(request);

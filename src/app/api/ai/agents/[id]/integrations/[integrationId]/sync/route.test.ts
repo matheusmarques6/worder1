@@ -37,7 +37,7 @@ const request = () => new NextRequest(
   },
 )
 
-const context = { params: { id: 'agent-1', integrationId: 'integration-1' } }
+const context = { params: Promise.resolve({ id: 'agent-1', integrationId: 'integration-1' }) }
 
 function syncSupabase() {
   const integrationUpdates: Array<{ payload: any; scopes: Array<[string, unknown]> }> = []

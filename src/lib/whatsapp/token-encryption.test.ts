@@ -40,10 +40,9 @@ describe('token-encryption', () => {
     expect(isEncryptedToken('ab:cd:gg')).toBe(false); // 'gg' not hex
   });
 
-  it('roundtrips 200 random strings', () => {
-    for (let i = 0; i < 200; i++) {
-      const s = `tok_${i}_${Math.random().toString(36).slice(2)}`;
-      expect(decryptToken(encryptToken(s))).toBe(s);
-    }
+  // Keep all 200 real scrypt roundtrips within the per-case timeout.
+  it.each(Array.from({ length: 200 }, (_, i) => i))('roundtrips random string %i', (i) => {
+    const s = `tok_${i}_${Math.random().toString(36).slice(2)}`;
+    expect(decryptToken(encryptToken(s))).toBe(s);
   });
 });

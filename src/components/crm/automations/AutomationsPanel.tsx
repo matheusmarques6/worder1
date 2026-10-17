@@ -6,6 +6,7 @@
 // =============================================
 
 import { useState, useEffect, useCallback } from 'react'
+import NextLink from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Plus,
@@ -585,13 +586,13 @@ export function AutomationsPanel() {
               <p className="text-sm text-gray-500 mb-4">
                 Conecte uma integração para configurar automações
               </p>
-              <a
+              <NextLink
                 href="/integrations"
                 className="inline-flex items-center gap-2 text-brand-600 hover:text-brand-500 text-sm"
               >
                 Ir para Integrações
                 <ExternalLink className="w-4 h-4" />
-              </a>
+              </NextLink>
             </div>
           ) : (
             connectedSources.map(source => renderSourceSection(source, createDealRules, 'create_deal'))

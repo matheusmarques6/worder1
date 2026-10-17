@@ -3,23 +3,26 @@ import { expect, it } from 'vitest'
 
 const workflow = readFileSync('.github/workflows/runtime.yml', 'utf8').replace(/\r\n/g, '\n')
 const appWorkflow = readFileSync('.github/workflows/app.yml', 'utf8').replace(/\r\n/g, '\n')
-const runtimePathFilters = [...workflow.matchAll(/    paths:\n((?:      - .+\n)+)/g)]
-const appPathFilters = [...appWorkflow.matchAll(/    paths:\n((?:      - .+\n)+)/g)]
+const releaseWorkflow = readFileSync('.github/workflows/release.yml', 'utf8').replace(/\r\n/g, '\n')
 const lintJob = workflow.slice(workflow.indexOf('  lint:\n'), workflow.indexOf('  boundaries:\n'))
 const boundariesJob = workflow.slice(workflow.indexOf('  boundaries:\n'), workflow.indexOf('  tests-unit:\n'))
 const unitJob = workflow.slice(workflow.indexOf('  tests-unit:\n'), workflow.indexOf('  tests-db:\n'))
 const databaseJob = workflow.slice(workflow.indexOf('  tests-db:\n'))
 
 it('runs the complete runtime database gate through one disposable executor', () => {
-  expect(runtimePathFilters).toHaveLength(2)
-  for (const [, paths] of runtimePathFilters) {
-    expect(paths).toContain('- "scripts/test-disposable-db.ps1"')
+  // Reusable workflows are now called for every candidate, including script,
+  // migration and app-only changes; a path-filtered caller would leave holes.
+  for (const reusable of [workflow, appWorkflow]) {
+    expect(reusable).toContain('  workflow_call:')
+    expect(reusable).not.toMatch(/^\s+paths(?:-ignore)?:/m)
   }
-
-  expect(appPathFilters).toHaveLength(2)
-  for (const [, paths] of appPathFilters) {
-    expect(paths).toContain('- ".github/workflows/runtime.yml"')
-  }
+  expect(releaseWorkflow).toContain('uses: ./.github/workflows/runtime.yml')
+  expect(releaseWorkflow).toContain('uses: ./.github/workflows/app.yml')
+  expect(releaseWorkflow).toContain('  push:')
+  expect(releaseWorkflow).toContain('  pull_request:')
+  expect(releaseWorkflow).not.toMatch(/^\s+paths(?:-ignore)?:/m)
+  expect(releaseWorkflow).toContain('needs: [app, runtime, ui, journeys]')
+  expect(releaseWorkflow).toContain('name: Release readiness\n    if: always()')
 
   expect(databaseJob).toContain('uv sync --directory runtime --frozen')
   expect(databaseJob).toContain('.superpowers/sdd/auditoria-ia-disposable/$([guid]::NewGuid().ToString(\'N\'))')

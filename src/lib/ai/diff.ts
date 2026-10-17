@@ -9,7 +9,8 @@
 
 export type DiffLine = { type: 'ctx' | 'add' | 'rem'; text: string }
 
-const VERSIONABLE_FIELDS = ['system_prompt', 'persona', 'settings'] as const
+export const VERSIONABLE_FIELDS = ['system_prompt', 'persona', 'settings', 'name', 'description', 'role',
+  'provider', 'model', 'temperature', 'max_tokens', 'monthly_cap_usd', 'presentation_mode', 'client_adaptation'] as const
 export type VersionableField = (typeof VERSIONABLE_FIELDS)[number]
 
 function splitLines(value: string): string[] {

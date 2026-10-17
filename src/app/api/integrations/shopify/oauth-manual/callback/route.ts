@@ -1,3 +1,5 @@
+import { sealIntegrationSecret } from '@/lib/integrations/credential-codec';
+import { openIntegrationSecret } from '@/lib/integrations/credential-codec';
 // =============================================
 // Shopify OAuth Manual — callback
 // GET /api/integrations/shopify/oauth-manual/callback
@@ -105,7 +107,7 @@ export async function GET(request: NextRequest) {
 
     const organizationId: string = pending.organization_id;
     const clientId: string = pending.client_id;
-    const clientSecret: string = pending.client_secret;
+    const clientSecret: string = openIntegrationSecret(pending.client_secret);
     const targetStoreId: string | null = pending.store_id || null;
 
     if (shop !== String(pending.shop || '').toLowerCase()) {
@@ -167,7 +169,7 @@ export async function GET(request: NextRequest) {
       const infoRes = await fetch(`https://${shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
         method: 'POST',
         headers: {
-          'X-Shopify-Access-Token': accessToken,
+          'X-Shopify-Access-Token': openIntegrationSecret(accessToken),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -299,8 +301,8 @@ export async function GET(request: NextRequest) {
       primary_domain: publicPrimaryDomain,
       primary_domain_checked_at: new Date().toISOString(),
       shop_phone: shopPhone,
-      access_token: accessToken,
-      api_secret: clientSecret,
+      access_token: sealIntegrationSecret(accessToken),
+      api_secret: sealIntegrationSecret(clientSecret),
       client_id: clientId,
       currency,
       timezone,
@@ -319,7 +321,7 @@ export async function GET(request: NextRequest) {
       // renovado via client_credentials (app de outra organização).
       token_expires_at: null,
       pixel_installed: false,
-      webhook_secret: clientSecret,
+      webhook_secret: sealIntegrationSecret(clientSecret),
       embed_installed: false,
       sync_orders: true,
       sync_customers: true,
@@ -374,7 +376,7 @@ export async function GET(request: NextRequest) {
     let existingTopics: string[] = [];
     try {
       const listRes = await fetch(`https://${shop}/admin/api/${SHOPIFY_API_VERSION}/webhooks.json`, {
-        headers: { 'X-Shopify-Access-Token': accessToken },
+        headers: { 'X-Shopify-Access-Token': openIntegrationSecret(accessToken) },
       });
       if (listRes.ok) {
         const json = await listRes.json();
@@ -392,7 +394,7 @@ export async function GET(request: NextRequest) {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-Shopify-Access-Token': accessToken,
+            'X-Shopify-Access-Token': openIntegrationSecret(accessToken),
           },
           body: JSON.stringify({ webhook: { topic, address: webhookUrl, format: 'json' } }),
         });
@@ -411,7 +413,7 @@ export async function GET(request: NextRequest) {
         const pixelRes = await fetch(`https://${shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
           method: 'POST',
           headers: {
-            'X-Shopify-Access-Token': accessToken,
+            'X-Shopify-Access-Token': openIntegrationSecret(accessToken),
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({

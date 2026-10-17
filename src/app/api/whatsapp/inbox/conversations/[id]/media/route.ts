@@ -14,6 +14,7 @@ import {
   buildRateLimitedResponseBody,
 } from '@/lib/whatsapp/send-guard'
 import { validateWhatsAppMediaFile } from '@/lib/whatsapp/media-validation'
+import { ownedMediaPath, resolveOwnedMediaPath } from '@/lib/whatsapp/media-ownership'
 
 // ✅ FASE 3: Force dynamic para evitar cache
 export const dynamic = 'force-dynamic'
@@ -27,7 +28,8 @@ const NO_CACHE_HEADERS = {
 const SIGNED_URL_EXPIRY = 3600 // 1 hora
 
 // POST - Enviar mídia
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const auth = await requireOrgFromAuth(request)
     if (auth instanceof NextResponse) return auth
@@ -73,6 +75,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       .maybeSingle()
 
     if (cloudConv && cloudConv.account) {
+      if (cloudConv.account.organization_id !== orgId || cloudConv.account.id !== cloudConv.waba_id ||
+          !ownedMediaPath(`${orgId}/${conversationId}/check`, orgId, conversationId)) {
+        return NextResponse.json({ error: 'Conversation not found' }, { status: 404, headers: NO_CACHE_HEADERS })
+      }
       const phoneNumber = cloudConv.contact_phone || cloudConv.wa_id
 
       // Onda 10 — guard opt-out (midia = service window, atendente pode override)
@@ -133,10 +139,6 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             .from('whatsapp-media')
             .createSignedUrl(cloudStoragePath, SIGNED_URL_EXPIRY)
           if (signed?.signedUrl) cloudMediaUrl = signed.signedUrl
-          else {
-            const { data: pub } = supabase.storage.from('whatsapp-media').getPublicUrl(cloudStoragePath)
-            cloudMediaUrl = pub?.publicUrl ?? null
-          }
         }
       } catch (storageErr) {
         console.error('[Media POST/Cloud] storage error:', storageErr)
@@ -280,7 +282,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 }
 
 // GET - Refresh de Signed URL
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const auth = await requireOrgFromAuth(request)
     if (auth instanceof NextResponse) return auth
@@ -311,22 +314,23 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       )
     }
 
-    if (!message.media_storage_path) {
+    const storagePath = resolveOwnedMediaPath(message, orgId, params.id)
+    if (!storagePath) {
       return NextResponse.json(
-        { url: message.media_url },
-        { headers: NO_CACHE_HEADERS }
+        { error: 'Media unavailable' },
+        { status: 404, headers: NO_CACHE_HEADERS }
       )
     }
 
     const { data: signedData, error: signedError } = await supabase.storage
       .from('whatsapp-media')
-      .createSignedUrl(message.media_storage_path, SIGNED_URL_EXPIRY)
+      .createSignedUrl(storagePath, SIGNED_URL_EXPIRY)
 
-    if (signedError) {
+    if (signedError || !signedData?.signedUrl) {
       console.error('[Media GET] Refresh URL error:', signedError)
       return NextResponse.json(
-        { url: message.media_url },
-        { headers: NO_CACHE_HEADERS }
+        { error: 'Media unavailable' },
+        { status: 503, headers: NO_CACHE_HEADERS }
       )
     }
 

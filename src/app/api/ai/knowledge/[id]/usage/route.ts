@@ -10,7 +10,8 @@ export const dynamic = 'force-dynamic'
 // em output.chunks desde a alteração 2026-10-15-05), mais as perguntas que
 // ela ajudou a responder (com agente, data e se a conversa acabou
 // transferida, o ✓/✗ do painel da UI F4).
-export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await getAuthClient()
   if (!auth) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
   const supabase = getSupabaseAdmin()

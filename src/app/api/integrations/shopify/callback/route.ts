@@ -1,3 +1,5 @@
+import { sealIntegrationSecret } from '@/lib/integrations/credential-codec';
+import { openIntegrationSecret } from '@/lib/integrations/credential-codec';
 // =============================================
 // Shopify OAuth Callback
 // src/app/api/integrations/shopify/callback/route.ts
@@ -11,7 +13,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
-import crypto from 'crypto';
+import { isShopifyDomain, validShopifyOAuthHmac } from '@/lib/shopify/oauth-validation';
 
 const SHOPIFY_CLIENT_ID = process.env.SHOPIFY_CLIENT_ID || '';
 const SHOPIFY_CLIENT_SECRET = process.env.SHOPIFY_CLIENT_SECRET || '';
@@ -28,7 +30,7 @@ export async function GET(request: NextRequest) {
     const hmac = searchParams.get('hmac');
     const errorParam = searchParams.get('error');
 
-    console.log('[Shopify Callback] Received:', { code: !!code, shop, state: state?.substring(0, 10), hmac: !!hmac });
+    console.log('[Shopify Callback] Received:', { code: !!code, shop, state: !!state, hmac: !!hmac });
 
     if (errorParam) {
       return NextResponse.redirect(`${APP_URL}/integrations/shopify?error=oauth_denied`);
@@ -38,87 +40,48 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(`${APP_URL}/integrations/shopify?error=missing_params`);
     }
 
-    // =============================================
-    // VALIDATE HMAC (Shopify security)
-    // =============================================
-    if (hmac && SHOPIFY_CLIENT_SECRET) {
-      const params = new URLSearchParams(searchParams);
-      params.delete('hmac');
-      params.sort();
-      const message = params.toString();
-      const generatedHmac = crypto
-        .createHmac('sha256', SHOPIFY_CLIENT_SECRET)
-        .update(message)
-        .digest('hex');
-
-      try {
-        if (!crypto.timingSafeEqual(Buffer.from(generatedHmac, 'hex'), Buffer.from(hmac, 'hex'))) {
-          console.error('[Shopify Callback] HMAC validation failed');
-          return NextResponse.redirect(`${APP_URL}/integrations/shopify?error=hmac_invalid`);
-        }
-      } catch {
-        console.warn('[Shopify Callback] HMAC comparison error, continuing...');
-      }
+    if (!isShopifyDomain(shop)) {
+      return NextResponse.redirect(`${APP_URL}/integrations/shopify?error=invalid_shop`);
+    }
+    if (!validShopifyOAuthHmac(searchParams, SHOPIFY_CLIENT_SECRET)) {
+      return NextResponse.redirect(`${APP_URL}/integrations/shopify?error=hmac_invalid`);
     }
 
-    // =============================================
-    // RESOLVE ORGANIZATION ID
-    // =============================================
     let organizationId: string | null = null;
-
-    // Try 1: State saved in oauth_states (Worder OAuth flow).
-    if (state) {
-      const nowIso = new Date().toISOString();
-
+    if (state !== null) {
+      if (!/^[a-f0-9]{64}$/.test(state)) {
+        return NextResponse.redirect(`${APP_URL}/integrations/shopify?error=invalid_state`);
+      }
+      // DELETE ... RETURNING is one atomic claim; a replay receives no row.
       const { data: stateRow, error: stateErr } = await supabase
         .from('oauth_states')
-        .select('metadata')
+        .delete()
         .eq('state', state)
-        .gte('expires_at', nowIso)
+        .eq('provider', 'shopify')
+        .eq('metadata->>shop', shop)
+        .gte('expires_at', new Date().toISOString())
+        .select('organization_id, metadata')
         .maybeSingle();
-      if (stateErr) console.warn('[Shopify Callback] leitura do state falhou:', stateErr);
-
-      const statePayload: any = stateRow?.metadata ?? null;
-
-      if (statePayload?.organization_id) {
-        organizationId = statePayload.organization_id;
-        // Consumir o state usado
-        await supabase.from('oauth_states').delete().eq('state', state);
-        console.log('[Shopify Callback] Resolved org via oauth_states:', organizationId);
+      if (stateErr || !stateRow?.organization_id ||
+          stateRow.metadata?.organization_id !== stateRow.organization_id ||
+          stateRow.metadata?.provider !== 'shopify' || stateRow.metadata?.shop !== shop) {
+        return NextResponse.redirect(`${APP_URL}/integrations/shopify?error=invalid_state`);
       }
+      organizationId = stateRow.organization_id;
     }
 
-    // Try 2: Existing store in DB (reinstall scenario)
-    if (!organizationId) {
-      const { data: existingStore } = await supabase
-        .from('shopify_stores')
-        .select('organization_id')
-        .eq('shop_domain', shop)
-        .maybeSingle();
-
-      if (existingStore?.organization_id) {
-        organizationId = existingStore.organization_id;
-        console.log('[Shopify Callback] Resolved org via existing store:', organizationId);
-      }
+    const { data: existingStore, error: mappingError } = await supabase
+      .from('shopify_stores')
+      .select('id, organization_id')
+      .eq('shop_domain', shop)
+      .maybeSingle();
+    if (mappingError || (existingStore && organizationId && existingStore.organization_id !== organizationId)) {
+      return NextResponse.redirect(`${APP_URL}/integrations/shopify?error=store_conflict`);
     }
-
-    // Try 3: Fallback for Partner link install (single-org setup)
+    // A signed reinstall can recover only its unambiguous existing tenant mapping.
+    if (state === null) organizationId = existingStore?.organization_id || null;
     if (!organizationId) {
-      const { data: org } = await supabase
-        .from('organizations')
-        .select('id')
-        .limit(1)
-        .maybeSingle();
-
-      if (org?.id) {
-        organizationId = org.id;
-        console.log('[Shopify Callback] Resolved org via fallback:', organizationId);
-      }
-    }
-
-    if (!organizationId) {
-      console.error('[Shopify Callback] Could not resolve organization');
-      return NextResponse.redirect(`${APP_URL}/integrations/shopify?error=no_organization`);
+      return NextResponse.redirect(`${APP_URL}/integrations/shopify?error=invalid_state`);
     }
 
     // =============================================
@@ -158,7 +121,7 @@ export async function GET(request: NextRequest) {
       const shopInfoRes = await fetch(`https://${shop}/admin/api/2026-04/graphql.json`, {
         method: 'POST',
         headers: {
-          'X-Shopify-Access-Token': accessToken,
+          'X-Shopify-Access-Token': openIntegrationSecret(accessToken),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -183,19 +146,13 @@ export async function GET(request: NextRequest) {
     // =============================================
     // UPSERT STORE IN DB
     // =============================================
-    const { data: existingStore } = await supabase
-      .from('shopify_stores')
-      .select('id')
-      .eq('shop_domain', shop)
-      .maybeSingle();
-
     const storeRecord = {
       organization_id: organizationId,
       shop_domain: shop,
       shop_name: shopName,
       shop_email: shopEmail,
-      access_token: accessToken,
-      api_secret: SHOPIFY_CLIENT_SECRET,
+      access_token: sealIntegrationSecret(accessToken),
+      api_secret: sealIntegrationSecret(SHOPIFY_CLIENT_SECRET),
       currency,
       plan_name: planName,
       api_version: '2026-04',
@@ -215,7 +172,7 @@ export async function GET(request: NextRequest) {
     let storeId: string;
 
     if (existingStore) {
-      await supabase.from('shopify_stores').update(storeRecord).eq('id', existingStore.id);
+      await supabase.from('shopify_stores').update(storeRecord).eq('id', existingStore.id).eq('organization_id', organizationId);
       storeId = existingStore.id;
     } else {
       const { data: newStore, error: insertError } = await supabase
@@ -270,7 +227,7 @@ export async function GET(request: NextRequest) {
         const res = await fetch(`https://${shop}/admin/api/2026-04/graphql.json`, {
           method: 'POST',
           headers: {
-            'X-Shopify-Access-Token': accessToken,
+            'X-Shopify-Access-Token': openIntegrationSecret(accessToken),
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -310,7 +267,7 @@ export async function GET(request: NextRequest) {
       const pixelRes = await fetch(`https://${shop}/admin/api/2026-04/graphql.json`, {
         method: 'POST',
         headers: {
-          'X-Shopify-Access-Token': accessToken,
+          'X-Shopify-Access-Token': openIntegrationSecret(accessToken),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -355,7 +312,7 @@ export async function GET(request: NextRequest) {
 
     await supabase.from('shopify_stores').update({
       pixel_installed: pixelInstalled,
-      webhook_secret: SHOPIFY_CLIENT_SECRET,
+      webhook_secret: sealIntegrationSecret(SHOPIFY_CLIENT_SECRET),
       embed_installed: false,
       settings: {
         theme_editor_url: themeEditorUrl,

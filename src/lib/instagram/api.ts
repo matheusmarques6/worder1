@@ -1,3 +1,4 @@
+import { openIntegrationSecret } from '@/lib/integrations/credential-codec';
 // =============================================
 // INSTAGRAM MESSAGING API - CLIENTE COMPLETO
 // src/lib/instagram/api.ts
@@ -158,7 +159,7 @@ export class InstagramMessagingAPI {
     const response = await fetch(url, {
       ...options,
       headers: {
-        'Authorization': `Bearer ${this.config.accessToken}`,
+        'Authorization': `Bearer ${openIntegrationSecret(this.config.accessToken)}`,
         'Content-Type': 'application/json',
         ...options.headers,
       },

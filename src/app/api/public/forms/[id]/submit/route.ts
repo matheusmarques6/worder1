@@ -385,10 +385,8 @@ async function writeEmailConsent(
 }
 
 // POST - Submit form
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const ip = getClientIp(request)
     const formId = params.id
@@ -655,7 +653,7 @@ export async function POST(
       if (contactData.email) {
         try {
           const { checkEmail, shouldValidateOnEntry } = await import('@/lib/email/email-hygiene')
-          if (await shouldValidateOnEntry(form.organization_id) && !checkEmail(contactData.email).ok) {
+          if ((await shouldValidateOnEntry(form.organization_id)) && !checkEmail(contactData.email).ok) {
             console.log('[Form Submit] E-mail rejeitado pela higiene da lista')
             delete contactData.email
           }

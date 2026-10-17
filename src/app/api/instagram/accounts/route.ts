@@ -1,3 +1,4 @@
+import { sealIntegrationSecret } from '@/lib/integrations/credential-codec';
 // =============================================
 // API: Instagram Accounts Management
 // src/app/api/instagram/accounts/route.ts
@@ -89,7 +90,7 @@ export async function POST(request: NextRequest) {
       const { data: updated, error } = await supabase
         .from('instagram_accounts')
         .update({
-          access_token,
+          access_token: sealIntegrationSecret(access_token),
           username: profile.username,
           name: profile.name,
           profile_picture_url: profile.profile_picture_url,
@@ -121,7 +122,7 @@ export async function POST(request: NextRequest) {
         organization_id: organizationId,
         store_id: store_id || null,
         ig_user_id,
-        access_token,
+        access_token: sealIntegrationSecret(access_token),
         username: profile.username,
         name: profile.name,
         profile_picture_url: profile.profile_picture_url,

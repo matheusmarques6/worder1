@@ -42,13 +42,11 @@ function renderPreview(bodyText: string, parameters: string[]): string {
   return bodyText.replace(/\{\{\s*(\d+)\s*\}\}/g, (_m, n) => {
     const idx = parseInt(n, 10) - 1
     return parameters[idx] ?? `{{${n}}}`
-  })
+  });
 }
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } },
-) {
+export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const auth = await requireOrgFromAuth(request)
     if (auth instanceof NextResponse) return auth

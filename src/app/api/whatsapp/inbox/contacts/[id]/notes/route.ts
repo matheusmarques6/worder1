@@ -6,10 +6,8 @@ import { requireOrgFromAuth } from '@/lib/auth/require-org'
 export const dynamic = 'force-dynamic';
 
 // GET - Buscar notas do contato
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const auth = await requireOrgFromAuth(request)
     if (auth instanceof NextResponse) return auth
@@ -42,10 +40,8 @@ export async function GET(
 }
 
 // POST - Adicionar nova nota
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const auth = await requireOrgFromAuth(request)
     if (auth instanceof NextResponse) return auth
@@ -147,10 +143,8 @@ export async function POST(
 }
 
 // DELETE - Excluir nota
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function DELETE(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const auth = await requireOrgFromAuth(request)
     if (auth instanceof NextResponse) return auth
@@ -184,10 +178,8 @@ export async function DELETE(
 }
 
 // PATCH - Atualizar nota (ex: fixar/desafixar)
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function PATCH(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const auth = await requireOrgFromAuth(request)
     if (auth instanceof NextResponse) return auth

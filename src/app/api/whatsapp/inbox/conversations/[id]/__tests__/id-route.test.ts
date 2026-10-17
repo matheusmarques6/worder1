@@ -46,7 +46,7 @@ import { PUT } from '../route'
 function req(body: any): any {
   return { json: async () => body, headers: new Headers() }
 }
-const ctx = { params: { id: 'conv-1' } }
+const ctx = { params: Promise.resolve({ id: 'conv-1' }) }
 
 const cloudResolved = {
   table: 'whatsapp_cloud_conversations',

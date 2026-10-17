@@ -15,6 +15,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { safeFetch, BLOCKED_PREFIX } from '../ssrf-guard'
+import { legacyProviderMediaUrl, resolveOwnedMediaPath } from '@/lib/whatsapp/media-ownership'
 
 export const MAX_INBOUND_MEDIA_BYTES = 10 * 1024 * 1024 // 10MB
 
@@ -30,11 +31,20 @@ function withinCap(buffer: Buffer): boolean {
 }
 
 export async function fetchInboundMedia(params: {
+  organizationId?: string
+  conversationId?: string
+  provider?: 'evolution'
   storagePath?: string | null
   mediaUrl?: string | null
   mimeType?: string | null
 }): Promise<FetchedMedia | null> {
-  const { storagePath, mediaUrl, mimeType } = params
+  const { mediaUrl, mimeType } = params
+  const storagePath = resolveOwnedMediaPath(
+    { media_storage_path: params.storagePath, media_url: mediaUrl },
+    params.organizationId || '', params.conversationId || '',
+  )
+  // A malformed/foreign key must never fall through to another source.
+  if (params.storagePath && !storagePath) return null
 
   if (storagePath) {
     try {
@@ -49,13 +59,14 @@ export async function fetchInboundMedia(params: {
         return null
       }
     } catch {
-      // storage indisponível => tenta a URL abaixo
+      // An owned private object may be retried; never reuse its expired URL.
     }
   }
 
-  if (mediaUrl) {
+  const providerUrl = legacyProviderMediaUrl({ provider: params.provider, media_url: mediaUrl })
+  if (providerUrl) {
     try {
-      const response = await safeFetch(mediaUrl)
+      const response = await safeFetch(providerUrl)
       if (!response.ok) return null
       const buffer = Buffer.from(await response.arrayBuffer())
       if (!withinCap(buffer)) return null

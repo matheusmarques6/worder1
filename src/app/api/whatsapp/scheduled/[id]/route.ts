@@ -42,10 +42,8 @@ async function validateScheduledMessageAccess(messageId: string, organizationId:
 // =============================================
 // GET - Detalhes do agendamento
 // =============================================
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await requireOrgFromAuth(request);
   if (auth instanceof NextResponse) return auth;
   const organizationId = auth.orgId;
@@ -76,10 +74,8 @@ export async function GET(
 // =============================================
 // PUT - Atualizar agendamento
 // =============================================
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function PUT(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await requireOrgFromAuth(request);
   if (auth instanceof NextResponse) return auth;
   const organizationId = auth.orgId;
@@ -183,10 +179,8 @@ export async function PUT(
 // =============================================
 // DELETE - Cancelar/remover agendamento
 // =============================================
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function DELETE(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await requireOrgFromAuth(request);
   if (auth instanceof NextResponse) return auth;
   const organizationId = auth.orgId;

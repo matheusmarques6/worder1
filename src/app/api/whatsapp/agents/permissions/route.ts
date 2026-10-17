@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/lib/api-utils';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { requireOrgFromAuth } from '@/lib/auth/require-org';
+import { canRoleAccess } from '@/lib/auth/permissions';
+import { writableAgentPermissions, findOrgAgent } from '@/lib/auth/agent-permissions';
 export const dynamic = 'force-dynamic';
 
 // Module-level lazy client
@@ -42,12 +44,8 @@ export async function GET(request: NextRequest) {
 
   try {
     // Verificar se o agente pertence à organização
-    const { data: agent } = await supabase
-      .from('agents')
-      .select('id')
-      .eq('id', agentId)
-      .eq('organization_id', orgId)
-      .single();
+    const { data: agent, error: agentError } = await findOrgAgent(supabase, orgId, agentId);
+    if (agentError) throw agentError;
 
     if (!agent) {
       return NextResponse.json({ error: 'Agent not found' }, { status: 404 });
@@ -92,6 +90,7 @@ export async function POST(request: NextRequest) {
   // ✅ P1 v2: org do token
   const auth = await requireOrgFromAuth(request);
   if (auth instanceof NextResponse) return auth;
+  if (!canRoleAccess(auth.role, 'org:members:role:change')) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   const orgId = auth.orgId;
 
   try {
@@ -109,12 +108,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Verificar se o agente pertence à organização
-    const { data: agent } = await supabase
-      .from('agents')
-      .select('id')
-      .eq('id', agent_id)
-      .eq('organization_id', orgId)
-      .single();
+    const { data: agent, error: agentError } = await findOrgAgent(supabase, orgId, agent_id);
+    if (agentError) throw agentError;
 
     if (!agent) {
       return NextResponse.json({ error: 'Agent not found' }, { status: 404 });
@@ -125,7 +120,7 @@ export async function POST(request: NextRequest) {
       .from('agent_permissions')
       .upsert({
         agent_id,
-        ...permissionsData,
+        ...writableAgentPermissions(permissionsData),
         updated_at: new Date().toISOString(),
       }, { onConflict: 'agent_id' })
       .select()

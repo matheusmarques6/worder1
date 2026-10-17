@@ -6,7 +6,8 @@ export const dynamic = 'force-dynamic';
 // GET /api/webhooks-admin/deliveries/[id]
 // Detalhe de uma entrega (payload completo, response_body, etc).
 // RLS (auth client) garante que o usuário só vê entregas da sua org.
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await getAuthClient();
   if (!auth) return authError();
   const { supabase } = auth;

@@ -4,10 +4,8 @@ import { requireOrgFromAuth } from '@/lib/auth/require-org';
 export const dynamic = 'force-dynamic';
 
 // POST /api/whatsapp/campaigns/[id]/schedule
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   // A campanha vinha só pelo id, com a chave de serviço e sem sessão:
   // qualquer um agendava a campanha de qualquer organização.
   const auth = await requireOrgFromAuth(request);

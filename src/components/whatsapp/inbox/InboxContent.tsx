@@ -46,9 +46,11 @@ const POLLING_INTERVAL_REALTIME = 30000
 interface InboxContentProps {
   /** Altura customizada (default: calc(100vh - 4rem)) */
   height?: string
+  requestedContact?: string | null
 }
 
-export default function InboxContent({ height = 'calc(100vh - 4rem)' }: InboxContentProps) {
+export default function InboxContent({ height = 'calc(100vh - 4rem)', requestedContact }: InboxContentProps) {
+  const openedContact = useRef<string | null>(null)
   const { user } = useAuthStore()
   const { currentStore } = useStoreStore()
   
@@ -301,6 +303,20 @@ export default function InboxContent({ height = 'calc(100vh - 4rem)' }: InboxCon
       fetchInstancesRef.current()
     }
   }, [organizationId, storeId])
+
+  // Open the contact linked from Atividade after its authorized list arrives.
+  useEffect(() => {
+    if (!requestedContact) { openedContact.current = null; return }
+    if (!organizationId || !storeId) return
+    const key = `${organizationId}:${storeId}:${requestedContact}`
+    if (openedContact.current === key) return
+    // Reuse the authorized store list and the normal selection path. Consume
+    // the link once so polling does not undo the operator's next selection.
+    const match = conversations.find(c => c.organization_id === organizationId
+      && (!c.store_id || c.store_id === storeId)
+      && (c.contact_id === requestedContact || c.unified_contact_id === requestedContact))
+    if (match) { openedContact.current = key; selectConversation(match) }
+  }, [requestedContact, organizationId, storeId, conversations, selectConversation])
 
   // Fetch messages when conversation selected
   useEffect(() => {

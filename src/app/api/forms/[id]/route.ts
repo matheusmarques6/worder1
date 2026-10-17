@@ -11,10 +11,8 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 30
 
 // GET - Obter formulário com campos e eventos
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const auth = await getAuthClient()
     if (!auth) return authError()
@@ -71,10 +69,8 @@ export async function GET(
 }
 
 // PUT - Atualizar formulário
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function PUT(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const auth = await getAuthClient()
     if (!auth) return authError()
@@ -292,10 +288,8 @@ function fireInstallExtrasForPublishedForm(storeId: string): void {
 }
 
 // DELETE - Deletar formulário
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function DELETE(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const auth = await getAuthClient()
     if (!auth) return authError()

@@ -11,20 +11,21 @@ import { getAuthClient, authError } from '@/lib/api-utils';
 export const dynamic = 'force-dynamic';
 
 interface RouteParams {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(request: NextRequest, props: RouteParams) {
+  const params = await props.params;
   const auth = await getAuthClient();
   if (!auth) return authError();
   const { supabase } = auth;
 
   const contactId = params.id;
-  
+
   if (!contactId) {
     return NextResponse.json({ error: 'Contact ID required' }, { status: 400 });
   }
-  
+
   const searchParams = request.nextUrl.searchParams;
   // ✅ CORREÇÃO: Validar parseInt e limitar valores
   const limitParam = parseInt(searchParams.get('limit') || '30');
@@ -32,7 +33,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const limit = isNaN(limitParam) ? 30 : Math.min(Math.max(limitParam, 1), 100);
   const offset = isNaN(offsetParam) ? 0 : Math.max(offsetParam, 0);
   const type = searchParams.get('type');
-  
+
   try {
     // 1. Buscar dados enriquecidos do contato - RLS filtra automaticamente
     const { data: contact, error: contactError } = await supabase
@@ -155,17 +156,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 }
 
 // POST - Adicionar atividade manual
-export async function POST(request: NextRequest, { params }: RouteParams) {
+export async function POST(request: NextRequest, props: RouteParams) {
+  const params = await props.params;
   const auth = await getAuthClient();
   if (!auth) return authError();
   const { supabase, user } = auth;
 
   const contactId = params.id;
-  
+
   if (!contactId) {
     return NextResponse.json({ error: 'Contact ID required' }, { status: 400 });
   }
-  
+
   try {
     const body = await request.json();
     const { type, title, description, metadata } = body;

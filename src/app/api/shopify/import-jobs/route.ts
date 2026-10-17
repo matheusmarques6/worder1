@@ -1,3 +1,4 @@
+import { openIntegrationSecret } from '@/lib/integrations/credential-codec';
 // =============================================
 // API: Shopify Import Jobs
 // /src/app/api/shopify/import-jobs/route.ts
@@ -155,7 +156,7 @@ export async function POST(request: NextRequest) {
       `https://${store.shop_domain}/admin/api/2026-04/customers/count.json`,
       {
         headers: {
-          'X-Shopify-Access-Token': store.access_token,
+          'X-Shopify-Access-Token': openIntegrationSecret(store.access_token),
           'Content-Type': 'application/json',
         },
       }

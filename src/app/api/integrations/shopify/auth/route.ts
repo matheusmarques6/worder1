@@ -1,3 +1,4 @@
+import { isShopifyDomain } from '@/lib/shopify/oauth-validation';
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError } from '@/lib/api-utils';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
@@ -40,6 +41,10 @@ export async function GET(request: NextRequest) {
     const normalizedShop = shop.includes('.myshopify.com')
       ? shop
       : `${shop}.myshopify.com`;
+
+    if (!isShopifyDomain(normalizedShop)) {
+      return NextResponse.json({ error: 'Invalid Shopify shop domain' }, { status: 400 });
+    }
 
     // Generate secure random state
     const state = crypto.randomBytes(32).toString('hex');

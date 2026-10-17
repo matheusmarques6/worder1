@@ -14,23 +14,24 @@ import { getAuthClient, authError } from '@/lib/api-utils';
 export const dynamic = 'force-dynamic';
 
 interface RouteParams {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 // =============================================
 // GET - Listar transições
 // =============================================
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(request: NextRequest, props: RouteParams) {
+  const params = await props.params;
   const auth = await getAuthClient();
   if (!auth) return authError();
   const { supabase } = auth;
 
   const pipelineId = params.id;
-  
+
   if (!pipelineId) {
     return NextResponse.json({ error: 'Pipeline ID required' }, { status: 400 });
   }
-  
+
   try {
     // RLS filtra automaticamente por organization_id
     const { data: transitions, error } = await supabase
@@ -63,17 +64,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 // =============================================
 // POST - Criar transição
 // =============================================
-export async function POST(request: NextRequest, { params }: RouteParams) {
+export async function POST(request: NextRequest, props: RouteParams) {
+  const params = await props.params;
   const auth = await getAuthClient();
   if (!auth) return authError();
   const { supabase, user } = auth;
 
   const pipelineId = params.id;
-  
+
   if (!pipelineId) {
     return NextResponse.json({ error: 'Pipeline ID required' }, { status: 400 });
   }
-  
+
   try {
     const body = await request.json();
     const {
@@ -191,17 +193,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 // =============================================
 // PUT - Atualizar transição
 // =============================================
-export async function PUT(request: NextRequest, { params }: RouteParams) {
+export async function PUT(request: NextRequest, props: RouteParams) {
+  const params = await props.params;
   const auth = await getAuthClient();
   if (!auth) return authError();
   const { supabase } = auth;
 
   const pipelineId = params.id;
-  
+
   if (!pipelineId) {
     return NextResponse.json({ error: 'Pipeline ID required' }, { status: 400 });
   }
-  
+
   try {
     const body = await request.json();
     const {
@@ -284,24 +287,25 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 // =============================================
 // DELETE - Deletar transição
 // =============================================
-export async function DELETE(request: NextRequest, { params }: RouteParams) {
+export async function DELETE(request: NextRequest, props: RouteParams) {
+  const params = await props.params;
   const auth = await getAuthClient();
   if (!auth) return authError();
   const { supabase } = auth;
 
   const pipelineId = params.id;
-  
+
   if (!pipelineId) {
     return NextResponse.json({ error: 'Pipeline ID required' }, { status: 400 });
   }
-  
+
   const searchParams = request.nextUrl.searchParams;
   const transitionId = searchParams.get('transitionId');
-  
+
   if (!transitionId) {
     return NextResponse.json({ error: 'transitionId required' }, { status: 400 });
   }
-  
+
   try {
     // RLS filtra automaticamente
     const { error: deleteError } = await supabase

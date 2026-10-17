@@ -12,10 +12,8 @@ export const dynamic = 'force-dynamic'
 // futuro-ou-corrente e, se houver oferta, template_readiness é recomendada
 // (o preflight do sender suprime toque de momento sem readiness — o aviso é
 // da UI, o bloqueio é do sender).
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function PATCH(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await getAuthClient()
   if (!auth) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 

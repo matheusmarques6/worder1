@@ -83,6 +83,9 @@ export default function BuilderCanvas({ organizationId, agentId }: { organizatio
   const [newSource, setNewSource] = useState<PaletteItem['sourceKind'] | null>(null)
   const [missionsOpen, setMissionsOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [closing, setClosing] = useState(false)
+  const [removingEntry, setRemovingEntry] = useState<AgentEntry | null>(null)
+  const [removing, setRemoving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const usdBrl = Number(metrics?.usd_brl) || USD_BRL_FALLBACK
@@ -259,8 +262,7 @@ export default function BuilderCanvas({ organizationId, agentId }: { organizatio
       const e = entries.find((x) => `e:${x.id}` === id)
       if (!e) return
       if (e.kind === 'flow_touch') { setToast('Este toque vem de um fluxo. Tire o agente no nó de IA do fluxo.'); return }
-      const res = await fetch(`/api/ai/agents/${agentId}/entries?entry_id=${encodeURIComponent(e.id)}`, { method: 'DELETE' })
-      if (res.ok) { await loadSide(); setSel(null); setToast('Entrada removida') }
+      setRemovingEntry(e)
       return
     }
     if (id.startsWith('k:')) {
@@ -270,6 +272,20 @@ export default function BuilderCanvas({ organizationId, agentId }: { organizatio
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agent_ids: note.readers.filter((r) => r !== agentId) }),
       })
       if (res.ok) { await loadSide(); setSel(null); setToast(`${head.name} parou de ler esta fonte`) }
+    }
+  }
+
+  const confirmRemoveEntry = async () => {
+    if (!removingEntry || removing) return
+    setRemoving(true)
+    try {
+      const res = await fetch(`/api/ai/agents/${agentId}/entries?entry_id=${encodeURIComponent(removingEntry.id)}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || 'Não foi possível remover a entrada')
+      await loadSide(); setSel(null); setRemovingEntry(null); setToast('Entrada removida')
+    } catch (e: any) {
+      setToast(e.message)
+    } finally {
+      setRemoving(false)
     }
   }
 
@@ -352,7 +368,7 @@ export default function BuilderCanvas({ organizationId, agentId }: { organizatio
           <button type="button" className={'w-sw' + (active ? ' on' : '')} role="switch" aria-checked={active} aria-label="Ativo" onClick={() => (active ? setCp(true) : setCk(true))}></button>
           {active ? 'Ativo' : 'Pausado'}{active && <i></i>}
         </label>
-        <Link className="w-close" href="/ai/agentes">Fechar</Link>
+        <Link className="w-close" href="/ai/agentes" onClick={(e) => { if (dirty) { e.preventDefault(); setClosing(true) } }}>Fechar</Link>
       </header>
       <div className="w-body">
         {left}
@@ -387,6 +403,16 @@ export default function BuilderCanvas({ organizationId, agentId }: { organizatio
         <Modal title={`Pausar ${head.name}?`} width={460} onClose={() => setCp(false)}
           sub={`Conversas em andamento vão para a equipe no Inbox. Toques de fluxo com ${head.name} ficam parados até você ativar de novo.`}
           footer={<><button type="button" className="btn" onClick={() => setCp(false)}>Cancelar</button><button type="button" className="btn dark" onClick={() => void pause()}>Pausar</button></>} />
+      )}
+      {closing && (
+        <Modal title="Sair sem salvar?" width={460} onClose={() => setClosing(false)}
+          sub="As alterações que você fez serão descartadas."
+          footer={<><button type="button" className="btn" onClick={() => setClosing(false)}>Cancelar</button><button type="button" className="btn dark" onClick={() => router.push('/ai/agentes')}>Sair</button></>} />
+      )}
+      {removingEntry && (
+        <Modal title="Remover número de WhatsApp?" width={460} onClose={() => { if (!removing) setRemovingEntry(null) }}
+          sub="Tem certeza? Este número para de ser atendido pelo agente."
+          footer={<><button type="button" className="btn" disabled={removing} onClick={() => setRemovingEntry(null)}>Cancelar</button><button type="button" className="btn dark" disabled={removing} onClick={() => void confirmRemoveEntry()}>Confirmar</button></>} />
       )}
       {newSource && <NewSource kind={newSource} agentId={agentId} onClose={() => setNewSource(null)} onDone={async (msg) => { setNewSource(null); await loadSide(); setToast(msg) }} />}
       {missionsOpen && (

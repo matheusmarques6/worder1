@@ -9,7 +9,8 @@ export const dynamic = 'force-dynamic';
 // Cria nova linha em webhook_deliveries com o mesmo payload, event_id
 // sufixado com _replay_<ts> (preserva histórico + contorna UNIQUE
 // (subscription_id, event_id)), e enfileira no QStash.
-export async function POST(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await getAuthClient();
   if (!auth) return authError();
   const { user, supabase } = auth;

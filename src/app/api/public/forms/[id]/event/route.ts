@@ -10,10 +10,8 @@ import { corsJson, corsError, corsPreflight } from '@/lib/forms/public-cors'
 export const dynamic = 'force-dynamic'
 
 // POST - Fire an event (e.g., page view on thank you page, meeting scheduled)
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const supabase = getSupabaseClient()
     if (!supabase) {

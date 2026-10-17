@@ -22,6 +22,7 @@
 
 import { CheckCircle2, AlertTriangle, ExternalLink, Copy, Check, Loader2, Zap } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { useStoreStore } from '@/stores'
 
 interface Props {
@@ -269,13 +270,13 @@ export function EmbedActivationBanner({ storeId, hideWhenInstalled = false }: Pr
                   </div>
 
                   <div className="mt-3 pt-3 border-t border-amber-100 flex flex-wrap items-center gap-2">
-                    <a
+                    <Link
                       href="/integrations/shopify"
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 rounded-md transition-colors"
                     >
                       <ExternalLink className="w-3 h-3" />
                       Atualizar token agora
-                    </a>
+                    </Link>
                     <button
                       type="button"
                       onClick={autoInstall}

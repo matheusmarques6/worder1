@@ -7,10 +7,8 @@ import { resolveInboxConversation } from '@/lib/whatsapp/inbox-conversation-reso
 export const dynamic = 'force-dynamic';
 
 // POST - Atribuir ou remover atribuição de conversa
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const auth = await requireOrgFromAuth(request)
     if (auth instanceof NextResponse) return auth

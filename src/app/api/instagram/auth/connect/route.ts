@@ -1,3 +1,4 @@
+import { sealIntegrationSecret } from '@/lib/integrations/credential-codec';
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
 import { getAuthClient, authError } from '@/lib/api-utils'
@@ -48,7 +49,7 @@ export async function POST(request: NextRequest) {
         .from('instagram_accounts')
         .update({
           page_id,
-          access_token: page_access_token,
+          access_token: sealIntegrationSecret(page_access_token),
           username: instagram_username,
           name: instagram_name,
           profile_picture_url: instagram_profile_picture,
@@ -83,7 +84,7 @@ export async function POST(request: NextRequest) {
           name: instagram_name,
           profile_picture_url: instagram_profile_picture,
           followers_count: instagram_followers,
-          access_token: page_access_token,
+          access_token: sealIntegrationSecret(page_access_token),
           token_expires_at,
           webhook_verify_token: webhookVerifyToken,
           status: 'active',

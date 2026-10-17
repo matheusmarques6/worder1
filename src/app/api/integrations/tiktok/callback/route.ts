@@ -1,3 +1,4 @@
+import { sealIntegrationSecret } from '@/lib/integrations/credential-codec';
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { consumeOAuthState, logOAuthAttempt } from '@/lib/oauth-security';
@@ -88,7 +89,7 @@ export async function GET(request: NextRequest) {
 
     await supabase.from('tiktok_accounts').upsert({
       organization_id: organizationId, // ← Vem do state validado, não do client!
-      access_token: access_token,
+      access_token: sealIntegrationSecret(access_token),
       advertiser_id: advertiser_ids[0],
       advertiser_name: advertiser?.name || `Advertiser ${advertiser_ids[0]}`,
       currency: advertiser?.currency || 'BRL',

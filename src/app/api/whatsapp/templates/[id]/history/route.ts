@@ -4,10 +4,8 @@ import { requireOrgFromAuth } from '@/lib/auth/require-org';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   // Sem sessão e sem organização, o id do modelo abria o histórico de
   // qualquer organização.
   const auth = await requireOrgFromAuth(request);

@@ -15,6 +15,7 @@ import { supabaseAdmin as supabase } from '@/lib/supabase-admin';
 import { createWhatsAppCloudClient } from './cloud-api';
 import { getAccessToken } from './account-loader';
 import { wlog } from '@/lib/observability/whatsapp-logger';
+import { ownedMediaPath } from './media-ownership';
 
 export const WHATSAPP_MEDIA_BUCKET = 'whatsapp-media';
 const SIGNED_URL_EXPIRY = 3600; // 1h — o GET de mensagens re-assina a cada leitura
@@ -63,7 +64,7 @@ export function buildStoragePath(
 export async function processInboundMedia(job: InboundMediaJob): Promise<InboundMediaResult> {
   const { data: row, error: rowError } = await supabase
     .from('whatsapp_cloud_messages')
-    .select('id, media_id, conversation_id, message_type, content, media_download_status')
+    .select('id, organization_id, waba_id, media_id, conversation_id, message_type, content, media_download_status')
     .eq('id', job.cloudMessageId)
     .maybeSingle();
 
@@ -77,6 +78,21 @@ export async function processInboundMedia(job: InboundMediaJob): Promise<Inbound
     return { ok: false, reason: 'db_read_failed' };
   }
   if (!row) return { ok: false, reason: 'message_not_found' };
+  if (row.organization_id !== job.organizationId || row.waba_id !== job.accountId ||
+      !ownedMediaPath(`${job.organizationId}/${row.conversation_id}/${row.id}.bin`, job.organizationId, row.conversation_id)) {
+    return { ok: false, reason: 'ownership_mismatch' };
+  }
+  const { data: conversation, error: conversationError } = await supabase
+    .from('whatsapp_cloud_conversations')
+    .select('id, organization_id, waba_id')
+    .eq('id', row.conversation_id)
+    .eq('organization_id', job.organizationId)
+    .eq('waba_id', job.accountId)
+    .maybeSingle();
+  if (conversationError) return { ok: false, reason: 'db_read_failed' };
+  if (!conversation || conversation.organization_id !== job.organizationId || conversation.waba_id !== job.accountId) {
+    return { ok: false, reason: 'ownership_mismatch' };
+  }
   if (!row.media_id) return { ok: false, reason: 'no_media_id' };
   // Idempotência: retry do QStash (ou corrida enqueue+inline) vira no-op.
   if (row.media_download_status === 'done') return { ok: true, reason: 'already_done' };
@@ -101,6 +117,7 @@ export async function processInboundMedia(job: InboundMediaJob): Promise<Inbound
     return { ok: false, reason: 'db_read_failed' };
   }
   if (!account) return { ok: false, reason: 'account_not_found' };
+  if (account.organization_id !== job.organizationId || account.id !== job.accountId) return { ok: false, reason: 'ownership_mismatch' };
 
   try {
     const client = createWhatsAppCloudClient({
@@ -112,10 +129,11 @@ export async function processInboundMedia(job: InboundMediaJob): Promise<Inbound
 
     const storagePath = buildStoragePath(
       job.organizationId,
-      row.conversation_id || 'no-conversation',
+      row.conversation_id,
       row.id,
       mimeType,
     );
+    if (!ownedMediaPath(storagePath, job.organizationId, row.conversation_id)) throw new Error('invalid_media_path');
 
     const { error: uploadError } = await supabase.storage
       .from(WHATSAPP_MEDIA_BUCKET)

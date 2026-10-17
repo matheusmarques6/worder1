@@ -161,7 +161,7 @@ export function PreviewModal({ isOpen, onClose, html, subject, onSendTest }: Pre
                       <span className="text-[10px] text-gray-400 truncate">{subject || 'email-preview'}</span>
                     </div>
                   </div>
-                  <iframe srcDoc={html} title="Desktop Preview" className="w-full border-0"
+                  <iframe srcDoc={html} sandbox="" title="Desktop Preview" className="w-full border-0"
                     style={{ height: 'calc(100vh - 220px)', minHeight: 500 }} />
                 </div>
               ) : (
@@ -187,7 +187,7 @@ export function PreviewModal({ isOpen, onClose, html, subject, onSendTest }: Pre
                         <p className="text-[11px] font-semibold text-gray-900 truncate">{subject || 'Assunto do email'}</p>
                         <p className="text-[10px] text-gray-500">De: Worder &lt;noreply@worder.com&gt;</p>
                       </div>
-                      <iframe srcDoc={html} title="Mobile Preview" className="w-full border-0"
+                      <iframe srcDoc={html} sandbox="" title="Mobile Preview" className="w-full border-0"
                         style={{ height: 'calc(100vh - 300px)', minHeight: 450 }} />
                     </div>
                     {/* Home indicator */}

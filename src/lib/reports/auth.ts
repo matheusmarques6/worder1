@@ -1,5 +1,4 @@
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { createRequestRlsClient } from '@/lib/auth/request-rls-client'
 
 /**
  * Resultado da validação de acesso
@@ -23,10 +22,10 @@ export async function validateReportAccess(
   storeId?: string | null
 ): Promise<ReportAccessResult> {
   try {
-    const supabase = createServerComponentClient({ cookies })
+    const { supabase, accessToken } = await createRequestRlsClient()
     
     // 1. Verificar autenticação
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    const { data: { user }, error: authError } = await supabase.auth.getUser(accessToken)
     
     if (authError || !user) {
       return {
@@ -95,7 +94,7 @@ export async function validateReportAccess(
  */
 export async function getDefaultStoreId(organizationId: string): Promise<string | null> {
   try {
-    const supabase = createServerComponentClient({ cookies })
+    const { supabase, accessToken } = await createRequestRlsClient()
     const { pickStore } = await import('@/lib/stores/pick-store')
     const picked = await pickStore<{ id: string }>(supabase as any, { orgIds: [organizationId], select: 'id' })
     return picked.store?.id || null

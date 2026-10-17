@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
 import { getAuthClient } from '@/lib/api-utils'
+import { parsePeriod } from '@/lib/ai/activity-data'
+import { periodWindow } from '@/lib/ai/activity-summary'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,11 +16,13 @@ export async function GET(request: NextRequest) {
   const params = new URL(request.url).searchParams
   const kind = params.get('kind')
   const agent = params.get('agent')
+  const period = periodWindow(parsePeriod(params.get('period')), new Date())
   const limit = Math.min(200, Math.max(1, Number(params.get('limit')) || 50))
   let query = getSupabaseAdmin()
     .from('ai_activity_events')
     .select('id, kind, text, amount, agent_id, conversation_id, contact_id, metadata, created_at')
     .eq('organization_id', auth.user.organization_id)
+    .gte('created_at', period.start.toISOString())
     .order('created_at', { ascending: false })
     .limit(limit)
   if (kind && KINDS.includes(kind)) query = query.eq('kind', kind)

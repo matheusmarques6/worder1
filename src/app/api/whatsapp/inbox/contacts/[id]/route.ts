@@ -12,10 +12,8 @@ const NO_CACHE_HEADERS = {
 }
 
 // GET - Buscar contato UNIFICADO
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const auth = await requireOrgFromAuth(request)
     if (auth instanceof NextResponse) return auth
@@ -230,10 +228,8 @@ function formatWhatsAppContact(contact: any) {
 }
 
 // PATCH - Atualizar contato UNIFICADO
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function PATCH(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const auth = await requireOrgFromAuth(request)
     if (auth instanceof NextResponse) return auth

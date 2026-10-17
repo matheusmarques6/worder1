@@ -7,7 +7,8 @@ export const dynamic = 'force-dynamic'
 
 // Plano IA M2 passo 15 — o checklist mínimo (chave, missão, handoff; entrada
 // como aviso). O M4 (passo 26) acrescenta a avaliação automática.
-export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await getAuthClient()
   if (!auth) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
   const supabase = getSupabaseAdmin()

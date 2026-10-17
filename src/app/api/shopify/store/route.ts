@@ -1,3 +1,4 @@
+import { withoutIntegrationSecrets } from '@/lib/integrations/credential-codec';
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { getAuthClient, authError } from '@/lib/api-utils';
@@ -36,7 +37,7 @@ export async function GET(request: NextRequest) {
         .single();
 
       if (error) throw error;
-      return NextResponse.json({ store: data });
+      return NextResponse.json({ store: data ? withoutIntegrationSecrets(data) : null });
     }
 
     const { data, error } = await supabase
@@ -46,7 +47,7 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    return NextResponse.json({ stores: data || [] });
+    return NextResponse.json({ stores: (data || []).map(withoutIntegrationSecrets) });
   } catch (error: any) {
     console.error('Shopify Store GET error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });

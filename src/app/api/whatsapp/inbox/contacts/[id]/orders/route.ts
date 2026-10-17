@@ -4,8 +4,9 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  props: { params: Promise<{ id: string }> }
 ) {
+  void props
   const auth = await requireOrgFromAuth(request)
   if (auth instanceof NextResponse) return auth
   // Placeholder - retorna vazio por enquanto

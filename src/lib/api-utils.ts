@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
+import { resolveActiveIdentity } from '@/lib/auth/active-identity';
 
 export interface AuthResult {
   supabase: SupabaseClient;
@@ -9,6 +10,9 @@ export interface AuthResult {
     email: string;
     organization_id: string;
     role?: string;
+    agent_id?: string | null;
+    aal?: 'aal1' | 'aal2';
+    mfa_satisfied?: boolean;
   };
 }
 
@@ -32,6 +36,15 @@ function getSupabaseAdmin(): SupabaseClient | null {
  * Usa ANON_KEY + token do usuário = RLS funciona automaticamente
  */
 export async function getAuthClient(): Promise<AuthResult | null> {
+  return resolveAuthClient(false);
+}
+
+/** Only the security enrollment/challenge handlers may use this exception. */
+export async function getAuthClientForMfaSetup(): Promise<AuthResult | null> {
+  return resolveAuthClient(true);
+}
+
+async function resolveAuthClient(allowMfaSetup: boolean): Promise<AuthResult | null> {
   try {
     const admin = getSupabaseAdmin();
     if (!admin) {
@@ -39,7 +52,7 @@ export async function getAuthClient(): Promise<AuthResult | null> {
       return null;
     }
 
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const accessToken = cookieStore.get('sb-access-token')?.value;
     
     if (!accessToken) {
@@ -47,24 +60,8 @@ export async function getAuthClient(): Promise<AuthResult | null> {
       return null;
     }
     
-    // Validar token
-    const { data: { user }, error } = await admin.auth.getUser(accessToken);
-    if (error || !user) {
-      console.log('[Auth] Invalid token');
-      return null;
-    }
-    
-    // Buscar org do perfil
-    const { data: profile } = await admin
-      .from('profiles')
-      .select('organization_id, role')
-      .eq('id', user.id)
-      .single();
-    
-    if (!profile?.organization_id) {
-      console.error('[Auth] No organization for user');
-      return null;
-    }
+    const identity = await resolveActiveIdentity(admin, accessToken);
+    if (!identity || (!allowMfaSetup && !identity.mfaSatisfied)) return null;
 
     // ✅ CRIAR CLIENTE COM ANON_KEY + TOKEN = RLS FUNCIONA!
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -85,10 +82,13 @@ export async function getAuthClient(): Promise<AuthResult | null> {
     return {
       supabase,
       user: {
-        id: user.id,
-        email: user.email || '',
-        organization_id: profile.organization_id,
-        role: profile.role,
+        id: identity.userId,
+        email: identity.email,
+        organization_id: identity.orgId,
+        role: identity.role,
+        agent_id: identity.agentId,
+        aal: identity.aal,
+        mfa_satisfied: identity.mfaSatisfied,
       },
     };
   } catch (error) {
@@ -212,18 +212,21 @@ export async function validateStoreAccess(
 
     const storeOrgId = store.organization_id;
 
-    // ✅ 2. Se a loja é da mesma organização do usuário, OK
-    if (storeOrgId === userOrganizationId) {
-      return { valid: true, storeOrganizationId: storeOrgId };
+    // Older callers omit userId. Resolve the authenticated caller instead of
+    // trusting a supplied profile organization as proof of membership.
+    if (!userId) {
+      const auth = await getAuthClient();
+      userId = auth?.user.id;
     }
 
     // ✅ 3. Verificar se o usuário é MEMBRO da organização da loja
     if (userId) {
       const { data: membership, error: memberError } = await admin
         .from('organization_members')
-        .select('id, role')
+        .select('id, role, status')
         .eq('user_id', userId)
         .eq('organization_id', storeOrgId)
+        .eq('status', 'active')
         .maybeSingle();
 
       if (membership && !memberError) {

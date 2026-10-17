@@ -6,8 +6,9 @@ export const dynamic = 'force-dynamic'
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string; traceId: string } }
+  props: { params: Promise<{ id: string; traceId: string }> }
 ) {
+  const params = await props.params;
   try {
     const auth = await getAuthClient()
     if (!auth) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })

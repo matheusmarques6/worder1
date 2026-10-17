@@ -18,6 +18,7 @@ beforeEach(() => {
   vi.resetModules()
   vi.clearAllMocks()
   vi.stubEnv('OAUTH_STATE_SECRET', 'tiktok-oauth-test-secret')
+  vi.stubEnv('ENCRYPTION_KEY', 'synthetic-integration-key-at-least-32-characters')
   vi.stubEnv('NEXTAUTH_SECRET', '')
   vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://app.example.test')
   vi.stubEnv('TIKTOK_CLIENT_KEY', 'test-client')

@@ -1,3 +1,4 @@
+import { withoutIntegrationSecrets } from '@/lib/integrations/credential-codec';
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient, getAuthClient, authError } from '@/lib/api-utils';
 import { generateOAuthState } from '@/lib/oauth-security';
@@ -26,7 +27,7 @@ export async function GET(request: NextRequest) {
       .eq('organization_id', organizationId);
 
     if (error) throw error;
-    return NextResponse.json({ accounts: data || [] });
+    return NextResponse.json({ accounts: (data || []).map(withoutIntegrationSecrets) });
   } catch (error: any) {
     console.error('TikTok GET error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });

@@ -61,7 +61,7 @@ const request = () => new NextRequest('http://localhost/api/ai/agents/agent-1', 
   headers: { 'content-type': 'application/json' },
   body: '{}',
 })
-const context = { params: { id: 'agent-1' } }
+const context = { params: Promise.resolve({ id: 'agent-1' }) }
 
 describe('AI agent routes preserve budget error status', () => {
   beforeEach(() => {

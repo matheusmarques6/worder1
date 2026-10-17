@@ -1,3 +1,5 @@
+import { sealIntegrationSecret } from '@/lib/integrations/credential-codec';
+import { openIntegrationSecret } from '@/lib/integrations/credential-codec';
 // ===============================
 // CORREÇÃO: /api/shopify/connect/route.ts
 // ===============================
@@ -53,7 +55,7 @@ export async function POST(request: NextRequest) {
       {
         method: 'GET',
         headers: {
-          'X-Shopify-Access-Token': accessToken.trim(),
+          'X-Shopify-Access-Token': openIntegrationSecret(accessToken.trim()),
           'Content-Type': 'application/json',
         },
       }
@@ -83,8 +85,8 @@ export async function POST(request: NextRequest) {
         .from('shopify_stores')
         .update({
           shop_name: name,
-          access_token: accessToken.trim(),
-          api_secret: apiSecret?.trim() || null,
+          access_token: sealIntegrationSecret(accessToken.trim()),
+          api_secret: apiSecret?.trim() ? sealIntegrationSecret(apiSecret.trim()) : null,
           shop_email: shopData.email,
           // shop.json traz `domain` = domínio principal público (o que o
           // cliente vê) e `myshopify_domain` = host da API. {{store_url}}
@@ -127,8 +129,8 @@ export async function POST(request: NextRequest) {
         primary_domain: normalizePublicHost(shopData.domain) || null,
         primary_domain_checked_at: new Date().toISOString(),
         shop_phone: normalizePhone(shopData.phone) || null,
-        access_token: accessToken.trim(),
-        api_secret: apiSecret?.trim() || null,
+        access_token: sealIntegrationSecret(accessToken.trim()),
+        api_secret: apiSecret?.trim() ? sealIntegrationSecret(apiSecret.trim()) : null,
         currency: shopData.currency,
         timezone: shopData.timezone,
         is_active: true,

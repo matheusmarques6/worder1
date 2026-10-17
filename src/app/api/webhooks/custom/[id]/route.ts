@@ -9,7 +9,7 @@ function getSupabase() {
 }
 
 interface Params {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 // ============================================
@@ -181,7 +181,8 @@ function logWebhookAttempt(
 // ============================================
 // POST - Receber webhook
 // ============================================
-export async function POST(request: NextRequest, { params }: Params) {
+export async function POST(request: NextRequest, props: Params) {
+  const params = await props.params;
   const webhookId = params.id;
 
   try {
@@ -328,7 +329,8 @@ export async function POST(request: NextRequest, { params }: Params) {
 // ============================================
 // GET - Verificar status do webhook
 // ============================================
-export async function GET(request: NextRequest, { params }: Params) {
+export async function GET(request: NextRequest, props: Params) {
+  const params = await props.params;
   const supabase = getSupabase();
   const { data: webhook } = await supabase
     .from('automation_webhooks')

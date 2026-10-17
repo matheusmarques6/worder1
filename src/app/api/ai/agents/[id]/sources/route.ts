@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { sourceProcessingOrigin } from '@/lib/ai/knowledge/process-trigger'
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { getAuthClient } from '@/lib/api-utils';
 import { assertAgentInOrg } from '@/lib/ai/agent-access';
@@ -9,10 +10,8 @@ export const dynamic = 'force-dynamic';
 // GET - LISTAR FONTES DO AGENTE
 // =====================================================
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     // ✅ P1: org SEMPRE do usuário autenticado; organization_id da
     // querystring é aceito e IGNORADO (compat com frontend atual).
@@ -85,10 +84,8 @@ export async function GET(
 // POST - CRIAR FONTE (URL ou TEXTO)
 // =====================================================
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     // ✅ P1: org SEMPRE do usuário autenticado; organization_id do
     // body é aceito e IGNORADO (compat com frontend atual).
@@ -201,7 +198,7 @@ async function processSourceAsync(sourceId: string, organizationId: string) {
       )
     }
 
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    const baseUrl = sourceProcessingOrigin()
 
     const res = await fetch(`${baseUrl}/api/ai/process/document`, {
       method: 'POST',

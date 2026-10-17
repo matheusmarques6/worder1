@@ -8,7 +8,8 @@ export const dynamic = 'force-dynamic';
 
 // GET /api/webhooks-admin/subscriptions/[id]
 // Lê via supabase auth client → RLS filtra por org.
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await getAuthClient();
   if (!auth) return authError();
   const { supabase } = auth;
@@ -26,7 +27,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 // PATCH: dois modos.
 // 1. { regenerate_secret: true } → rotaciona (move atual pra previous, 24h)
 // 2. Campos parciais (name, url, events, status, description)
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await getAuthClient();
   if (!auth) return authError();
   const { user } = auth;
@@ -95,7 +97,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   return NextResponse.json({ ok: true });
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await getAuthClient();
   if (!auth) return authError();
   const { user } = auth;

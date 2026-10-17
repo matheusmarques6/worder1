@@ -12,10 +12,8 @@ export const dynamic = 'force-dynamic';
 // =====================================================
 
 // GET - Buscar comentários/notas do contato
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const authCtx = await requireOrgFromAuth(request)
     if (authCtx instanceof NextResponse) return authCtx
@@ -106,10 +104,8 @@ export async function GET(
 }
 
 // POST - Criar novo comentário/nota
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const contactId = params.id
     const body = await request.json()
@@ -243,10 +239,8 @@ export async function POST(
 }
 
 // PATCH - Atualizar comentário
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function PATCH(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const contactId = params.id
     
@@ -324,10 +318,8 @@ export async function PATCH(
 }
 
 // DELETE - Remover comentário
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function DELETE(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const contactId = params.id
     

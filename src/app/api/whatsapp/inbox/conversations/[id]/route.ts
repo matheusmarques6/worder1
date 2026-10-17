@@ -5,10 +5,8 @@ import { resolveInboxConversation } from '@/lib/whatsapp/inbox-conversation-reso
 export const dynamic = 'force-dynamic';
 
 // GET /api/whatsapp/inbox/conversations/[id]
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const auth = await requireOrgFromAuth(request)
     if (auth instanceof NextResponse) return auth
@@ -85,10 +83,8 @@ export async function GET(
 }
 
 // PUT /api/whatsapp/inbox/conversations/[id]
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function PUT(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const auth = await requireOrgFromAuth(request)
     if (auth instanceof NextResponse) return auth
@@ -170,10 +166,8 @@ export async function PUT(
 }
 
 // DELETE /api/whatsapp/inbox/conversations/[id]
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function DELETE(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const auth = await requireOrgFromAuth(request)
     if (auth instanceof NextResponse) return auth

@@ -18,10 +18,8 @@ import { checkRateLimit, LIMITS } from '@/lib/segments/rate-limit'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-export async function POST(
-  _req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function POST(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await getAuthClient()
   if (!auth) return authError()
 

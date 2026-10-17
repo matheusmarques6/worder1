@@ -7,7 +7,8 @@ export const dynamic = 'force-dynamic'
 
 // Plano IA M4 passo 25 — o painel Versões: mais nova primeiro, com resumo
 // por área, nota da avaliação, casos graves e origem de restauração.
-export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await getAuthClient()
   if (!auth) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
   try {

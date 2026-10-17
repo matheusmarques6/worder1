@@ -5,6 +5,7 @@ import { productImageHeight } from '@/lib/email/product-grid'
 import dynamic from 'next/dynamic'
 import { Instagram, Facebook, Music, Youtube, Link2, Zap, Copy, X } from 'lucide-react'
 import type { EmailBlock } from '../config/types'
+import { previewTextAlign, sanitizeRichText } from './preview-safety'
 
 const RichTextEditor = dynamic(
   () => import('./RichTextEditor').then(m => m.RichTextEditor),
@@ -101,8 +102,8 @@ export function BlockPreview({
             ) : (
               <>
                 {/* Wrap in a div that forces text-align on all children */}
-                <style dangerouslySetInnerHTML={{ __html: `.worder-ta-${block.id.replace(/[^a-z0-9]/gi,'')} p,.worder-ta-${block.id.replace(/[^a-z0-9]/gi,'')} h1,.worder-ta-${block.id.replace(/[^a-z0-9]/gi,'')} h2,.worder-ta-${block.id.replace(/[^a-z0-9]/gi,'')} h3,.worder-ta-${block.id.replace(/[^a-z0-9]/gi,'')} h4{text-align:${p.align || 'left'}}` }} />
-                <div className={`worder-ta-${block.id.replace(/[^a-z0-9]/gi,'')}`} dangerouslySetInnerHTML={{ __html: p.contentHtml || (typeof p.content === 'string' ? p.content : '') || '<p>Escreva seu texto aqui.</p>' }} />
+                <style>{`.worder-ta-${block.id.replace(/[^a-z0-9]/gi,'')} p,.worder-ta-${block.id.replace(/[^a-z0-9]/gi,'')} h1,.worder-ta-${block.id.replace(/[^a-z0-9]/gi,'')} h2,.worder-ta-${block.id.replace(/[^a-z0-9]/gi,'')} h3,.worder-ta-${block.id.replace(/[^a-z0-9]/gi,'')} h4{text-align:${previewTextAlign(p.align)}}`}</style>
+                <div className={`worder-ta-${block.id.replace(/[^a-z0-9]/gi,'')}`} dangerouslySetInnerHTML={{ __html: sanitizeRichText(p.contentHtml || (typeof p.content === 'string' ? p.content : '') || '<p>Escreva seu texto aqui.</p>') }} />
               </>
             )}
           </div>
@@ -272,7 +273,11 @@ export function BlockPreview({
       // ── HTML ──
       case 'html':
         return (
-          <div style={pad} dangerouslySetInnerHTML={{ __html: p.code || '' }} />
+          <div style={pad}>
+            <iframe srcDoc={typeof p.code === 'string' ? p.code : ''} sandbox="" title="Bloco HTML"
+              className={selected ? 'w-full border-0' : 'w-full border-0 pointer-events-none'}
+              style={{ width: '100%', height: 240, border: 0, display: 'block' }} />
+          </div>
         )
 
       // ── Video ──
@@ -984,7 +989,7 @@ export function BlockPreview({
         const textSide = (
           <div style={{ flex: 1, minWidth: 0, padding: 12 }}>
             {p.textHtml && (
-              <div dangerouslySetInnerHTML={{ __html: p.textHtml }} />
+              <div dangerouslySetInnerHTML={{ __html: sanitizeRichText(p.textHtml) }} />
             )}
             {p.showButton && p.buttonText && (
               <a

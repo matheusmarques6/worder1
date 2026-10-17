@@ -8,7 +8,8 @@ export const dynamic = 'force-dynamic'
 // do mês DESTE agente, lido de ai_usage_logs (espelho de internal.llm_calls
 // pelo trigger; inclui o legado). NULL em cost_usd = custo desconhecido, e a
 // soma vira um piso — `has_unknown_cost` diz isso à UI.
-export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await getAuthClient()
   if (!auth) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
   const supabase = getSupabaseAdmin()

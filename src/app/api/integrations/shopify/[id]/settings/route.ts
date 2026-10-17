@@ -9,10 +9,8 @@ import { requireOrgFromAuth } from '@/lib/auth/require-org'
 export const dynamic = 'force-dynamic';
 
 // GET - Get store settings
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   // A organização vinha na URL e nada exigia sessão: bastava informar o
   // par (id da loja, id da organização) de outra empresa.
   const auth = await requireOrgFromAuth(request);
@@ -52,10 +50,8 @@ export async function GET(
 }
 
 // PUT - Update store settings
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function PUT(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   // A organização vinha na URL e nada exigia sessão: bastava informar o
   // par (id da loja, id da organização) de outra empresa.
   const auth = await requireOrgFromAuth(request);

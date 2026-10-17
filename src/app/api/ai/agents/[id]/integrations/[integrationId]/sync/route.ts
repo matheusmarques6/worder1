@@ -24,8 +24,9 @@ function getSupabase() {
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string; integrationId: string } }
+  props: { params: Promise<{ id: string; integrationId: string }> }
 ) {
+  const params = await props.params;
   try {
     // ✅ CORREÇÃO: Validar autenticação
     const auth = await getAuthClient();

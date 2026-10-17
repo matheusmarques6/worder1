@@ -10,9 +10,10 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 
 export const dynamic = 'force-dynamic'
 
-interface RouteParams { params: { id: string } }
+interface RouteParams { params: Promise<{ id: string }> }
 
-export async function GET(req: NextRequest, { params }: RouteParams) {
+export async function GET(req: NextRequest, props: RouteParams) {
+  const params = await props.params;
   const auth = await getAuthClient()
   if (!auth) return authError()
 
@@ -40,7 +41,8 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   return NextResponse.json({ activities: data || [], total: count || 0 })
 }
 
-export async function POST(req: NextRequest, { params }: RouteParams) {
+export async function POST(req: NextRequest, props: RouteParams) {
+  const params = await props.params;
   const auth = await getAuthClient()
   if (!auth) return authError()
 

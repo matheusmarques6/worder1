@@ -1,3 +1,4 @@
+import { openIntegrationSecret } from '@/lib/integrations/credential-codec';
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin as supabase } from '@/lib/supabase-admin'
 export const dynamic = 'force-dynamic';
@@ -34,7 +35,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Store not found' }, { status: 404 })
     }
 
-    const secret = store.api_secret || process.env.SHOPIFY_API_SECRET || ''
+    const secret = openIntegrationSecret(store.api_secret) || process.env.SHOPIFY_API_SECRET || ''
     if (!secret) {
       if (process.env.NODE_ENV === 'production') {
         return NextResponse.json({ error: 'Webhook not configured' }, { status: 500 })

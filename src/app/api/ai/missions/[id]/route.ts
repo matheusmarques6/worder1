@@ -11,10 +11,8 @@ export const dynamic = 'force-dynamic'
 // comando — o índice one-active transforma corrida em erro, nunca em duas
 // ativas. Editar conteúdo de missão ativa não é permitido: versão nova é um
 // POST com parent_version_id (a história das versões é a trilha do lojista).
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function PATCH(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await getAuthClient()
   if (!auth) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 

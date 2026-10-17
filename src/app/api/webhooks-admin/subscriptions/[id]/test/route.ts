@@ -25,7 +25,8 @@ function getRatelimit(): Ratelimit | null {
 // POST /api/webhooks-admin/subscriptions/[id]/test
 // Dispara um payload sintético pra essa subscription.
 // Rate-limited a 10/hora por subscription pra evitar spam do destino.
-export async function POST(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await getAuthClient();
   if (!auth) return authError();
   const { user } = auth;

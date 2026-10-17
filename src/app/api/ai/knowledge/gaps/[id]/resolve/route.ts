@@ -14,7 +14,8 @@ export const dynamic = 'force-dynamic'
 //   append_to     { source_id, answer } → resposta pronta no fim da nota;
 //   add_limit     { text?, agent_ids? } → assunto bloqueado nos agentes;
 //   ignore        → some por 30 dias.
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await getAuthClient()
   if (!auth) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
   const body = await request.json().catch(() => null)

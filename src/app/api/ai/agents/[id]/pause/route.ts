@@ -8,7 +8,8 @@ export const dynamic = 'force-dynamic'
 // runtime (status != active) e as conversas abertas que ele atendia passam
 // para a equipe (conversations.status = 'human'), para ninguém ficar sem
 // resposta. As entradas ficam: ao reativar, ele volta aos mesmos números.
-export async function POST(_request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(_request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await getAuthClient()
   if (!auth) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
   const supabase = getSupabaseAdmin()

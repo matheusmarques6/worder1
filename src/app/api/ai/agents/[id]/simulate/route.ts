@@ -9,7 +9,8 @@ export const maxDuration = 60
 // (/internal/simulate-turn, mesmo token do preview): o turno roda em
 // sandbox — nada vai ao cliente, ferramentas de escrita só dizem o que
 // fariam, e o custo fica como `playground`. A org vem da sessão, nunca do body.
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await getAuthClient()
   if (!auth) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
   const body = await request.json().catch(() => null)

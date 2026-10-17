@@ -1,3 +1,4 @@
+import { openIntegrationSecret } from '@/lib/integrations/credential-codec';
 // =============================================
 // Shopify Reconciliation Job
 // src/lib/services/shopify/jobs/reconciliation.ts
@@ -352,7 +353,7 @@ export async function checkWebhookHealth(): Promise<{
         `https://${store.shop_domain}/admin/api/2026-04/webhooks.json`,
         {
           headers: {
-            'X-Shopify-Access-Token': store.access_token,
+            'X-Shopify-Access-Token': openIntegrationSecret(store.access_token),
           },
           signal: AbortSignal.timeout(15000),
         }
@@ -390,7 +391,7 @@ export async function checkWebhookHealth(): Promise<{
             {
               method: 'DELETE',
               headers: {
-                'X-Shopify-Access-Token': store.access_token,
+                'X-Shopify-Access-Token': openIntegrationSecret(store.access_token),
               },
               signal: AbortSignal.timeout(15000),
             }
@@ -429,7 +430,7 @@ export async function checkWebhookHealth(): Promise<{
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'X-Shopify-Access-Token': store.access_token,
+              'X-Shopify-Access-Token': openIntegrationSecret(store.access_token),
             },
             body: JSON.stringify({
               webhook: {

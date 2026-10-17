@@ -108,7 +108,7 @@ export function Props({ n, folder, folders, agents, setReaders, patch }: {
 export function NoteView({ n, body, exists, mode, setMode, setBody, rename, onLink, hi, scroller, props }: {
   n: KbNote; body: string; exists: (t: string) => boolean; mode: 'read' | 'edit'; setMode: (m: 'read' | 'edit') => void
   setBody: (b: string) => void; rename: (t: string) => void; onLink: (t: string) => void
-  hi: number | null; scroller: RefObject<HTMLDivElement>; props: React.ReactNode
+  hi: number | null; scroller: RefObject<HTMLDivElement | null>; props: React.ReactNode
 }) {
   const [title, setTitle] = useState(n.name)
   useEffect(() => setTitle(n.name), [n.id, n.name])

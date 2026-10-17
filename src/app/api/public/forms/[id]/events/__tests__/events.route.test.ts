@@ -33,7 +33,7 @@ async function post(body: Record<string, any>, headers: Record<string, string> =
     headers: { 'content-type': 'text/plain', ...headers },
     body: JSON.stringify(body),
   })
-  return POST(req, { params: { id: FORM_ID } })
+  return POST(req, { params: Promise.resolve({ id: FORM_ID }) })
 }
 
 beforeEach(() => {

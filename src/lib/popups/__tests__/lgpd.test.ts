@@ -5,19 +5,21 @@ import { exportPopupData, erasePopupData } from '../lgpd'
 // escreveu, para o teste checar o escopo (org + contato) e o conteúdo.
 type Call = { table: string; filters: Record<string, any>; update?: Record<string, any> }
 
-function fakeAdmin(rows: Record<string, any[]> = {}) {
+function fakeAdmin(rows: Record<string, any[]> = {}, errors: Record<string, string> = {}) {
   const calls: Call[] = []
   const admin: any = {
     from(table: string) {
       const call: Call = { table, filters: {} }
+      let start = 0, end = Infinity
       const q: any = {
         select: () => q,
         order: () => q,
         eq(col: string, val: any) { call.filters[col] = val; return q },
         update(patch: Record<string, any>) { call.update = patch; calls.push(call); return q },
         // Encadeável e aguardável ao mesmo tempo, como o cliente real.
-        limit() { if (!call.update) calls.push(call); return q },
-        then(resolve: any) { return Promise.resolve({ data: rows[table] || [] }).then(resolve) },
+        limit(n: number) { end = n - 1; if (!call.update) calls.push(call); return q },
+        range(a: number, b: number) { start = a; end = b; if (!call.update) calls.push(call); return q },
+        then(resolve: any) { return Promise.resolve({ data: (rows[table] || []).slice(start, end + 1), error: errors[table] ? { message: errors[table] } : null }).then(resolve) },
       }
       return q
     },
@@ -30,6 +32,14 @@ const ORG = 'org-1'
 const CONTACT = 'contact-9'
 
 describe('exportação dos dados de popup', () => {
+  it('propaga falha de tabela obrigatória em vez de fabricar uma lista vazia', async () => {
+    await expect(exportPopupData(fakeAdmin({}, { consent_records: 'missing table' }), ORG, CONTACT)).rejects.toThrow()
+  })
+  it('exporta todas as respostas além do limite da primeira página', async () => {
+    const rows = Array.from({ length: 501 }, (_, i) => ({ id: `s-${i}`, answers: { answer: String(i) } }))
+    const out = await exportPopupData(fakeAdmin({ crm_form_submissions: rows }), ORG, CONTACT)
+    expect(out.submissions).toHaveLength(501)
+  })
   it('busca as cinco fontes, sempre presas à organização e ao contato', async () => {
     const admin = fakeAdmin()
     const out = await exportPopupData(admin, ORG, CONTACT)
@@ -63,6 +73,16 @@ describe('exportação dos dados de popup', () => {
 })
 
 describe('exclusão dos dados de popup', () => {
+  it('não ignora o bloqueio append-only durante limpeza de consentimento', async () => {
+    await expect(erasePopupData(fakeAdmin({}, { consent_records: 'append-only' }), ORG, CONTACT)).rejects.toThrow()
+  })
+  it('preserva a chave de telefone necessária à supressão operacional', async () => {
+    const admin = fakeAdmin({ whatsapp_opt_status: [{ id: 'wa-1' }] })
+    await erasePopupData(admin, ORG, CONTACT)
+    const update = admin._calls.find((c: Call) => c.table === 'whatsapp_opt_status' && c.update)!.update
+    expect(update).not.toHaveProperty('phone')
+    expect(update.status).toBe('opted_out')
+  })
   it('apaga o que a pessoa digitou e o rastro, sempre dentro da org e do contato', async () => {
     const admin = fakeAdmin()
     await erasePopupData(admin, ORG, CONTACT)
@@ -82,10 +102,11 @@ describe('exclusão dos dados de popup', () => {
       contact_id: null, last_email: null, last_ip: null, email_hash: null, phone_hash: null,
     })
 
-    // O WhatsApp fica registrado como opt-out, sem o número.
+    // O telefone deve continuar consultável pelo guard real dos senders.
     expect(by('whatsapp_opt_status').update).toMatchObject({
-      phone: null, status: 'opted_out', opt_out_reason: 'lgpd_erasure',
+      status: 'opted_out', opt_out_reason: 'lgpd_erasure',
     })
+    expect(by('whatsapp_opt_status').update).not.toHaveProperty('phone')
   })
 
   it('a prova do consentimento sobrevive: sai o que identifica, fica o que prova', async () => {

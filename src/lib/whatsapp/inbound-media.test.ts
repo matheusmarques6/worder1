@@ -12,7 +12,7 @@ vi.mock('@/lib/observability/whatsapp-logger', () => ({
 }))
 
 // Estado mutável que o mock do supabase-admin devolve por tabela.
-const rows: { message: any; account: any } = { message: null, account: null }
+const rows: { message: any; account: any; conversation: any } = { message: null, account: null, conversation: null }
 const mockUpdate = vi.fn()
 const mockUpload = vi.fn()
 const mockCreateSignedUrl = vi.fn()
@@ -42,7 +42,7 @@ vi.mock('@/lib/supabase-admin', () => ({
             return chain
           },
           maybeSingle: async () => ({
-            data: table === 'whatsapp_cloud_messages' ? rows.message : rows.account,
+            data: table === 'whatsapp_cloud_messages' ? rows.message : table === 'whatsapp_cloud_conversations' ? rows.conversation : rows.account,
             error: table === 'whatsapp_cloud_messages' ? selectErrorBehavior.message : selectErrorBehavior.account,
           }),
         }
@@ -103,13 +103,16 @@ describe('processInboundMedia', () => {
     mockAccountEq.length = 0
     rows.message = {
       id: 'msg-1',
+      organization_id: 'org-1',
+      waba_id: 'acc-1',
       media_id: 'meta-media-9',
       conversation_id: 'conv-1',
       message_type: 'image',
       content: { image: { id: 'meta-media-9', mime_type: 'image/jpeg' } },
       media_download_status: 'pending',
     }
-    rows.account = { id: 'acc-1', phone_number_id: 'pn-1', access_token: 'raw-token' }
+    rows.conversation = { id: 'conv-1', organization_id: 'org-1', waba_id: 'acc-1' }
+    rows.account = { organization_id: 'org-1', id: 'acc-1', phone_number_id: 'pn-1', access_token: 'raw-token' }
     mockUpload.mockResolvedValue({ error: null })
     mockCreateSignedUrl.mockResolvedValue({ data: { signedUrl: 'https://signed.example/x' }, error: null })
     updateEqBehavior.mode = 'ok'
@@ -212,4 +215,24 @@ describe('processInboundMedia', () => {
     expect(result).toEqual({ ok: false, reason: 'db_read_failed' })
     expect(mockDownloadMedia).not.toHaveBeenCalled()
   })
+  it.each(['organization_id', 'waba_id'])('rejects mismatched message %s before token/download/write', async field => {
+    rows.message[field] = 'foreign'
+    expect(await processInboundMedia(JOB)).toEqual({ ok: false, reason: 'ownership_mismatch' })
+    expect(mockDownloadMedia).not.toHaveBeenCalled()
+    expect(mockUpload).not.toHaveBeenCalled()
+    expect(mockUpdate).not.toHaveBeenCalled()
+  })
+  it.each(['organization_id', 'waba_id'])('rejects mismatched conversation %s before download/write', async field => {
+    rows.conversation[field] = 'foreign'
+    expect(await processInboundMedia(JOB)).toEqual({ ok: false, reason: 'ownership_mismatch' })
+    expect(mockDownloadMedia).not.toHaveBeenCalled()
+    expect(mockUpdate).not.toHaveBeenCalled()
+  })
+  it('keeps private key available for retry when signing fails', async () => {
+    mockDownloadMedia.mockResolvedValue({ data: new Uint8Array([1]), mimeType: 'image/jpeg' })
+    mockCreateSignedUrl.mockResolvedValue({ data: null, error: { message: 'unavailable' } })
+    expect(await processInboundMedia(JOB)).toEqual({ ok: true })
+    expect(mockUpdate).toHaveBeenCalledWith('whatsapp_cloud_messages', expect.objectContaining({ media_url: null, media_storage_path: 'org-1/conv-1/msg-1.jpg' }))
+  })
+
 })

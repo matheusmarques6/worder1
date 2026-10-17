@@ -44,7 +44,7 @@ import { POST } from '../read/route'
 function req(): any {
   return { json: async () => ({}), headers: new Headers() }
 }
-const ctx = { params: { id: 'conv-1' } }
+const ctx = { params: Promise.resolve({ id: 'conv-1' }) }
 
 describe('POST /api/whatsapp/inbox/conversations/[id]/read', () => {
   beforeEach(() => {

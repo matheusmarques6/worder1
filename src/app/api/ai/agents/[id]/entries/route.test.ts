@@ -59,7 +59,7 @@ const post = (agentId: string, body: unknown) =>
     new Request('http://localhost', {
       method: 'POST', body: JSON.stringify(body), headers: { 'content-type': 'application/json' },
     }) as any,
-    { params: { id: agentId } },
+    { params: Promise.resolve({ id: agentId }) },
   )
 
 let db: ReturnType<typeof fakeDb>

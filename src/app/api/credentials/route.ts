@@ -1,3 +1,4 @@
+import { openIntegrationSecret } from '@/lib/integrations/credential-codec';
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient, getAuthClient, authError } from '@/lib/api-utils';
 import { encryptCredential, decryptCredential, maskSensitive } from '@/lib/automation/credential-encryption';
@@ -409,7 +410,7 @@ async function testCredential(
         const response = await fetch(
           `https://${data.shopDomain}/admin/api/2026-04/shop.json`,
           {
-            headers: { 'X-Shopify-Access-Token': data.accessToken },
+            headers: { 'X-Shopify-Access-Token': openIntegrationSecret(data.accessToken) },
           }
         );
         if (!response.ok) {

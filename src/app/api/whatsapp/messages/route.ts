@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+import { createRequestRlsClient } from '@/lib/auth/request-rls-client'
 import { getAccessToken } from '@/lib/whatsapp/account-loader';
 import { META_BASE_URL } from '@/lib/whatsapp/cloud-api';
 export const dynamic = 'force-dynamic';
@@ -8,8 +7,8 @@ export const dynamic = 'force-dynamic';
 const WHATSAPP_API_URL = META_BASE_URL;
 
 // Helper
-async function getOrgId(supabase: any) {
-  const { data: { user } } = await supabase.auth.getUser();
+async function getOrgId(supabase: any, accessToken?: string) {
+  const { data: { user } } = await supabase.auth.getUser(accessToken);
   if (!user) return null;
   const { data } = await supabase.from('profiles').select('organization_id').eq('id', user.id).single();
   return data?.organization_id;
@@ -18,8 +17,8 @@ async function getOrgId(supabase: any) {
 // GET - Lista mensagens
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
-    const orgId = await getOrgId(supabase);
+    const { supabase, accessToken } = await createRequestRlsClient();
+    const orgId = await getOrgId(supabase, accessToken);
     if (!orgId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const searchParams = request.nextUrl.searchParams;
@@ -74,8 +73,8 @@ export async function GET(request: NextRequest) {
 // POST - Enviar mensagem
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
-    const orgId = await getOrgId(supabase);
+    const { supabase, accessToken } = await createRequestRlsClient();
+    const orgId = await getOrgId(supabase, accessToken);
     if (!orgId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await request.json();

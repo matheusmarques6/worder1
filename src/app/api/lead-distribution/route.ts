@@ -1,5 +1,4 @@
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { createRequestRlsClient } from '@/lib/auth/request-rls-client'
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthClient, authError } from '@/lib/api-utils'
 
@@ -55,7 +54,7 @@ export async function GET(request: NextRequest) {
     if (!auth) return authError()
     const organizationId = auth.user.organization_id
 
-    const supabase = createServerComponentClient({ cookies })
+    const { supabase, accessToken } = await createRequestRlsClient()
     const { searchParams } = new URL(request.url)
 
     const ruleId = searchParams.get('rule_id')
@@ -152,7 +151,7 @@ export async function POST(request: NextRequest) {
     if (!auth) return authError()
     const organization_id = auth.user.organization_id
 
-    const supabase = createServerComponentClient({ cookies })
+    const { supabase, accessToken } = await createRequestRlsClient()
     const body = await request.json()
 
     const { action } = body
@@ -211,7 +210,7 @@ export async function PUT(request: NextRequest) {
     if (!auth) return authError()
     const organization_id = auth.user.organization_id
 
-    const supabase = createServerComponentClient({ cookies })
+    const { supabase, accessToken } = await createRequestRlsClient()
     const body = await request.json()
 
     // Remover quaisquer tentativas do cliente de forçar org_id
@@ -255,7 +254,7 @@ export async function DELETE(request: NextRequest) {
     if (!auth) return authError()
     const organization_id = auth.user.organization_id
 
-    const supabase = createServerComponentClient({ cookies })
+    const { supabase, accessToken } = await createRequestRlsClient()
     const { searchParams } = new URL(request.url)
 
     const id = searchParams.get('id')

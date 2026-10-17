@@ -9,6 +9,7 @@ import Placeholder from '@tiptap/extension-placeholder'
 import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Link, Type, Tag } from 'lucide-react'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { MergeTagQuickPicker } from '../modals/MergeTagQuickPicker'
+import { sanitizeRichText } from './preview-safety'
 
 interface RichTextEditorProps {
   content: string
@@ -34,13 +35,15 @@ export function RichTextEditor({ content, onChange, onInsertMergeTag, placeholde
     extensions: [
       StarterKit.configure({
         heading: { levels: [1, 2, 3, 4] },
+        link: false,
+        underline: false,
       }),
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
       LinkExtension.configure({ openOnClick: false }),
       Underline,
       Placeholder.configure({ placeholder: placeholder || 'Escreva seu texto...' }),
     ],
-    content: content || '<p></p>',
+    content: sanitizeRichText(content) || '<p></p>',
     autofocus: 'end',
     // Sem isto o Tiptap 3 monta o editor DURANTE o render e reclama de
     // SSR — um erro no console a cada bloco de texto aberto. E era o que
@@ -48,9 +51,10 @@ export function RichTextEditor({ content, onChange, onInsertMergeTag, placeholde
     // "Cannot update a component while rendering a different component".
     immediatelyRender: false,
     onUpdate: ({ editor: e }) => {
-      onChangeRef.current(e.getHTML())
+      onChangeRef.current(sanitizeRichText(e.getHTML()))
     },
     editorProps: {
+      transformPastedHTML: sanitizeRichText,
       attributes: {
         class: 'prose prose-sm max-w-none focus:outline-none min-h-[80px] px-3 py-2 text-gray-900',
       },
@@ -59,8 +63,9 @@ export function RichTextEditor({ content, onChange, onInsertMergeTag, placeholde
 
   // Sync external content changes
   useEffect(() => {
-    if (editor && content !== editor.getHTML()) {
-      editor.commands.setContent(content || '<p></p>', { emitUpdate: false })
+    const safeContent = sanitizeRichText(content) || '<p></p>'
+    if (editor && safeContent !== sanitizeRichText(editor.getHTML())) {
+      editor.commands.setContent(safeContent, { emitUpdate: false })
     }
   }, [content, editor])
 

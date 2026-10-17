@@ -1,3 +1,4 @@
+import { openIntegrationSecret } from '@/lib/integrations/credential-codec';
 // =============================================
 // CRON: Shopify Import Worker (V2 - Otimizado)
 // /src/app/api/cron/shopify-import-worker/route.ts
@@ -228,7 +229,7 @@ async function processJobBatch(supabase: any, job: any, store: any, startTime: n
       // Fetch da Shopify
       const response: Response = await fetch(nextPageUrl, {
         headers: {
-          'X-Shopify-Access-Token': store.access_token,
+          'X-Shopify-Access-Token': openIntegrationSecret(store.access_token),
           'Content-Type': 'application/json',
         },
       });

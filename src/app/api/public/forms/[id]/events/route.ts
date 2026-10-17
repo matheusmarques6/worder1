@@ -44,7 +44,8 @@ function shortText(v: unknown, max: number): string | null {
   return s ? s.slice(0, max) : null;
 }
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     let body: any = {};
     try {

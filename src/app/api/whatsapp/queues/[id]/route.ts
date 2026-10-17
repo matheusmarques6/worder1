@@ -9,10 +9,8 @@ import { requireOrgFromAuth } from '@/lib/auth/require-org'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   // ✅ P1 v2: org do token; organizationId da query é IGNORADO
   const auth = await requireOrgFromAuth(request);
   if (auth instanceof NextResponse) return auth;
@@ -43,10 +41,8 @@ export async function GET(
   }
 }
 
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function PUT(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   // ✅ P1 v2: org do token
   const auth = await requireOrgFromAuth(request);
   if (auth instanceof NextResponse) return auth;
@@ -103,10 +99,8 @@ export async function PUT(
   }
 }
 
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function DELETE(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   // ✅ P1 v2: org do token
   const auth = await requireOrgFromAuth(request);
   if (auth instanceof NextResponse) return auth;

@@ -45,10 +45,8 @@ async function readResponseText(response: Response): Promise<string> {
 // POST — o teste OBRIGATÓRIO antes de ligar (10.7): chamada real, feita do
 // servidor (o browser nunca vê o header de auth), cap de 10s. O resultado
 // grava last_test_status — o CHECK do schema só deixa ligar com 'ok'.
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await getAuthClient()
   if (!auth) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 

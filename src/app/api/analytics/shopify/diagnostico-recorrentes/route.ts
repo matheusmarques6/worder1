@@ -1,3 +1,4 @@
+import { openIntegrationSecret } from '@/lib/integrations/credential-codec';
 import { NextRequest, NextResponse } from 'next/server';
 import { assertDebugAllowed } from '@/lib/debug-guard';
 import { requireStore } from '@/lib/api/guards';
@@ -15,7 +16,7 @@ async function shopifyFetch(shopDomain: string, accessToken: string, endpoint: s
   const url = `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}${endpoint}`;
   const response = await fetch(url, {
     headers: {
-      'X-Shopify-Access-Token': accessToken,
+      'X-Shopify-Access-Token': openIntegrationSecret(accessToken),
       'Content-Type': 'application/json',
     },
   });
@@ -48,7 +49,7 @@ async function testShopifyQL(shopDomain: string, accessToken: string, daysBack: 
     const response = await fetch(url, {
       method: 'POST',
       headers: {
-        'X-Shopify-Access-Token': accessToken,
+        'X-Shopify-Access-Token': openIntegrationSecret(accessToken),
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(graphqlQuery),

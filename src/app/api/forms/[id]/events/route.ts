@@ -7,10 +7,8 @@ import { getAuthClient, authError } from '@/lib/api-utils'
 export const dynamic = 'force-dynamic'
 
 // GET - Listar eventos do formulário
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const auth = await getAuthClient()
     if (!auth) return authError()
@@ -48,10 +46,8 @@ export async function GET(
 }
 
 // POST - Criar evento
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const auth = await getAuthClient()
     if (!auth) return authError()
@@ -103,10 +99,8 @@ export async function POST(
 }
 
 // PUT - Atualizar evento
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function PUT(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const auth = await getAuthClient()
     if (!auth) return authError()
@@ -164,10 +158,8 @@ export async function PUT(
 }
 
 // DELETE - Deletar evento
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function DELETE(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const auth = await getAuthClient()
     if (!auth) return authError()

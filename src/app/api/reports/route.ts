@@ -1,5 +1,4 @@
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { createRequestRlsClient } from '@/lib/auth/request-rls-client'
 import { NextRequest, NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
@@ -111,14 +110,14 @@ interface TrendData {
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createServerComponentClient({ cookies })
+    const { supabase, accessToken } = await createRequestRlsClient()
     const { searchParams } = new URL(request.url)
 
     // Resolve the authenticated user and the set of orgs they own;
     // only those can be queried. Before this guard, ?organization_id=...
     // from the URL was trusted as-is — any session could pull any
     // org's revenue/conversions/channels by guessing the UUID.
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await supabase.auth.getUser(accessToken)
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }

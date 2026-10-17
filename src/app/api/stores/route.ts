@@ -1,3 +1,4 @@
+import { withoutIntegrationSecrets } from '@/lib/integrations/credential-codec';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { isTombstoneStore } from '@/lib/stores/placeholder';
@@ -77,7 +78,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      stores: realStores,
+      stores: realStores.map(withoutIntegrationSecrets),
       hasStores: realStores.length > 0
     });
   } catch (error: any) {

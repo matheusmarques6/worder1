@@ -7,7 +7,8 @@ export const dynamic = 'force-dynamic'
 
 // Plano IA M3 passo 21 — "lida por": substitui o conjunto de agentes que
 // leem a nota. { agent_ids: [] } deixa a nota sem leitor.
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await getAuthClient()
   if (!auth) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
   const body = await request.json().catch(() => null)

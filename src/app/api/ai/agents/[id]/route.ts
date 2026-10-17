@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { getAuthClient } from '@/lib/api-utils';
 import { snapshotIfChanged } from '@/lib/ai/versions';
+import { VERSIONABLE_FIELDS } from '@/lib/ai/diff';
 import { hasActiveProviderKey, providerKeyMissingResponse } from '@/lib/ai/provider-key-check';
 import { hasBooleanTransferCooldown } from '@/lib/ai/guards';
 export const dynamic = 'force-dynamic';
@@ -18,10 +19,8 @@ function getSupabase() {
 // GET - BUSCAR AGENTE POR ID
 // =====================================================
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     // ✅ CORREÇÃO: Validar autenticação
     const auth = await getAuthClient();
@@ -66,10 +65,8 @@ export async function GET(
 // PUT - ATUALIZAR AGENTE COMPLETO
 // =====================================================
 
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function PUT(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     // ✅ CORREÇÃO: Validar autenticação
     const auth = await getAuthClient();
@@ -95,7 +92,7 @@ export async function PUT(
     // Verificar se agente existe (estado pré-update usado pelo snapshot de versão)
     const { data: existing, error: checkError } = await supabase
       .from('ai_agents')
-      .select('id, system_prompt, persona, settings, provider, is_active')
+      .select('id, is_active, system_prompt, persona, settings, name, description, role, provider, model, temperature, max_tokens, monthly_cap_usd, presentation_mode, client_adaptation')
       .eq('id', agentId)
       .eq('organization_id', organization_id)
       .single()
@@ -123,13 +120,14 @@ export async function PUT(
       await snapshotIfChanged(
         supabase,
         {
+          ...existing,
           id: agentId,
           organization_id,
           system_prompt: existing.system_prompt,
           persona: existing.persona,
           settings: existing.settings,
         },
-        { system_prompt: body.system_prompt, persona: body.persona, settings: body.settings },
+        body,
         typeof body.user_id === 'string' ? body.user_id : null,
         typeof body.version_label === 'string' ? body.version_label : null
       )
@@ -196,10 +194,8 @@ export async function PUT(
 // PATCH - ATUALIZAR CAMPOS ESPECÍFICOS
 // =====================================================
 
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function PATCH(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     // ✅ CORREÇÃO: Validar autenticação
     const auth = await getAuthClient();
@@ -242,6 +238,8 @@ export async function PATCH(
       'role',
       'status',
       'monthly_cap_usd',
+      'presentation_mode',
+      'client_adaptation',
     ]
 
     for (const field of allowedFields) {
@@ -275,13 +273,11 @@ export async function PATCH(
     // Snapshot de versão (Bloco F1) — não-fatal: o save continua mesmo se falhar
     try {
       if (
-        body.system_prompt !== undefined ||
-        body.persona !== undefined ||
-        body.settings !== undefined
+        VERSIONABLE_FIELDS.some(field => body[field] !== undefined)
       ) {
         const { data: current } = await supabase
           .from('ai_agents')
-          .select('id, system_prompt, persona, settings')
+          .select('id, system_prompt, persona, settings, name, description, role, provider, model, temperature, max_tokens, monthly_cap_usd, presentation_mode, client_adaptation')
           .eq('id', agentId)
           .eq('organization_id', organization_id)
           .single()
@@ -290,13 +286,14 @@ export async function PATCH(
           await snapshotIfChanged(
             supabase,
             {
+              ...current,
               id: agentId,
               organization_id,
               system_prompt: current.system_prompt,
               persona: current.persona,
               settings: current.settings,
             },
-            { system_prompt: body.system_prompt, persona: body.persona, settings: body.settings },
+            body,
             typeof body.user_id === 'string' ? body.user_id : null,
             typeof body.version_label === 'string' ? body.version_label : null
           )
@@ -337,10 +334,8 @@ export async function PATCH(
 // DELETE - REMOVER AGENTE
 // =====================================================
 
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function DELETE(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     // ✅ CORREÇÃO: Validar autenticação
     const auth = await getAuthClient();

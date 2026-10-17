@@ -20,7 +20,7 @@ function db(agentFound: boolean) {
 }
 
 const call = (body: unknown) =>
-  POST(new Request('http://localhost', { method: 'POST', body: JSON.stringify(body) }) as any, { params: { id: 'agent-1' } })
+  POST(new Request('http://localhost', { method: 'POST', body: JSON.stringify(body) }) as any, { params: Promise.resolve({ id: 'agent-1' }) })
 
 beforeEach(() => {
   process.env.AGENTS_RUNTIME_URL = 'http://runtime.local'

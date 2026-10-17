@@ -1,3 +1,4 @@
+import { openIntegrationSecret } from '@/lib/integrations/credential-codec';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
@@ -52,7 +53,7 @@ async function shopifyFetch(shopDomain: string, accessToken: string, endpoint: s
   const url = `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}${endpoint}`;
   const response = await fetch(url, {
     headers: {
-      'X-Shopify-Access-Token': accessToken,
+      'X-Shopify-Access-Token': openIntegrationSecret(accessToken),
       'Content-Type': 'application/json',
     },
   });
