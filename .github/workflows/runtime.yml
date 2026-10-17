@@ -1,30 +1,13 @@
 # CI do runtime Python (fork do motor — ver runtime/FORK.md).
-# Path filters: só roda quando runtime/ ou as migrations canônicas mudam (D2).
+# Chamado pelo workflow release; alterações só no app também validam o contrato Python.
 #
 # Gates bloqueantes: lint, boundaries, tests-unit e tests-db (DB/RLS/pipeline).
 # O banco de testes precisa de identidade descartável comprovada.
 name: runtime
 
 on:
-  pull_request:
-    paths:
-      - "runtime/**"
-      - "supabase/migrations/**"
-      - "supabase/config.toml"
-      - "scripts/test-disposable-db.ps1"
-      - ".github/workflows/runtime.yml"
-  push:
-    branches: ["**"]
-    paths:
-      - "runtime/**"
-      - "supabase/migrations/**"
-      - "supabase/config.toml"
-      - "scripts/test-disposable-db.ps1"
-      - ".github/workflows/runtime.yml"
-
-concurrency:
-  group: runtime-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  workflow_call:
+  workflow_dispatch:
 
 permissions:
   contents: read

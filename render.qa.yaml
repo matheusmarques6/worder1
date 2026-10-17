@@ -1,0 +1,46 @@
+# Dedicated QA service only. Apply separately from the production Blueprint.
+# Existing Supabase QA project and secrets must be provisioned first.
+services:
+  - type: web
+    name: worder-agents-runtime-qa
+    runtime: docker
+    rootDir: runtime
+    dockerfilePath: ./Dockerfile
+    region: virginia
+    plan: starter
+    healthCheckPath: /healthz
+    # CI deploys the exact SHA inside the shared staging concurrency lock.
+    autoDeployTrigger: "off"
+    envVars:
+      - key: AGENTS_HTTP_PORT
+        value: "10000"
+      - key: AGENTS_RESPONDER
+        value: agents_runtime.agent_core.responder:agent_responder
+      - key: AGENTS_TOUCHER
+        value: agents_runtime.agent_core.toucher:agent_toucher
+      - key: AGENTS_CHANNEL
+        value: agents_runtime.channels.cloud_api:from_env
+      - key: AGENTS_WORKER_SET_ROLE
+        value: worker_role
+      - key: AGENTS_SENDER_SET_ROLE
+        value: sender_role
+      - key: AGENTS_WORKERS
+        value: "1"
+      - key: AGENTS_PROCESS_NAME
+        value: agents-runtime-qa
+      - key: AGENTS_LOG_LEVEL
+        value: INFO
+      - key: DEPLOY_ENV
+        value: staging
+      - key: AGENTS_META_API_VERSION
+        value: v22.0
+      - key: AGENTS_WORKER_DB_URL
+        sync: false
+      - key: AGENTS_SENDER_DB_URL
+        sync: false
+      - key: AGENTS_OPENROUTER_API_KEY
+        sync: false
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: AGENTS_PREVIEW_TOKEN
+        sync: false

@@ -1,3 +1,9 @@
 allowBuilds:
   esbuild: true
   unrs-resolver: true
+minimumReleaseAgeExclude:
+  - nodemailer@10.1.2
+overrides:
+  next>sharp: 0.35.5
+  postcss@<8.5.12: 8.5.30
+  prosemirror-view@<1.42.3: 1.42.3

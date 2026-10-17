@@ -1,10 +1,12 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    serverComponentsExternalPackages: ['undici', 'pdf-parse', 'mammoth'],
-    // Plano IA M5 passo 30: src/instrumentation.ts (OpenTelemetry → Logfire).
-    instrumentationHook: true,
+  // Redirect before rendering: the legacy dashboard and full-screen Builder
+  // belong to different root layouts.
+  async redirects() {
+    return [{ source: '/ai/agentes/:id((?!novo(?:/|$))[^/]+)', destination: '/ai/construtor/:id', permanent: false }]
   },
+  // Stable since Next 15; src/instrumentation.ts is discovered automatically.
+  serverExternalPackages: ['undici', 'pdf-parse', 'mammoth'],
   images: {
     remotePatterns: [
       {

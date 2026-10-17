@@ -1,13 +1,14 @@
 # Render Blueprint — o runtime de agentes IA (runtime/) como web service.
 #
-# Deploy: Render Dashboard → New → Blueprint → este repo → preencher os 4
+# Deploy: Render Dashboard → New → Blueprint → este repo → preencher os
 # segredos (sync: false) → Apply. O serviço builda de runtime/Dockerfile,
 # expõe /healthz (o Render usa como health check) e o processo único asyncio
 # (coalescer + workers + sender + heartbeat + listener) sobe dormante: filas
 # vazias e rollout vazio = idle seguro até o cutover.
 #
-# ATENÇÃO à DSN (SUPABASE_DB_URL): usar o SESSION POOLER (IPv4) —
-#   postgresql://postgres.rqpmoavktzvxfcfsdkcc:[SENHA]@aws-0-sa-east-1.pooler.supabase.com:5432/postgres
+# DSNs distintas AGENTS_WORKER_DB_URL / AGENTS_SENDER_DB_URL: SESSION POOLER
+# com runtime_worker_login.<project-ref> / runtime_sender_login.<project-ref>.
+# Provisionar senhas fora do repositório após a migration runtime_minimum_login.
 # A conexão direta (db.<ref>.supabase.co) é IPv6 e o egress do Render é IPv4.
 # Transaction pooler (porta 6543) NÃO serve: o engine usa `set role` e leases
 # por sessão (runtime/DEPLOY.md).
@@ -24,7 +25,7 @@ services:
     region: virginia
     plan: starter
     healthCheckPath: /healthz
-    autoDeploy: true
+    autoDeployTrigger: checksPass
     envVars:
       # -- o processo ---------------------------------------------------------
       - key: AGENTS_HTTP_PORT
@@ -52,7 +53,9 @@ services:
       - key: AGENTS_META_API_VERSION
         value: v22.0
       # -- segredos (preenchidos no Apply do Blueprint; nunca no repo) --------
-      - key: SUPABASE_DB_URL # session pooler, ver cabeçalho
+      - key: AGENTS_WORKER_DB_URL # runtime_worker_login, session pooler
+        sync: false
+      - key: AGENTS_SENDER_DB_URL # runtime_sender_login, session pooler
         sync: false
       - key: AGENTS_OPENROUTER_API_KEY # chave da PLATAFORMA (Judge 1 + embeddings)
         sync: false
