@@ -20,6 +20,7 @@ Nenhum hostname aqui: adapters moram em direct_providers.py/openrouter.py
 """
 
 import os
+import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -55,6 +56,8 @@ class ProviderChoice:
 def decode_stored_key(value: str, *, base_secret: str | None) -> str:
     """provider-key-codec do app: v2 cifrado ou plaintext legado (passthrough)."""
     if not is_encrypted_secret(value):
+        if re.match(r"^v\d+:", value) or value.count(":") == 2:
+            raise ValueError("secret-box: malformed or unsupported stored credential")
         return value
     if not base_secret:
         raise NoOrgLlmKey(

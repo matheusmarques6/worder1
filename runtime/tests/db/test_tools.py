@@ -93,7 +93,7 @@ class TestSearchKnowledge:
                 conn,
                 SearchKnowledge(EmbeddingStandIn()),
                 _context(tenant, thread.conversation_id),
-                {"query": "quanto custa o frete?"},
+                {"query": FRETE},
                 clock=FrozenClock(START),
             )
 
@@ -111,14 +111,14 @@ class TestSearchKnowledge:
         try:
             thread = create_thread(admin, tenant)
             await _ingest(dsn, tenant, texts=(FRETE,))
-            await _ingest(dsn, stranger, texts=("Cupom secreto do outro lojista.",))
+            await _ingest(dsn, stranger, texts=(FRETE + " Cupom secreto do outro lojista.",))
 
             async with as_runtime_worker(dsn) as conn:
                 result = await tools.run_tool(
                     conn,
                     SearchKnowledge(EmbeddingStandIn()),
                     _context(tenant, thread.conversation_id),
-                    {"query": "cupom secreto", "organization_id": str(stranger)},
+                    {"query": FRETE, "organization_id": str(stranger)},
                     clock=FrozenClock(START),
                 )
 
@@ -144,7 +144,7 @@ class TestSearchKnowledge:
                 conn,
                 SearchKnowledge(standin),
                 _context(tenant, thread.conversation_id),
-                {"query": "frete"},
+                {"query": FRETE},
                 clock=FrozenClock(START),
             )
 
@@ -208,14 +208,14 @@ class TestTheTrail:
                 conn,
                 SearchKnowledge(EmbeddingStandIn(clock=clock)),
                 _context(tenant, thread.conversation_id),
-                {"query": "frete"},
+                {"query": FRETE},
                 clock=clock,
             )
 
         (row,) = await _recorded(admin, thread.conversation_id)
         tool_name, recorded_input, output, success, error, latency_ms, owner = row
         assert tool_name == "search_knowledge"
-        assert recorded_input == {"query": "frete"}
+        assert recorded_input == {"query": FRETE}
         assert success is True
         assert error is None
         assert latency_ms == 40

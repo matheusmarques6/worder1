@@ -24,6 +24,7 @@ from dataclasses import dataclass, replace
 from datetime import timedelta
 from functools import partial
 from pathlib import Path
+from typing import Any
 from uuid import UUID, uuid4
 
 import httpx
@@ -37,6 +38,7 @@ from agents_runtime.agent_core.guards import (
     resolve_blocked_topic,
     schedule_silence,
 )
+from agents_runtime.agent_core.handoff import handoff_destination
 from agents_runtime.agent_core.llm import LlmPort, Message, ToolCall, ToolSpec
 from agents_runtime.agent_core.metering import TurnBudget
 from agents_runtime.agent_core.mission_resolver import (
@@ -97,6 +99,7 @@ from agents_runtime.repository.scope import (
     set_statement_timeout,
 )
 from agents_runtime.tools.base import ToolContext, run_tool
+from agents_runtime.tools.builtin import builtin_tools_for
 from agents_runtime.tools.coupon import CreateCoupon
 from agents_runtime.tools.custom_http import CustomHttpTool, CustomToolRow, tool_spec_for
 from agents_runtime.tools.knowledge import DEFAULT_LIMIT
@@ -140,6 +143,10 @@ def _node_delta(raw: dict | None) -> NodeDelta:
         ),
         forbidden=tuple(raw.get("forbidden") or ()),
     )
+
+
+class _TouchTransferred(Exception):
+    """End this producer after a persisted handoff, before any further action."""
 
 
 def build_toucher(
@@ -438,10 +445,17 @@ def build_toucher(
                 )
 
                 capture = AttemptTraceCapture()
-                turn_tools: dict[str, CustomToolRow] = {}
+                turn_tools: dict[str, Any] = {}
                 tool_specs: tuple[ToolSpec, ...] = ()
+                # Same agent-enabled catalog as inbound replies. Coupons stay
+                # in the authorized concession path above, never this loop.
+                for name, tool, spec in builtin_tools_for(
+                    version.config.enabled_tools, has_store=purchase is not None
+                ):
+                    turn_tools[name] = tool
+                    tool_specs = (*tool_specs, spec)
                 for row in custom_rows:
-                    if row.name == "create_coupon":
+                    if row.name == "create_coupon" or row.name in turn_tools:
                         continue
                     turn_tools[row.name] = row
                     tool_specs = (*tool_specs, tool_spec_for(row))
@@ -459,8 +473,15 @@ def build_toucher(
                         else:
                             result = await run_tool(
                                 conn, tool,
-                                ToolContext(organization_id=job.organization_id,
-                                            conversation_id=job.conversation_id),
+                                ToolContext(
+                                    organization_id=job.organization_id,
+                                    conversation_id=job.conversation_id,
+                                    contact_id=state.contact_id,
+                                    agent_id=version.agent_id,
+                                    channel_account_id=job.channel_account_id,
+                                    phone=state.contact_phone,
+                                    handoff_agent_id=handoff_destination(version.settings),
+                                ),
                                 dict(call.arguments), clock=clock,
                             )
                             payload = (dict(result.output or {}) if result.success
@@ -469,6 +490,9 @@ def build_toucher(
                             attempt, {"name": call.name, "arguments": dict(call.arguments),
                                       "result": payload}, known_secrets=secrets,
                         )
+                        if call.name == "transfer_to_human" and payload.get("transferred") is True:
+                            await note_step("transferred", "Toque transferido; turno encerrado")
+                            raise _TouchTransferred
                         return json.dumps(payload, ensure_ascii=False)
                     finally:
                         secrets.clear()
@@ -480,8 +504,8 @@ def build_toucher(
                 )
                 compiled = compile_prompt(
                     agent=agent,
-                    # A oferta do toque contém só consultas custom. O cupom já
-                    # foi materializado por concession_request e entra como fato.
+                    # Builtins habilitadas e consultas custom; o cupom já foi
+                    # materializado por concession_request e entra como fato.
                     mission=replace(resolved, tools=tuple(turn_tools)),
                     state=StateBlock(
                         moment_ids=tuple(str(m) for m in moment_view.moment_ids),
@@ -547,7 +571,10 @@ def build_toucher(
                         think=False,
                     )
 
-                outcome = await guarded_reply(generate, judge, context=context)
+                try:
+                    outcome = await guarded_reply(generate, judge, context=context)
+                except _TouchTransferred:
+                    return TouchDraft(None, (), mission_version_id)
 
                 for judgement in outcome.judgements:
                     async with conn.transaction():

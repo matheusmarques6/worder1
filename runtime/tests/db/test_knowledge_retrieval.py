@@ -23,6 +23,7 @@ No network: `tests/support/embedding.py` is the embedder, and the network lock
 of S5 guarantees the whole level stays offline.
 """
 
+import math
 import uuid
 
 import psycopg
@@ -72,7 +73,8 @@ class TestRetrieval:
 
         async with as_worker(dsn, tenant) as conn:
             found = await knowledge_repo.search_knowledge(
-                conn, embedding=embed_text("quanto custa o frete para o Brasil?"), limit=3
+                conn, embedding=embed_text("quanto custa o frete para o Brasil?"),
+                limit=3, threshold=0,
             )
 
         assert found[0].content == FRETE
@@ -87,7 +89,7 @@ class TestRetrieval:
 
         async with as_worker(dsn, tenant) as conn:
             found = await knowledge_repo.search_knowledge(
-                conn, embedding=embed_text("trocas e devoluções"), limit=1
+                conn, embedding=embed_text("trocas e devoluções"), limit=1, threshold=0,
             )
 
         assert len(found) == 1
@@ -124,10 +126,30 @@ class TestRetrieval:
 
         async with as_worker(dsn, tenant) as conn:
             found = await knowledge_repo.search_knowledge(
-                conn, embedding=embed_text("frete"), limit=10
+                conn, embedding=embed_text("frete"), limit=10, threshold=0,
             )
 
         assert [chunk.content for chunk in found] == [FRETE]
+
+    async def test_default_threshold_keeps_only_relevant_vectors(self, dsn, tenant):
+        # Ranking tests above admit weak word overlap deliberately. The real
+        # default must reject 0.69 similarity and accept 0.71, around 0.7.
+        await _ingest_faq(dsn, tenant, texts=(FRETE,))
+        base = embed_text(FRETE)
+        orthogonal_slot = base.index(0)
+
+        def query_vector(similarity):
+            vector = [similarity * value for value in base]
+            vector[orthogonal_slot] = math.sqrt(1 - similarity ** 2)
+            return vector
+
+        async with as_worker(dsn, tenant) as conn:
+            unrelated = await knowledge_repo.search_knowledge(
+                conn, embedding=query_vector(0.69),
+            )
+            relevant = await knowledge_repo.search_knowledge(conn, embedding=query_vector(0.71))
+        assert unrelated == ()
+        assert [chunk.content for chunk in relevant] == [FRETE]
 
 
 class TestIngestion:

@@ -64,7 +64,7 @@ def ingest_message(sync_admin: psycopg.Connection, organization_id, phone: str, 
 def a_tenant_with_an_agent(sync_admin: psycopg.Connection, *, tools=("search_knowledge",)):
     organization_id = create_tenant(sync_admin)
     set_runtime_mode(sync_admin, organization_id, "runtime")
-    create_agent_version(
+    version_id = create_agent_version(
         sync_admin,
         organization_id,
         status="active",
@@ -89,7 +89,11 @@ def a_tenant_with_an_agent(sync_admin: psycopg.Connection, *, tools=("search_kno
         enabled_tools=list(tools),
     )
     create_knowledge_chunk(
-        sync_admin, organization_id, content=FRETE, embedding=an_embedding_of(FRETE)
+        sync_admin, organization_id, content=FRETE,
+        embedding=an_embedding_of("qual é o frete?"),
+        agent_id=sync_admin.execute(
+            "select agent_id from public.ai_agent_versions where id = %s", (version_id,),
+        ).fetchone()[0],
     )
     return organization_id
 

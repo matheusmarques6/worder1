@@ -11,9 +11,10 @@ o `docker-compose.yml` é o espelho local dela.
    `render.yaml`).
 2. O Render lê o blueprint: web service Docker de `runtime/`, health check em
    `/healthz`, envs não-secretas já preenchidas.
-3. Preencher os 4 segredos no Apply:
-   - `SUPABASE_DB_URL` — **session pooler** (IPv4; a direta é IPv6):
-     `postgresql://postgres.rqpmoavktzvxfcfsdkcc:[SENHA]@aws-0-sa-east-1.pooler.supabase.com:5432/postgres`
+3. Provisionar os logins mínimos conforme a seção abaixo e preencher os segredos no Apply:
+   - `AGENTS_WORKER_DB_URL` — **session pooler** (IPv4; a direta é IPv6),
+     usuário `runtime_worker_login.<project-ref>`.
+   - `AGENTS_SENDER_DB_URL` — mesmo banco, usuário `runtime_sender_login.<project-ref>`.
      (transaction pooler 6543 NÃO serve — `set role` e leases são por sessão)
    - `AGENTS_OPENROUTER_API_KEY` — chave da plataforma (Judge 1 + embeddings)
    - `ENCRYPTION_KEY` — o MESMO do app Next.js (senão as chaves BYO nem a
@@ -28,6 +29,44 @@ o `docker-compose.yml` é o espelho local dela.
 
 Qualquer outra plataforma que rode container long-lived serve igualmente
 (Railway/Fly/VPS com compose); não há estado no disco, tudo vive no Postgres.
+
+## Provisionamento e rollout dos logins mínimos (SEC18)
+
+1. Aplicar `20261017051724_runtime_minimum_login.sql` pelo processo aprovado de
+   migrations. Ela cria `runtime_worker_login` e `runtime_sender_login` sem senha,
+   com NOINHERIT/NOSUPERUSER/NOBYPASSRLS/NOCREATEDB/NOCREATEROLE/NOREPLICATION.
+   Cada login recebe somente seu role NOLOGIN correspondente, sem ADMIN OPTION.
+   Nenhuma policy, função ou dado existente é removido.
+2. Pelo canal administrativo seguro do banco, definir duas senhas diferentes.
+   Em uma sessão psql administrativa com destino explicitamente conferido, usar
+   `\password runtime_worker_login` e `\password runtime_sender_login`: prompts
+   interativos evitam senha em argumento de shell, migration ou histórico SQL.
+   As credenciais pertencem ao gerenciador de segredos da implantação. Não gravar
+   DSNs reais neste repositório nem colar senhas em logs/comandos compartilhados.
+3. Configurar as duas DSNs no serviço e manter `DEPLOY_ENV=production` (ou
+   `staging` no QA). Retirar `SUPABASE_DB_URL` privilegiada do ambiente do runtime.
+   Confirmar suporte aos usuários dedicados no session pooler do projeto; para
+   conexão direta o nome de usuário não leva o sufixo do projeto.
+4. Implantar e verificar health/heartbeat e uma operação de cada pool no QA.
+   Antes de abrir HTTP, o processo verifica ambas as credenciais. Cada conexão
+   nova repete a guarda: identidade real, cadeia completa de memberships,
+   atributos administrativos, ownership, ADMIN OPTION e grants diretos ao login.
+   Qualquer desvio falha fechado, sem imprimir a DSN.
+
+As factories de responder/toucher recebem a DSN worker; o canal recebe a DSN
+sender e usa a conexão sender já guardada para carregar a credencial da conta.
+O processo único ainda possui os dois segredos e consegue definir o escopo de
+tenant. Esta mudança limita a autoridade no banco após RCE; não elimina todo
+impacto de RCE nem implementa isolamento criptográfico/KMS (decisão pendente).
+
+Rollback: conservar as duas credenciais e seus roles, que são compatíveis com o
+`SET ROLE` anterior; uma versão anterior com apenas uma DSN não atende ao novo
+contrato e não deve ser usada com owner em produção. Se for preciso interromper
+o rollout, parar o serviço e corrigir a configuração/provisionamento mantendo a
+guarda. Revogar logins (`ALTER ROLE ... NOLOGIN`) e encerrar sessões existentes
+somente em uma janela operacional aprovada. Não apagar roles ou dados como parte
+do rollback desta migration. Os testes locais descartáveis podem continuar com
+`DEPLOY_ENV=development` e a DSN legada; isso não é uma opção de deploy.
 
 ## Rodando no PC (bancada e piloto)
 
@@ -84,10 +123,12 @@ interruptor — subir o piloto não liga org nenhuma.
 
 | Variável | O que é |
 |---|---|
-| `SUPABASE_DB_URL` | DSN Postgres (session pooler ou conexão direta; o processo abre ~N_workers+3 conexões longas — transaction pooler NÃO serve, o engine usa `set role` e leases por sessão) |
+| `AGENTS_WORKER_DB_URL` | DSN do `runtime_worker_login`; worker, heartbeat, replay, responder, toucher, HTTP e health. Obrigatória em production/staging. Session pooler ou conexão direta; transaction pooler NÃO serve. |
+| `AGENTS_SENDER_DB_URL` | DSN do `runtime_sender_login`; sender, housekeeping e fábrica do canal. Obrigatória em production/staging. |
+| `SUPABASE_DB_URL` | Compatibilidade para desenvolvimento/banco descartável quando as DSNs específicas estão ausentes. Nunca usada como fallback em production/staging. |
 | `AGENTS_RESPONDER` | `agents_runtime.agent_core.responder:agent_responder` (a fábrica real; o processo recusa largar sem ela) |
 | `AGENTS_TOUCHER` | `agents_runtime.agent_core.toucher:agent_toucher` — o toque de missão real (F1). Ausente = toque de andaime; obrigatório em produção |
-| `AGENTS_WORKER_SET_ROLE` | `worker_role`. **O processo recusa subir sem ela** (28/08). Sem `SET ROLE` ele fica sendo o dono do DSN — que no Supabase tem BYPASSRLS mesmo sem ser superuser — e a camada de repositório, escrita sem `where organization_id` porque a RLS escopa, passaria a ler cross-org em silêncio. `worker_role` é NOLOGIN de propósito: `SET ROLE` é o único caminho, não existe "logar COMO o role" |
+| `AGENTS_WORKER_SET_ROLE` | `worker_role`, NOLOGIN. O login mínimo só pode assumir este role. A guarda valida também `session_user`: `SET ROLE` a partir de postgres não satisfaz o contrato em production/staging. |
 | `AGENTS_SENDER_SET_ROLE` | `sender_role` — mesma regra, mesma recusa na partida. As duas NÃO são intercambiáveis: cada pool cobra o seu role por constante do código, então trocá-las de lugar também mata a partida. Com `AGENTS_HTTP_PORT` definida a checagem acontece ANTES de o listener abrir a porta |
 | `AGENTS_OPENROUTER_API_KEY` | Chave da PLATAFORMA (Judge 1 + embeddings — D4). A resposta do agente usa as chaves BYO da org (`organization_api_keys`) |
 | `ENCRYPTION_KEY` | O mesmo secret do app Next.js — o secret_box (scrypt+AES-GCM) descriptografa as chaves BYO E, desde o item 20 da auditoria, a credencial Meta por conta (`whatsapp_business_accounts.access_token_encrypted`) |

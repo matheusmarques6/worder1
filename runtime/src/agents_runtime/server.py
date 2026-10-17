@@ -24,6 +24,8 @@ import contextlib
 import hmac
 import json
 import logging
+import os
+import re
 from collections.abc import AsyncIterator
 from datetime import timedelta
 from typing import Any
@@ -361,7 +363,12 @@ async def _healthz(
 
     if age is None or age > max_age_s:
         return _response(503, {"status": "stale", "beat_age_s": age})
-    return _response(200, {"status": "ok", "beat_age_s": round(age, 3)})
+    commit = os.environ.get("RENDER_GIT_COMMIT") or os.environ.get("AGENTS_COMMIT_SHA", "")
+    return _response(200, {
+        "status": "ok", "beat_age_s": round(age, 3),
+        "commit": commit if re.fullmatch(r"[a-f0-9]{40}", commit) else None,
+        "environment": os.environ.get("DEPLOY_ENV"),
+    })
 
 
 def _serialize(compiled: CompiledPrompt) -> dict:

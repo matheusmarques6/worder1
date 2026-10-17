@@ -13,7 +13,6 @@ a joga para o fim do heap, atrás de um rascunho criado antes.
 """
 
 import psycopg
-import pytest
 
 from tests.db.factories import create_mission
 

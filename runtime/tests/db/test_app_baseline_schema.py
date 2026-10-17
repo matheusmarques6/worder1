@@ -1120,9 +1120,17 @@ def _normalized_policy_rows(admin, table):
 @pytest.mark.parametrize("table", ("shopify_products", "api_keys", "email_templates"))
 def test_org_replay_dependencies_have_only_the_org_policy(admin, table):
     predicate = "(organization_id=get_user_organization_id())"
-    assert _normalized_policy_rows(admin, table) == (
+    expected = [
         ("org_isolation_rls", "ALL", ["authenticated"], "PERMISSIVE", predicate, predicate),
-    )
+    ]
+    if table == "shopify_products":
+        # The catalog migration adds a separate, SELECT-only worker policy.
+        # Keep exact role/command/scope checks; any broader policy still fails.
+        expected.append((
+            "shopify_products_worker_read", "SELECT", ["worker_role"], "PERMISSIVE",
+            "(organization_id=current_app_organization_id())", None,
+        ))
+    assert _normalized_policy_rows(admin, table) == tuple(expected)
 
 
 @pytest.mark.parametrize("table,has_org_policy", (
