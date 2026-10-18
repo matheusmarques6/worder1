@@ -1,13 +1,16 @@
 # O que falta — Segurança P0/P1
 
 Mapa de pendências do plano `docs/superpowers/plans/2026-10-16-security-p0-p1.md`.
-Estado em 17/10/2026, checkout `D:/worder1`, branch `codex/sync-debug-console-error-FWrLE`,
+Estado em 17/10/2026, checkout `D:/worder1`, branch `security/p0-p1-2026-10-17`,
 base `5642010`. Evidências e decisões em
 `.superpowers/sdd/2026-10-16-security-p0-p1/progress.md`; estados por SEC-ID em
 `docs/security/sec-id-status.md`.
 
-Nada está commitado: são 374 arquivos no working tree (310 modificados, 64 novos),
-5647 inserções e 5474 deleções.
+O trabalho está em 5 commits na branch `security/p0-p1-2026-10-17` e no PR
+[#10](https://github.com/matheusmarques6/worder1/pull/10), aberto contra
+`claude/debug-console-error-FWrLE`. 401 arquivos. **O PR não pode ser mergeado antes
+das migrations** — ver seção 1. A branch de deploy não recebeu nada: produção segue
+como estava.
 
 ---
 
