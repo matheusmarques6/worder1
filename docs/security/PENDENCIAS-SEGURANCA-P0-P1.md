@@ -35,13 +35,36 @@ responde 503**. O mesmo vale para `resolveActiveIdentity` logo acima, que depend
 O fail-closed está correto como desenho de segurança — o que não pode acontecer é
 o código chegar à produção antes do esquema.
 
-**Ordem obrigatória:** aplicar as 3 migrations → conferir → só então deployar.
+**As três migrations não têm a mesma ordem.** Duas vêm antes do código e uma vem
+depois — o próprio cabeçalho de cada arquivo diz qual:
 
-| Migration | Cria | Efeito se o código subir sem ela |
+| Migration | Ordem | Por quê |
 |---|---|---|
-| `20261017050140_active_identity_security.sql` | schema `internal`, `has_active_org_access`, `list_mfa_factors`, política restritiva em `organizations` | **Login 503 / acesso 403 para todos** |
-| `20261017051724_runtime_minimum_login.sql` | runtime mínimo de login | Caminhos do runtime mínimo falham |
-| `20261017161216_private_whatsapp_media.sql` | bucket privado, `can_access_whatsapp_media`, 3 políticas em `storage.objects` | Mídia de WhatsApp sem política nova; bucket segue como está |
+| `20261017050140_active_identity_security.sql` | **antes/junto** do código | "Deploy together with the server identity guard". Cria `internal`, `has_active_org_access`, `list_mfa_factors` e uma política **restritiva** em toda tabela de `public` com `organization_id`. Sem ela: **login 503 / acesso 403 para todos** |
+| `20261017051724_runtime_minimum_login.sql` | **antes**, indiferente | Só cria as roles LOGIN `runtime_worker_login` e `runtime_sender_login` (deliberadamente **sem senha**, a provisionar em separado) e os grants. Não afeta o app |
+| `20261017161216_private_whatsapp_media.sql` | **depois** do código | "Deploy the owned-key readers before this migration". Torna o bucket `whatsapp-media` **privado** e cerca `storage.objects` com políticas restritivas. Aplicar antes do código **quebra a mídia da inbox**, porque as URLs públicas antigas passam a precisar de assinatura pelo app |
+
+**Sequência correta:**
+
+1. Aplicar `20261017050140` e `20261017051724`
+2. Mergear o PR (código novo em produção)
+3. Aplicar `20261017161216`
+
+O rollback da de mídia não é reabrir o bucket: o próprio arquivo diz que "re-enabling
+public access is not a safe security rollback" — o rollback é voltar os leitores para
+uma release que assina chaves próprias.
+
+### Medição em produção antes de aplicar (17/10)
+
+Projeto **Worder CRM** `rqpmoavktzvxfcfsdkcc` (sa-east-1). Última migration aplicada:
+`20261016000015`; as três acima não estão aplicadas. O risco da política restritiva de
+identidade é baixo neste banco: **1 usuário, 0 fatores MFA verificados, 0 organizações
+exigindo 2FA, 1 vínculo ativo e nenhum profile sem vínculo** — as cláusulas de MFA e de
+`require_2fa` passam por vacuidade e o backfill não tem o que fazer. Risco residual: o
+predicado exige que o JWT traga `session_id`, e os `revoke insert/update/delete` de
+`authenticated` quebram qualquer escrita que o código **atual** faça direto pelo cliente
+em vez de por handler de servidor. Rollback: `drop policy active_identity_required` nas
+tabelas e re-grant.
 
 Há um segundo detalhe no mesmo assunto: a edição de
 `20261016000005_runtime_tool_grants.sql` adicionou um bloco idempotente que cria
