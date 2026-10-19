@@ -260,6 +260,8 @@ CHECK_VALUES = (
 )
 
 INDEXES = (
+    ("organization_members", ("user_id", "organization_id"), False,
+     "(status = 'active'::text)"),
     ("pipeline_stages", ("pipeline_id", '"position"'), False, None),
     ("automation_runs", ("created_at",), False, "(status = 'pending'::text)"),
     ("automation_runs", ("waiting_until",), False, "(status = 'waiting'::text)"),
@@ -276,6 +278,14 @@ INDEXES = (
     ("whatsapp_campaigns", ("organization_id", "created_at DESC"), False, None),
     ("whatsapp_campaigns", ("organization_id", "store_id"), False,
      "(store_id IS NOT NULL)"),
+)
+
+# 20261017050140: restrictive guard ANDs with every existing org policy.
+# Keep the final catalog exact, including role, command and both predicates.
+ACTIVE_IDENTITY_PREDICATE = "internal.has_active_org_access((organization_id)::text)"
+ACTIVE_IDENTITY_POLICY = (
+    "active_identity_required", "ALL", ["authenticated"], "RESTRICTIVE",
+    ACTIVE_IDENTITY_PREDICATE, ACTIVE_IDENTITY_PREDICATE,
 )
 
 # Reviewed active definitions: normalize line endings and outer whitespace only.
@@ -463,6 +473,8 @@ def expected_scoped_catalog():
         if table != "pipeline_stages":
             pred = "(organization_id = get_user_organization_id())"
             rows.append(("policy", table, "ALL", ("authenticated",), "PERMISSIVE", pred, pred))
+            rows.append(("policy", table, "ALL", ("authenticated",), "RESTRICTIVE",
+                         ACTIVE_IDENTITY_PREDICATE, ACTIVE_IDENTITY_PREDICATE))
     pred = ("(store_id IN ( SELECT s.id FROM shopify_stores s "
             "WHERE (s.organization_id = get_user_organization_id())))")
     rows.append(("policy", "pipelines", "ALL", ("authenticated",), "PERMISSIVE", pred, pred))
@@ -1121,6 +1133,7 @@ def _normalized_policy_rows(admin, table):
 def test_org_replay_dependencies_have_only_the_org_policy(admin, table):
     predicate = "(organization_id=get_user_organization_id())"
     expected = [
+        ACTIVE_IDENTITY_POLICY,
         ("org_isolation_rls", "ALL", ["authenticated"], "PERMISSIVE", predicate, predicate),
     ]
     if table == "shopify_products":
@@ -1146,6 +1159,7 @@ def test_crm_replay_dependencies_have_the_exact_store_policy(admin, table, has_o
     if has_org_policy:
         org = "(organization_id=get_user_organization_id())"
         rows.insert(0, ("org_isolation_rls", "ALL", ["authenticated"], "PERMISSIVE", org, org))
+        rows.insert(0, ACTIVE_IDENTITY_POLICY)
     assert _normalized_policy_rows(admin, table) == tuple(rows)
 
 
@@ -1169,6 +1183,7 @@ def test_child_replay_dependencies_have_the_exact_parent_policy(
     if has_org_policy:
         org = "(organization_id=get_user_organization_id())"
         rows.insert(0, ("org_isolation_rls", "ALL", ["authenticated"], "PERMISSIVE", org, org))
+        rows.insert(0, ACTIVE_IDENTITY_POLICY)
     assert _normalized_policy_rows(admin, table) == tuple(rows)
 
 
