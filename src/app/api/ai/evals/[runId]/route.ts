@@ -5,7 +5,8 @@ import { RuntimeNotConfigured, callRuntime } from '@/lib/ai/runtime-client'
 export const dynamic = 'force-dynamic'
 
 // Plano IA M4 passo 26 — andamento e resultado de uma avaliação da org.
-export async function GET(_request: NextRequest, { params }: { params: { runId: string } }) {
+export async function GET(_request: NextRequest, props: { params: Promise<{ runId: string }> }) {
+  const params = await props.params;
   const auth = await getAuthClient()
   if (!auth) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
   try {

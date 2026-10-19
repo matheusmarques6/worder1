@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { NextRequest } from 'next/server'
+import { POST } from './route'
 
 const ORIGINAL_ENV = { ...process.env }
 
@@ -38,27 +39,23 @@ describe('POST /api/email/campaigns/send-batch', () => {
 
   it('nega quem só envia X-Internal: true', async () => {
     process.env.INTERNAL_API_SECRET = 's3cret'
-    const { POST } = await import('./route')
     const res = await POST(post({ 'X-Internal': 'true' }))
     expect(res.status).toBe(401)
   })
 
   it('nega bearer errado', async () => {
     process.env.INTERNAL_API_SECRET = 's3cret'
-    const { POST } = await import('./route')
     const res = await POST(post({ authorization: 'Bearer errado' }))
     expect(res.status).toBe(401)
   })
 
   it('nega sem segredo configurado, mesmo com bearer', async () => {
-    const { POST } = await import('./route')
     const res = await POST(post({ authorization: 'Bearer qualquer' }))
     expect(res.status).toBe(401)
   })
 
   it('passa da autorização com bearer correto', async () => {
     process.env.INTERNAL_API_SECRET = 's3cret'
-    const { POST } = await import('./route')
     const res = await POST(post({ authorization: 'Bearer s3cret' }))
     expect(res.status).not.toBe(401)
   })

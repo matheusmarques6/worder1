@@ -11,7 +11,8 @@ export const dynamic = 'force-dynamic'
 // (sem chave, sem missão ativa, cupom autorizado com a ferramenta desligada,
 // sem transferência, fonte com erro ou sincronizando, muitas respostas
 // retidas em 7 dias, teto mensal acima de 80%).
-export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await getAuthClient()
   if (!auth) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
   const supabase = getSupabaseAdmin()

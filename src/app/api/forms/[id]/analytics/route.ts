@@ -19,7 +19,8 @@ function clampDays(raw: string | null): number {
   return Math.min(365, Math.max(1, Math.round(n)))
 }
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await getAuthClient()
   if (!auth) return authError()
   const orgId = auth.user.organization_id

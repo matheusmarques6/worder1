@@ -45,7 +45,8 @@ async function checkRate(orgId: string): Promise<boolean> {
   return true
 }
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await getAuthClient()
   if (!auth) return authError()
   const orgId = auth.user.organization_id

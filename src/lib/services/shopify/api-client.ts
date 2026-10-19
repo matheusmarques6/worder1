@@ -1,3 +1,4 @@
+import { openIntegrationSecret } from '@/lib/integrations/credential-codec';
 // =============================================
 // Shopify API Client
 // src/lib/services/shopify/api-client.ts
@@ -113,7 +114,7 @@ export class ShopifyAPIClient {
 
     const response = await fetch(url, {
       headers: {
-        'X-Shopify-Access-Token': this.accessToken,
+        'X-Shopify-Access-Token': openIntegrationSecret(this.accessToken),
         'Content-Type': 'application/json',
       },
       signal: AbortSignal.timeout(10000),

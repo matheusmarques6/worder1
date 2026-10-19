@@ -12,7 +12,8 @@ export const dynamic = 'force-dynamic'
 
 // Plano IA M6 passo 31 — os números de cada bloco do Construtor:
 // ?period=7d|30d (padrão 7d).
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await getAuthClient()
   if (!auth) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
   const supabase = getSupabaseAdmin()

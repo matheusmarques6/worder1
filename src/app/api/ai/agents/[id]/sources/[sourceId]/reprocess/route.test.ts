@@ -90,7 +90,7 @@ afterEach(() => {
 
 describe('POST .../sources/[sourceId]/reprocess — a credencial vazia vira falha legível (achado 6)', () => {
   it('sem INTERNAL_API_SECRET nem CRON_SECRET: nunca chama fetch, e o erro nomeia a env que falta', async () => {
-    await POST(req(), { params: { id: 'agent-1', sourceId: 'source-1' } })
+    await POST(req(), { params: Promise.resolve({ id: 'agent-1', sourceId: 'source-1' }) })
     await flush()
 
     expect(global.fetch).not.toHaveBeenCalled()
@@ -103,7 +103,7 @@ describe('POST .../sources/[sourceId]/reprocess — a credencial vazia vira falh
     process.env.INTERNAL_API_SECRET = 'segredo-de-teste'
     ;(global.fetch as any).mockResolvedValue({ ok: true, json: async () => ({}) })
 
-    await POST(req(), { params: { id: 'agent-1', sourceId: 'source-1' } })
+    await POST(req(), { params: Promise.resolve({ id: 'agent-1', sourceId: 'source-1' }) })
     await flush()
 
     expect(global.fetch).toHaveBeenCalled()

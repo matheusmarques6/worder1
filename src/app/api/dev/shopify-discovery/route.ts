@@ -1,3 +1,4 @@
+import { openIntegrationSecret } from '@/lib/integrations/credential-codec';
 // =============================================
 // GET /api/dev/shopify-discovery?store_id=X
 //
@@ -58,7 +59,7 @@ async function tryRest(
     const url = `https://${storeConfig.shop_domain}/admin/api/${API_VERSION}/${endpoint}`;
     const res = await fetch(url, {
       headers: {
-        'X-Shopify-Access-Token': storeConfig.access_token,
+        'X-Shopify-Access-Token': openIntegrationSecret(storeConfig.access_token),
         'Content-Type': 'application/json',
       },
     });

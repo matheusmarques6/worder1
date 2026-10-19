@@ -1,3 +1,4 @@
+import { openIntegrationSecret } from '@/lib/integrations/credential-codec';
 // =============================================
 // Verificador de Saúde do Shopify
 // src/lib/services/integration-health/checkers/shopify.ts
@@ -62,7 +63,7 @@ export class ShopifyHealthChecker extends BaseHealthChecker {
         {
           method: 'GET',
           headers: {
-            'X-Shopify-Access-Token': accessToken,
+            'X-Shopify-Access-Token': openIntegrationSecret(accessToken),
             'Content-Type': 'application/json',
           },
           signal: controller.signal,

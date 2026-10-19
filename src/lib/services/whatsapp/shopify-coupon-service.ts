@@ -1,3 +1,4 @@
+import { openIntegrationSecret } from '@/lib/integrations/credential-codec';
 // =============================================
 // Shopify Coupon Generation Service
 // Module E: Giftback / Cashback automatico
@@ -93,7 +94,7 @@ export async function generateShopifyCoupon(
       {
         method: 'POST',
         headers: {
-          'X-Shopify-Access-Token': accessToken,
+          'X-Shopify-Access-Token': openIntegrationSecret(accessToken),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(priceRulePayload),
@@ -119,7 +120,7 @@ export async function generateShopifyCoupon(
       {
         method: 'POST',
         headers: {
-          'X-Shopify-Access-Token': accessToken,
+          'X-Shopify-Access-Token': openIntegrationSecret(accessToken),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({

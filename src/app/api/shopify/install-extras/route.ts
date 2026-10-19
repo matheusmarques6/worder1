@@ -1,3 +1,4 @@
+import { openIntegrationSecret } from '@/lib/integrations/credential-codec';
 // =============================================
 // POST /api/shopify/install-extras
 //
@@ -159,7 +160,7 @@ export async function POST(request: NextRequest) {
       {
         method: 'POST',
         headers: {
-          'X-Shopify-Access-Token': store.access_token,
+          'X-Shopify-Access-Token': openIntegrationSecret(store.access_token),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ query: `{ shop { myshopifyDomain primaryDomain { host } billingAddress { phone } } }` }),
@@ -228,7 +229,7 @@ export async function POST(request: NextRequest) {
   try {
     const listRes = await fetch(
       `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/webhooks.json`,
-      { headers: { 'X-Shopify-Access-Token': accessToken } }
+      { headers: { 'X-Shopify-Access-Token': openIntegrationSecret(accessToken) } }
     );
     if (listRes.ok) {
       const json = await listRes.json();
@@ -246,7 +247,7 @@ export async function POST(request: NextRequest) {
         try {
           const delRes = await fetch(
             `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/webhooks/${sw.id}.json`,
-            { method: 'DELETE', headers: { 'X-Shopify-Access-Token': accessToken } }
+            { method: 'DELETE', headers: { 'X-Shopify-Access-Token': openIntegrationSecret(accessToken) } }
           );
           if (delRes.ok) staleDeleted++; else staleFailed++;
         } catch { staleFailed++; }
@@ -283,7 +284,7 @@ export async function POST(request: NextRequest) {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-Shopify-Access-Token': accessToken,
+            'X-Shopify-Access-Token': openIntegrationSecret(accessToken),
           },
           body: JSON.stringify({ webhook: { topic, address: topicUrl, format: 'json' } }),
         }
@@ -314,7 +315,7 @@ export async function POST(request: NextRequest) {
   try {
     const scopesRes = await fetch(
       `https://${shopDomain}/admin/oauth/access_scopes.json`,
-      { headers: { 'X-Shopify-Access-Token': accessToken } }
+      { headers: { 'X-Shopify-Access-Token': openIntegrationSecret(accessToken) } }
     );
     if (scopesRes.ok) {
       const sj = await scopesRes.json();
@@ -339,7 +340,7 @@ export async function POST(request: NextRequest) {
         {
           method: 'POST',
           headers: {
-            'X-Shopify-Access-Token': accessToken,
+            'X-Shopify-Access-Token': openIntegrationSecret(accessToken),
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -398,7 +399,7 @@ export async function POST(request: NextRequest) {
       // Look for existing tag pointing to our loader URL
       const listRes = await fetch(
         `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/script_tags.json?src=${encodeURIComponent(loaderUrl)}`,
-        { headers: { 'X-Shopify-Access-Token': accessToken } }
+        { headers: { 'X-Shopify-Access-Token': openIntegrationSecret(accessToken) } }
       );
       if (listRes.ok) {
         const listJson = await listRes.json();
@@ -416,7 +417,7 @@ export async function POST(request: NextRequest) {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'X-Shopify-Access-Token': accessToken,
+              'X-Shopify-Access-Token': openIntegrationSecret(accessToken),
             },
             body: JSON.stringify({
               script_tag: {
@@ -463,7 +464,7 @@ export async function POST(request: NextRequest) {
       // ones, then install the canonical one.
       const listRes = await fetch(
         `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/script_tags.json`,
-        { headers: { 'X-Shopify-Access-Token': accessToken } }
+        { headers: { 'X-Shopify-Access-Token': openIntegrationSecret(accessToken) } }
       );
       if (listRes.ok) {
         const listJson = await listRes.json();
@@ -482,7 +483,7 @@ export async function POST(request: NextRequest) {
             try {
               await fetch(
                 `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/script_tags/${stale.id}.json`,
-                { method: 'DELETE', headers: { 'X-Shopify-Access-Token': accessToken } }
+                { method: 'DELETE', headers: { 'X-Shopify-Access-Token': openIntegrationSecret(accessToken) } }
               );
             } catch { /* best-effort */ }
           }
@@ -495,7 +496,7 @@ export async function POST(request: NextRequest) {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'X-Shopify-Access-Token': accessToken,
+              'X-Shopify-Access-Token': openIntegrationSecret(accessToken),
             },
             body: JSON.stringify({
               script_tag: {
@@ -547,7 +548,7 @@ export async function POST(request: NextRequest) {
       // themes (drafts, library). We only edit the live one.
       const themesRes = await fetch(
         `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/themes.json`,
-        { headers: { 'X-Shopify-Access-Token': accessToken } }
+        { headers: { 'X-Shopify-Access-Token': openIntegrationSecret(accessToken) } }
       );
       if (!themesRes.ok) {
         themeAssetError = `themes list ${themesRes.status}`;
@@ -561,7 +562,7 @@ export async function POST(request: NextRequest) {
           // Pull the current theme.liquid content
           const getRes = await fetch(
             `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/themes/${mainTheme.id}/assets.json?asset[key]=layout/theme.liquid`,
-            { headers: { 'X-Shopify-Access-Token': accessToken } }
+            { headers: { 'X-Shopify-Access-Token': openIntegrationSecret(accessToken) } }
           );
           if (!getRes.ok) {
             themeAssetError = `theme.liquid GET ${getRes.status}`;
@@ -587,7 +588,7 @@ export async function POST(request: NextRequest) {
                   method: 'PUT',
                   headers: {
                     'Content-Type': 'application/json',
-                    'X-Shopify-Access-Token': accessToken,
+                    'X-Shopify-Access-Token': openIntegrationSecret(accessToken),
                   },
                   body: JSON.stringify({
                     asset: { key: 'layout/theme.liquid', value: patched },

@@ -26,8 +26,8 @@ describe('writers de agentes — cooldown_after_transfer', () => {
 
     for (const handler of [
       () => POST(request(body)),
-      () => PUT(request(body), { params: { id: 'agent-1' } }),
-      () => PATCH(request(body), { params: { id: 'agent-1' } }),
+      () => PUT(request(body), { params: Promise.resolve({ id: 'agent-1' }) }),
+      () => PATCH(request(body), { params: Promise.resolve({ id: 'agent-1' }) }),
     ]) {
       const response = await handler()
       expect(response.status).toBe(400)

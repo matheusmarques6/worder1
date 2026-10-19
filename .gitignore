@@ -61,3 +61,4 @@ supabase/.temp
 /playwright-report/
 /e2e/.auth/
 scripts/ui-compare/out/
+.env*

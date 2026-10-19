@@ -22,12 +22,12 @@ const read = (p: string) => readFileSync(path.join(ROOT, p), 'utf8');
 const SCANNED_ROOTS = ['src/lib/ai', 'src/app/api/ai'];
 
 /**
- * `NODE_ENV` é de plataforma: Next e Node a definem sozinhos, não é segredo, e
- * declará-la num `.env.example` convida o lojista a sobrescrevê-la. É o único
- * nome isento — `GEN_BUBBLE_VECTORS` e `ENCRYPTION_KEY` não precisam de
+ * Node/Next e Vercel injetam estas variáveis de plataforma; declará-las num
+ * `.env.example` convida o lojista a sobrescrevê-las. As duas VERCEL_* fixam
+ * o processamento interno na revisão do preview. `GEN_BUBBLE_VECTORS` e `ENCRYPTION_KEY` não precisam de
  * isenção porque só são lidas em `__tests__/`, e o filtro abaixo as tira antes.
  */
-const PLATFORM_ENVS = new Set(['NODE_ENV']);
+const PLATFORM_ENVS = new Set(['NODE_ENV', 'VERCEL_ENV', 'VERCEL_URL']);
 
 const sourceFiles = SCANNED_ROOTS.flatMap((root) =>
   readdirSync(path.join(ROOT, root), { recursive: true })

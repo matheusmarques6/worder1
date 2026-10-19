@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { resolveActiveIdentity } from './active-identity'
 
 export interface AuthContext {
   orgId: string
   userId: string
+  role: string
+  agentId: string | null
+  aal: 'aal1' | 'aal2'
 }
 
 /**
@@ -51,20 +55,11 @@ export async function requireOrgFromAuth(
     return NextResponse.json({ error: 'Dev token not supported here' }, { status: 401 })
   }
 
-  const { data: { user }, error } = await supabaseAdmin.auth.getUser(token)
-  if (error || !user) {
+  const identity = await resolveActiveIdentity(supabaseAdmin, token)
+  if (!identity) {
     return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
   }
 
-  const { data: profile } = await supabaseAdmin
-    .from('profiles')
-    .select('organization_id')
-    .eq('id', user.id)
-    .single()
-
-  if (!profile?.organization_id) {
-    return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
-  }
-
-  return { orgId: profile.organization_id, userId: user.id }
+  if (!identity.mfaSatisfied) return NextResponse.json({ error: 'Verificação em duas etapas necessária.', code: 'mfa_required' }, { status: 403 })
+  return { orgId: identity.orgId, userId: identity.userId, role: identity.role, agentId: identity.agentId, aal: identity.aal }
 }

@@ -22,10 +22,8 @@ const SAFE_INSTALLED_COLUMNS = `
 `;
 
 // GET - Get single installed integration
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await getAuthClient()
   if (!auth) return authError()
   const { supabase, user } = auth
@@ -48,10 +46,8 @@ export async function GET(
 }
 
 // PATCH - Update installed integration
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function PATCH(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await getAuthClient()
   if (!auth) return authError()
   const { supabase, user } = auth
@@ -100,10 +96,8 @@ export async function PATCH(
 }
 
 // DELETE - Uninstall integration
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function DELETE(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await getAuthClient()
   if (!auth) return authError()
   const { supabase, user } = auth

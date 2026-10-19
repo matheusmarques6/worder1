@@ -12,6 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { authorizeCronRequest } from '@/lib/cron-auth'
+import { LgpdStepError } from '@/lib/lgpd/operations'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -22,11 +23,13 @@ export async function GET(req: NextRequest) {
   }
 
   const start = Date.now()
-  const { data: policies } = await supabaseAdmin
+  const { data: policies, error: policiesError } = await supabaseAdmin
     .from('lgpd_retention_policies')
     .select('*')
     .eq('enabled', true)
     .limit(500)
+
+  if (policiesError) return NextResponse.json({ error: 'Retention policy lookup failed' }, { status: 500 })
 
   if (!policies || policies.length === 0) {
     return NextResponse.json({ applied: 0 })
@@ -36,16 +39,18 @@ export async function GET(req: NextRequest) {
 
   for (const policy of policies) {
     try {
+      if (!policy.organization_id || !Number.isFinite(policy.retention_days) || policy.retention_days <= 0) throw new LgpdStepError('invalid_policy')
       const cutoff = new Date(Date.now() - policy.retention_days * 24 * 60 * 60 * 1000).toISOString()
       let affected = 0
 
       switch (policy.resource) {
         case 'contact_events': {
-          const { count } = await supabaseAdmin
+          const { count, error } = await supabaseAdmin
             .from('contact_events')
             .delete({ count: 'exact' })
             .eq('organization_id', policy.organization_id)
             .lt('occurred_at', cutoff)
+          if (error) throw new LgpdStepError('retention_mutation')
           affected = count || 0
           break
         }
@@ -56,56 +61,29 @@ export async function GET(req: NextRequest) {
           // retention policy (say 180 days) would wipe every other
           // org's email_sends older than that, across the entire
           // database. Always scope by the policy's organization_id.
-          const { count } = await supabaseAdmin
+          const { count, error } = await supabaseAdmin
             .from('email_sends')
             .delete({ count: 'exact' })
             .eq('organization_id', policy.organization_id)
             .lt('created_at', cutoff)
+          if (error) throw new LgpdStepError('retention_mutation')
           affected = count || 0
           break
         }
-        case 'contacts_inactive': {
-          // Inativos: last_active_at < cutoff E sem compras
-          if (policy.anonymize_only) {
-            const { count } = await supabaseAdmin
-              .from('contacts')
-              .update({
-                email: `retained_${policy.organization_id}_anon_${Date.now()}@deleted.lgpd`,
-                phone: null,
-                first_name: 'Anonimizado',
-                last_name: 'Retenção',
-                custom_fields: {},
-                // `is_active` não existe em contacts: com ela no payload, o
-                // PostgREST recusava a linha inteira e a ANONIMIZAÇÃO NÃO
-                // ACONTECIA — uma política de retenção configurada não
-                // fazia nada. `suppressed` é a coluna real e diz o que
-                // importa aqui: não mandar mais nada para este endereço.
-                suppressed: true,
-              }, { count: 'exact' })
-              .eq('organization_id', policy.organization_id)
-              .lt('last_active_at', cutoff)
-              .or('total_orders.is.null,total_orders.eq.0')
-            affected = count || 0
-          } else {
-            const { count } = await supabaseAdmin
-              .from('contacts')
-              .delete({ count: 'exact' })
-              .eq('organization_id', policy.organization_id)
-              .lt('last_active_at', cutoff)
-              .or('total_orders.is.null,total_orders.eq.0')
-            affected = count || 0
-          }
-          break
-        }
+        case 'contacts_inactive':
+          // A contact-only purge loses the links needed to locate derived copies.
+          // Keep the policy visibly failed until the subject graph can be erased.
+          throw new LgpdStepError('contacts_inactive_requires_review')
         case 'popup_events': {
           // A tabela que mais cresce: uma linha por exibição de popup, em
           // toda página da loja. Aqui é apagar mesmo — o número que a tela
           // mostra vem de agregados por dia, não do evento cru.
-          const { count } = await supabaseAdmin
+          const { count, error } = await supabaseAdmin
             .from('form_events')
             .delete({ count: 'exact' })
             .eq('organization_id', policy.organization_id)
             .lt('occurred_at', cutoff)
+          if (error) throw new LgpdStepError('retention_mutation')
           affected = count || 0
           break
         }
@@ -113,7 +91,7 @@ export async function GET(req: NextRequest) {
           // Por padrão anonimiza: as respostas digitadas somem, mas a
           // inscrição continua contando na série e na receita atribuída.
           if (policy.anonymize_only) {
-            const { count } = await supabaseAdmin
+            const { count, error } = await supabaseAdmin
               .from('crm_form_submissions')
               .update({
                 answers: {},
@@ -127,40 +105,45 @@ export async function GET(req: NextRequest) {
               .eq('organization_id', policy.organization_id)
               .lt('created_at', cutoff)
               .neq('answers', '{}')
+            if (error) throw new LgpdStepError('retention_mutation')
             affected = count || 0
           } else {
-            const { count } = await supabaseAdmin
+            const { count, error } = await supabaseAdmin
               .from('crm_form_submissions')
               .delete({ count: 'exact' })
               .eq('organization_id', policy.organization_id)
               .lt('created_at', cutoff)
+            if (error) throw new LgpdStepError('retention_mutation')
             affected = count || 0
           }
           break
         }
         default:
-          break
+          throw new LgpdStepError('unsupported_resource')
       }
 
-      await supabaseAdmin
+      const { error: checkpointError, data: checkpoint } = await supabaseAdmin
         .from('lgpd_retention_policies')
         .update({
           last_run_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })
         .eq('id', policy.id)
+        .eq('organization_id', policy.organization_id)
+        .select('id')
+      if (checkpointError || checkpoint?.length !== 1) throw new LgpdStepError('retention_checkpoint')
 
       results.push({ resource: policy.resource, affected })
     } catch (err: any) {
-      results.push({ resource: policy.resource, error: err?.message })
+      results.push({ resource: policy.resource, error: err instanceof LgpdStepError ? err.stage : 'retention_failed' })
     }
   }
 
   return NextResponse.json({
-    policiesApplied: results.length,
+    policiesApplied: results.filter(r => !r.error).length,
     results,
     durationMs: Date.now() - start,
-  })
+  }, { status: results.some(r => r.error) ? 500 : 200 })
 }
 
 export async function POST(req: NextRequest) {

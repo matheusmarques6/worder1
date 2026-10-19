@@ -61,11 +61,11 @@ export default function ActivityDashboard() {
   useEffect(() => { void load() }, [load])
 
   useEffect(() => {
-    const qs = new URLSearchParams({ limit: '40' })
+    const qs = new URLSearchParams({ limit: '40', period: String(per) })
     if (evf !== 'all') qs.set('kind', evf)
     if (ag !== 'all') qs.set('agent', ag)
     fetch(`/api/ai/activity/events?${qs}`).then((r) => (r.ok ? r.json() : { events: [] })).then((d) => setEvents(d.events ?? [])).catch(() => {})
-  }, [evf, ag])
+  }, [evf, ag, per])
 
   const loadAlerts = useCallback(() => {
     fetch('/api/ai/alerts?status=open').then((r) => (r.ok ? r.json() : { alerts: [] })).then((d) => setAlerts(d.alerts ?? [])).catch(() => {})

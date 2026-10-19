@@ -9,10 +9,11 @@ import { getAuthClient, authError } from '@/lib/api-utils'
 export const dynamic = 'force-dynamic'
 
 interface PipelineAnalyticsParams {
-  params: { id: string }
+  params: Promise<{ id: string }>
 }
 
-export async function GET(request: NextRequest, { params }: PipelineAnalyticsParams) {
+export async function GET(request: NextRequest, props: PipelineAnalyticsParams) {
+  const params = await props.params;
   try {
     const auth = await getAuthClient()
     if (!auth) return authError()

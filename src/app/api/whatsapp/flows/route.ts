@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+import { createRequestRlsClient } from '@/lib/auth/request-rls-client'
 export const dynamic = 'force-dynamic';
 
-async function getOrgId(supabase: any) {
-  const { data: { user } } = await supabase.auth.getUser();
+async function getOrgId(supabase: any, accessToken?: string) {
+  const { data: { user } } = await supabase.auth.getUser(accessToken);
   if (!user) return null;
   const { data } = await supabase.from('profiles').select('organization_id').eq('id', user.id).single();
   return data?.organization_id;
@@ -13,8 +12,8 @@ async function getOrgId(supabase: any) {
 // GET - Lista ou busca flow específico
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
-    const orgId = await getOrgId(supabase);
+    const { supabase, accessToken } = await createRequestRlsClient();
+    const orgId = await getOrgId(supabase, accessToken);
     if (!orgId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const id = request.nextUrl.searchParams.get('id');
@@ -47,8 +46,8 @@ export async function GET(request: NextRequest) {
 // POST - Criar flow
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
-    const orgId = await getOrgId(supabase);
+    const { supabase, accessToken } = await createRequestRlsClient();
+    const orgId = await getOrgId(supabase, accessToken);
     if (!orgId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await request.json();
@@ -94,8 +93,8 @@ export async function POST(request: NextRequest) {
 // PATCH - Atualizar flow
 export async function PATCH(request: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
-    const orgId = await getOrgId(supabase);
+    const { supabase, accessToken } = await createRequestRlsClient();
+    const orgId = await getOrgId(supabase, accessToken);
     if (!orgId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await request.json();
@@ -134,8 +133,8 @@ export async function PATCH(request: NextRequest) {
 // DELETE - Deletar flow
 export async function DELETE(request: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
-    const orgId = await getOrgId(supabase);
+    const { supabase, accessToken } = await createRequestRlsClient();
+    const orgId = await getOrgId(supabase, accessToken);
     if (!orgId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const id = request.nextUrl.searchParams.get('id');

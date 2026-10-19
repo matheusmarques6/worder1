@@ -84,7 +84,7 @@ describe('vários agentes ativos por organização — rotas de escrita', () => 
     ])
     getSupabaseAdmin.mockReturnValue(table)
 
-    const response = await PUT(jsonRequest('PUT', { is_active: true }), { params: { id: 'agent-b' } })
+    const response = await PUT(jsonRequest('PUT', { is_active: true }), { params: Promise.resolve({ id: 'agent-b' }) })
 
     expect(response.status).toBe(200)
     expect(activeCount(table)).toBe(2)
@@ -97,7 +97,7 @@ describe('vários agentes ativos por organização — rotas de escrita', () => 
     ])
     getSupabaseAdmin.mockReturnValue(table)
 
-    const response = await PATCH(jsonRequest('PATCH', { is_active: true }), { params: { id: 'agent-b' } })
+    const response = await PATCH(jsonRequest('PATCH', { is_active: true }), { params: Promise.resolve({ id: 'agent-b' }) })
 
     expect(response.status).toBe(200)
     expect(activeCount(table)).toBe(2)

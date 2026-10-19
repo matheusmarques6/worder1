@@ -1,3 +1,4 @@
+import { openIntegrationSecret } from '@/lib/integrations/credential-codec';
 // =============================================
 // API: Shopify Sync
 // src/app/api/shopify/sync/route.ts
@@ -27,7 +28,7 @@ async function fetchAllOrders(shopDomain: string, accessToken: string): Promise<
     const currentUrl = nextPageUrl;
     const response: Response = await fetch(currentUrl, {
       headers: {
-        'X-Shopify-Access-Token': accessToken,
+        'X-Shopify-Access-Token': openIntegrationSecret(accessToken),
         'Content-Type': 'application/json',
       },
     });
@@ -65,7 +66,7 @@ async function fetchCustomers(shopDomain: string, accessToken: string): Promise<
     `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/customers.json?limit=250`,
     {
       headers: {
-        'X-Shopify-Access-Token': accessToken,
+        'X-Shopify-Access-Token': openIntegrationSecret(accessToken),
         'Content-Type': 'application/json',
       },
     }

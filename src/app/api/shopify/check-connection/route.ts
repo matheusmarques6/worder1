@@ -1,3 +1,4 @@
+import { openIntegrationSecret } from '@/lib/integrations/credential-codec';
 // =============================================
 // Shopify Check Connection API
 // src/app/api/shopify/check-connection/route.ts
@@ -64,7 +65,7 @@ export async function GET(request: NextRequest) {
     const response = await fetch(shopifyUrl, {
       method: 'GET',
       headers: {
-        'X-Shopify-Access-Token': store.access_token,
+        'X-Shopify-Access-Token': openIntegrationSecret(store.access_token),
         'Content-Type': 'application/json',
       },
     });

@@ -49,7 +49,8 @@ export async function OPTIONS() {
   return new NextResponse(null, { headers: cors() });
 }
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const headers = cors();
   const allow = () => NextResponse.json({ allowed: true }, { headers });
   const deny = (reason: string) => NextResponse.json({ allowed: false, reason }, { headers });

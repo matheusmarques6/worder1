@@ -93,7 +93,7 @@ describe('POST /api/ai/custom-tools/[id]/test — portão SSRF', () => {
     chainResult = { data: tool({ endpoint: 'http://169.254.169.254/latest/meta-data/' }) }
     fetchMock.mockResolvedValue(new Response('segredo-da-vpc', { status: 200 }))
 
-    const res = await POST(postReq(), { params: { id: 'tool-1' } })
+    const res = await POST(postReq(), { params: Promise.resolve({ id: 'tool-1' }) })
     const json = await res.json()
 
     expect(fetchMock).not.toHaveBeenCalled()
@@ -107,7 +107,7 @@ describe('POST /api/ai/custom-tools/[id]/test — portão SSRF', () => {
     mockLookup.mockResolvedValue([{ address: '127.0.0.1', family: 4 }])
     fetchMock.mockResolvedValue(new Response('ok-interno', { status: 200 }))
 
-    const res = await POST(postReq(), { params: { id: 'tool-1' } })
+    const res = await POST(postReq(), { params: Promise.resolve({ id: 'tool-1' }) })
     const json = await res.json()
 
     expect(fetchMock).not.toHaveBeenCalled()
@@ -124,7 +124,7 @@ describe('POST /api/ai/custom-tools/[id]/test — portão SSRF', () => {
       }),
     )
 
-    const res = await POST(postReq(), { params: { id: 'tool-1' } })
+    const res = await POST(postReq(), { params: Promise.resolve({ id: 'tool-1' }) })
     const json = await res.json()
 
     expect(fetchMock).toHaveBeenCalledTimes(1) // só o primeiro salto — o segundo nunca aconteceu
@@ -140,13 +140,13 @@ describe('POST /api/ai/custom-tools/[id]/test — portão SSRF', () => {
     // distinção fica só no log do servidor.
     chainResult = { data: tool({ endpoint: 'https://interno.exemplo.com/api' }) }
     mockLookup.mockResolvedValue([{ address: '127.0.0.1', family: 4 }])
-    const resInterno = await POST(postReq(), { params: { id: 'tool-1' } })
+    const resInterno = await POST(postReq(), { params: Promise.resolve({ id: 'tool-1' }) })
     const jsonInterno = await resInterno.json()
 
     chainResult = { data: tool({ endpoint: 'https://naoexiste.exemplo.com/api' }) }
     mockLookup.mockReset()
     mockLookup.mockRejectedValue(new Error('ENOTFOUND'))
-    const resNaoResolve = await POST(postReq(), { params: { id: 'tool-1' } })
+    const resNaoResolve = await POST(postReq(), { params: Promise.resolve({ id: 'tool-1' }) })
     const jsonNaoResolve = await resNaoResolve.json()
 
     expect(jsonInterno.detail.error).toBe(GENERIC_REFUSAL_MESSAGE)
@@ -159,7 +159,7 @@ describe('POST /api/ai/custom-tools/[id]/test — portão SSRF', () => {
     chainResult = { data: tool({ endpoint: 'https://api.loja-publica.com/dados' }) }
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }))
 
-    const res = await POST(postReq(), { params: { id: 'tool-1' } })
+    const res = await POST(postReq(), { params: Promise.resolve({ id: 'tool-1' }) })
     const json = await res.json()
 
     expect(json.status).toBe('ok')
@@ -170,7 +170,7 @@ describe('POST /api/ai/custom-tools/[id]/test — portão SSRF', () => {
     chainResult = { data: tool({ endpoint: 'https://api.loja-publica.com/dados' }) }
     fetchMock.mockResolvedValue(new Response('resposta curta', { status: 200 }))
 
-    const res = await POST(postReq(), { params: { id: 'tool-1' } })
+    const res = await POST(postReq(), { params: Promise.resolve({ id: 'tool-1' }) })
     const json = await res.json()
 
     expect(json.status).toBe('ok')
@@ -197,7 +197,7 @@ describe('POST /api/ai/custom-tools/[id]/test — portão SSRF', () => {
     }, { highWaterMark: 0 })
     fetchMock.mockResolvedValue(new Response(stream, { status: 200 }))
 
-    const res = await POST(postReq(), { params: { id: 'tool-1' } })
+    const res = await POST(postReq(), { params: Promise.resolve({ id: 'tool-1' }) })
     const json = await res.json()
 
     expect(json.status).toBe('ok')

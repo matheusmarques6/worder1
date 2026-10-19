@@ -1,3 +1,4 @@
+import { sealIntegrationSecret } from '@/lib/integrations/credential-codec';
 // =============================================
 // Shopify token refresh cron
 // GET /api/cron/shopify-token-refresh
@@ -101,7 +102,7 @@ export async function GET(request: NextRequest) {
         await supabase
           .from('shopify_stores')
           .update({
-            access_token: newToken,
+            access_token: sealIntegrationSecret(newToken),
             token_expires_at: newExpiresAt,
             updated_at: new Date().toISOString(),
           })

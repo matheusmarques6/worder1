@@ -1,3 +1,4 @@
+import { openIntegrationSecret } from '@/lib/integrations/credential-codec';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireStore } from '@/lib/api/guards';
 
@@ -51,7 +52,7 @@ async function shopifyqlQuery(
   const response = await fetch(url, {
     method: 'POST',
     headers: {
-      'X-Shopify-Access-Token': accessToken,
+      'X-Shopify-Access-Token': openIntegrationSecret(accessToken),
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(graphqlQuery),
@@ -144,7 +145,7 @@ async function shopifyFetch(
   
   const response: Response = await fetch(url, {
     headers: {
-      'X-Shopify-Access-Token': accessToken,
+      'X-Shopify-Access-Token': openIntegrationSecret(accessToken),
       'Content-Type': 'application/json',
     },
   });

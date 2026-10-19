@@ -3,6 +3,7 @@ import { getSupabaseClient } from '@/lib/api-utils';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { requireOrgFromAuth } from '@/lib/auth/require-org';
+import { canRoleAccess } from '@/lib/auth/permissions';
 export const dynamic = 'force-dynamic';
 
 // Module-level lazy client
@@ -53,6 +54,9 @@ export async function POST(request: NextRequest) {
   // ✅ P1 v2: org do token; reset de senha sem auth era IDOR crítico
   const auth = await requireOrgFromAuth(request);
   if (auth instanceof NextResponse) return auth;
+  if (!canRoleAccess(auth.role, 'org:members:role:change') || auth.aal !== 'aal2') {
+    return NextResponse.json({ error: 'Administrador com verificação 2FA necessária.' }, { status: 403 });
+  }
   const orgId = auth.orgId;
 
   try {

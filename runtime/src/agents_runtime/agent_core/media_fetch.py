@@ -7,8 +7,8 @@ de Storage — só o DSN e, por conta, o token da Meta. Então a ordem aqui é:
 
   1. `whatsapp_cloud_messages.media_url` do espelho (URL assinada do Storage,
      gravada pelo pipeline de mídia do app): um GET simples, sem token — mas
-     SÓ se o host for do Supabase, porque a coluna é escrita por outro
-     processo e uma URL para a rede interna não pode virar download;
+     SÓ para a origem configurada, bucket e org/conversa verificada, porque
+     uma linha do tenant não autoriza qualquer URL gravada nessa linha;
   2. a API Graph da Meta pelo `media_id` que o ingest guardou no `content`:
      `GET /{version}/{media_id}` devolve a URL temporária, e o segundo GET
      (com o mesmo bearer) devolve os bytes. Vale enquanto a Meta retiver a
@@ -22,6 +22,8 @@ nunca mata um turno.
 Este módulo é ADAPTER para o teste de rede (nomeia o host da Meta).
 """
 
+import os
+import re
 from dataclasses import dataclass
 from typing import Any, Protocol
 from urllib.parse import urlparse
@@ -36,9 +38,6 @@ MAX_INBOUND_MEDIA_BYTES = 10 * 1024 * 1024
 GRAPH_BASE_URL = "https://graph.facebook.com"
 DEFAULT_API_VERSION = "v22.0"
 DEFAULT_TIMEOUT_SECONDS = 30.0
-
-#: Só URLs assinadas do próprio Storage são seguidas sem token.
-_STORAGE_HOST_SUFFIXES = (".supabase.co", ".supabase.in")
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,13 +61,47 @@ class MediaFetcher(Protocol):
     ) -> FetchedMedia | None: ...
 
 
-def is_storage_url(url: str) -> bool:
+def is_storage_url(
+    url: str,
+    *,
+    configured_origin: str | None,
+    organization_id: UUID,
+    conversation_id: UUID | None,
+    storage_path: str | None,
+) -> bool:
+    if not configured_origin or not conversation_id or any(ord(char) <= 32 for char in url):
+        return False
     try:
         parsed = urlparse(url)
+        configured = urlparse(configured_origin)
+        same_origin = (
+            parsed.scheme,
+            parsed.hostname,
+            parsed.port if parsed.port is not None else 443,
+        ) == (
+            configured.scheme,
+            configured.hostname,
+            configured.port if configured.port is not None else 443,
+        )
     except ValueError:
         return False
-    host = (parsed.hostname or "").lower()
-    return parsed.scheme == "https" and host.endswith(_STORAGE_HOST_SUFFIXES)
+    if (
+        not same_origin
+        or parsed.scheme != "https"
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.fragment
+        or parsed.params
+    ):
+        return False
+    prefix = f"/storage/v1/object/sign/whatsapp-media/{organization_id}/{conversation_id}/"
+    if not parsed.path.startswith(prefix):
+        return False
+    filename = parsed.path[len(prefix) :]
+    if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]*", filename) or ".." in filename:
+        return False
+    return not storage_path or storage_path == f"{organization_id}/{conversation_id}/{filename}"
 
 
 def within_cap(size: int) -> bool:
@@ -86,6 +119,9 @@ class MetaMediaFetcher:
     ) -> None:
         self._base_secret = base_secret
         self._api_version = api_version
+        self._storage_origin = os.environ.get("SUPABASE_URL") or os.environ.get(
+            "NEXT_PUBLIC_SUPABASE_URL"
+        )
         self._client = httpx.AsyncClient(
             timeout=httpx.Timeout(timeout), transport=transport, follow_redirects=False
         )
@@ -103,7 +139,17 @@ class MetaMediaFetcher:
                 )
             except Exception:
                 mirror = None
-        if mirror is not None and mirror.media_url and is_storage_url(mirror.media_url):
+        if (
+            mirror is not None
+            and mirror.media_url
+            and is_storage_url(
+                mirror.media_url,
+                configured_origin=self._storage_origin,
+                organization_id=organization_id,
+                conversation_id=mirror.conversation_id,
+                storage_path=mirror.media_storage_path,
+            )
+        ):
             fetched = await self._get(mirror.media_url, token=None)
             if fetched is not None:
                 return FetchedMedia(

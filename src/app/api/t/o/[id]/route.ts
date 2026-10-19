@@ -13,10 +13,8 @@ import { detectMpp } from '@/lib/email/mpp-detection';
 
 const GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const emailSendId = params.id;
 
   // Fire-and-forget — the pixel response can't block on DB writes

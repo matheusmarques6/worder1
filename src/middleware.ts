@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { resolveActiveIdentity } from '@/lib/auth/active-identity';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 
 // =====================================================
 // ROUTE CONFIGURATION
@@ -101,7 +103,7 @@ const adminOnlyApis = [
 ];
 
 // Check if we're in dev mode
-const isDevMode = process.env.NODE_ENV === 'development' || process.env.DEV_AUTH_BYPASS === 'true';
+const isDevMode = process.env.NODE_ENV === 'development' && process.env.DEV_AUTH_BYPASS === 'true';
 
 // =====================================================
 // HELPER FUNCTIONS
@@ -234,22 +236,8 @@ export async function middleware(request: NextRequest) {
   }
 
   // Dev mode: allow dev tokens through
-  if (accessToken === 'dev-access-token') {
+  if (isDevMode && accessToken === 'dev-access-token') {
     return NextResponse.next();
-  }
-
-  // A organização exige verificação em duas etapas e este usuário ainda não
-  // configurou: só a tela de Segurança (e as APIs necessárias) ficam liberadas.
-  if (accessToken && request.cookies.get('wd-2fa-required')?.value === '1' && !isPublicRoute(pathname)) {
-    const allowed = pathname.startsWith('/settings/security') || pathname.startsWith('/api/settings/security')
-      || pathname.startsWith('/api/settings/account') || pathname.startsWith('/api/auth') || pathname.startsWith('/api/stores')
-      || pathname.startsWith('/api/profile') || pathname.startsWith('/api/notifications') || pathname.startsWith('/api/shopify/stores');
-    if (!allowed) {
-      if (pathname.startsWith('/api/')) {
-        return NextResponse.json({ error: 'Configure a verificação em duas etapas para continuar.', code: 'mfa_setup_required' }, { status: 403 });
-      }
-      return NextResponse.redirect(new URL('/settings/security?require2fa=1', request.url));
-    }
   }
 
   // Verify token and check user role
@@ -290,7 +278,7 @@ export async function middleware(request: NextRequest) {
           }
 
           // Update cookies with new tokens
-          const response = NextResponse.next();
+          const response = NextResponse.redirect(request.nextUrl);
           response.cookies.set('sb-access-token', refreshData.session.access_token, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
@@ -318,7 +306,27 @@ export async function middleware(request: NextRequest) {
       // ROLE-BASED ACCESS CONTROL
       // =====================================================
       
-      const isAgent = user.user_metadata?.is_agent === true;
+      const identity = await resolveActiveIdentity(supabaseAdmin, accessToken);
+      if (!identity) {
+        if (pathname.startsWith('/api/')) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        const denied = NextResponse.redirect(new URL('/', request.url));
+        denied.cookies.delete('sb-access-token');
+        denied.cookies.delete('sb-refresh-token');
+        return denied;
+      }
+      if (!identity.mfaSatisfied) {
+        const setup = pathname === '/settings/security' || pathname === '/api/settings/security';
+        if (!setup) {
+          if (pathname.startsWith('/api/')) return NextResponse.json({ error: 'Verificação em duas etapas necessária.', code: 'mfa_required' }, { status: 403 });
+          return NextResponse.redirect(new URL('/settings/security?require2fa=1', request.url));
+        }
+        return NextResponse.next();
+      }
+      const isAgent = identity.role === 'agent';
+      // Every active user can manage their own security and read inbox identity.
+      if (pathname === '/settings/security' || pathname === '/api/settings/security' || pathname === '/api/whatsapp/agents/me') {
+        return NextResponse.next();
+      }
       
       if (isAgent) {
         // Agent trying to access admin-only API
@@ -352,7 +360,7 @@ export async function middleware(request: NextRequest) {
 
     } catch (error) {
       console.error('Middleware auth error:', error);
-      // On error, allow request to proceed (API routes will handle auth)
+      return NextResponse.json({ error: 'Authentication unavailable' }, { status: 503 });
     }
   }
 

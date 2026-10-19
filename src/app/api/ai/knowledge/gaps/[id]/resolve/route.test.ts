@@ -51,7 +51,7 @@ function fakeDb(tables: Record<string, Array<Record<string, any>>>) {
 }
 
 const resolveGap = (body: unknown) =>
-  POST(new Request('http://localhost', { method: 'POST', body: JSON.stringify(body) }) as any, { params: { id: 'gap-1' } })
+  POST(new Request('http://localhost', { method: 'POST', body: JSON.stringify(body) }) as any, { params: Promise.resolve({ id: 'gap-1' }) })
 
 let db: ReturnType<typeof fakeDb>
 beforeEach(() => {

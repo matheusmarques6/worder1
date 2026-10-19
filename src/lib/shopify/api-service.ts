@@ -1,3 +1,4 @@
+import { openIntegrationSecret } from '@/lib/integrations/credential-codec';
 // =====================================================
 // SHOPIFY API SERVICE
 // src/lib/shopify/api-service.ts
@@ -62,7 +63,7 @@ export class ShopifyAPIService {
     const response = await fetch(url, {
       ...options,
       headers: {
-        'X-Shopify-Access-Token': this.accessToken,
+        'X-Shopify-Access-Token': openIntegrationSecret(this.accessToken),
         'Content-Type': 'application/json',
         ...options.headers,
       },
@@ -101,7 +102,7 @@ export class ShopifyAPIService {
 
       const response = await fetch(`${this.baseUrl}${url}`, {
         headers: {
-          'X-Shopify-Access-Token': this.accessToken,
+          'X-Shopify-Access-Token': openIntegrationSecret(this.accessToken),
           'Content-Type': 'application/json',
         },
       });

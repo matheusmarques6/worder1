@@ -37,6 +37,7 @@ export async function GET() {
       supabaseAdmin.from('organization_members')
         .select('id, user_id, role, email, status, name, invited_at, joined_at, created_at, profiles:user_id(full_name, first_name, last_name, avatar_url, last_seen_at, email, preferences)')
         .eq('organization_id', orgId)
+        .neq('status', 'removed')
         .order('created_at', { ascending: true }),
       supabaseAdmin.from('organizations').select('settings').eq('id', orgId).single(),
     ])
@@ -100,13 +101,26 @@ export async function POST(request: NextRequest) {
     if (!role) return NextResponse.json({ error: 'Função inválida.' }, { status: 400 })
     const name = String(body.name || '').trim() || null
 
-    const { data: existing } = await supabaseAdmin.from('organization_members').select('id, user_id').eq('organization_id', orgId).ilike('email', email).maybeSingle()
-    if (existing?.user_id) return NextResponse.json({ error: 'Esta pessoa já faz parte da equipe.' }, { status: 409 })
+    const { data: existing } = await supabaseAdmin.from('organization_members').select('id, user_id, status').eq('organization_id', orgId).ilike('email', email).maybeSingle()
+    if (existing?.user_id && existing.status !== 'removed') return NextResponse.json({ error: 'Esta pessoa já faz parte da equipe.' }, { status: 409 })
 
     // Já tem conta Worder em outra organização? Não dá para mover por convite.
     const { data: prof } = await supabaseAdmin.from('profiles').select('id, organization_id').ilike('email', email).maybeSingle()
     if (prof && prof.organization_id && prof.organization_id !== orgId) {
       return NextResponse.json({ error: 'Este e-mail já tem uma conta Worder em outra organização. Peça para usar outro e-mail.' }, { status: 409 })
+    }
+
+    // Explicit authorized invitation can restore this tombstone. Never do this
+    // from login or a compatibility fallback; secondary organizations stay put.
+    if (existing?.user_id && existing.status === 'removed' && prof && prof.id === existing.user_id) {
+      const { data, error } = await supabaseAdmin.from('organization_members')
+        .update({ role, name, status: 'active', joined_at: new Date().toISOString(), invited_by: auth.user.id })
+        .eq('id', existing.id).eq('organization_id', orgId).select().single()
+      if (error) throw error
+      const { error: profileError } = await supabaseAdmin.from('profiles').update({ role, organization_id: orgId }).eq('id', prof.id)
+      if (profileError) throw profileError
+      await audit(orgId, auth.user.id, auth.user.email, 'team.readded', { member: existing.id, role }, request)
+      return NextResponse.json(data)
     }
 
     let row: any
@@ -187,12 +201,28 @@ export async function DELETE(request: NextRequest) {
       const { count } = await supabaseAdmin.from('organization_members').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).in('role', ['admin', 'owner'])
       if ((count || 0) <= 1) return NextResponse.json({ error: 'Não é possível remover o último administrador' }, { status: 400 })
     }
-    const { error } = await supabaseAdmin.from('organization_members').delete().eq('id', id).eq('organization_id', orgId)
+    // Keep a durable denial; deleting the row loses the distinction between
+    // offboarded and legacy users during compatibility backfills.
+    const { error } = await supabaseAdmin.from('organization_members').update({ status: 'removed' }).eq('id', id).eq('organization_id', orgId)
     if (error) throw error
     if (member.user_id) {
-      // Derruba as sessões de quem saiu (o acesso termina na hora).
-      await supabaseAdmin.rpc('revoke_other_auth_sessions', { p_user_id: member.user_id, p_keep_session_id: null }).then(() => {}, () => {})
-      await supabaseAdmin.from('profiles').update({ role: 'agent' }).eq('id', member.user_id).eq('organization_id', orgId)
+      const { data: remaining, error: remainingError } = await supabaseAdmin.from('organization_members')
+        .select('organization_id, role').eq('user_id', member.user_id).eq('status', 'active').neq('organization_id', orgId).limit(1).maybeSingle()
+      if (remainingError) throw remainingError
+      const { error: profileError } = await supabaseAdmin.from('profiles')
+        .update({ organization_id: remaining?.organization_id || null, role: remaining?.role || 'agent' })
+        .eq('id', member.user_id).eq('organization_id', orgId)
+      if (profileError) throw profileError
+      for (const table of ['agents', 'whatsapp_agents']) {
+        const { error: agentError } = await supabaseAdmin.from(table).update({ is_active: false })
+          .eq('user_id', member.user_id).eq('organization_id', orgId)
+        if (agentError && !['42P01', 'PGRST205'].includes(agentError.code)) throw agentError
+      }
+      const { error: revokeError } = await supabaseAdmin.rpc('revoke_other_auth_sessions', { p_user_id: member.user_id, p_keep_session_id: null })
+      if (revokeError) {
+        await audit(orgId, auth.user.id, auth.user.email, 'team.session_revocation_failed', { member: id }, request)
+        return NextResponse.json({ error: 'Acesso removido, mas falhou o encerramento das sessões. Repita a remoção.', access_removed: true }, { status: 503 })
+      }
     }
     await audit(orgId, auth.user.id, auth.user.email, 'team.removed', { member: id, email: member.email }, request)
     return NextResponse.json({ success: true })

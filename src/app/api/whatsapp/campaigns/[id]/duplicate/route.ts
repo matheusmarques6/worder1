@@ -4,10 +4,8 @@ import { requireOrgFromAuth } from '@/lib/auth/require-org';
 export const dynamic = 'force-dynamic';
 
 // POST /api/whatsapp/campaigns/[id]/duplicate
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   // ✅ P1 v2: org do token; valida que a campanha pertence à org antes de duplicar
   const auth = await requireOrgFromAuth(request);
   if (auth instanceof NextResponse) return auth;

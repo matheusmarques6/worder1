@@ -8,10 +8,8 @@ import { createAdminClient } from '@/lib/supabase'
 import { requireOrgFromAuth } from '@/lib/auth/require-org'
 export const dynamic = 'force-dynamic';
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   // A organização vinha na URL e nada exigia sessão: bastava informar o
   // par (id da loja, id da organização) de outra empresa.
   const auth = await requireOrgFromAuth(request);

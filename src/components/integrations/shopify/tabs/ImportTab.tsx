@@ -94,7 +94,7 @@ export function ImportTab({
   const nextDataGenerationRef = useRef(0)
   const jobGenerationRef = useRef(0)
   const nextJobGenerationRef = useRef(0)
-  const loadInitialDataRef = useRef<(dataGeneration: number, jobGeneration: number) => Promise<void>>()
+  const loadInitialDataRef = useRef<((dataGeneration: number, jobGeneration: number) => Promise<void>) | undefined>(undefined)
   const onSuccessRef = useRef(onSuccess)
   onSuccessRef.current = onSuccess
 

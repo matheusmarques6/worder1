@@ -4,7 +4,8 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(request: NextRequest, { params }: { params: { metric: string } }) {
+export async function GET(request: NextRequest, props0: { params: Promise<{ metric: string }> }) {
+  const params = await props0.params;
   try {
     const auth = await getAuthClient()
     if (!auth) return authError()

@@ -51,10 +51,8 @@ async function validateTaskAccess(taskId: string, orgIds: string[]) {
 // =============================================
 // GET - Detalhes da tarefa
 // =============================================
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     // ⚠️ SEGURANÇA: org derivada da SESSÃO, nunca do request
     const auth = await getAuthClient();
@@ -98,10 +96,8 @@ export async function GET(
 // =============================================
 // PUT - Atualizar tarefa
 // =============================================
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function PUT(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     // ⚠️ SEGURANÇA: org derivada da SESSÃO, nunca do request
     const auth = await getAuthClient();
@@ -200,10 +196,8 @@ export async function PUT(
 // =============================================
 // DELETE - Remover tarefa
 // =============================================
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function DELETE(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     // ⚠️ SEGURANÇA: org derivada da SESSÃO, nunca do request
     const auth = await getAuthClient();

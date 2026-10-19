@@ -5,7 +5,8 @@ import { attachExperiments } from '@/lib/popups/experiment-service'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const { data: form } = await supabaseAdmin
       .from('crm_forms')

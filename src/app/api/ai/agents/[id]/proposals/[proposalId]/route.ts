@@ -30,8 +30,9 @@ async function loadAgentInOrg(
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string; proposalId: string } }
+  props: { params: Promise<{ id: string; proposalId: string }> }
 ) {
+  const params = await props.params;
   try {
     // ✅ Validar autenticação
     const auth = await getAuthClient()

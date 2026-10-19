@@ -19,7 +19,7 @@ function csv(v: unknown): string {
   // Respostas vêm do visitante: "=HYPERLINK(...)" numa célula viraria
   // fórmula na planilha do lojista. Um apóstrofo na frente neutraliza.
   if (/^[=+\-@\t\r]/.test(s)) s = "'" + s
-  return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+  return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
 function clampDays(raw: string | null): number {
@@ -28,7 +28,8 @@ function clampDays(raw: string | null): number {
   return Math.min(365, Math.max(1, Math.round(n)))
 }
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await getAuthClient()
   if (!auth) return authError()
   const orgId = auth.user.organization_id

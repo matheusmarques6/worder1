@@ -31,10 +31,8 @@ function parsePeriod(raw: string | null): ReportPeriod {
 // GET - RELATÓRIO (agregados + distribuição + propostas pendentes) (Bloco F5)
 // =====================================================
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     // ✅ Validar autenticação (espelha o padrão endurecido de evals/route.ts)
     const auth = await getAuthClient()

@@ -10,8 +10,9 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string; integrationId: string } }
+  props: { params: Promise<{ id: string; integrationId: string }> }
 ) {
+  const params = await props.params;
   try {
     // ✅ P1: org SEMPRE do usuário autenticado; organization_id da
     // querystring é aceito e IGNORADO (compat com frontend atual).
@@ -58,8 +59,9 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string; integrationId: string } }
+  props: { params: Promise<{ id: string; integrationId: string }> }
 ) {
+  const params = await props.params;
   try {
     // ✅ P1: org SEMPRE do usuário autenticado; organization_id do
     // body é aceito e IGNORADO (compat com frontend atual).
@@ -120,8 +122,9 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string; integrationId: string } }
+  props: { params: Promise<{ id: string; integrationId: string }> }
 ) {
+  const params = await props.params;
   try {
     // ✅ P1: org SEMPRE do usuário autenticado; organization_id da
     // querystring é aceito e IGNORADO (compat com frontend atual).

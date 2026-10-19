@@ -4136,19 +4136,23 @@ def test_manifest_shape_refuses_malformed_or_ambiguous_history(bad):
         ex.manifest_shape(bad)
 
 
-def test_launcher_transports_two_targets_and_preserves_native_exit_code(tmp_path):
+@pytest.mark.parametrize("storage_http", [False, True])
+def test_launcher_transports_two_targets_and_preserves_native_exit_code(tmp_path, storage_http):
     # The only real process boundary in this module; the DB backend is never imported.
     runtime = tmp_path / "a\u00e7\u00e3o \u6f22 runtime"
     support = runtime / "tests/support"
     support.mkdir(parents=True)
     (runtime / "tests/__init__.py").write_text("", encoding="utf-8")
     (support / "__init__.py").write_text("", encoding="utf-8")
-    (support / "disposable_executor.py").write_text(
+    module = "disposable_storage" if storage_http else "disposable_executor"
+    profile = "    'Profile': 'storage-http-v1',\n" if storage_http else ""
+    (support / f"{module}.py").write_text(
         "import json, os, sys\n"
         "assert sys.flags.utf8_mode == 1\n"
         "request = json.loads(sys.stdin.read())\n"
         "assert request == {\n"
-        "    'Action': 'Test',\n"
+        + profile
+        + "    'Action': 'Test',\n"
         "    'RunDirectory': os.environ['LAUNCH_RUNTIME'],\n"
         "    'MigrationThrough': None,\n"
         "    'TestTargets': ['tests/db/first.py::test_one',\n"
@@ -4206,11 +4210,13 @@ $RunDirectory = $env:LAUNCH_RUNTIME
 $TestTargets = @('tests/db/first.py::test_one', ('tests/db/second.py::test_a' +
     [char]0x00e7 + [char]0x00e3 + 'o'))
 $MigrationThrough = $null
+$StorageHttp = $env:LAUNCH_STORAGE -eq 'true'
 Invoke-Executor 'Test'
 """
     env = dict(
         os.environ, LAUNCH_SCRIPT=str(REPO / "scripts/test-disposable-db.ps1"),
         LAUNCH_RUNTIME=str(runtime), LAUNCH_PYTHON=ex.sys.executable, PYTHONUTF8="0",
+        LAUNCH_STORAGE=str(storage_http).lower(),
     )
     for name in ("PYTHONPATH", "PYTHONHOME", "PYTHONIOENCODING"):
         env.pop(name, None)

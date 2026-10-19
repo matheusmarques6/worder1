@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Image from 'next/image';
+import Link from 'next/link';
 import { useStoreStore } from '@/stores';
 import {
   ShoppingBag, CheckCircle, AlertCircle, Loader2, Trash2,
@@ -1021,13 +1022,13 @@ export default function ShopifyConnect() {
           >
             <RefreshCw className="w-4 h-4" /> Atualizar
           </button>
-          <a
+          <Link
             href="/integrations/shopify/tracking-debug"
             className="flex items-center gap-2 px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-700"
             title="Ver eventos de tracking em tempo real"
           >
             <Wifi className="w-4 h-4" /> Diagnóstico
-          </a>
+          </Link>
           {store.connectionType === 'manual' && (
             <button
               onClick={() => { setShowEditCreds((v) => !v); setShowSwap(false); }}
@@ -1649,7 +1650,7 @@ function ConflictBanner({ conflict, busy, onMerge, onDisconnect }: {
       </div>
       <p className="text-[11px] text-red-600/80">
         Os dados da loja nunca são apagados em nenhuma das ações. Ou gerencie manualmente no{' '}
-        <a href="/integrations/shopify/tracking-debug" className="underline hover:text-red-800">diagnóstico</a>.
+        <Link href="/integrations/shopify/tracking-debug" className="underline hover:text-red-800">diagnóstico</Link>.
       </p>
     </div>
   );

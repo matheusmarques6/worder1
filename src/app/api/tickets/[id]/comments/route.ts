@@ -51,10 +51,8 @@ async function validateTicketAccess(ticketId: string, orgIds: string[]) {
 // =============================================
 // GET - Listar comentários
 // =============================================
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const { searchParams } = new URL(request.url);
     const includeInternal = searchParams.get('include_internal') !== 'false';
@@ -101,10 +99,8 @@ export async function GET(
 // =============================================
 // POST - Adicionar comentário
 // =============================================
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     // ⚠️ SEGURANÇA: org derivada da SESSÃO, nunca do request
     const auth = await getAuthClient();

@@ -22,7 +22,8 @@ async function loadFeed(orgId: string, id: string) {
   return data
 }
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await getAuthClient()
   if (!auth) return authError()
   const feed = await loadFeed(auth.user.organization_id, params.id)
@@ -30,7 +31,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   return NextResponse.json(feed)
 }
 
-export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await getAuthClient()
   if (!auth) return authError()
   const orgId = auth.user.organization_id
@@ -81,7 +83,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   return NextResponse.json(data)
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await getAuthClient()
   if (!auth) return authError()
   const orgId = auth.user.organization_id

@@ -75,7 +75,7 @@ export function SendTestModal({ isOpen, onClose, html, defaultSubject, storeId }
 
           {/* Mini preview */}
           <div className="border border-gray-200 rounded-lg overflow-hidden bg-gray-50">
-            <iframe srcDoc={html} title="Preview" className="w-full pointer-events-none" style={{ height: 160, transform: 'scale(0.5)', transformOrigin: 'top left', width: '200%' }} />
+            <iframe srcDoc={html} sandbox="" title="Preview" className="w-full pointer-events-none" style={{ height: 160, transform: 'scale(0.5)', transformOrigin: 'top left', width: '200%' }} />
           </div>
 
           <p className="text-[11px] text-gray-400 flex items-center gap-1">

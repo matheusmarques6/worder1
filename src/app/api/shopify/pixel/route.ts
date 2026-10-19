@@ -1,3 +1,4 @@
+import { openIntegrationSecret } from '@/lib/integrations/credential-codec';
 // =============================================
 // Shopify Pixel Management API
 // src/app/api/shopify/pixel/route.ts
@@ -63,7 +64,7 @@ export async function POST(request: NextRequest) {
     const listResponse = await fetch(
       `https://${store.shop_domain}/admin/api/${SHOPIFY_API_VERSION}/script_tags.json`,
       {
-        headers: { 'X-Shopify-Access-Token': store.access_token },
+        headers: { 'X-Shopify-Access-Token': openIntegrationSecret(store.access_token) },
       }
     );
     
@@ -102,7 +103,7 @@ export async function POST(request: NextRequest) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Shopify-Access-Token': store.access_token,
+          'X-Shopify-Access-Token': openIntegrationSecret(store.access_token),
         },
         body: JSON.stringify({
           script_tag: {
@@ -173,7 +174,7 @@ export async function GET(request: NextRequest) {
         const response = await fetch(
           `https://${store.shop_domain}/admin/api/${SHOPIFY_API_VERSION}/script_tags/${store.tracking_script_id}.json`,
           {
-            headers: { 'X-Shopify-Access-Token': store.access_token },
+            headers: { 'X-Shopify-Access-Token': openIntegrationSecret(store.access_token) },
           }
         );
         
@@ -231,7 +232,7 @@ export async function DELETE(request: NextRequest) {
           `https://${store.shop_domain}/admin/api/${SHOPIFY_API_VERSION}/script_tags/${store.tracking_script_id}.json`,
           {
             method: 'DELETE',
-            headers: { 'X-Shopify-Access-Token': store.access_token },
+            headers: { 'X-Shopify-Access-Token': openIntegrationSecret(store.access_token) },
           }
         );
       } catch (e) {

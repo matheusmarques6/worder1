@@ -19,15 +19,13 @@ function csvField(v: unknown): string {
   if (v === null || v === undefined) return ''
   const s = String(v)
   if (s.includes(',') || s.includes('"') || s.includes('\n')) {
-    return `"${s.replace(/"/g, '""')}"`
+    return `"${s.replace(/"/g, '""')}"`;
   }
   return s
 }
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await getAuthClient()
   if (!auth) return authError()
 

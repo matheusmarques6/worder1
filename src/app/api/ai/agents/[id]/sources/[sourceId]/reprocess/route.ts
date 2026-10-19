@@ -10,8 +10,9 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string; sourceId: string } }
+  props: { params: Promise<{ id: string; sourceId: string }> }
 ) {
+  const params = await props.params;
   try {
     // ✅ P1: org SEMPRE do usuário autenticado; organization_id do
     // body é aceito e IGNORADO (compat com frontend atual).

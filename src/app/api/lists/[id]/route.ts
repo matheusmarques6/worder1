@@ -21,10 +21,8 @@ async function userOrgIds(): Promise<string[] | null> {
   ])]
 }
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const orgIds = await userOrgIds()
   if (!orgIds) return authError()
 
@@ -40,10 +38,8 @@ export async function GET(
   return NextResponse.json({ list: data })
 }
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const orgIds = await userOrgIds()
   if (!orgIds) return authError()
 
@@ -72,10 +68,8 @@ export async function PATCH(
 
 // Default: soft-delete via is_archived flag. ?hard=true for permanent
 // (cascades to contact_list_members via FK ON DELETE CASCADE).
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const orgIds = await userOrgIds()
   if (!orgIds) return authError()
 

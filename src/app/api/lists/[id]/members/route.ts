@@ -34,10 +34,8 @@ async function assertListOwnership(listId: string, orgIds: string[]): Promise<st
   return data ? (data as any).organization_id : null
 }
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await userOrgIds()
   if (!ctx) return authError()
 
@@ -82,10 +80,8 @@ export async function GET(
   return NextResponse.json({ members, total: count ?? 0, limit, offset })
 }
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await userOrgIds()
   if (!ctx) return authError()
 
@@ -127,10 +123,8 @@ export async function POST(
   return NextResponse.json({ added: rows.length, skipped: ids.length - rows.length })
 }
 
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const ctx = await userOrgIds()
   if (!ctx) return authError()
 

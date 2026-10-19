@@ -1,3 +1,5 @@
+import { sealIntegrationSecret } from '@/lib/integrations/credential-codec';
+import { openIntegrationSecret } from '@/lib/integrations/credential-codec';
 // =============================================
 // Shopify Manual Integration API (Client Credentials Grant)
 // POST /api/integrations/shopify/manual
@@ -160,7 +162,7 @@ export async function POST(request: NextRequest) {
         {
           method: 'POST',
           headers: {
-            'X-Shopify-Access-Token': accessToken,
+            'X-Shopify-Access-Token': openIntegrationSecret(accessToken),
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -313,11 +315,11 @@ export async function POST(request: NextRequest) {
       primary_domain: publicPrimaryDomain,
       primary_domain_checked_at: new Date().toISOString(),
       shop_phone: shopPhone,
-      access_token: accessToken,
+      access_token: sealIntegrationSecret(accessToken),
       // api_secret holds the Client Secret — used to:
       //  (a) verify HMAC on inbound webhooks, and
       //  (b) refresh the access token every ~23h.
-      api_secret: cleanClientSecret,
+      api_secret: sealIntegrationSecret(cleanClientSecret),
       client_id: cleanClientId,
       currency,
       timezone,
@@ -331,7 +333,7 @@ export async function POST(request: NextRequest) {
       last_sync_at: new Date().toISOString(),
       token_expires_at: tokenExpiresAt,
       pixel_installed: false,
-      webhook_secret: cleanClientSecret,
+      webhook_secret: sealIntegrationSecret(cleanClientSecret),
       embed_installed: false,
       // Enable all sync flags by default — essential for checkouts/orders/customers
       sync_orders: true,
@@ -482,7 +484,7 @@ export async function POST(request: NextRequest) {
     try {
       const listRes = await fetch(
         `https://${shopDomain}/admin/api/${SHOPIFY_API_VERSION}/webhooks.json`,
-        { headers: { 'X-Shopify-Access-Token': accessToken } }
+        { headers: { 'X-Shopify-Access-Token': openIntegrationSecret(accessToken) } }
       );
       if (listRes.ok) {
         const json = await listRes.json();
@@ -511,7 +513,7 @@ export async function POST(request: NextRequest) {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'X-Shopify-Access-Token': accessToken,
+              'X-Shopify-Access-Token': openIntegrationSecret(accessToken),
             },
             body: JSON.stringify({
               webhook: { topic, address: webhookUrl, format: 'json' },
@@ -553,7 +555,7 @@ export async function POST(request: NextRequest) {
           {
             method: 'POST',
             headers: {
-              'X-Shopify-Access-Token': accessToken,
+              'X-Shopify-Access-Token': openIntegrationSecret(accessToken),
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({

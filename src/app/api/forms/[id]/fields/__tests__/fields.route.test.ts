@@ -22,7 +22,7 @@ async function put(fields: any[]) {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ fields }),
   })
-  const res = await PUT(req, { params: { id: FORM } })
+  const res = await PUT(req, { params: Promise.resolve({ id: FORM }) })
   return { res, body: await res.json() }
 }
 

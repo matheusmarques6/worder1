@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   RefreshCw,
@@ -314,13 +315,13 @@ function EmptyState() {
       <p className="text-gray-400 mb-4 max-w-md">
         Conecte integrações como Shopify ou WhatsApp para monitorar a saúde das conexões.
       </p>
-      <a
+      <Link
         href="/integrations"
         className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-gray-900 font-medium transition-colors"
       >
         Ver Integrações
         <ChevronRight className="w-4 h-4" />
-      </a>
+      </Link>
     </div>
   )
 }

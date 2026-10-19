@@ -1,3 +1,4 @@
+import { openIntegrationSecret } from '@/lib/integrations/credential-codec';
 // =============================================
 // POST /api/integrations/shopify/canonicalize-domains
 //
@@ -80,7 +81,7 @@ export async function POST(request: NextRequest) {
         {
           method: 'POST',
           headers: {
-            'X-Shopify-Access-Token': store.access_token,
+            'X-Shopify-Access-Token': openIntegrationSecret(store.access_token),
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ query: `{ shop { myshopifyDomain } }` }),

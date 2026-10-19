@@ -12,7 +12,7 @@
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { encryptSecret, decryptSecret, isEncryptedSecret } from '@/lib/crypto/secret-box';
+import { sealIntegrationSecret, openIntegrationSecret } from '@/lib/integrations/credential-codec';
 
 // ==========================================
 // CONSTANTS
@@ -66,7 +66,7 @@ export function encryptToken(token: string): string {
   try {
     // Delega para o secret-box canonico (AES-256-GCM, salt aleatorio por
     // segredo — formato v2). Tokens legados iv:tag:cipher continuam legiveis.
-    return encryptSecret(token);
+    return sealIntegrationSecret(token);
   } catch (error) {
     if (process.env.NODE_ENV === 'development') {
       console.error('[TikTok] Encryption error:', error);
@@ -76,16 +76,7 @@ export function encryptToken(token: string): string {
 }
 
 export function decryptToken(encryptedToken: string): string {
-  try {
-    // Token legado em texto plano (sem envelope) → retorna como esta.
-    if (!isEncryptedSecret(encryptedToken)) {
-      return encryptedToken;
-    }
-    return decryptSecret(encryptedToken);
-  } catch {
-    // Fallback para token não encriptado (legado)
-    return encryptedToken;
-  }
+  return openIntegrationSecret(encryptedToken);
 }
 
 // ==========================================

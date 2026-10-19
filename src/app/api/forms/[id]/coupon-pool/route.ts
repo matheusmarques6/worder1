@@ -60,7 +60,8 @@ async function ownedForm(orgId: string, formId: string) {
   return data
 }
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await getAuthClient()
   if (!auth) return authError()
   const orgId = auth.user.organization_id
@@ -69,7 +70,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   return NextResponse.json(serialize(await listPoolStatuses(orgId, params.id)))
 }
 
-export async function POST(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await getAuthClient()
   if (!auth) return authError()
   const orgId = auth.user.organization_id

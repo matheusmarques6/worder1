@@ -76,11 +76,9 @@ async def _connect(
         if on_open is not None:
             on_open(conn)
         if set_role:
-            # SET ROLE é o ÚNICO caminho, aqui e em produção: worker_role e
-            # sender_role são NOLOGIN de propósito (20260812000002) — senha em
-            # migration seria segredo em git —, então "logar COMO o role" não
-            # existe. O `if` não é mais uma porta aberta: sem role a guarda abaixo
-            # recusa a conexão — ele só existe porque `set role None` não é SQL.
+            # Permission roles stay NOLOGIN. Deployed sessions authenticate with
+            # a dedicated minimum LOGIN, checked separately below: SET ROLE from
+            # the database owner alone cannot establish a safe runtime session.
             await conn.execute("set role " + set_role)
         await set_statement_timeout(conn, config.statement_timeout_ms)
 
@@ -121,6 +119,7 @@ async def run(
     workers: int = 2,
     worker_set_role: str | None = None,
     sender_set_role: str | None = None,
+    sender_dsn: str | None = None,
 ) -> None:
     config = config or QueueingConfig()
     clock = clock or SystemClock()
@@ -280,7 +279,9 @@ async def run(
         # separate from delivery, so its transactions never interleave with
         # a send's.
         if sender_set_role is not None:
-            housekeeping_conn = await _connect(dsn, sender_set_role, SENDER_ROLE, config=config)
+            housekeeping_conn = await _connect(
+                sender_dsn or dsn, sender_set_role, SENDER_ROLE, config=config
+            )
             connections.append(housekeeping_conn)
 
             async def housekeeping():
@@ -298,7 +299,9 @@ async def run(
         # E1's final stretch, and a sender with nowhere to send would either
         # spin or lie.
         if channel is not None:
-            sender_conn = await _connect(dsn, sender_set_role, SENDER_ROLE, config=config)
+            sender_conn = await _connect(
+                sender_dsn or dsn, sender_set_role, SENDER_ROLE, config=config
+            )
             connections.append(sender_conn)
 
             async def sender() -> None:

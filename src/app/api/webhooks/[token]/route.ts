@@ -10,10 +10,8 @@ import { META_BASE_URL } from '@/lib/whatsapp/api-version'
 export const dynamic = 'force-dynamic';
 
 // POST - Receive webhook from integrations
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { token: string } }
-) {
+export async function POST(request: NextRequest, props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   const supabase = getSupabaseClient()
 
   if (!supabase) {
@@ -570,12 +568,10 @@ async function createOrUpdateLead(supabase: any, installation: any, leadData: an
 }
 
 // GET - Webhook verification (for WhatsApp, etc)
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { token: string } }
-) {
+export async function GET(request: NextRequest, props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   const searchParams = request.nextUrl.searchParams
-  
+
   // WhatsApp verification
   const mode = searchParams.get('hub.mode')
   const verifyToken = searchParams.get('hub.verify_token')

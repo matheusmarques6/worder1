@@ -1,3 +1,4 @@
+import { openIntegrationSecret } from '@/lib/integrations/credential-codec';
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthClient, authError } from '@/lib/api-utils';
 import { decryptCredential } from '@/lib/automation/credential-encryption';
@@ -89,7 +90,7 @@ const credentialTesters: Record<string, TestFunction> = {
       const domain = data.shopDomain.replace(/^https?:\/\//, '').replace(/\/$/, '');
       const response = await fetch(`https://${domain}/admin/api/2026-04/shop.json`, {
         headers: {
-          'X-Shopify-Access-Token': data.accessToken,
+          'X-Shopify-Access-Token': openIntegrationSecret(data.accessToken),
         },
       });
 

@@ -568,101 +568,18 @@ export function EmailPreviewMode({ templateId, triggerType, organizationId, stor
 }
 
 // =============================================
-// PreviewIframe — renders the email HTML with these production-parity
-// behaviors:
-//   1. Auto-sizes height to the email's actual content (no white space
-//      below the email like a fixed h-720px would leave).
-//   2. Injects <base target="_blank"> so every link inside the email
-//      opens in a new tab when clicked, matching what the recipient
-//      sees in their inbox client.
-//   3. Sandbox flags include allow-popups + allow-popups-to-escape-sandbox
-//      so the new tab actually opens (without these the click is a
-//      no-op in modern Chromium).
+// Email HTML is untrusted, including HTML persisted before this policy.
+// A scrollable frame keeps long emails readable without running a resize
+// script or granting the email access to the panel's origin.
 // =============================================
 function PreviewIframe({ html, viewMode }: { html: string; viewMode: 'desktop' | 'mobile' }) {
-  const ref = React.useRef<HTMLIFrameElement | null>(null);
-  const [height, setHeight] = React.useState<number>(viewMode === 'mobile' ? 640 : 720);
-
-  // Wrap the email with a <base target="_blank"> + a postMessage hook
-  // so we can size the iframe to its rendered content. Done as a
-  // wrapper rather than touching the original HTML so we don't change
-  // what eventually ships to the recipient.
-  const wrappedHtml = React.useMemo(() => {
-    return `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<base target="_blank">
-<style>html,body{margin:0;padding:0;overflow:hidden;}</style>
-</head>
-<body>
-${html}
-<script>
-  var lastReported = 0;
-  function reportSize(){
-    var h = Math.max(
-      document.documentElement.scrollHeight || 0,
-      document.documentElement.offsetHeight || 0,
-      document.body.scrollHeight || 0,
-      document.body.offsetHeight || 0
-    );
-    if (h && Math.abs(h - lastReported) >= 1) {
-      lastReported = h;
-      try { parent.postMessage({ type: 'worder:preview-size', height: h }, '*'); } catch(_){}
-    }
-  }
-  // Initial passes — RAF covers the late layout pass after style/asset
-  // application; load handles HTML+image full load.
-  reportSize();
-  requestAnimationFrame(function(){ requestAnimationFrame(reportSize); });
-  window.addEventListener('load', reportSize);
-  window.addEventListener('resize', reportSize);
-  // Watch every image — emails are heavily image-driven and the iframe
-  // must grow as each one decodes.
-  Array.prototype.forEach.call(document.images, function(img){
-    if (!img.complete) img.addEventListener('load', reportSize);
-    img.addEventListener('error', reportSize);
-  });
-  // ResizeObserver: catches dynamic content (lazy-loaded images decoding,
-  // late web font swaps shifting line heights, etc.) without polling.
-  if (typeof ResizeObserver !== 'undefined') {
-    try {
-      new ResizeObserver(reportSize).observe(document.documentElement);
-    } catch(_){}
-  }
-  // Belt-and-suspenders polling for the first 5s in case all the above miss.
-  var pollGuard = 0;
-  var pollInterval = setInterval(function(){
-    reportSize();
-    if (++pollGuard >= 10) clearInterval(pollInterval);
-  }, 500);
-</script>
-</body>
-</html>`;
-  }, [html]);
-
-  React.useEffect(() => {
-    function onMsg(e: MessageEvent) {
-      if (!e.data || e.data.type !== 'worder:preview-size') return;
-      const h = Number(e.data.height) || 0;
-      if (h > 0) setHeight(h);
-    }
-    window.addEventListener('message', onMsg);
-    return () => window.removeEventListener('message', onMsg);
-  }, []);
-
   return (
     <iframe
-      ref={ref}
-      srcDoc={wrappedHtml}
-      // allow-popups + allow-popups-to-escape-sandbox: links with
-      // target="_blank" actually open. allow-same-origin: lets us read
-      // scrollHeight via postMessage. allow-scripts: required for the
-      // tiny size-reporter snippet above.
-      sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox"
+      srcDoc={html}
+      sandbox=""
       title="Pré-visualização do e-mail"
       className={cn('w-full border-0 block', viewMode === 'mobile' ? 'bg-white' : '')}
-      style={{ height: `${height}px` }}
+      style={{ height: viewMode === 'mobile' ? 640 : 720 }}
     />
   );
 }

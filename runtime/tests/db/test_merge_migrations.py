@@ -15,43 +15,47 @@ ROOT = Path(__file__).resolve().parents[3]
 INSTAGRAM_INTEGRITY = (
     ROOT / "supabase/migrations/20260910340000_instagram_tenant_integrity.sql"
 )
+MERGE_RELATIONS = (
+    "whatsapp_campaign_logs", "instagram_accounts", "instagram_contacts",
+    "instagram_conversations", "instagram_messages",
+)
+EXPECTED_MERGE_POLICIES = [
+    (
+        "active_identity_required", "RESTRICTIVE", ["authenticated"], "ALL",
+        "internal.has_active_org_access((organization_id)::text)",
+        "internal.has_active_org_access((organization_id)::text)",
+    ),
+    (
+        "org_isolation_rls", "PERMISSIVE", ["authenticated"], "ALL",
+        "(organization_id = get_user_organization_id())",
+        "(organization_id = get_user_organization_id())",
+    ),
+]
+
+
+def merge_policy_rows(admin, relation):
+    return admin.execute(
+        """select policyname, permissive, roles, cmd, qual, with_check
+             from pg_policies
+            where schemaname='public' and tablename=%s
+            order by policyname""",
+        (relation,),
+    ).fetchall()
 
 
 def test_required_merge_relations_and_policies_exist(admin):
-    relations = (
-        "whatsapp_campaign_logs",
-        "instagram_accounts",
-        "instagram_contacts",
-        "instagram_conversations",
-        "instagram_messages",
-    )
-    for relation in relations:
+    for relation in MERGE_RELATIONS:
         assert admin.execute(
             "select to_regclass(%s)", (f"public.{relation}",)
         ).fetchone()[0] is not None
 
-    for relation in relations[1:]:
+    for relation in MERGE_RELATIONS[1:]:
         assert admin.execute(
             """select relrowsecurity from pg_class
                  where oid=to_regclass(%s)""",
             (f"public.{relation}",),
         ).fetchone() == (True,)
-        assert admin.execute(
-            """select policyname, permissive, roles, cmd, qual, with_check
-                 from pg_policies
-                 where schemaname='public' and tablename=%s
-                 order by policyname""",
-            (relation,),
-        ).fetchall() == [
-            (
-                "org_isolation_rls",
-                "PERMISSIVE",
-                ["authenticated"],
-                "ALL",
-                "(organization_id = get_user_organization_id())",
-                "(organization_id = get_user_organization_id())",
-            )
-        ]
+        assert merge_policy_rows(admin, relation) == EXPECTED_MERGE_POLICIES
         assert not admin.execute(
             "select has_table_privilege('anon', %s, 'SELECT')",
             (f"public.{relation}",),
@@ -70,21 +74,7 @@ def test_required_merge_relations_and_policies_exist(admin):
             (f"public.{relation}",),
         ).fetchone() == (0,)
 
-    assert admin.execute(
-        """select policyname, permissive, roles, cmd, qual, with_check
-             from pg_policies
-            where schemaname='public' and tablename='whatsapp_campaign_logs'
-            order by policyname"""
-    ).fetchall() == [
-        (
-            "org_isolation_rls",
-            "PERMISSIVE",
-            ["authenticated"],
-            "ALL",
-            "(organization_id = get_user_organization_id())",
-            "(organization_id = get_user_organization_id())",
-        )
-    ]
+    assert merge_policy_rows(admin, "whatsapp_campaign_logs") == EXPECTED_MERGE_POLICIES
 
 
 def test_campaign_counters_are_service_only(admin):
@@ -437,7 +427,15 @@ def test_instagram_external_parents_cannot_break_tenant_links(admin, two_tenants
 def test_instagram_migration_removes_incompatible_legacy_log_policy(admin):
     migration = INSTAGRAM_INTEGRITY.read_text(encoding="utf-8")
     policy = "Users can view own org campaign_logs"
+    before = {table: merge_policy_rows(admin, table) for table in MERGE_RELATIONS}
+    assert all(rows == EXPECTED_MERGE_POLICIES for rows in before.values())
     with admin.transaction(force_rollback=True):
+        # Exercise the September predecessor, before the later identity guard.
+        # Only the exact reviewed policy is removed; unknown policies still fail.
+        for table in MERGE_RELATIONS:
+            admin.execute(psycopg.sql.SQL(
+                "drop policy active_identity_required on public.{}"
+            ).format(psycopg.sql.Identifier(table)))
         admin.execute(f'drop policy if exists "{policy}" on public.whatsapp_campaign_logs')
         admin.execute(
             f"""create policy "{policy}" on public.whatsapp_campaign_logs
@@ -450,6 +448,9 @@ def test_instagram_migration_removes_incompatible_legacy_log_policy(admin):
                    and policyname=%s""",
             (policy,),
         ).fetchone() == (0,)
+        for table in MERGE_RELATIONS:
+            assert merge_policy_rows(admin, table) == [EXPECTED_MERGE_POLICIES[1]]
+    assert {table: merge_policy_rows(admin, table) for table in MERGE_RELATIONS} == before
 
 
 def test_instagram_migration_aborts_before_mutating_incompatible_legacy_row(

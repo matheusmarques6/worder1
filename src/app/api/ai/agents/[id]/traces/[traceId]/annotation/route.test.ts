@@ -16,7 +16,7 @@ vi.mock('@/lib/supabase-admin', () => ({
 
 import { PUT } from './route'
 
-const context = { params: { id: 'agent-1', traceId: 'trace-1' } }
+const context = { params: Promise.resolve({ id: 'agent-1', traceId: 'trace-1' }) }
 
 function request(body: Record<string, unknown>) {
   return new NextRequest(

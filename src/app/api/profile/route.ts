@@ -23,7 +23,7 @@ async function getAuthUser() {
   const admin = getSupabaseAdmin();
   if (!admin) return null;
 
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const accessToken = cookieStore.get('sb-access-token')?.value;
   
   if (!accessToken) return null;

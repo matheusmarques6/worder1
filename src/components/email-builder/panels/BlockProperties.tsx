@@ -1551,7 +1551,7 @@ export function BlockProperties({ block, onChange, onSaveAsReusable, selectedSub
 // ══════════════════════════════════════════
 
 function ProductBlockProperties({ p, onChange, commonTail, selectedSubElement, onSelectSubElement }: {
-  p: any; onChange: (k: string, v: any) => void; commonTail: () => JSX.Element;
+  p: any; onChange: (k: string, v: any) => void; commonTail: () => React.ReactElement;
   selectedSubElement?: string | null; onSelectSubElement?: (subEl: string | null) => void
 }) {
   const [showViewFeeds, setShowViewFeeds] = useState(false)

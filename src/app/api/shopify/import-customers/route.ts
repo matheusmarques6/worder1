@@ -1,3 +1,4 @@
+import { openIntegrationSecret } from '@/lib/integrations/credential-codec';
 // =============================================
 // API: Import Existing Customers from Shopify
 // ✅ ATUALIZADO: Salva store_id nos contatos
@@ -67,7 +68,7 @@ async function fetchShopifyCustomers(
   while (nextPageUrl && pageCount < maxPages) {
     const response: Response = await fetch(nextPageUrl, {
       headers: {
-        'X-Shopify-Access-Token': accessToken,
+        'X-Shopify-Access-Token': openIntegrationSecret(accessToken),
         'Content-Type': 'application/json',
       },
     });
@@ -269,7 +270,7 @@ export async function GET(request: NextRequest) {
       `https://${store.shop_domain}/admin/api/${SHOPIFY_API_VERSION}/customers/count.json`,
       {
         headers: {
-          'X-Shopify-Access-Token': store.access_token,
+          'X-Shopify-Access-Token': openIntegrationSecret(store.access_token),
           'Content-Type': 'application/json',
         },
       }

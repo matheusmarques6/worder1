@@ -19,6 +19,7 @@ não é assunto do motor.
 """
 
 import asyncio
+import os
 from uuid import UUID
 
 import psycopg
@@ -115,6 +116,52 @@ async def assert_rls_enforced(conn: psycopg.AsyncConnection, expected_role: str 
             "denied no primeiro turno. Confira AGENTS_WORKER_SET_ROLE / "
             "AGENTS_SENDER_SET_ROLE."
         )
+
+    if os.environ.get("DEPLOY_ENV", "").strip().lower() in {"production", "staging"}:
+        # SET ROLE changes current_user, never session_user. Walk every membership,
+        # including NOINHERIT edges: RESET ROLE / SET ROLE can recover those rights.
+        row = await (
+            await conn.execute(
+                """
+                with recursive reachable(oid) as (
+                    select oid from pg_roles where rolname = session_user
+                    union
+                    select m.roleid from pg_auth_members m
+                    join reachable r on r.oid = m.member
+                )
+                select session_user, array_agg(r.rolname),
+                       bool_or(r.rolsuper or r.rolbypassrls or r.rolcreatedb
+                               or r.rolcreaterole or r.rolreplication),
+                       bool_or(exists (
+                           select 1 from pg_shdepend d
+                           where d.refclassid = 'pg_authid'::regclass
+                             and d.refobjid = r.oid and d.deptype = 'o')),
+                       bool_or(exists (
+                           select 1 from pg_auth_members m
+                           where m.member = r.oid and m.admin_option)),
+                       bool_or(r.rolname = session_user and exists (
+                           select 1 from pg_shdepend d
+                           where d.refclassid = 'pg_authid'::regclass
+                             and d.refobjid = r.oid and d.deptype = 'a')),
+                       bool_or(r.rolname = session_user and r.rolcanlogin)
+                from pg_roles r join reachable on reachable.oid = r.oid
+                """
+            )
+        ).fetchone()
+        session, roles, elevated, owns, admin, direct_acl, can_login = row
+        login = {WORKER_ROLE: "runtime_worker_login", SENDER_ROLE: "runtime_sender_login"}.get(
+            expected_role
+        )
+        if (
+            session != login
+            or set(roles or ()) != {login, expected_role}
+            or elevated or owns or admin or direct_acl or not can_login
+        ):
+            raise RlsNotEnforced(
+                "unsafe runtime session_user: use the dedicated minimum-privilege "
+                "worker/sender LOGIN with only its matching role membership, no "
+                "ownership, direct grants, administrative attributes or ADMIN OPTION"
+            )
 
 
 async def scope_to_organization(conn: psycopg.AsyncConnection, organization_id: UUID) -> None:

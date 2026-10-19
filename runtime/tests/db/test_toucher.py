@@ -228,6 +228,9 @@ class TestCustomToolLoop:
 
 @pytest.fixture
 def knowledge_turn(admin, org, monkeypatch):
+    agent_id = admin.execute(
+        "select agent_id from public.ai_agent_versions where organization_id = %s", (org,),
+    ).fetchone()[0]
     admin.execute(
         "update public.ai_agent_versions set settings = %s where organization_id = %s",
         (psycopg.types.json.Jsonb({"tools": {"enabled": ["search_knowledge"]}}), org),
@@ -238,6 +241,7 @@ def knowledge_turn(admin, org, monkeypatch):
     )
     create_knowledge_chunk(
         admin, org, content="Frete em 3 dias", embedding=json.dumps(embed_text("frete")),
+        agent_id=agent_id,
     )
     stranger = create_tenant(admin)
     create_knowledge_chunk(
@@ -253,7 +257,16 @@ def knowledge_turn(admin, org, monkeypatch):
 
     monkeypatch.setattr(toucher_module, "JudgeContext", capture_context)
     llm = ScriptedLlm()
-    monkeypatch.setattr(llm, "embed", AsyncMock(wraps=llm.embed))
+    original_embed = llm.embed
+
+    async def relevant_embedding(texts, *, model):
+        # This fixture checks query wiring, metering and real DB isolation.
+        # Give its known-relevant queries the same semantic vector as the FAQ;
+        # literal word overlap scores below the production 0.7 threshold.
+        result = await original_embed(texts, model=model)
+        return replace(result, vectors=tuple(embed_text("frete") for _ in texts))
+
+    monkeypatch.setattr(llm, "embed", AsyncMock(side_effect=relevant_embedding))
     try:
         yield llm, contexts, create_thread(admin, org)
     finally:

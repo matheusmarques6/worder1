@@ -979,13 +979,12 @@ class TestMediaWithoutAWordDegradesHonestly:
 
 
 @pytest.mark.db
-def test_one_active_agent_per_organization(admin: psycopg.Connection, two_tenants) -> None:
-    """W3-GD-07: no máximo um agente ativo por organização; ausência continua
-    legal. `create_agent` nasce inativo por padrão (Fix round 2 — a coluna da
-    tabela em si continua `default true`, `20260812000001:663`, mas a fixture
-    agora pede a ativação explicitamente, como o app faz), então a ativação
-    é este `update` explícito — e é ele que o índice único (20260917050000)
-    recusa na segunda organização, não o INSERT."""
+def test_active_agents_can_be_paused_independently(admin: psycopg.Connection, two_tenants) -> None:
+    """The multi-agent model allows several active agents in one organization.
+
+    Migration 20261016000008 moved uniqueness to the active entry, covered by
+    test_multi_agent_schema. Pausing one agent must leave its peers active.
+    """
     activate = "update public.ai_agents set is_active=true where id=%s"
     deactivate = "update public.ai_agents set is_active=false where id=%s"
     first = create_agent(admin, two_tenants.a.id)
@@ -993,9 +992,12 @@ def test_one_active_agent_per_organization(admin: psycopg.Connection, two_tenant
     other_org = create_agent(admin, two_tenants.b.id)
 
     admin.execute(activate, (first,))
-    with pytest.raises(psycopg.errors.UniqueViolation):
-        admin.execute(activate, (second,))
+    admin.execute(activate, (second,))
     admin.execute(activate, (other_org,))
 
     admin.execute(deactivate, (first,))
-    admin.execute(activate, (second,))
+    states = dict(admin.execute(
+        "select id, is_active from public.ai_agents where id = any(%s)",
+        ([first, second, other_org],),
+    ).fetchall())
+    assert states == {first: False, second: True, other_org: True}

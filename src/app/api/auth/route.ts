@@ -4,6 +4,8 @@ import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
 import { getAuthClient } from '@/lib/api-utils';
 import { requestMeta, jwtSessionId } from '@/lib/settings/request-meta';
 import { gotrue } from '@/lib/settings/gotrue';
+import { changePasswordWithReauthentication } from '@/lib/auth/change-password';
+import { resolveActiveIdentity } from '@/lib/auth/active-identity';
 export const dynamic = 'force-dynamic';
 
 // Cookie temporário entre a senha e o código do 2FA (10 min).
@@ -48,7 +50,7 @@ function getSupabase(): SupabaseClient | null {
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
     
     if (url && key && !url.includes('placeholder')) {
-      supabase = createClient(url, key);
+      supabase = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
     }
   }
   return supabase;
@@ -128,7 +130,7 @@ export async function POST(request: NextRequest) {
       case 'reset-password':
         return await handleResetPassword(client, data);
       case 'update-password':
-        return await handleUpdatePassword(client, data);
+        return await handleUpdatePassword(client, data, request);
       case 'get-or-create-org':
         return await handleGetOrCreateOrg(client, request);
       default:
@@ -188,7 +190,9 @@ function handleDevLogin({ email, password }: { email: string; password: string }
 }
 
 async function handleLogin(supabase: SupabaseClient, { email, password }: { email: string; password: string }, request: NextRequest) {
-  const { data, error } = await supabase.auth.signInWithPassword({
+  const { data, error } = await createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  }).auth.signInWithPassword({
     email,
     password,
   });
@@ -216,7 +220,10 @@ async function handleLogin(supabase: SupabaseClient, { email, password }: { emai
     .single();
 
   // ---- Verificação em duas etapas ----
-  const { data: factors } = await supabase.rpc('list_mfa_factors', { p_user_id: data.user.id });
+  const identity = await resolveActiveIdentity(supabase, data.session.access_token);
+  if (!identity) return NextResponse.json({ error: 'Acesso à organização indisponível.' }, { status: 403 });
+  const { data: factors, error: factorsError } = await supabase.rpc('list_mfa_factors', { p_user_id: data.user.id });
+  if (factorsError || !Array.isArray(factors)) return NextResponse.json({ error: 'Não foi possível verificar MFA.' }, { status: 503 });
   const hasMfa = ((factors as any[]) || []).some((f) => f.status === 'verified');
   if (hasMfa) {
     // Senha certa, falta o código: guardamos a sessão aal1 num cookie curto.
@@ -225,7 +232,7 @@ async function handleLogin(supabase: SupabaseClient, { email, password }: { emai
     return response;
   }
 
-  const requires2fa = !!profile?.organization?.settings?.require_2fa && profile?.role !== 'owner';
+  const requires2fa = identity.mfaRequired;
   const response = NextResponse.json({
     user: data.user,
     profile,
@@ -251,6 +258,8 @@ async function handleMfaVerify(supabase: SupabaseClient, { code }: { code: strin
 
   const { data: { user }, error: uErr } = await supabase.auth.getUser(pending.a);
   if (uErr || !user) return NextResponse.json({ error: 'Sessão expirada. Entre novamente.' }, { status: 401 });
+  const pendingIdentity = await resolveActiveIdentity(supabase, pending.a);
+  if (!pendingIdentity) return NextResponse.json({ error: 'Sessão inválida.' }, { status: 401 });
   const { data: factors } = await supabase.rpc('list_mfa_factors', { p_user_id: user.id });
   const totp = ((factors as any[]) || []).filter((f) => f.status === 'verified' && f.factor_type === 'totp');
   if (!totp.length) return NextResponse.json({ error: 'Nenhum app autenticador configurado.' }, { status: 400 });
@@ -266,6 +275,11 @@ async function handleMfaVerify(supabase: SupabaseClient, { code }: { code: strin
   if (!verified?.access_token) {
     await logLogin(supabase, request, user.email || '', user.id, false, 'Código 2FA inválido');
     return NextResponse.json({ error: 'Código inválido ou expirado. Tente o próximo código do app.' }, { status: 401 });
+  }
+
+  const verifiedIdentity = await resolveActiveIdentity(supabase, verified.access_token);
+  if (!verifiedIdentity || verifiedIdentity.userId !== user.id || verifiedIdentity.aal !== 'aal2') {
+    return NextResponse.json({ error: 'Sessão inválida.' }, { status: 401 });
   }
 
   const { data: profile } = await supabase.from('profiles').select('*, organization:organizations(*)').eq('id', user.id).single();
@@ -294,7 +308,9 @@ async function handleSignup(
   }
 ) {
   // Create auth user with metadata
-  const { data: authData, error: authError } = await supabase.auth.signUp({
+  const { data: authData, error: authError } = await createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  }).auth.signUp({
     email,
     password,
     options: {
@@ -386,10 +402,13 @@ async function handleUpdatePassword(
   supabase: SupabaseClient,
   {
     newPassword,
+    currentPassword,
   }: {
     accessToken?: string;
     newPassword: string;
-  }
+    currentPassword?: string;
+  },
+  request: NextRequest,
 ) {
   // ⚠️ SEGURANÇA: identidade vem SEMPRE da sessão. Qualquer id de
   // usuário enviado no body é ignorado — só é permitido alterar a
@@ -403,13 +422,9 @@ async function handleUpdatePassword(
     return NextResponse.json({ error: 'newPassword is required' }, { status: 400 });
   }
 
-  const { error } = await supabase.auth.admin.updateUserById(auth.user.id, {
-    password: newPassword,
-  });
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
-  }
+  const result = await changePasswordWithReauthentication(supabase, auth.user,
+    String(currentPassword || ''), String(newPassword), jwtSessionId(request.cookies.get('sb-access-token')?.value));
+  if (result.error) return NextResponse.json({ error: result.error }, { status: result.status });
 
   return NextResponse.json({ message: 'Password updated successfully' });
 }
@@ -425,6 +440,8 @@ async function handleGetOrCreateOrg(supabase: SupabaseClient, request: NextReque
       const { data: { user: authUser }, error: authError } = await supabase.auth.getUser(accessToken);
       
       if (authUser && !authError) {
+        const identity = await resolveActiveIdentity(supabase, accessToken);
+        if (!identity) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
         // User is authenticated - return their real data
         const { data: profile } = await supabase
           .from('profiles')
@@ -433,7 +450,7 @@ async function handleGetOrCreateOrg(supabase: SupabaseClient, request: NextReque
           .single();
 
         // ✅ CORREÇÃO: Não usar 'default-org' - usar null se não tiver organization
-        const orgId = profile?.organization?.id || profile?.organization_id || authUser.user_metadata?.organization_id || null;
+        const orgId = identity.orgId;
 
         return NextResponse.json({
           organization: profile?.organization || (orgId ? { id: orgId } : null),
@@ -446,7 +463,7 @@ async function handleGetOrCreateOrg(supabase: SupabaseClient, request: NextReque
             first_name: profile?.first_name || authUser.user_metadata?.name?.split(' ')[0],
             last_name: profile?.last_name || '',
             avatar_url: profile?.avatar_url || authUser.user_metadata?.avatar_url,
-            role: profile?.role || 'user',
+            role: identity.role,
             organization_id: orgId,
             user_metadata: authUser.user_metadata,
           },
@@ -478,7 +495,7 @@ export async function GET(request: NextRequest) {
   }
 
   // Dev mode check
-  if (accessToken === 'dev-access-token') {
+  if (isDevMode && accessToken === 'dev-access-token') {
     return NextResponse.json({
       user: {
         id: 'dev-user-id',
@@ -508,6 +525,8 @@ export async function GET(request: NextRequest) {
   if (error || !user) {
     return NextResponse.json({ error: 'Invalid session' }, { status: 401 });
   }
+  const identity = await resolveActiveIdentity(client, accessToken);
+  if (!identity) return NextResponse.json({ error: 'Invalid session' }, { status: 401 });
 
   // Get profile and organization
   const { data: profile } = await client
@@ -519,5 +538,5 @@ export async function GET(request: NextRequest) {
     .eq('id', user.id)
     .single();
 
-  return NextResponse.json({ user, profile });
+  return NextResponse.json({ user, profile: profile ? { ...profile, role: identity.role } : profile });
 }

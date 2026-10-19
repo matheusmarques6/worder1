@@ -3,8 +3,10 @@
 // para o modal "o que muda em relação a hoje" ao restaurar.
 
 import { TOOL_CATALOG } from './tools/catalog'
+import { jsonEquals } from './diff'
 
 export interface VersionableConfig {
+  [key: string]: unknown
   system_prompt?: string | null
   persona?: Record<string, any> | null
   settings?: Record<string, any> | null
@@ -32,6 +34,14 @@ export function summarizeChanges(before: VersionableConfig, after: VersionableCo
   const pa = after.persona ?? {}
   const sb = before.settings ?? {}
   const sa = after.settings ?? {}
+
+  for (const [field, label] of [
+    ['name', 'Identidade: nome alterado'], ['description', 'Identidade: descrição alterada'],
+    ['role', 'Identidade: função alterada'], ['provider', 'Modelo: provedor alterado'],
+    ['model', 'Modelo: modelo alterado'], ['temperature', 'Modelo: temperatura alterada'],
+    ['max_tokens', 'Modelo: limite de tokens alterado'], ['monthly_cap_usd', 'Limite: teto mensal alterado'],
+    ['presentation_mode', 'Identidade: apresentação alterada'], ['client_adaptation', 'Adaptação: preferências alteradas'],
+  ]) if (!jsonEquals(before[field], after[field])) lines.push(label)
 
   if ((before.system_prompt ?? '').trim() !== (after.system_prompt ?? '').trim()) {
     lines.push('Instruções: texto base alterado')

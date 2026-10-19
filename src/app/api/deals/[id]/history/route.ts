@@ -11,23 +11,24 @@ import { getAuthClient, authError } from '@/lib/api-utils';
 export const dynamic = 'force-dynamic';
 
 interface RouteParams {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(request: NextRequest, props: RouteParams) {
+  const params = await props.params;
   const auth = await getAuthClient();
   if (!auth) return authError();
   const { supabase } = auth;
 
   const dealId = params.id;
-  
+
   if (!dealId) {
     return NextResponse.json({ error: 'Deal ID required' }, { status: 400 });
   }
-  
+
   const searchParams = request.nextUrl.searchParams;
   const limit = parseInt(searchParams.get('limit') || '50');
-  
+
   try {
     // Buscar histórico de mudanças - RLS filtra automaticamente
     const { data: history, error } = await supabase

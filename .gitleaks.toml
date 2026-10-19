@@ -1,0 +1,12 @@
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+
+[[rules.allowlists]]
+description = "Exact synthetic encryption fixture, limited to its test file"
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^synthetic-integration-key-at-least-32-characters$''']
+paths = ['''(^|/)src/app/api/integrations/tiktok/route\.test\.ts$''']

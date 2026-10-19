@@ -1,0 +1,127 @@
+name: release
+
+# No path filters: every candidate must have a conclusive release result.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  app:
+    uses: ./.github/workflows/app.yml
+  runtime:
+    uses: ./.github/workflows/runtime.yml
+
+  ui:
+    name: AI browser behavior (${{ matrix.spec }})
+    runs-on: ubuntu-latest
+    # A fresh Next process per spec bounds dev-compiler memory. Each shard
+    # remains mandatory, with unchanged assertions and no retries/skips.
+    strategy:
+      fail-fast: false
+      matrix:
+        spec: [agents.spec.ts, new-agent.spec.ts, builder.spec.ts, builder-blocks.spec.ts, knowledge.spec.ts, activity.spec.ts]
+    timeout-minutes: 25
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+      PLAYWRIGHT_JSON_OUTPUT_FILE: test-results/ai-ui/report.json
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.25.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:ai:ui ${{ matrix.spec }} --reporter=line,json,html
+      - run: node scripts/ci/playwright-report.mjs test-results/ai-ui/report.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ai-ui-${{ matrix.spec }}-${{ github.sha }}-${{ github.run_id }}
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 7
+
+  journeys:
+    name: AI candidate journeys
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: ia-staging
+    concurrency:
+      group: ai-staging-${{ github.repository }}
+      cancel-in-progress: false
+    env:
+      AI_E2E_APP_URL: ${{ vars.AI_E2E_APP_URL }}
+      AI_E2E_RUNTIME_URL: ${{ vars.AI_E2E_RUNTIME_URL }}
+      AI_E2E_SUPABASE_URL: ${{ vars.AI_E2E_SUPABASE_URL }}
+      AI_E2E_EMAIL: ${{ secrets.AI_E2E_EMAIL }}
+      AI_E2E_PASSWORD: ${{ secrets.AI_E2E_PASSWORD }}
+      AI_E2E_ACCOUNT_ID: ${{ vars.AI_E2E_ACCOUNT_ID }}
+      AI_E2E_RECIPIENT_PHONE: ${{ secrets.AI_E2E_RECIPIENT_PHONE }}
+      AI_E2E_ORGANIZATION_ID: ${{ vars.AI_E2E_ORGANIZATION_ID }}
+      AI_E2E_STORE_ID: ${{ vars.AI_E2E_STORE_ID }}
+      AI_E2E_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.AI_E2E_SUPABASE_SERVICE_ROLE_KEY }}
+      AI_E2E_META_APP_SECRET: ${{ secrets.AI_E2E_META_APP_SECRET }}
+      AI_E2E_COMMIT_SHA: ${{ github.sha }}
+      AI_E2E_VERCEL_PROJECT_ID: ${{ vars.AI_E2E_VERCEL_PROJECT_ID }}
+      AI_E2E_VERCEL_TEAM_ID: ${{ vars.AI_E2E_VERCEL_TEAM_ID }}
+      AI_E2E_VERCEL_TOKEN: ${{ secrets.AI_E2E_VERCEL_TOKEN }}
+      AI_E2E_RENDER_SERVICE_ID: ${{ vars.AI_E2E_RENDER_SERVICE_ID }}
+      AI_E2E_RENDER_API_KEY: ${{ secrets.AI_E2E_RENDER_API_KEY }}
+      AI_E2E_WAIT_SECONDS: "900"
+      PLAYWRIGHT_JSON_OUTPUT_FILE: test-results/ai-journeys/report.json
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      # Refuse missing configuration before allocating a candidate deployment.
+      - run: node scripts/ci/ai-e2e-preflight.mjs --configuration-only
+      - name: Deploy exact candidate to isolated QA services
+        run: node scripts/ci/deploy-ai-staging.mjs
+      # Wait for both SHA health endpoints before login or fixture writes.
+      - run: node scripts/ci/ai-e2e-preflight.mjs
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.25.0
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:ai:journeys --reporter=line,json,html
+      - run: node scripts/ci/playwright-report.mjs test-results/ai-journeys/report.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ai-journeys-${{ github.sha }}-${{ github.run_id }}
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 7
+
+  ready:
+    name: Release readiness
+    if: always()
+    needs: [app, runtime, ui, journeys]
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Require every job to succeed
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: node scripts/ci/release-policy.mjs

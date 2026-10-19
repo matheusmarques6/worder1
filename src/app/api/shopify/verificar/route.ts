@@ -1,3 +1,4 @@
+import { openIntegrationSecret } from '@/lib/integrations/credential-codec';
 // =============================================
 // API: Verificação SIMPLES - HTML
 // src/app/api/shopify/verificar/route.ts
@@ -66,7 +67,7 @@ export async function GET(request: NextRequest) {
       try {
         const webhooksRes = await fetch(
           `https://${store.shop_domain}/admin/api/2026-04/webhooks.json`,
-          { headers: { 'X-Shopify-Access-Token': store.access_token } }
+          { headers: { 'X-Shopify-Access-Token': openIntegrationSecret(store.access_token) } }
         );
         
         if (webhooksRes.ok) {

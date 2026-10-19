@@ -1,3 +1,4 @@
+import { openIntegrationSecret } from '@/lib/integrations/credential-codec';
 // =============================================
 // Shopify Client Credentials Token Manager
 //
@@ -34,7 +35,7 @@ export async function getAccessTokenViaClientCredentials(
     body: new URLSearchParams({
       grant_type: 'client_credentials',
       client_id: clientId,
-      client_secret: clientSecret,
+      client_secret: openIntegrationSecret(clientSecret),
     }).toString(),
   });
 

@@ -7,7 +7,8 @@ export const dynamic = 'force-dynamic'
 
 // Plano IA M2 passo 15 — ativar exige o checklist verde. Não arquiva os
 // demais: vários agentes ativos por org (20261016000008).
-export async function POST(_request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(_request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await getAuthClient()
   if (!auth) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
   const supabase = getSupabaseAdmin()

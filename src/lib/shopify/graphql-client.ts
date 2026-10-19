@@ -1,3 +1,4 @@
+import { openIntegrationSecret } from '@/lib/integrations/credential-codec';
 // =============================================
 // Shopify GraphQL Admin API Client
 // src/lib/shopify/graphql-client.ts
@@ -94,6 +95,7 @@ export async function shopifyGraphQL<T = any>(
 ): Promise<GraphQLResponse<T>> {
   const { retries = MAX_RETRIES, timeout = 30000 } = options || {};
   const url = `https://${store.shop_domain}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
+  const providerToken = openIntegrationSecret(store.access_token);
 
   let lastError: Error | null = null;
 
@@ -105,7 +107,7 @@ export async function shopifyGraphQL<T = any>(
       const response = await fetch(url, {
         method: 'POST',
         headers: {
-          'X-Shopify-Access-Token': store.access_token,
+          'X-Shopify-Access-Token': providerToken,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ query, variables }),

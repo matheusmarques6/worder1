@@ -30,7 +30,8 @@ function arquivos(raiz: string, filtro: (p: string) => boolean): string[] {
       if (nome === 'node_modules' || nome === '__tests__') continue
       const p = join(dir, nome)
       if (statSync(p).isDirectory()) ande(p)
-      else if (filtro(p)) saida.push(p)
+      // Separador normalizado: as listas de exceção abaixo usam '/'.
+      else if (filtro(p)) saida.push(p.replace(/\\/g, '/'))
     }
   }
   ande(raiz)

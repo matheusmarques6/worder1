@@ -1,6 +1,7 @@
 """Desfechos, eventos e atribuição de pedido (20261016000013, plano IA M5 passo 27)."""
 
 import uuid
+from decimal import Decimal
 
 import psycopg
 import pytest
@@ -19,7 +20,7 @@ def tenant(admin: psycopg.Connection) -> uuid.UUID:
 def _attribute(admin, org, contact, order="1001", value=199.9, days=7):
     (conv,) = admin.execute(
         "select public.attribute_ai_conversation(%s, %s, %s, %s, %s)",
-        (org, contact, order, value, days),
+        (org, contact, order, Decimal(str(value)), days),
     ).fetchone()
     return conv
 
@@ -40,7 +41,7 @@ class TestAttribution:
             " where conversation_id = %s",
             (thread.conversation_id,),
         ).fetchone()
-        assert row == (agent, "1001", pytest.approx(199.9))
+        assert row == (agent, "1001", Decimal("199.9"))
         (sales,) = admin.execute(
             "select count(*) from public.ai_activity_events"
             " where organization_id = %s and kind = 'sale'",

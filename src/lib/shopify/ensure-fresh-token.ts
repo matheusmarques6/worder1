@@ -1,3 +1,4 @@
+import { sealIntegrationSecret } from '@/lib/integrations/credential-codec';
 // =============================================
 // ensureFreshToken
 //
@@ -31,7 +32,7 @@ export async function ensureFreshToken(store: any): Promise<{ ok: true; store: a
     const supabase = getSupabaseAdmin();
     await supabase
       .from('shopify_stores')
-      .update({ access_token: newToken, token_expires_at: newExpiresAt })
+      .update({ access_token: sealIntegrationSecret(newToken), token_expires_at: newExpiresAt })
       .eq('id', store.id);
     return { ok: true, store: { ...store, access_token: newToken, token_expires_at: newExpiresAt } };
   } catch (err: any) {

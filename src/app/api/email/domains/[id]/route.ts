@@ -15,10 +15,8 @@ import {
   subdominioDeLinksPadrao,
 } from '@/lib/email/tracking-subdomain';
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const auth = await getAuthClient();
     if (!auth) return authError();
@@ -49,10 +47,8 @@ export async function GET(
   }
 }
 
-export async function DELETE(
-  _req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function DELETE(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const auth = await getAuthClient();
     if (!auth) return authError();
@@ -135,10 +131,8 @@ export async function DELETE(
 // O nosso /api/t/* não muda: continua no salto seguinte, carimbando a
 // atribuição. Ver src/lib/email/tracking-subdomain.ts.
 // =============================================
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const auth = await getAuthClient();
     if (!auth) return authError();

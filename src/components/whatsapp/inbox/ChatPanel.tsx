@@ -436,6 +436,7 @@ export function ChatPanel({
   const [aiAgentName, setAiAgentName] = useState<string | null>(null)
   useEffect(() => {
     let cancelled = false
+    setAiAgentName(null)
     if (!organizationId) return
     fetch(`/api/ai/agents?organization_id=${encodeURIComponent(organizationId)}&status=active`)
       .then((r) => (r.ok ? r.json() : null))
@@ -449,7 +450,7 @@ export function ChatPanel({
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [organizationId])
 
   useEffect(() => {
     if (!conversation?.id) {

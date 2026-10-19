@@ -3,6 +3,8 @@ import { getSupabaseClient } from '@/lib/api-utils';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { requireOrgFromAuth } from '@/lib/auth/require-org';
+import { canRoleAccess } from '@/lib/auth/permissions';
+import { writableAgentPermissions, findOrgAgent } from '@/lib/auth/agent-permissions';
 export const dynamic = 'force-dynamic';
 
 // Module-level lazy client
@@ -206,14 +208,40 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { action, type } = body;
 
+    if (action === 'assign' || action === 'resolve') {
+      const { data: conversation, error } = await supabase.from('whatsapp_conversations')
+        .select('id, assigned_agent_id').eq('id', body.conversation_id).eq('organization_id', orgId).maybeSingle();
+      if (error || !conversation) return NextResponse.json({ error: 'Conversation not found' }, { status: 404 });
+      if (auth.role === 'agent') {
+        // Só colunas que o esquema tem: pedir uma inexistente faz o PostgREST
+        // recusar a linha inteira em silêncio, e o guarda negaria todo mundo.
+        // `whatsapp_allowed_numbers` existe, mas não há coluna em
+        // `whatsapp_conversations` que diga de qual número da empresa a
+        // conversa é, então o acesso restrito a números não é conferível:
+        // aqui ele nega, que é o lado seguro, até o vínculo existir.
+        const { data: permissions, error: permissionsError } = await supabase.from('agent_permissions')
+          .select('can_transfer_conversations, whatsapp_access_all')
+          .eq('agent_id', auth.agentId).maybeSingle();
+        if (permissionsError || !permissions || !auth.agentId || conversation.assigned_agent_id !== auth.agentId
+          || !permissions.whatsapp_access_all
+          || (action === 'assign' && !permissions.can_transfer_conversations)) {
+          return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+      } else if (!canRoleAccess(auth.role, action === 'assign' ? 'inbox:assign' : 'inbox:close')) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+    } else if (!canRoleAccess(auth.role, 'org:members:invite')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     // Ação: Atribuir chat
     if (action === 'assign') {
       const { conversation_id, agent_id } = body;
       if (!conversation_id) return NextResponse.json({ error: 'conversation_id required' }, { status: 400 });
 
       if (!agent_id) {
-        await supabase.from('whatsapp_agent_assignments').delete().eq('conversation_id', conversation_id);
-        await supabase.from('whatsapp_conversations').update({ assigned_agent_id: null }).eq('id', conversation_id);
+        await supabase.from('whatsapp_agent_assignments').delete().eq('conversation_id', conversation_id).eq('organization_id', orgId);
+        await supabase.from('whatsapp_conversations').update({ assigned_agent_id: null }).eq('id', conversation_id).eq('organization_id', orgId);
         return NextResponse.json({ success: true, message: 'Assignment removed' });
       }
 
@@ -246,7 +274,7 @@ export async function POST(request: NextRequest) {
         assigned_at: new Date().toISOString(),
       }, { onConflict: 'conversation_id' });
 
-      await supabase.from('whatsapp_conversations').update({ assigned_agent_id: agent_id }).eq('id', conversation_id);
+      await supabase.from('whatsapp_conversations').update({ assigned_agent_id: agent_id }).eq('id', conversation_id).eq('organization_id', orgId);
 
       return NextResponse.json({ success: true });
     }
@@ -254,8 +282,8 @@ export async function POST(request: NextRequest) {
     // Ação: Resolver chat
     if (action === 'resolve') {
       const { conversation_id } = body;
-      await supabase.from('whatsapp_agent_assignments').update({ status: 'resolved', resolved_at: new Date().toISOString() }).eq('conversation_id', conversation_id);
-      await supabase.from('whatsapp_conversations').update({ status: 'closed' }).eq('id', conversation_id);
+      await supabase.from('whatsapp_agent_assignments').update({ status: 'resolved', resolved_at: new Date().toISOString() }).eq('conversation_id', conversation_id).eq('organization_id', orgId);
+      await supabase.from('whatsapp_conversations').update({ status: 'closed' }).eq('id', conversation_id).eq('organization_id', orgId);
       return NextResponse.json({ success: true });
     }
 
@@ -365,6 +393,18 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ 
             error: 'Este email já está registrado em outra organização' 
           }, { status: 409 });
+        }
+
+        // Agent creation must not change another role or restore removed access.
+        const { data: membership, error: membershipError } = await supabase
+          .from('organization_members')
+          .select('role, status')
+          .eq('organization_id', orgId)
+          .eq('user_id', existingAuthUser.id)
+          .maybeSingle();
+        if (membershipError) throw membershipError;
+        if (!membership || membership.role !== 'agent' || membership.status !== 'active') {
+          return NextResponse.json({ error: 'Usuário existente sem vínculo ativo de agente nesta organização' }, { status: 409 });
         }
 
         authUserId = existingAuthUser.id;
@@ -499,6 +539,15 @@ export async function POST(request: NextRequest) {
           await adminClient.auth.admin.deleteUser(authUserId);
         }
         return NextResponse.json({ error: agentError.message }, { status: 500 });
+      }
+
+      // Existing active agent memberships are preserved. A new Auth user's
+      // personal organization may come from the trigger; insert only this grant.
+      if (!existingAuthUser) {
+        const { error: membershipError } = await supabase.from('organization_members').insert({
+          organization_id: orgId, user_id: authUserId, email, role: 'agent', status: 'active', joined_at: new Date().toISOString(),
+        });
+        if (membershipError) throw membershipError;
       }
 
       // Criar permissões
@@ -670,6 +719,7 @@ export async function PATCH(request: NextRequest) {
   // ✅ P1 v2: org do token
   const auth = await requireOrgFromAuth(request);
   if (auth instanceof NextResponse) return auth;
+  if (!canRoleAccess(auth.role, 'org:members:role:change')) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   const orgId = auth.orgId;
 
   try {
@@ -683,6 +733,7 @@ export async function PATCH(request: NextRequest) {
     const { id, ...updateData } = body;
 
     if (!id) return NextResponse.json({ error: 'Agent ID required' }, { status: 400 });
+
 
     const allowed = ['name', 'email', 'role', 'is_active', 'is_available', 'max_concurrent_chats', 'status', 'avatar_url'];
     const filtered: any = {};
@@ -718,7 +769,7 @@ export async function PATCH(request: NextRequest) {
     if (updateData.permissions && data) {
       await supabase.from('agent_permissions').upsert({
         agent_id: data.id,
-        ...updateData.permissions,
+        ...writableAgentPermissions(updateData.permissions),
         updated_at: new Date().toISOString(),
       }, { onConflict: 'agent_id' });
     }
@@ -734,6 +785,7 @@ export async function DELETE(request: NextRequest) {
   // ✅ P1 v2: org do token
   const auth = await requireOrgFromAuth(request);
   if (auth instanceof NextResponse) return auth;
+  if (!canRoleAccess(auth.role, 'org:members:remove')) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   const orgId = auth.orgId;
 
   try {
@@ -747,6 +799,9 @@ export async function DELETE(request: NextRequest) {
     const id = searchParams.get('id');
 
     if (!id) return NextResponse.json({ error: 'Agent ID required' }, { status: 400 });
+    const { data: agent, error: agentError, table: agentTable } = await findOrgAgent(supabase, orgId, id);
+    if (agentError) throw agentError;
+    if (!agent) return NextResponse.json({ error: 'Agent not found' }, { status: 404 });
 
     // Verificar chats ativos
     const { count } = await supabase
@@ -774,55 +829,34 @@ export async function DELETE(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Buscar agente para pegar user_id
-    const { data: agent } = await supabase
-      .from('agents')
-      .select('user_id, type')
-      .eq('id', id)
-      .eq('organization_id', orgId)
-      .single();
+    if (agent.user_id) {
+      const { data: member, error: memberError } = await supabase.from('organization_members').select('role')
+        .eq('organization_id', orgId).eq('user_id', agent.user_id).maybeSingle();
+      if (memberError) throw memberError;
+      if (member?.role === 'owner' || agent.user_id === auth.userId) return NextResponse.json({ error: 'Cannot remove this member' }, { status: 403 });
+      const { error: removalError } = await supabase.from('organization_members').update({ status: 'removed' })
+        .eq('organization_id', orgId).eq('user_id', agent.user_id);
+      if (removalError) throw removalError;
+      const { data: remaining, error: remainingError } = await supabase.from('organization_members').select('organization_id, role')
+        .eq('user_id', agent.user_id).eq('status', 'active').neq('organization_id', orgId).order('organization_id').limit(1).maybeSingle();
+      if (remainingError) throw remainingError;
+      const { error: profileError } = await supabase.from('profiles')
+        .update({ organization_id: remaining?.organization_id || null, role: remaining?.role || 'agent' })
+        .eq('id', agent.user_id).eq('organization_id', orgId);
+      if (profileError) throw profileError;
+      const { error: revokeError } = await supabase.rpc('revoke_other_auth_sessions', { p_user_id: agent.user_id, p_keep_session_id: null });
+      if (revokeError) return NextResponse.json({ error: 'Acesso removido, mas falhou o encerramento das sessões.', access_removed: true }, { status: 503 });
+    }
 
     // Deletar atribuições e referências
     await supabase.from('chat_assignments').delete().eq('agent_id', id);
     await supabase.from('whatsapp_agent_assignments').delete().eq('agent_id', id);
-    await supabase.from('whatsapp_conversations').update({ assigned_agent_id: null }).eq('assigned_agent_id', id);
+    await supabase.from('whatsapp_conversations').update({ assigned_agent_id: null }).eq('assigned_agent_id', id).eq('organization_id', orgId);
     await supabase.from('agent_permissions').delete().eq('agent_id', id);
     await supabase.from('ai_agent_configs').delete().eq('agent_id', id);
     
-    // Tentar deletar da nova tabela
-    let { error } = await supabase
-      .from('agents')
-      .delete()
-      .eq('id', id)
-      .eq('organization_id', orgId);
-
-    // Se a nova tabela não existe, usa a antiga
-    if (error && error.code === '42P01') {
-      const result = await supabase
-        .from('whatsapp_agents')
-        .delete()
-        .eq('id', id)
-        .eq('organization_id', orgId);
-      error = result.error;
-    }
-
+    const { error } = await supabase.from(agentTable).delete().eq('id', id).eq('organization_id', orgId);
     if (error) throw error;
-
-    // Se era agente humano com user_id, deletar também do Auth e profiles
-    if (agent?.user_id && agent.type === 'human') {
-      const adminClient = getAdminClient();
-      if (adminClient) {
-        // Deletar perfil
-        await supabase.from('profiles').delete().eq('id', agent.user_id);
-        
-        // Deletar usuário do Auth
-        try {
-          await adminClient.auth.admin.deleteUser(agent.user_id);
-        } catch (e) {
-          console.warn('Could not delete auth user:', e);
-        }
-      }
-    }
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

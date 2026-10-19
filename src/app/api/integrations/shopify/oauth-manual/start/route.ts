@@ -1,3 +1,4 @@
+import { sealIntegrationSecret } from '@/lib/integrations/credential-codec';
 // =============================================
 // Shopify OAuth Manual — start
 // POST /api/integrations/shopify/oauth-manual/start
@@ -120,7 +121,7 @@ export async function POST(request: NextRequest) {
       user_id: auth.user.id,
       shop: shopDomain,
       client_id: String(clientId).trim(),
-      client_secret: String(clientSecret).trim(),
+      client_secret: sealIntegrationSecret(String(clientSecret).trim()),
       store_id: storeId || null,
       // Alterar integração nunca cria loja: o callback só insere linha
       // nova com esta flag (fluxo "Adicionar loja") ou em org sem lojas.

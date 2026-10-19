@@ -9,6 +9,7 @@ runs against the same database cannot collide, and teardown removes it.
 """
 
 import asyncio
+import json
 import sys
 import uuid
 from collections.abc import Iterator
@@ -140,15 +141,29 @@ def as_app_role(dsn: str, role: str, organization_id: uuid.UUID) -> Iterator[psy
 def as_authenticated_user(dsn: str, user_id: uuid.UUID) -> Iterator[psycopg.Connection]:
     """A connection acting as the hub does: the `authenticated` role plus JWT claims.
 
-    `auth.uid()` reads `request.jwt.claims`, so setting it reproduces exactly
-    what PostgREST does with a verified token — without needing to sign one.
-    PostgREST sets the claims transaction-locally, so the harness does too.
+    Install claims as PostgREST does after JWT verification, including an AAL1
+    session persisted in Auth. Membership and MFA guards remain authoritative.
+    The separate admin connection cleans up the session even after an aborted
+    user transaction, preserving the yielded connection's commit/rollback contract.
     """
-    with psycopg.connect(dsn) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "select set_config('request.jwt.claims', %s, true)",
-                (f'{{"sub": "{user_id}", "role": "authenticated"}}',),
-            )
-            cur.execute("set role authenticated")
-        yield conn
+    session_id = uuid.uuid4()
+    with psycopg.connect(dsn, autocommit=True) as session_admin:
+        session_admin.execute(
+            "insert into auth.sessions (id, user_id, created_at, updated_at) "
+            "values (%s, %s, now(), now())",
+            (session_id, user_id),
+        )
+        try:
+            with psycopg.connect(dsn) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "select set_config('request.jwt.claims', %s, true)",
+                        (json.dumps({
+                            "sub": str(user_id), "role": "authenticated",
+                            "session_id": str(session_id), "aal": "aal1",
+                        }),),
+                    )
+                    cur.execute("set role authenticated")
+                yield conn
+        finally:
+            session_admin.execute("delete from auth.sessions where id=%s", (session_id,))

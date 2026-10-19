@@ -1,3 +1,4 @@
+import { openIntegrationSecret } from '@/lib/integrations/credential-codec';
 // =============================================
 // API: Shopify Webhook Receiver
 // src/app/api/integrations/shopify/webhook/route.ts
@@ -74,7 +75,7 @@ export async function POST(request: NextRequest) {
     //    recusa sempre — inclusive fora de produção, que era o caminho
     //    "aceita e loga" (na prática nem logava) que este item fecha.
     //    Mantém consistência com /api/tracking/shopify-webhook.
-    const secret = store.api_secret || process.env.SHOPIFY_API_SECRET || '';
+    const secret = openIntegrationSecret(store.api_secret) || process.env.SHOPIFY_API_SECRET || '';
     if (secret) {
       const isValid = !!hmacHeader && verifyShopifyWebhook(rawBody, hmacHeader, secret);
       if (!isValid) {

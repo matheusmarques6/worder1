@@ -1,3 +1,4 @@
+import { sealIntegrationSecret } from '@/lib/integrations/credential-codec';
 // =============================================
 // PATCH /api/integrations/shopify/manual/update-credentials
 //
@@ -83,10 +84,10 @@ export async function PATCH(request: NextRequest) {
     const { error: updErr } = await supabase
       .from('shopify_stores')
       .update({
-        access_token: accessToken,
+        access_token: sealIntegrationSecret(accessToken),
         client_id: cleanClientId,
-        api_secret: cleanClientSecret,
-        webhook_secret: cleanClientSecret,
+        api_secret: sealIntegrationSecret(cleanClientSecret),
+        webhook_secret: sealIntegrationSecret(cleanClientSecret),
         token_expires_at: tokenExpiresAt,
         scopes: scopesList,
         status: 'active',

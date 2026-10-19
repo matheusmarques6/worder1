@@ -28,7 +28,7 @@ from agents_runtime.obs import (
     configure_logging,
     configure_telemetry,
 )
-from agents_runtime.repository.scope import WORKER_ROLE
+from agents_runtime.repository.scope import SENDER_ROLE, WORKER_ROLE
 
 DSN_VARIABLE = "SUPABASE_DB_URL"
 
@@ -99,6 +99,13 @@ def _stop_on_shutdown_signals(stop: asyncio.Event) -> None:
 
 
 async def _serve(dsn: str) -> None:
+    deployed = os.environ.get("DEPLOY_ENV", "").strip().lower() in {"production", "staging"}
+    if deployed:
+        for variable in ("AGENTS_WORKER_DB_URL", "AGENTS_SENDER_DB_URL"):
+            if not os.environ.get(variable, "").strip():
+                raise RuntimeError(f"{variable} is required for deployed runtime logins")
+    dsn = os.environ.get("AGENTS_WORKER_DB_URL") or dsn
+    sender_dsn = os.environ.get("AGENTS_SENDER_DB_URL") or dsn
     stop = asyncio.Event()
     _stop_on_shutdown_signals(stop)
     config = config_from_env(dict(os.environ))
@@ -115,6 +122,14 @@ async def _serve(dsn: str) -> None:
     # dono. É sujeira de partida — o processo morre logo atrás —, mas é uma
     # sessão pendurada no pooler a cada tentativa de subir.
     try:
+        if deployed:
+            # Both credentials must be safe before opening HTTP or starting work.
+            for url, role, variable in (
+                (dsn, WORKER_ROLE, "AGENTS_WORKER_SET_ROLE"),
+                (sender_dsn, SENDER_ROLE, "AGENTS_SENDER_SET_ROLE"),
+            ):
+                checked = await _connect(url, os.environ.get(variable), role, config=config)
+                await checked.close()
         if port_spec:
             # Preflight ANTES do primeiro socket: o listener abre conexão própria e
             # atende requisições antes de qualquer `_connect`, então sem isto um
@@ -157,7 +172,8 @@ async def _serve(dsn: str) -> None:
             dsn,
             stop=stop,
             config=config,
-            channel=_channel_from_env(dsn),
+            sender_dsn=sender_dsn,
+            channel=_channel_from_env(sender_dsn),
             # The responder seam, reachable from outside the process: cenário 4
             # holds a REAL subprocess inside FASE 2 through this.
             respond=_factory_from_env(RESPONDER_VARIABLE, dsn, required=True),
@@ -201,7 +217,7 @@ def main() -> None:
             extra={"instrumented": list(enabled), "domain_spans": adopted},
         )
 
-    dsn = os.environ.get(DSN_VARIABLE)
+    dsn = os.environ.get("AGENTS_WORKER_DB_URL") or os.environ.get(DSN_VARIABLE)
     if not dsn:
         raise SystemExit(
             f"agents-runtime: {DSN_VARIABLE} is not set; there is nothing to connect to."

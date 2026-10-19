@@ -6,7 +6,7 @@
 // =============================================
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { diffLines, hasVersionableChanges, type DiffLine, type VersionableField } from './diff'
+import { diffLines, hasVersionableChanges, VERSIONABLE_FIELDS, type DiffLine, type VersionableField } from './diff'
 import { labelFromSummary, summarizeChanges } from './version-summary'
 
 export type VersionStatus = 'produção' | 'rascunho' | 'arquivada'
@@ -30,6 +30,7 @@ export interface VersionListItem {
 }
 
 interface AgentVersionableState {
+  [key: string]: unknown
   id: string
   organization_id: string
   system_prompt?: string | null
@@ -38,6 +39,7 @@ interface AgentVersionableState {
 }
 
 interface IncomingVersionableFields {
+  [key: string]: unknown
   system_prompt?: unknown
   persona?: unknown
   settings?: unknown
@@ -47,6 +49,17 @@ const FIELD_LABELS: Record<VersionableField, string> = {
   system_prompt: 'prompt',
   persona: 'persona',
   settings: 'configurações',
+  name: 'nome', description: 'descrição', role: 'função', provider: 'provedor', model: 'modelo',
+  temperature: 'temperatura', max_tokens: 'tokens', monthly_cap_usd: 'teto',
+  presentation_mode: 'apresentação', client_adaptation: 'adaptação',
+}
+
+const COLUMN_FIELDS = VERSIONABLE_FIELDS.filter(field => !['system_prompt', 'persona', 'settings'].includes(field))
+// Additive payload in an existing jsonb column: old readers still use `lines`.
+// Old snapshots have no agent_fields; their restore preserves current columns.
+function columnSnapshot(value: any): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  return Object.fromEntries(COLUMN_FIELDS.filter(field => value[field] !== undefined).map(field => [field, value[field]]))
 }
 
 /** Valida o user_id enviado pelo cliente contra profiles + org (padrão do plano). */
@@ -86,7 +99,7 @@ async function nextVersionNumber(supabase: SupabaseClient, agentId: string): Pro
 }
 
 /**
- * Chamado pelo PUT/PATCH de agentes ANTES do update. Se prompt/persona/settings
+ * Chamado pelo PUT/PATCH de agentes ANTES do update. Se campos versionáveis
  * mudaram: garante v1 ("Versão inicial") a partir do estado pré-update quando a
  * tabela está vazia, arquiva a produção anterior e insere a nova versão como
  * 'produção' com o estado pós-update (incoming mesclado sobre o atual).
@@ -99,7 +112,7 @@ export async function snapshotIfChanged(
   versionLabel?: string | null
 ): Promise<void> {
   const changed = hasVersionableChanges(
-    { system_prompt: agent.system_prompt, persona: agent.persona, settings: agent.settings },
+    agent,
     incoming
   )
   if (changed.length === 0) return
@@ -118,6 +131,7 @@ export async function snapshotIfChanged(
       system_prompt: agent.system_prompt ?? null,
       persona: agent.persona ?? null,
       settings: agent.settings ?? null,
+      change_summary: { lines: [], agent_fields: columnSnapshot(agent) },
       created_by: author,
     })
     if (v1Error) throw v1Error
@@ -125,12 +139,15 @@ export async function snapshotIfChanged(
   }
 
   const after = {
+    ...columnSnapshot(agent),
+    ...columnSnapshot(incoming),
     system_prompt: incoming.system_prompt !== undefined ? (incoming.system_prompt as string | null) : agent.system_prompt ?? null,
     persona: (incoming.persona !== undefined ? incoming.persona : agent.persona ?? null) as Record<string, any> | null,
     settings: (incoming.settings !== undefined ? incoming.settings : agent.settings ?? null) as Record<string, any> | null,
   }
   const summary = summarizeChanges(
     {
+      ...columnSnapshot(agent),
       system_prompt: agent.system_prompt ?? null,
       persona: (agent.persona ?? null) as Record<string, any> | null,
       settings: (agent.settings ?? null) as Record<string, any> | null,
@@ -157,7 +174,7 @@ export async function snapshotIfChanged(
     persona: incoming.persona !== undefined ? incoming.persona : agent.persona ?? null,
     settings: incoming.settings !== undefined ? incoming.settings : agent.settings ?? null,
     created_by: author,
-    change_summary: { lines: summary },
+    change_summary: { lines: summary, agent_fields: columnSnapshot(after) },
   })
   if (insertError) throw insertError
 }
@@ -177,7 +194,7 @@ export async function rollbackToVersion(
 ): Promise<{ id: string; version_number: number; summary: string[] }> {
   const { data: version, error: versionError } = await supabase
     .from('ai_agent_versions')
-    .select('id, version_number, system_prompt, persona, settings')
+    .select('id, version_number, system_prompt, persona, settings, change_summary')
     .eq('id', versionId)
     .eq('agent_id', agentId)
     .eq('organization_id', organizationId)
@@ -189,15 +206,17 @@ export async function rollbackToVersion(
 
   const { data: current } = await supabase
     .from('ai_agents')
-    .select('system_prompt, persona, settings')
+    .select('system_prompt, persona, settings, name, description, role, provider, model, temperature, max_tokens, monthly_cap_usd, presentation_mode, client_adaptation')
     .eq('id', agentId)
     .eq('organization_id', organizationId)
     .single()
-  const summary = summarizeChanges(current ?? {}, version)
+  const restoredFields = columnSnapshot(version.change_summary?.agent_fields)
+  const summary = summarizeChanges(current ?? {}, { ...current, ...version, ...restoredFields })
 
   const { error: updateError } = await supabase
     .from('ai_agents')
     .update({
+      ...restoredFields,
       system_prompt: version.system_prompt,
       persona: version.persona,
       settings: version.settings,
@@ -225,7 +244,7 @@ export async function rollbackToVersion(
       settings: version.settings,
       created_by: author,
       restored_from: version.id,
-      change_summary: { lines: summary },
+      change_summary: { lines: summary, agent_fields: { ...columnSnapshot(current), ...restoredFields } },
     })
     .select('id, version_number')
     .single()
@@ -243,20 +262,20 @@ export async function previewRestore(
   const [{ data: version }, { data: current }] = await Promise.all([
     supabase
       .from('ai_agent_versions')
-      .select('version_number, system_prompt, persona, settings')
+      .select('version_number, system_prompt, persona, settings, change_summary')
       .eq('id', versionId)
       .eq('agent_id', agentId)
       .eq('organization_id', organizationId)
       .maybeSingle(),
     supabase
       .from('ai_agents')
-      .select('system_prompt, persona, settings')
+      .select('system_prompt, persona, settings, name, description, role, provider, model, temperature, max_tokens, monthly_cap_usd, presentation_mode, client_adaptation')
       .eq('id', agentId)
       .eq('organization_id', organizationId)
       .maybeSingle(),
   ])
   if (!version || !current) return null
-  return { version_number: version.version_number, summary: summarizeChanges(current, version) }
+  return { version_number: version.version_number, summary: summarizeChanges(current, { ...current, ...version, ...columnSnapshot(version.change_summary?.agent_fields) }) }
 }
 
 /**

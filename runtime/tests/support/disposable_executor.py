@@ -137,9 +137,10 @@ def read_json(path):
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def config_text(text, project, enabled, *, source=False):
+def config_text(text, project, enabled, *, source=False, storage_profile=False):
     require(re.fullmatch(r"waudit-[0-9a-f]{32}", project), "invalid project id")
     require(type(enabled) is bool, "invalid migrations flag")
+    require(type(storage_profile) is bool, "invalid Storage profile")
     actual = tomllib.loads(text)
     desired = copy.deepcopy(EXPECTED)
     desired["project_id"] = project
@@ -147,6 +148,7 @@ def config_text(text, project, enabled, *, source=False):
     desired["db"]["port"] = 45322
     desired["db"]["shadow_port"] = 45320
     desired["db"]["migrations"]["enabled"] = enabled
+    desired["storage"]["enabled"] = storage_profile
     before = copy.deepcopy(EXPECTED if source else desired)
     if not source:
         before["db"]["migrations"]["enabled"] = actual.get("db", {}).get(
@@ -164,7 +166,7 @@ def config_text(text, project, enabled, *, source=False):
         ("db", "shadow_port"): "45320",
         ("db.migrations", "enabled"): str(enabled).lower(),
         ("db.seed", "enabled"): "false",
-        ("storage", "enabled"): "false",
+        ("storage", "enabled"): str(storage_profile).lower(),
     }
     section, seen, lines = "", set(), []
     for line in text.splitlines():
@@ -663,6 +665,9 @@ class Executor:
     def save(self):
         write_json(self.run / "gates.json", gate_shape(self.gate))
 
+    def render_config(self, text, enabled, *, source=False):
+        return config_text(text, self.project, enabled, source=source)
+
     def command(self, tool, *arguments, stdin=None, identity=None, timeout=600, check=True):
         if self.reap_failure is not None:
             raise self.reap_failure
@@ -747,7 +752,7 @@ class Executor:
         text = path.read_text(encoding="utf-8")
         parsed = tomllib.loads(text)
         actual = parsed.get("db", {}).get("migrations", {}).get("enabled")
-        checked = config_text(text, self.project, actual if enabled is None else enabled)
+        checked = self.render_config(text, actual if enabled is None else enabled)
         if enabled is not None:
             path.write_text(checked, encoding="utf-8", newline="\n")
         for name in (
@@ -882,9 +887,8 @@ class Executor:
         self.preflight(check_reset=check_reset)
         source_config = self.repo / "supabase/config.toml"
         no_links(source_config)
-        text = config_text(
+        text = self.render_config(
             source_config.read_text(encoding="utf-8"),
-            self.project,
             False,
             source=True,
         )

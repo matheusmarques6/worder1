@@ -7,7 +7,8 @@ export const dynamic = 'force-dynamic'
 // Plano IA M5 passo 30 — reconhecer ({status:'acknowledged'}) ou resolver
 // ({status:'resolved'}) um alerta da org. Reconhecer libera o dedup_key para
 // o mesmo problema abrir de novo se voltar a acontecer só depois de resolvido.
-export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await getAuthClient()
   if (!auth) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
   const body = await request.json().catch(() => null)

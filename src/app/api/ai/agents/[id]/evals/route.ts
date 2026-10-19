@@ -28,10 +28,8 @@ async function loadAgentInOrg(
 // GET - PAYLOAD DE AVALIAÇÃO (versões, critérios, kappa, casos) (Bloco F4)
 // =====================================================
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     // ✅ Validar autenticação (espelha o padrão endurecido de test-runs/route.ts)
     const auth = await getAuthClient()
@@ -76,10 +74,8 @@ export async function GET(
 // Long-running: tudo bem (force-dynamic / nodejs).
 // =====================================================
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     // ✅ Validar autenticação
     const auth = await getAuthClient()

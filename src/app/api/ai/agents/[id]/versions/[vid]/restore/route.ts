@@ -9,7 +9,11 @@ export const dynamic = 'force-dynamic'
 // antiga (a história não se reescreve). GET mostra "o que muda em relação a
 // hoje" sem gravar; POST restaura.
 
-export async function GET(_request: NextRequest, { params }: { params: { id: string; vid: string } }) {
+export async function GET(
+  _request: NextRequest,
+  props: { params: Promise<{ id: string; vid: string }> }
+) {
+  const params = await props.params;
   const auth = await getAuthClient()
   if (!auth) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
   const preview = await previewRestore(getSupabaseAdmin(), params.id, auth.user.organization_id, params.vid)
@@ -17,7 +21,11 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
   return NextResponse.json(preview)
 }
 
-export async function POST(_request: NextRequest, { params }: { params: { id: string; vid: string } }) {
+export async function POST(
+  _request: NextRequest,
+  props: { params: Promise<{ id: string; vid: string }> }
+) {
+  const params = await props.params;
   const auth = await getAuthClient()
   if (!auth) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
   try {

@@ -1,0 +1,4 @@
+# These sealed fixtures are verified byte-for-byte by the disposable DB guard.
+# Their canonical Git blobs use LF, including on Windows checkouts.
+supabase/migrations/20260812000005_app_baseline_prereqs.sql text eol=lf
+runtime/tests/db/fixtures/app_baseline_legacy.sql text eol=lf

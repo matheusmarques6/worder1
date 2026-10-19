@@ -736,6 +736,8 @@ export async function maybeRunAgentForCloudConversation(
     }
     const fetched = media
       ? await fetchInboundMedia({
+          organizationId,
+          conversationId: conversation.id,
           storagePath: media.storagePath,
           mediaUrl: media.mediaUrl,
           mimeType: media.mimeType,
@@ -790,6 +792,8 @@ export async function maybeRunAgentForCloudConversation(
     const caption = (media?.caption || text || '').trim();
     const fetched = shouldFetchImageBytes(agent.provider, media)
       ? await fetchInboundMedia({
+          organizationId,
+          conversationId: conversation.id,
           storagePath: media!.storagePath,
           mediaUrl: media!.mediaUrl,
           mimeType: media!.mimeType,

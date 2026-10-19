@@ -4,10 +4,8 @@ import { requireOrgFromAuth } from '@/lib/auth/require-org';
 export const dynamic = 'force-dynamic';
 
 // PUT /api/whatsapp/inbox/quick-replies/[id]
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function PUT(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const auth = await requireOrgFromAuth(request)
     if (auth instanceof NextResponse) return auth
@@ -50,10 +48,8 @@ export async function PUT(
 }
 
 // DELETE /api/whatsapp/inbox/quick-replies/[id]
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function DELETE(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const auth = await requireOrgFromAuth(request)
     if (auth instanceof NextResponse) return auth
@@ -78,10 +74,8 @@ export async function DELETE(
 }
 
 // POST /api/whatsapp/inbox/quick-replies/[id]/use - Registrar uso
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const auth = await requireOrgFromAuth(request)
     if (auth instanceof NextResponse) return auth

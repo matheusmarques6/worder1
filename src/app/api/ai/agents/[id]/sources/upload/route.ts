@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { sourceProcessingOrigin } from '@/lib/ai/knowledge/process-trigger'
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { getAuthClient } from '@/lib/api-utils';
 import { assertAgentInOrg } from '@/lib/ai/agent-access';
@@ -22,10 +23,8 @@ const MAX_FILE_SIZE = 25 * 1024 * 1024 // 25MB
 // POST - UPLOAD DE ARQUIVO
 // =====================================================
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     // ✅ P1: org SEMPRE do usuário autenticado; organization_id do
     // formData é aceito e IGNORADO (compat com frontend atual).
@@ -179,7 +178,7 @@ async function processFileAsync(
       )
     }
 
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    const baseUrl = sourceProcessingOrigin()
 
     const res = await fetch(`${baseUrl}/api/ai/process/document`, {
       method: 'POST',

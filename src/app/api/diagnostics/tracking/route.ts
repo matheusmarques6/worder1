@@ -1,3 +1,4 @@
+import { openIntegrationSecret } from '@/lib/integrations/credential-codec';
 // =============================================
 // GET /api/diagnostics/tracking?store_id=X
 //
@@ -207,7 +208,7 @@ export async function GET(request: NextRequest) {
     const apiVersion = store.api_version || '2026-04';
     const wRes = await fetch(
       `https://${store.shop_domain}/admin/api/${apiVersion}/webhooks.json`,
-      { headers: { 'X-Shopify-Access-Token': store.access_token } }
+      { headers: { 'X-Shopify-Access-Token': openIntegrationSecret(store.access_token) } }
     );
     if (wRes.ok) {
       const json = await wRes.json();

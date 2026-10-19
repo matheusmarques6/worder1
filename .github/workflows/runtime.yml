@@ -1,30 +1,13 @@
 # CI do runtime Python (fork do motor — ver runtime/FORK.md).
-# Path filters: só roda quando runtime/ ou as migrations canônicas mudam (D2).
+# Chamado pelo workflow release; alterações só no app também validam o contrato Python.
 #
 # Gates bloqueantes: lint, boundaries, tests-unit e tests-db (DB/RLS/pipeline).
 # O banco de testes precisa de identidade descartável comprovada.
 name: runtime
 
 on:
-  pull_request:
-    paths:
-      - "runtime/**"
-      - "supabase/migrations/**"
-      - "supabase/config.toml"
-      - "scripts/test-disposable-db.ps1"
-      - ".github/workflows/runtime.yml"
-  push:
-    branches: ["**"]
-    paths:
-      - "runtime/**"
-      - "supabase/migrations/**"
-      - "supabase/config.toml"
-      - "scripts/test-disposable-db.ps1"
-      - ".github/workflows/runtime.yml"
-
-concurrency:
-  group: runtime-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  workflow_call:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -94,14 +77,25 @@ jobs:
           "RUNTIME_DB_RUN_DIRECTORY=$runPath" >> $env:GITHUB_ENV
       - name: Prepare disposable database
         shell: pwsh
-        run: ./scripts/test-disposable-db.ps1 -Action Prepare -RunDirectory $env:RUNTIME_DB_RUN_DIRECTORY
+        run: ./scripts/test-disposable-db.ps1 -StorageHttp -Action Prepare -RunDirectory $env:RUNTIME_DB_RUN_DIRECTORY
       - name: Replay canonical migrations
         shell: pwsh
-        run: ./scripts/test-disposable-db.ps1 -Action Replay -RunDirectory $env:RUNTIME_DB_RUN_DIRECTORY
+        run: ./scripts/test-disposable-db.ps1 -StorageHttp -Action Replay -RunDirectory $env:RUNTIME_DB_RUN_DIRECTORY
       - name: Run complete database gates
         shell: pwsh
-        run: ./scripts/test-disposable-db.ps1 -Action Test -RunDirectory $env:RUNTIME_DB_RUN_DIRECTORY
+        run: ./scripts/test-disposable-db.ps1 -StorageHttp -Action Test -RunDirectory $env:RUNTIME_DB_RUN_DIRECTORY
       - name: Stop disposable database
         if: always()
         shell: pwsh
-        run: ./scripts/test-disposable-db.ps1 -Action Stop -RunDirectory $env:RUNTIME_DB_RUN_DIRECTORY
+        run: ./scripts/test-disposable-db.ps1 -StorageHttp -Action Stop -RunDirectory $env:RUNTIME_DB_RUN_DIRECTORY
+      - name: Preserve sanitized database evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: runtime-database-evidence
+          path: |
+            ${{ env.RUNTIME_DB_RUN_DIRECTORY }}/gates.json
+            ${{ env.RUNTIME_DB_RUN_DIRECTORY }}/events.jsonl
+            ${{ env.RUNTIME_DB_RUN_DIRECTORY }}/artifacts/*.xml
+            ${{ env.RUNTIME_DB_RUN_DIRECTORY }}/storage-command-failure.log
+          if-no-files-found: warn

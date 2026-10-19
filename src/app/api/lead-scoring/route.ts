@@ -1,5 +1,4 @@
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { createRequestRlsClient } from '@/lib/auth/request-rls-client'
 import { NextRequest, NextResponse } from 'next/server'
 
 // =============================================
@@ -99,7 +98,7 @@ const DEFAULT_CONFIG: ScoringConfig = {
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createServerComponentClient({ cookies })
+    const { supabase, accessToken } = await createRequestRlsClient()
     const { searchParams } = new URL(request.url)
 
     // Resolve the user from the session cookie so we can validate
@@ -107,7 +106,7 @@ export async function GET(request: NextRequest) {
     // Without this guard, `?organization_id=...&deal_id=...` could
     // be aimed at a foreign org and (depending on RLS coverage) read
     // its lead scores.
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await supabase.auth.getUser(accessToken)
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -237,7 +236,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createServerComponentClient({ cookies })
+    const { supabase, accessToken } = await createRequestRlsClient()
 
     // CRITICAL: resolve the authenticated user and the orgs they
     // belong to BEFORE dispatching to any handler. Previously the
@@ -245,7 +244,7 @@ export async function POST(request: NextRequest) {
     // with no validation — same auth-bypass class of bug the
     // playbooks route had. Now every handler receives a verified
     // ownedOrgs Set and rejects requests targeting other orgs.
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await supabase.auth.getUser(accessToken)
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }

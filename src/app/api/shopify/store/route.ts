@@ -1,3 +1,4 @@
+import { withoutIntegrationSecrets } from '@/lib/integrations/credential-codec';
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { getAuthClient, authError } from '@/lib/api-utils';
@@ -12,21 +13,22 @@ export async function GET(request: NextRequest) {
   const userId = auth.user.id;
   const userOrgId = auth.user.organization_id;
 
-  // Multi-org lookup: get all orgs the user belongs to
-  const { data: memberships } = await supabase
-    .from('organization_members')
-    .select('organization_id')
-    .eq('user_id', userId);
-
-  const orgIds = [...new Set([
-    userOrgId,
-    ...(memberships?.map((m: any) => m.organization_id) || []),
-  ])];
-
   const { searchParams } = new URL(request.url);
   const storeId = searchParams.get('storeId');
 
   try {
+    const { data: memberships, error: membershipError } = await supabase
+      .from('organization_members')
+      .select('organization_id')
+      .eq('user_id', userId)
+      .eq('status', 'active');
+    if (membershipError) throw membershipError;
+
+    const orgIds = [...new Set([
+      userOrgId,
+      ...(memberships?.map((m: any) => m.organization_id) || []),
+    ])];
+
     if (storeId) {
       const { data, error } = await supabase
         .from('shopify_stores')
@@ -36,7 +38,7 @@ export async function GET(request: NextRequest) {
         .single();
 
       if (error) throw error;
-      return NextResponse.json({ store: data });
+      return NextResponse.json({ store: data ? withoutIntegrationSecrets(data) : null });
     }
 
     const { data, error } = await supabase
@@ -46,7 +48,7 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    return NextResponse.json({ stores: data || [] });
+    return NextResponse.json({ stores: (data || []).map(withoutIntegrationSecrets) });
   } catch (error: any) {
     console.error('Shopify Store GET error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });

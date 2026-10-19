@@ -1,3 +1,4 @@
+import { openIntegrationSecret } from '@/lib/integrations/credential-codec';
 // =============================================
 // Shopify Webhook Handler
 // src/app/api/webhooks/shopify/route.ts
@@ -2781,7 +2782,7 @@ export async function POST(request: NextRequest) {
     // "webhooks aren't arriving" debugging impossible. We now record the
     // failed delivery in shopify_webhook_log so the diagnostic dashboard
     // can surface "X HMAC failures from this shop" to the merchant.
-    const effectiveSecret = store.api_secret || process.env.SHOPIFY_API_SECRET || null;
+    const effectiveSecret = openIntegrationSecret(store.api_secret) || process.env.SHOPIFY_API_SECRET || null;
     async function logRejectedDelivery(status: 'hmac_failed' | 'no_secret', errMsg: string) {
       if (!webhookId) return;
       try {

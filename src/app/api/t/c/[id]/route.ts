@@ -22,10 +22,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { publicStoreUrl } from '@/lib/shopify/store-url';
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const emailSendId = params.id;
   // Por qual host o clique entrou. É o que responde, meses depois, "os
   // links deste e-mail saíram pelo domínio certo?" — a pergunta que a

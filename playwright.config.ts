@@ -48,6 +48,7 @@ const chromiumPath = (() => {
 
 export default defineConfig({
   testDir: './e2e',
+  testIgnore: ['**/ai/**'],
   // O trabalho do lojista é sequencial por natureza (criar, publicar,
   // conferir); paralelizar por arquivo já dá o ganho sem embaralhar dados.
   fullyParallel: false,

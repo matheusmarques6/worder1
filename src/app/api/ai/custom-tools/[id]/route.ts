@@ -7,10 +7,8 @@ export const dynamic = 'force-dynamic'
 
 // PATCH — hoje só liga/desliga. Ligar exige teste ok: o CHECK do schema é o
 // juiz final; aqui a recusa vira mensagem legível.
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function PATCH(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await getAuthClient()
   if (!auth) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
@@ -45,10 +43,8 @@ export async function PATCH(
   return NextResponse.json({ ok: true })
 }
 
-export async function DELETE(
-  _request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function DELETE(_request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = await getAuthClient()
   if (!auth) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 

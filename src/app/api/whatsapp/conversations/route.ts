@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+import { createRequestRlsClient } from '@/lib/auth/request-rls-client'
 import { requireOrgFromAuth } from '@/lib/auth/require-org';
 import { sanitizeSearchTerm } from '@/lib/db/search-term'
 export const dynamic = 'force-dynamic';
 
 // Helper para obter organization_id do usuário
-async function getOrgIdFromSession(supabase: any) {
-  const { data: { user } } = await supabase.auth.getUser();
+async function getOrgIdFromSession(supabase: any, accessToken?: string) {
+  const { data: { user } } = await supabase.auth.getUser(accessToken);
   if (!user) return { orgId: null, user: null };
 
   const { data: profile } = await supabase
@@ -28,18 +27,19 @@ export async function GET(request: NextRequest) {
   const orgId = auth.orgId;
 
   // Usar createRouteHandlerClient para operações que precisam do cliente com RLS
-  const supabase = createRouteHandlerClient({ cookies });
+  const { supabase, accessToken } = await createRequestRlsClient();
 
   try {
     const searchParams = request.nextUrl.searchParams;
-    const agentIdFromQuery = searchParams.get('agent_id');
+    const callerAgentId = auth.role === 'agent' ? auth.agentId : null;
+    if (auth.role === 'agent' && !callerAgentId) return NextResponse.json({ error: 'Agent access not configured' }, { status: 403 });
 
     const status = searchParams.get('status');
     const search = searchParams.get('search');
     // O termo vai para dentro de um filtro do PostgREST: vírgula e
     // parêntese deixariam de ser texto e passariam a ser consulta.
     const buscaSegura = sanitizeSearchTerm(search)
-    const agentId = searchParams.get('agent_id');
+    const agentId = auth.role === 'agent' ? null : searchParams.get('agent_id');
     const whatsappNumberId = searchParams.get('whatsapp_number_id');
     const limit = parseInt(searchParams.get('limit') || '50');
     const offset = parseInt(searchParams.get('offset') || '0');
@@ -76,19 +76,18 @@ export async function GET(request: NextRequest) {
     }
 
     // Se é um agente, filtrar por números permitidos
-    if (agentIdFromQuery) {
+    if (callerAgentId) {
       // Buscar permissões do agente
-      const { data: permissions } = await supabase
+      const { data: permissions, error: permissionsError } = await supabase
         .from('agent_permissions')
-        .select('whatsapp_access_all, whatsapp_number_ids')
-        .eq('agent_id', agentIdFromQuery)
+        .select('whatsapp_access_all, whatsapp_allowed_numbers, can_view_all_conversations')
+        .eq('agent_id', callerAgentId)
         .single();
 
-      if (permissions && !permissions.whatsapp_access_all && permissions.whatsapp_number_ids?.length > 0) {
-        // Filtrar por números permitidos
-        query = query.in('whatsapp_number_id', permissions.whatsapp_number_ids);
-      } else if (permissions && !permissions.whatsapp_access_all && (!permissions.whatsapp_number_ids || permissions.whatsapp_number_ids.length === 0)) {
-        // Agente sem números permitidos - retornar vazio
+      if (permissionsError && permissionsError.code !== 'PGRST116') throw permissionsError;
+      // The canonical allowed-number list cannot be checked against a
+      // conversation yet: the schema has no conversation-to-number column.
+      if (!permissions || !permissions.whatsapp_access_all) {
         return NextResponse.json({
           conversations: [],
           total: 0,
@@ -96,6 +95,7 @@ export async function GET(request: NextRequest) {
           offset,
         });
       }
+      if (!permissions.can_view_all_conversations) query = query.eq('assigned_agent_id', callerAgentId);
     }
 
     query = query.range(offset, offset + limit - 1);
@@ -122,8 +122,8 @@ export async function GET(request: NextRequest) {
 // POST - Criar nova conversa
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
-    const { orgId } = await getOrgIdFromSession(supabase);
+    const { supabase, accessToken } = await createRequestRlsClient();
+    const { orgId } = await getOrgIdFromSession(supabase, accessToken);
 
     if (!orgId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -184,8 +184,8 @@ export async function POST(request: NextRequest) {
 // PATCH - Atualizar conversa
 export async function PATCH(request: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
-    const { orgId } = await getOrgIdFromSession(supabase);
+    const { supabase, accessToken } = await createRequestRlsClient();
+    const { orgId } = await getOrgIdFromSession(supabase, accessToken);
 
     if (!orgId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -239,8 +239,8 @@ export async function PATCH(request: NextRequest) {
 // DELETE - Arquivar/deletar conversa
 export async function DELETE(request: NextRequest) {
   try {
-    const supabase = createRouteHandlerClient({ cookies });
-    const { orgId } = await getOrgIdFromSession(supabase);
+    const { supabase, accessToken } = await createRequestRlsClient();
+    const { orgId } = await getOrgIdFromSession(supabase, accessToken);
 
     if (!orgId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
