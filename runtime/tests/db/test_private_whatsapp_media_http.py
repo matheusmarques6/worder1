@@ -170,7 +170,10 @@ def test_signed_download_expires_at_live_server(storage):
         time.sleep(0.5)
         response = storage.request("GET", signed)
         if response.status_code in (400, 401, 403):
-            assert "expir" in response.text.lower(), response.text
+            assert response.status_code == 400, response.text
+            error = response.json()
+            assert error.get("code") == "InvalidJWT", response.text
+            assert error.get("message") == '"exp" claim timestamp check failed', response.text
             return
         assert response.status_code == 200, response.text
     pytest.fail("signed URL still served bytes after the bounded expiry window")
