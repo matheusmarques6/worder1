@@ -40,6 +40,7 @@ from agents_runtime.repository.provider_keys import ProviderKeyRow
 from agents_runtime.repository.whatsapp_accounts import WhatsAppAccountRow
 
 ORG = uuid4()
+CONVERSATION = uuid4()
 
 #: Hosts montados em tempo de execução, nunca como literal com esquema: o
 #: detector de rede (`test_no_provider_network.py`) reprova qualquer literal
@@ -143,17 +144,30 @@ class _Conn:
 
 class TestFetchingMedia:
     def test_only_the_storage_host_is_followed_without_token(self) -> None:
-        assert media_fetch.is_storage_url(_https("abc.supabase.co", "/storage/v1/object/sign/x"))
-        assert not media_fetch.is_storage_url(_https("evil.example", "/x"))
-        assert not media_fetch.is_storage_url("http:" + "//abc.supabase.co/x")
-        assert not media_fetch.is_storage_url(_https("169.254.169.254", "/latest"))
+        scope = dict(
+            configured_origin=_https("abc.supabase.co"),
+            organization_id=ORG,
+            conversation_id=CONVERSATION,
+            storage_path=None,
+        )
+        path = f"/storage/v1/object/sign/whatsapp-media/{ORG}/{CONVERSATION}/a.ogg"
+        assert media_fetch.is_storage_url(_https("abc.supabase.co", path), **scope)
+        assert not media_fetch.is_storage_url(_https("evil.example", path), **scope)
+        assert not media_fetch.is_storage_url("http:" + "//abc.supabase.co" + path, **scope)
+        assert not media_fetch.is_storage_url(_https("169.254.169.254", path), **scope)
 
     async def test_the_mirror_signed_url_is_the_first_door(self, monkeypatch) -> None:
+        monkeypatch.setenv("SUPABASE_URL", _https("abc.supabase.co"))
+        path = f"{ORG}/{CONVERSATION}/a.ogg"
+
         async def mirror(conn, *, organization_id, provider_message_id):
             return MirrorMedia(
-                media_url=_https("abc.supabase.co", "/storage/v1/object/sign/a.ogg?token=t"),
-                media_storage_path="a.ogg",
+                media_url=_https(
+                    "abc.supabase.co", f"/storage/v1/object/sign/whatsapp-media/{path}?token=t"
+                ),
+                media_storage_path=path,
                 media_mime_type="audio/ogg",
+                conversation_id=CONVERSATION,
             )
 
         monkeypatch.setattr(media_fetch.agent_repo, "load_mirror_media", mirror)

@@ -1,5 +1,40 @@
 # O que falta — Segurança P0/P1
 
+## Atualização de 19/10/2026
+
+Esta seção substitui os estados históricos de 17/10 abaixo. O candidato está no
+PR [#10](https://github.com/matheusmarques6/worder1/pull/10), branch
+`security/p0-p1-2026-10-17`. O usuário autorizou mover os gates pesados para o CI
+remoto, devido à falta de memória local. Publicação na branch do PR é para teste;
+promoção para produção depende dos resultados obrigatórios.
+
+- Revisões de credenciais, identidade e código de mídia concluídas. Os achados
+  CRED-1 a CRED-4, IR-01/02 e a referência cruzada mensagem/conversa foram corrigidos
+  e aprovados em revisão posterior. Provas focais: 54 testes de credenciais,
+  80 de identidade, 18 de handlers de mídia e 45 de mídia no runtime.
+- Redis real: 2/2 passaram com SDK e Lua reais. O novo gate bloqueia o CI. A prova
+  cobre o caminho Lua próprio; não certifica a variante proprietária legada Upstash.
+- ChatPanel: troca de organização e resposta atrasada cobertas; 11/11 testes focais
+  passaram. Lint estrito terminou sem warnings nem erros em 19/10.
+- CI: pnpm fixado em 11.25.0, Node mínimo 22.13; política 44/44 passou. O scan
+  remoto anterior reprovou uma fixture sintética; triagem limitada à regra,
+  caminho e valor exatos, com testes de rejeição fora desse limite.
+- Storage: perfil explícito com schema e API oficiais, 25 guardas e 17 verificações
+  diferenciais passaram. Os 25 casos SQL/repositório/HTTP reais ainda precisam
+  executar; inicialização local não completou. Guardas canônicas completas ficaram
+  incompletas com falhas observadas; não há aprovação global atual.
+- Reexecutar app, tipos, build, interface, runtime, banco/RLS/pipeline e scanner
+  no candidato remoto. Os resultados globais de 17/10 são históricos.
+- Homologação não provisionada: o job de jornadas reprovou por configuração
+  ausente. Não ignorar esse gate. KMS, rotação externa e aplicação de dados
+  continuam pendentes; não afirmar conformidade LGPD integral.
+
+Os metadados hospedados precisam ser conferidos novamente antes do rollout.
+Identidade/runtime vêm antes ou junto do código; privatização de mídia vem depois
+dos leitores compatíveis. **Não aplicar as três migrations antes do código.**
+
+## Registro histórico de 17/10/2026
+
 Mapa de pendências do plano `docs/superpowers/plans/2026-10-16-security-p0-p1.md`.
 Estado em 17/10/2026, checkout `D:/worder1`, branch `security/p0-p1-2026-10-17`,
 base `5642010`. Evidências e decisões em
@@ -161,8 +196,9 @@ consegue resolver a tabela e reprovou.
 
 ## 6. Ordem recomendada para fechar
 
-1. Aplicar as 3 migrations e conferir (destrava SEC-03/04/06 e SEC-17, e é
-   **pré-requisito do deploy**).
+1. Conferir os gates e metadados; aplicar identidade/runtime antes ou junto do
+   código e a privatização de mídia somente depois dos leitores compatíveis,
+   conforme a sequência detalhada da seção 1.
 2. Responder as duas perguntas abertas: provedor de KMS e autorização de metadados de
    produção.
 3. Revisão independente de criptografia (SEC-08) e de mídia (SEC-17).

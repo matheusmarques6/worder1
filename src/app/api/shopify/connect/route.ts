@@ -13,6 +13,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { normalizePublicHost, publicStoreHost, normalizePhone } from '@/lib/shopify/store-url';
 import { isTombstoneStore } from '@/lib/stores/placeholder';
+import { isShopifyDomain } from '@/lib/shopify/oauth-validation';
 export const dynamic = 'force-dynamic';
 
 let _supabase: SupabaseClient | null = null;
@@ -44,18 +45,37 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const cleanDomain = domain.trim().toLowerCase().replace(/\s+/g, '');
-    const shopDomain = cleanDomain.includes('.myshopify.com') 
-      ? cleanDomain 
+    if (typeof domain !== 'string') {
+      return NextResponse.json({ error: 'Domínio Shopify inválido' }, { status: 400 });
+    }
+    const cleanDomain = domain.trim().toLowerCase();
+    const shopDomain = cleanDomain.endsWith('.myshopify.com')
+      ? cleanDomain
       : `${cleanDomain}.myshopify.com`;
+    if (!isShopifyDomain(shopDomain)) {
+      return NextResponse.json({ error: 'Domínio Shopify inválido' }, { status: 400 });
+    }
+
+    // Shopify access does not grant access to an existing Worder tenant mapping.
+    const { data: existingStore, error: lookupError } = await supabase
+      .from('shopify_stores')
+      .select('id, organization_id')
+      .eq('shop_domain', shopDomain)
+      .maybeSingle();
+    if (lookupError) throw lookupError;
+    if (existingStore && existingStore.organization_id !== organizationId) {
+      return NextResponse.json({ error: 'Loja pertence a outra organização' }, { status: 403 });
+    }
+    const providerToken = openIntegrationSecret(accessToken.trim());
 
     // Verify access token
     const shopResponse = await fetch(
       `https://${shopDomain}/admin/api/2026-04/shop.json`,
       {
         method: 'GET',
+        redirect: 'error',
         headers: {
-          'X-Shopify-Access-Token': openIntegrationSecret(accessToken.trim()),
+          'X-Shopify-Access-Token': providerToken,
           'Content-Type': 'application/json',
         },
       }
@@ -73,19 +93,12 @@ export async function POST(request: NextRequest) {
 
     const { shop: shopData } = await shopResponse.json();
 
-    // Check if store already exists
-    const { data: existingStore } = await supabase
-      .from('shopify_stores')
-      .select('id')
-      .eq('shop_domain', shopDomain)
-      .single();
-
     if (existingStore) {
       const { error: updateError } = await supabase
         .from('shopify_stores')
         .update({
           shop_name: name,
-          access_token: sealIntegrationSecret(accessToken.trim()),
+          access_token: sealIntegrationSecret(providerToken),
           api_secret: apiSecret?.trim() ? sealIntegrationSecret(apiSecret.trim()) : null,
           shop_email: shopData.email,
           // shop.json traz `domain` = domínio principal público (o que o
@@ -99,7 +112,8 @@ export async function POST(request: NextRequest) {
           is_active: true,
           last_sync_at: new Date().toISOString(),
         })
-        .eq('id', existingStore.id);
+        .eq('id', existingStore.id)
+        .eq('organization_id', organizationId);
 
       if (updateError) throw updateError;
 
@@ -129,7 +143,7 @@ export async function POST(request: NextRequest) {
         primary_domain: normalizePublicHost(shopData.domain) || null,
         primary_domain_checked_at: new Date().toISOString(),
         shop_phone: normalizePhone(shopData.phone) || null,
-        access_token: sealIntegrationSecret(accessToken.trim()),
+        access_token: sealIntegrationSecret(providerToken),
         api_secret: apiSecret?.trim() ? sealIntegrationSecret(apiSecret.trim()) : null,
         currency: shopData.currency,
         timezone: shopData.timezone,
@@ -202,10 +216,12 @@ export async function GET(request: NextRequest) {
 
   try {
     // ✅ 1. Buscar todas as organizações que o usuário é membro
-    const { data: memberships } = await supabaseAdmin
+    const { data: memberships, error: membershipError } = await supabaseAdmin
       .from('organization_members')
       .select('organization_id')
-      .eq('user_id', userId);
+      .eq('user_id', userId)
+      .eq('status', 'active');
+    if (membershipError) throw membershipError;
 
     // Criar lista de org IDs (inclui a org padrão do usuário)
     let orgIds: string[] = [userOrgId];

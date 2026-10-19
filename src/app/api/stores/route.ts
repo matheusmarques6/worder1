@@ -2,6 +2,7 @@ import { withoutIntegrationSecrets } from '@/lib/integrations/credential-codec';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { isTombstoneStore } from '@/lib/stores/placeholder';
+import { getAuthClient, authError } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,40 +16,24 @@ function getSupabaseAdmin() {
 }
 
 export async function GET(request: NextRequest) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+
   try {
     const supabase = getSupabaseAdmin();
     if (!supabase) {
       return NextResponse.json({ success: false, stores: [], error: 'Database not configured' });
     }
 
-    const accessToken = request.cookies.get('sb-access-token')?.value;
-    if (!accessToken) {
-      return NextResponse.json({ success: true, stores: [], hasStores: false });
-    }
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser(accessToken);
-    if (authError || !user) {
-      return NextResponse.json({ success: true, stores: [], hasStores: false });
-    }
-
-    // Get user's primary organization
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('organization_id')
-      .eq('id', user.id)
-      .single();
-
-    if (!profile?.organization_id) {
-      return NextResponse.json({ success: true, stores: [], hasStores: false });
-    }
-
-    const userOrgId = profile.organization_id;
+    const userOrgId = auth.user.organization_id;
 
     // Build list of ALL org IDs the user has access to
-    const { data: memberships } = await supabase
+    const { data: memberships, error: membershipError } = await supabase
       .from('organization_members')
       .select('organization_id')
-      .eq('user_id', user.id);
+      .eq('user_id', auth.user.id)
+      .eq('status', 'active');
+    if (membershipError) throw membershipError;
 
     const orgIds = [...new Set([
       userOrgId,

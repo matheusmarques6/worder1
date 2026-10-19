@@ -299,6 +299,21 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
       )
     }
 
+    const { data: conversation, error: conversationError } = await supabase
+      .from('whatsapp_cloud_conversations')
+      .select('id')
+      .eq('id', params.id)
+      .eq('organization_id', orgId)
+      .maybeSingle()
+
+    if (conversationError) throw conversationError
+    if (!conversation) {
+      return NextResponse.json(
+        { error: 'Conversation not found' },
+        { status: 404, headers: NO_CACHE_HEADERS }
+      )
+    }
+
     const { data: message, error } = await supabase
       .from('whatsapp_cloud_messages')
       .select('media_storage_path, media_url')

@@ -6,7 +6,8 @@ param(
     [string]$Action,
     [Parameter(Mandatory)][string]$RunDirectory,
     [string[]]$TestTargets = @(),
-    [ValidatePattern('^[0-9]{14}$')][string]$MigrationThrough
+    [ValidatePattern('^[0-9]{14}$')][string]$MigrationThrough,
+    [switch]$StorageHttp
 )
 $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
@@ -27,12 +28,18 @@ function Invoke-Executor([string]$SelectedAction) {
         RunDirectory = $RunDirectory
         TestTargets = @($TestTargets)
         MigrationThrough = $(if ($MigrationThrough) { $MigrationThrough } else { $null })
-    } | ConvertTo-Json -Depth 4 -Compress
+    }
+    $executorModule = 'tests.support.disposable_executor'
+    if ($StorageHttp) {
+        $request.Profile = 'storage-http-v1'
+        $executorModule = 'tests.support.disposable_storage'
+    }
+    $request = $request | ConvertTo-Json -Depth 4 -Compress
     $previousEncoding = $OutputEncoding
     Push-Location -LiteralPath $runtimeRoot
     try {
         $OutputEncoding = [Text.UTF8Encoding]::new($false)
-        $request | & $pythonPath -X utf8 -m tests.support.disposable_executor
+        $request | & $pythonPath -X utf8 -m $executorModule
         $result = $LASTEXITCODE
     } finally {
         $OutputEncoding = $previousEncoding

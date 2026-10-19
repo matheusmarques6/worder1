@@ -80,16 +80,14 @@ export async function GET(request: NextRequest) {
       // Buscar permissões do agente
       const { data: permissions, error: permissionsError } = await supabase
         .from('agent_permissions')
-        .select('whatsapp_access_all, whatsapp_number_ids, can_view_all_conversations')
+        .select('whatsapp_access_all, whatsapp_allowed_numbers, can_view_all_conversations')
         .eq('agent_id', callerAgentId)
         .single();
 
       if (permissionsError && permissionsError.code !== 'PGRST116') throw permissionsError;
-      if (permissions && !permissions.whatsapp_access_all && permissions.whatsapp_number_ids?.length > 0) {
-        // Filtrar por números permitidos
-        query = query.in('whatsapp_number_id', permissions.whatsapp_number_ids);
-      } else if (!permissions || (!permissions.whatsapp_access_all && !permissions.whatsapp_number_ids?.length)) {
-        // Agente sem números permitidos - retornar vazio
+      // The canonical allowed-number list cannot be checked against a
+      // conversation yet: the schema has no conversation-to-number column.
+      if (!permissions || !permissions.whatsapp_access_all) {
         return NextResponse.json({
           conversations: [],
           total: 0,

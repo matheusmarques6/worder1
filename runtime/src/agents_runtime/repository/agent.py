@@ -464,6 +464,7 @@ class MirrorMedia:
     media_url: str | None
     media_storage_path: str | None
     media_mime_type: str | None
+    conversation_id: UUID
 
 
 async def load_mirror_media(
@@ -472,9 +473,11 @@ async def load_mirror_media(
     """Alteração 2026-10-15-03: o caminho 1 de `media_fetch.py`."""
     cursor = await conn.execute(
         """
-        select media_url, media_storage_path, media_mime_type
-          from public.whatsapp_cloud_messages
-         where organization_id = %s and message_id = %s
+        select m.media_url, m.media_storage_path, m.media_mime_type, c.id
+          from public.whatsapp_cloud_messages m
+          join public.whatsapp_cloud_conversations c
+            on c.id = m.conversation_id and c.organization_id = m.organization_id
+         where m.organization_id = %s and m.message_id = %s
          limit 1
         """,
         (organization_id, provider_message_id),
@@ -482,7 +485,9 @@ async def load_mirror_media(
     row = await cursor.fetchone()
     if row is None:
         return None
-    return MirrorMedia(media_url=row[0], media_storage_path=row[1], media_mime_type=row[2])
+    return MirrorMedia(
+        media_url=row[0], media_storage_path=row[1], media_mime_type=row[2], conversation_id=row[3]
+    )
 
 
 async def save_transcript(

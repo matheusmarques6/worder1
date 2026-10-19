@@ -1,11 +1,14 @@
 import { openIntegrationSecret } from '@/lib/integrations/credential-codec';
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseClient } from '@/lib/api-utils';
+import { getSupabaseClient, getAuthClient, authError } from '@/lib/api-utils';
 export const dynamic = 'force-dynamic';
 
 const SHOPIFY_API_VERSION = '2026-04';
 
 export async function GET(request: NextRequest) {
+  const auth = await getAuthClient();
+  if (!auth) return authError();
+
   const results: any = {
     timestamp: new Date().toISOString(),
     steps: [],
@@ -27,6 +30,7 @@ export async function GET(request: NextRequest) {
     const { data: stores, error: storesError } = await supabase
       .from('shopify_stores')
       .select('*')
+      .eq('organization_id', auth.user.organization_id)
       .eq('is_active', true)
       .limit(1);
 

@@ -395,6 +395,18 @@ export async function POST(request: NextRequest) {
           }, { status: 409 });
         }
 
+        // Agent creation must not change another role or restore removed access.
+        const { data: membership, error: membershipError } = await supabase
+          .from('organization_members')
+          .select('role, status')
+          .eq('organization_id', orgId)
+          .eq('user_id', existingAuthUser.id)
+          .maybeSingle();
+        if (membershipError) throw membershipError;
+        if (!membership || membership.role !== 'agent' || membership.status !== 'active') {
+          return NextResponse.json({ error: 'Usuário existente sem vínculo ativo de agente nesta organização' }, { status: 409 });
+        }
+
         authUserId = existingAuthUser.id;
       } else {
         // Criar novo usuário no Auth
@@ -529,12 +541,14 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: agentError.message }, { status: 500 });
       }
 
-      // Auth trigger may provision a separate personal organization first.
-      // Grant only the explicit agent membership in the requested organization.
-      const { error: membershipError } = await supabase.from('organization_members').upsert({
-        organization_id: orgId, user_id: authUserId, email, role: 'agent', status: 'active', joined_at: new Date().toISOString(),
-      }, { onConflict: 'organization_id,user_id' });
-      if (membershipError) throw membershipError;
+      // Existing active agent memberships are preserved. A new Auth user's
+      // personal organization may come from the trigger; insert only this grant.
+      if (!existingAuthUser) {
+        const { error: membershipError } = await supabase.from('organization_members').insert({
+          organization_id: orgId, user_id: authUserId, email, role: 'agent', status: 'active', joined_at: new Date().toISOString(),
+        });
+        if (membershipError) throw membershipError;
+      }
 
       // Criar permissões
       const permissionsData = {

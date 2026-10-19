@@ -1,5 +1,40 @@
 # Estado por SEC-ID — plano Segurança P0/P1
 
+## Estado atual — 19/10/2026
+
+Branch `security/p0-p1-2026-10-17`, PR
+[#10](https://github.com/matheusmarques6/worder1/pull/10). Gates pesados serão
+executados no CI remoto por escolha do usuário. Isso substitui a exigência de
+concluir cada execução pesada neste computador, não a exigência de gates verdes
+antes da promoção. Produção não foi alterada nesta retomada.
+
+| Área | Evidência atual | Pendência |
+|---|---|---|
+| SEC-01 | Triagem de fixture limitada; 15 achados da árvore classificados como sintéticos/preexistentes | Scanner no candidato remoto e revogação externa da chave histórica |
+| SEC-02 | Audit de produção: 0 critical, 0 high, 3 moderate; pnpm/Node alinhados | Revalidar CI do candidato |
+| SEC-03/04/06 e SEC-05 | Revisão posterior aprovada, 80 testes focais | Migration hospedada; autorização por número continua com negação conservadora |
+| SEC-07 | Revisão aprovada, provas do editor preservadas | Gate global no candidato |
+| SEC-08 | Revisão concluída, quatro achados corrigidos e revisão posterior aprovada; 54 testes focais | Gates globais, backfill controlado e verificação hospedada |
+| SEC-09 | Configuração externa pendente | Definir KMS; chave compartilhada não é envelope externo |
+| SEC-10/11 | Fix revisado; grafo incompleto continua `needs_review` | Não declarar exclusão integral nem conformidade LGPD concluída |
+| SEC-17 | Código revisado; 18 testes TS e 45 Python focais | 25 casos reais SQL/repositório/Storage HTTP e rollout da mídia privada |
+| SEC-18 | Subset mínimo revisado | Gates completos de runtime/banco e configuração das roles hospedadas |
+| Redis | 2/2 reais passaram, gate obrigatório adicionado | Execução remota; caminho proprietário legado não certificado |
+| Lint | Sem warnings/erros em 19/10; troca de organização coberta | Gate global no candidato |
+| Jornadas | CI anterior reprovou por configuração ausente | Provisionar QA e provar bloqueio da promoção |
+
+Os resultados globais abaixo pertencem ao checkout de 17/10. Não são aprovação
+das correções posteriores. O último runtime global teve uma falha de fitness
+de fixture depois corrigida; a repetição completa continua pendente. A última
+repetição do scanner teve timeouts/erros de cleanup local; não foi declarada verde.
+Guardas canônicas de banco ficaram incompletas, com três falhas sem diagnóstico
+final. Estes resultados precisam ser esclarecidos nos runners antes da promoção.
+
+Ordem de rollout e detalhes atualizados em
+`docs/security/PENDENCIAS-SEGURANCA-P0-P1.md`. Nenhuma dispensa de teste foi criada.
+
+## Registro histórico de 17/10/2026
+
 Fonte: `.superpowers/sdd/2026-10-16-security-p0-p1/progress.md` (ledger com os
 números e as decisões) e `docs/superpowers/plans/2026-10-16-security-p0-p1.md`.
 Atualizado em 17/10/2026, execução local na branch `codex/sync-debug-console-error-FWrLE`,

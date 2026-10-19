@@ -4,8 +4,37 @@ const caller = vi.hoisted(() => ({ role: 'agent', agentId: 'agent-a', aal: 'aal2
 vi.mock('@/lib/auth/require-org', () => ({ requireOrgFromAuth: async () => ({ orgId: 'org-a', userId: 'user-a', ...caller }) }))
 vi.mock('@/lib/supabase-admin', async () => {
   const { createFakeSupabase } = await import('@/tests/fake-supabase')
+  const { default: schema } = await import('../../../../../supabase/schema-snapshot.json')
   const db: any = createFakeSupabase()
-  db.auth = { getUser: vi.fn(async () => ({ data: { user: { id: 'user-a' } }, error: null })), admin: { updateUserById: vi.fn(async () => ({ error: null })) } }
+  const from = db.from
+  // Validate the list handler's projections/filters against the real schema.
+  // The general fake otherwise accepts nonexistent columns silently.
+  db.from = (table: string) => {
+    const query = from(table)
+    if (table === 'agent_permissions' || table === 'whatsapp_conversations') {
+      const columns = (schema as Record<string, string[]>)[table]
+      const validate = (column: string) => {
+        if (!columns.includes(column.trim())) throw new Error(`column ${table}.${column} does not exist`)
+      }
+      const select = query.select
+      query.select = (projection: string, ...args: any[]) => {
+        // Nested relationship projections are preserved by the general fake.
+        if (projection && !projection.includes('(')) projection.split(',').filter(c => c.trim() !== '*').forEach(validate)
+        return select(projection, ...args)
+      }
+      for (const method of ['eq', 'in']) {
+        const filter = query[method]
+        query[method] = (column: string, ...args: any[]) => { validate(column); return filter(column, ...args) }
+      }
+    }
+    return query
+  }
+  db.auth = { getUser: vi.fn(async () => ({ data: { user: { id: 'user-a' } }, error: null })), admin: {
+    listUsers: vi.fn(async () => ({ data: { users: [] }, error: null })),
+    createUser: vi.fn(async () => ({ data: { user: { id: 'new-user' } }, error: null })),
+    deleteUser: vi.fn(async () => ({ error: null })),
+    updateUserById: vi.fn(async () => ({ error: null })),
+  } }
   return { supabaseAdmin: db, getSupabaseAdmin: () => db, __db: db }
 })
 vi.mock('@/lib/api-utils', async () => {
@@ -36,15 +65,66 @@ beforeEach(() => {
     { id: 'agent-a', user_id: 'user-a', organization_id: 'org-a', type: 'human', is_active: true },
     { id: 'agent-peer', user_id: 'peer', organization_id: 'org-a', type: 'human', is_active: true },
   ])
-  db.seed('agent_permissions', [{ agent_id: 'agent-a', whatsapp_access_all: false, whatsapp_number_ids: ['number-a'] }])
+  db.auth.admin.listUsers.mockResolvedValue({ data: { users: [] }, error: null })
+  db.seed('agent_permissions', [{ agent_id: 'agent-a', whatsapp_access_all: false, whatsapp_allowed_numbers: ['number-a'] }])
   db.seed('whatsapp_conversations', [
-    { id: 'allowed', organization_id: 'org-a', whatsapp_number_id: 'number-a', assigned_agent_id: 'agent-a' },
-    { id: 'forbidden-number', organization_id: 'org-a', whatsapp_number_id: 'number-b', assigned_agent_id: 'agent-peer' },
+    { id: 'allowed', organization_id: 'org-a', assigned_agent_id: 'agent-a' },
+    { id: 'peer-conversation', organization_id: 'org-a', assigned_agent_id: 'agent-peer' },
     { id: 'other-tenant', organization_id: 'org-b', assigned_agent_id: 'agent-other' },
   ])
   db.seed('whatsapp_agent_assignments', [{ conversation_id: 'other-tenant', organization_id: 'org-b', agent_id: 'agent-other' }])
 })
 describe('agent permission boundaries', () => {
+  it.each([
+    ['owner', 'active'], ['admin', 'active'], ['member', 'active'],
+    ['agent', 'removed'], ['agent', 'pending'],
+  ])('creation rejects an existing %s/%s membership before any account writes', async (role, status) => {
+    caller.role = 'admin'
+    db.auth.admin.listUsers.mockResolvedValue({ data: { users: [{ id: 'existing-user', email: 'existing@example.com' }] }, error: null })
+    db.tables.profiles.push({ id: 'existing-user', organization_id: 'org-a', role })
+    db.seed('organization_members', [{ user_id: 'existing-user', organization_id: 'org-a', role, status }])
+    const memberships = structuredClone(db.tables.organization_members)
+    const profiles = structuredClone(db.tables.profiles)
+    const response = await agentsPost(req({ type: 'human', name: 'Existing User', email: 'existing@example.com' }))
+    expect(response.status).toBe(409)
+    expect(db.tables.organization_members).toEqual(memberships)
+    expect(db.tables.profiles).toEqual(profiles)
+    expect(db.tables.agents).toHaveLength(2)
+    expect(db.calls.filter(([, method]: any) => ['insert', 'upsert', 'update', 'delete'].includes(method))).toEqual([])
+    expect(db.auth.admin.createUser).not.toHaveBeenCalled()
+    expect(db.auth.admin.updateUserById).not.toHaveBeenCalled()
+    expect(db.auth.admin.deleteUser).not.toHaveBeenCalled()
+  })
+  it('an existing Auth user without membership cannot regain access through creation', async () => {
+    caller.role = 'admin'
+    db.auth.admin.listUsers.mockResolvedValue({ data: { users: [{ id: 'existing-user', email: 'existing@example.com' }] }, error: null })
+    db.tables.profiles.push({ id: 'existing-user', organization_id: 'org-a' })
+    db.seed('organization_members', [{ user_id: 'existing-user', organization_id: 'org-b', role: 'agent', status: 'active' }])
+    expect((await agentsPost(req({ name: 'Existing User', email: 'existing@example.com' }))).status).toBe(409)
+    expect(db.tables.agents).toHaveLength(2)
+    expect(db.tables.organization_members).toHaveLength(1)
+    expect(db.auth.admin.updateUserById).not.toHaveBeenCalled()
+  })
+  it('creation preserves an existing active agent membership', async () => {
+    caller.role = 'admin'
+    db.auth.admin.listUsers.mockResolvedValue({ data: { users: [{ id: 'existing-user', email: 'existing@example.com' }] }, error: null })
+    db.tables.profiles.push({ id: 'existing-user', organization_id: 'org-a' })
+    db.seed('organization_members', [{ user_id: 'existing-user', organization_id: 'org-a', role: 'agent', status: 'active', joined_at: '2026-01-01' }])
+    const memberships = structuredClone(db.tables.organization_members)
+    const response = await agentsPost(req({ name: 'Existing Agent', email: 'existing@example.com' }))
+    expect(response.status, JSON.stringify(await response.json())).toBe(201)
+    expect(db.tables.agents.at(-1)).toMatchObject({ user_id: 'existing-user', organization_id: 'org-a', type: 'human' })
+    expect(db.tables.organization_members).toEqual(memberships)
+    expect(db.auth.admin.createUser).not.toHaveBeenCalled()
+  })
+  it('creation grants a newly created Auth user an active agent membership', async () => {
+    caller.role = 'admin'
+    const response = await agentsPost(req({ name: 'New Agent', email: 'new@example.com' }))
+    expect(response.status, JSON.stringify(await response.json())).toBe(201)
+    expect(db.tables.agents.at(-1)).toMatchObject({ user_id: 'new-user', organization_id: 'org-a', type: 'human' })
+    expect(db.tables.organization_members).toEqual([expect.objectContaining({ user_id: 'new-user', organization_id: 'org-a', role: 'agent', status: 'active' })])
+    expect(db.tables.profiles.at(-1)).toMatchObject({ id: 'new-user', organization_id: 'org-a', role: 'agent' })
+  })
   it('deleting an agent revokes only their tenant and preserves another active membership', async () => {
     caller.role = 'admin'
     db.tables.profiles.push({ id: 'peer', organization_id: 'org-a', role: 'agent' })
@@ -139,9 +219,21 @@ describe('agent permission boundaries', () => {
     expect(db.tables.whatsapp_conversations[0].assigned_agent_id).toBeNull()
   })
   it.each(['', '?agent_id=agent-peer'])('applies caller permissions when query is omitted or forged: %s', async (query) => {
+    db.seed('agent_permissions', [{ agent_id: 'agent-a', whatsapp_access_all: true, can_view_all_conversations: false }])
     const response = await conversationsGet(new NextRequest('http://localhost/api/whatsapp/conversations' + query))
     expect(response.status).toBe(200)
     expect((await response.json()).conversations.map((c: any) => c.id)).toEqual(['allowed'])
+  })
+  it('unrestricted agent with view-all sees own and peer conversations only in their tenant', async () => {
+    db.seed('agent_permissions', [{ agent_id: 'agent-a', whatsapp_access_all: true, can_view_all_conversations: true }])
+    const response = await conversationsGet(new NextRequest('http://localhost/api/whatsapp/conversations?agent_id=agent-peer'))
+    expect(response.status).toBe(200)
+    expect((await response.json()).conversations.map((c: any) => c.id)).toEqual(['allowed', 'peer-conversation'])
+  })
+  it('number-restricted agent sees no conversations until the number relationship can be verified', async () => {
+    const response = await conversationsGet(new NextRequest('http://localhost/api/whatsapp/conversations'))
+    expect(response.status).toBe(200)
+    expect((await response.json()).conversations).toEqual([])
   })
   it('missing agent permissions exposes no conversations', async () => {
     db.seed('agent_permissions', [])
@@ -151,6 +243,6 @@ describe('agent permission boundaries', () => {
   it('admin can list all conversations in their org', async () => {
     caller.role = 'admin'
     const response = await conversationsGet(new NextRequest('http://localhost/api/whatsapp/conversations'))
-    expect((await response.json()).conversations.map((c: any) => c.id)).toEqual(['allowed', 'forbidden-number'])
+    expect((await response.json()).conversations.map((c: any) => c.id)).toEqual(['allowed', 'peer-conversation'])
   })
 })

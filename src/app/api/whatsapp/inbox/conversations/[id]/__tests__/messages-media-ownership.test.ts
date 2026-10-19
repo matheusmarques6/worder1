@@ -3,9 +3,13 @@ import { beforeEach, expect, it, vi } from 'vitest'
 const state = vi.hoisted(() => ({ messages: [] as any[], sign: vi.fn(), calls: [] as any[] }))
 vi.mock('@/lib/auth/require-org', () => ({ requireOrgFromAuth: async () => ({ orgId: 'org-1', userId: 'u-1' }) }))
 vi.mock('@/lib/supabase-admin', () => ({ supabaseAdmin: {
-  from: () => {
+  from: (table: string) => {
     const query: any = new Proxy({}, { get: (_, key) => key === 'then'
-      ? (resolve: any) => Promise.resolve({ data: state.messages, error: null }).then(resolve)
+      ? (resolve: any) => Promise.resolve({
+        data: table === 'whatsapp_inbox_conversations'
+          ? { id: 'conv-1', organization_id: 'org-1' } : state.messages,
+        error: null,
+      }).then(resolve)
       : (...args: any[]) => { state.calls.push([key, ...args]); return query } })
     return query
   },

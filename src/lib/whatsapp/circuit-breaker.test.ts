@@ -18,12 +18,11 @@
 // behave atomically because INCR mutates+returns in one awaited command.
 //
 // The genuinely-atomic guarantee under a REAL distributed Redis EVAL is gated
-// behind RUN_REDIS_IT (mocks cannot prove Lua atomicity).
+// in tests/redis/atomicity.test.ts (mocks cannot prove Lua atomicity).
 // =============================================
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { fakeRedis } from './__fake-redis'
 
-const RUN_REDIS_IT = !!process.env.RUN_REDIS_IT
 
 vi.mock('@upstash/redis', () => ({
   Redis: class {
@@ -162,12 +161,4 @@ describe('0B: public interface is preserved', () => {
 // ---------------------------------------------------------------------------
 // 0B — real-Redis atomicity (gated): mocks can't prove Lua/INCR atomicity
 // ---------------------------------------------------------------------------
-describe.skipIf(!RUN_REDIS_IT)('0B: atomic admission against REAL Redis (integration)', () => {
-  it('50 concurrent canExecute() in HALF_OPEN admit at most halfOpenMaxCalls', async () => {
-    const cb = new CircuitBreaker(`it-cb-${Date.now()}`, { halfOpenMaxCalls: 3, resetTimeout: 1 })
-    await cb.reset()
-    await cb.forceState('HALF_OPEN')
-    const grants = await Promise.all(Array.from({ length: 50 }, () => cb.canExecute()))
-    expect(grants.filter(Boolean).length).toBeLessThanOrEqual(3)
-  })
-})
+// Real SDK + Lua proof: node scripts/test-redis-local.mjs (tests/redis/atomicity.test.ts).

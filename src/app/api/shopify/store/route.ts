@@ -13,21 +13,22 @@ export async function GET(request: NextRequest) {
   const userId = auth.user.id;
   const userOrgId = auth.user.organization_id;
 
-  // Multi-org lookup: get all orgs the user belongs to
-  const { data: memberships } = await supabase
-    .from('organization_members')
-    .select('organization_id')
-    .eq('user_id', userId);
-
-  const orgIds = [...new Set([
-    userOrgId,
-    ...(memberships?.map((m: any) => m.organization_id) || []),
-  ])];
-
   const { searchParams } = new URL(request.url);
   const storeId = searchParams.get('storeId');
 
   try {
+    const { data: memberships, error: membershipError } = await supabase
+      .from('organization_members')
+      .select('organization_id')
+      .eq('user_id', userId)
+      .eq('status', 'active');
+    if (membershipError) throw membershipError;
+
+    const orgIds = [...new Set([
+      userOrgId,
+      ...(memberships?.map((m: any) => m.organization_id) || []),
+    ])];
+
     if (storeId) {
       const { data, error } = await supabase
         .from('shopify_stores')

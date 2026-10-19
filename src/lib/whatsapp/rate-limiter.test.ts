@@ -12,12 +12,11 @@
 // We replace `@upstash/redis` with the shared FakeRedis singleton (so the test
 // and the SUT share state) and replace `@upstash/ratelimit` with a token-bucket
 // fake whose state is committed only on grant. Tests that require a REAL Lua /
-// real Upstash atomic eval are gated behind RUN_REDIS_IT.
+// real Upstash atomic eval run separately in tests/redis/atomicity.test.ts.
 // =============================================
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { fakeRedis, FakeTokenBucket } from './__fake-redis'
 
-const RUN_REDIS_IT = !!process.env.RUN_REDIS_IT
 
 // A controllable clock so the burst-window assertions are deterministic.
 let NOW = 1_700_000_000_000
@@ -199,20 +198,8 @@ describe('0A: burst cap — N concurrent lanes never exceed targetMPS in a 1s wi
 // ---------------------------------------------------------------------------
 // 0A — atomic burst under REAL redis (gated): requires the implemented Lua
 // ---------------------------------------------------------------------------
-describe.skipIf(!RUN_REDIS_IT)('0A: atomic canSend against REAL Upstash (integration)', () => {
-  it('aggregate grants across 50 concurrent canSend never exceed targetMPS', async () => {
-    // Requires UPSTASH_REDIS_REST_URL/TOKEN to a dev instance AND the Phase-0
-    // Lua-backed canSend. Mock fakes cannot prove the EVAL is genuinely atomic.
-    const rl = new WhatsAppRateLimiter(`it-burst-${Date.now()}`, 1)
-    await rl.reset()
-    const targetMPS = Math.floor(TIER_CONFIG[1].mps * 0.9)
-    const results = await Promise.all(
-      Array.from({ length: 50 }, (_, i) => rl.canSend(`it${i}`)),
-    )
-    const granted = results.filter((r) => r.allowed).length
-    expect(granted).toBeLessThanOrEqual(targetMPS)
-  })
-})
+// Real SDK + Lua proof: node scripts/test-redis-local.mjs (tests/redis/atomicity.test.ts).
+
 
 // ---------------------------------------------------------------------------
 // 0C — error-code ladder: code 4 must increment ladder and throttle

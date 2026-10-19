@@ -35,6 +35,21 @@ export async function GET(request: NextRequest, props: { params: Promise<{ id: s
     const { orgId } = auth
 
     const conversationId = params.id
+    const { data: conversation, error: conversationError } = await supabase
+      .from('whatsapp_inbox_conversations')
+      .select('id')
+      .eq('id', conversationId)
+      .eq('organization_id', orgId)
+      .maybeSingle()
+
+    if (conversationError) throw conversationError
+    if (!conversation) {
+      return NextResponse.json(
+        { error: 'Conversation not found' },
+        { status: 404, headers: NO_CACHE_HEADERS }
+      )
+    }
+
     const { searchParams } = new URL(request.url)
     const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 100)
     const before = searchParams.get('before')

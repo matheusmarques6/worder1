@@ -77,14 +77,24 @@ jobs:
           "RUNTIME_DB_RUN_DIRECTORY=$runPath" >> $env:GITHUB_ENV
       - name: Prepare disposable database
         shell: pwsh
-        run: ./scripts/test-disposable-db.ps1 -Action Prepare -RunDirectory $env:RUNTIME_DB_RUN_DIRECTORY
+        run: ./scripts/test-disposable-db.ps1 -StorageHttp -Action Prepare -RunDirectory $env:RUNTIME_DB_RUN_DIRECTORY
       - name: Replay canonical migrations
         shell: pwsh
-        run: ./scripts/test-disposable-db.ps1 -Action Replay -RunDirectory $env:RUNTIME_DB_RUN_DIRECTORY
+        run: ./scripts/test-disposable-db.ps1 -StorageHttp -Action Replay -RunDirectory $env:RUNTIME_DB_RUN_DIRECTORY
       - name: Run complete database gates
         shell: pwsh
-        run: ./scripts/test-disposable-db.ps1 -Action Test -RunDirectory $env:RUNTIME_DB_RUN_DIRECTORY
+        run: ./scripts/test-disposable-db.ps1 -StorageHttp -Action Test -RunDirectory $env:RUNTIME_DB_RUN_DIRECTORY
       - name: Stop disposable database
         if: always()
         shell: pwsh
-        run: ./scripts/test-disposable-db.ps1 -Action Stop -RunDirectory $env:RUNTIME_DB_RUN_DIRECTORY
+        run: ./scripts/test-disposable-db.ps1 -StorageHttp -Action Stop -RunDirectory $env:RUNTIME_DB_RUN_DIRECTORY
+      - name: Preserve sanitized database evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: runtime-database-evidence
+          path: |
+            ${{ env.RUNTIME_DB_RUN_DIRECTORY }}/gates.json
+            ${{ env.RUNTIME_DB_RUN_DIRECTORY }}/events.jsonl
+            ${{ env.RUNTIME_DB_RUN_DIRECTORY }}/artifacts/*.xml
+          if-no-files-found: warn

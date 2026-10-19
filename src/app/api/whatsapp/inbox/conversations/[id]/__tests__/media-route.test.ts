@@ -7,25 +7,31 @@ vi.mock('@/lib/auth/require-org', () => ({
 
 const queryCalls: Array<{ method: string; args: any[] }> = []
 let queryResult: any
-const query: any = new Proxy(
-  {},
-  {
-    get(_target, method: string) {
-      if (method === 'then') {
-        return (resolve: any, reject: any) => Promise.resolve(queryResult).then(resolve, reject)
-      }
-      return (...args: any[]) => {
-        queryCalls.push({ method, args })
-        return query
-      }
+const makeQuery = (table: string): any => {
+  const query: any = new Proxy(
+    {},
+    {
+      get(_target, method: string) {
+        if (method === 'then') {
+          const result = table === 'whatsapp_cloud_conversations'
+            ? { data: { id: 'conv-1', organization_id: 'org-1' }, error: null }
+            : queryResult
+          return (resolve: any, reject: any) => Promise.resolve(result).then(resolve, reject)
+        }
+        return (...args: any[]) => {
+          queryCalls.push({ method, args })
+          return query
+        }
+      },
     },
-  },
-)
+  )
+  return query
+}
 
 const createSignedUrl = vi.fn()
 vi.mock('@/lib/supabase-admin', () => ({
   supabaseAdmin: {
-    from: () => query,
+    from: (table: string) => makeQuery(table),
     storage: {
       from: () => ({ createSignedUrl: (...args: any[]) => createSignedUrl(...args) }),
     },

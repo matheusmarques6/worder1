@@ -2,8 +2,9 @@
   "name": "worder",
   "version": "1.0.0",
   "private": true,
+  "packageManager": "pnpm@11.25.0",
   "engines": {
-    "node": ">=22.12.0"
+    "node": ">=22.13.0"
   },
   "scripts": {
     "dev": "next dev",
@@ -15,6 +16,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:ci-policy": "node --test scripts/ci/*.test.mjs",
+    "test:redis:local": "node scripts/test-redis-local.mjs",
     "test:ai:parity": "vitest run src/lib/ai/__tests__/hub-configuration-parity.test.ts src/lib/ai/__tests__/hub-runtime-parity.test.ts",
     "test:ai:api": "vitest run src/app/api/ai",
     "test:ai:ui": "playwright test --config playwright.ai.config.ts",
