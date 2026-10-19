@@ -108,9 +108,9 @@ def test_forward_repair_refuses_privileged_membership(admin, member, parent):
                                    (member, parent)).fetchone()
     with admin.transaction(force_rollback=True):
         if synthetic:
-            creator = admin.execute('select current_user').fetchone()[0]
-            admin.execute(sql.SQL('create role {} nologin bypassrls admin {}').format(
-                sql.Identifier(parent), sql.Identifier(creator),
+            # CREATEROLE already gives the creator ADMIN on this fresh role.
+            admin.execute(sql.SQL('create role {} nologin bypassrls').format(
+                sql.Identifier(parent),
             ))
         admin.execute(sql.SQL('grant {} to {} with inherit false, set true').format(
             sql.Identifier(parent), sql.Identifier(member),
