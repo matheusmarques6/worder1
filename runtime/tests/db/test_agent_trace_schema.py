@@ -183,14 +183,26 @@ def test_annotations_preserve_shape_and_fix_requires_text(
 
 def test_rls_and_grants_are_explicit_and_tenant_scoped(admin, dsn, two_tenants):
     policies = admin.execute(
-        """select tablename,roles,cmd,qual from pg_policies
+        """select tablename,policyname,roles,cmd,permissive,qual,with_check from pg_policies
             where schemaname='public'
               and tablename in ('agent_traces','agent_trace_annotations')
-            order by tablename"""
+            order by tablename,policyname"""
     ).fetchall()
-    assert len(policies) == 2
-    assert all(row[1] == ["authenticated"] and row[2] == "SELECT" for row in policies)
-    assert all("user_belongs_to_org(organization_id)" in row[3] for row in policies)
+    assert policies == [
+        (table, name, ["authenticated"], command, permissive, predicate, check)
+        for table in ("agent_trace_annotations", "agent_traces")
+        for name, command, permissive, predicate, check in (
+            (
+                "active_identity_required", "ALL", "RESTRICTIVE",
+                "internal.has_active_org_access((organization_id)::text)",
+                "internal.has_active_org_access((organization_id)::text)",
+            ),
+            (
+                f"{table}_org_select", "SELECT", "PERMISSIVE",
+                "user_belongs_to_org(organization_id)", None,
+            ),
+        )
+    ]
     for table in ("agent_traces", "agent_trace_annotations"):
         assert admin.execute(
             """select count(*) from pg_class c

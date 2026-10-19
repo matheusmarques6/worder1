@@ -128,6 +128,9 @@ def test_storage_tenant_boundary_survives_legacy_policies(admin, two_tenants, op
                         (foreign.replace(".jpg", "-moved.jpg"), own),
                     )
         else:
+            # Match the Storage API's transaction scope; the fixture only creates
+            # metadata and rolls back. This permits SQL DELETE, not an RLS bypass.
+            admin.execute("select set_config('storage.allow_delete_query', 'true', true)")
             assert (
                 admin.execute(
                     "delete from storage.objects where bucket_id='whatsapp-media' and name=%s",

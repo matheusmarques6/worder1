@@ -61,13 +61,16 @@ grant execute on function internal.has_active_org_access(text) to authenticated,
 
 -- Restrictive policies AND with every existing permissive policy, including
 -- legacy profile-based policies. Runtime worker/sender/service roles are intact.
+-- oauth_states retains its service-only contract: RLS, zero policies and no
+-- browser grants, enforced by 20260910010100_oauth_states_service_only.sql.
 do $$
 declare t record; pred text;
 begin
   for t in
     select c.relname from pg_class c join pg_namespace n on n.oid=c.relnamespace
       join pg_attribute a on a.attrelid=c.oid and a.attname='organization_id' and not a.attisdropped
-    where n.nspname='public' and c.relkind='r' and c.relname <> 'profiles'
+    where n.nspname='public' and c.relkind='r'
+      and c.relname not in ('profiles', 'oauth_states')
   loop
     pred := 'internal.has_active_org_access(organization_id::text)';
     execute format('alter table public.%I enable row level security', t.relname);
