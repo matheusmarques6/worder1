@@ -16,6 +16,7 @@
 services:
   - type: web
     name: worder-agents-runtime
+    branch: claude/debug-console-error-FWrLE
     runtime: docker
     rootDir: runtime
     dockerfilePath: ./Dockerfile
@@ -56,6 +57,9 @@ services:
       - key: AGENTS_WORKER_DB_URL # runtime_worker_login, session pooler
         sync: false
       - key: AGENTS_SENDER_DB_URL # runtime_sender_login, session pooler
+        sync: false
+      # Origem HTTPS usada para validar as URLs assinadas de mídia privada.
+      - key: SUPABASE_URL
         sync: false
       - key: AGENTS_OPENROUTER_API_KEY # chave da PLATAFORMA (Judge 1 + embeddings)
         sync: false
