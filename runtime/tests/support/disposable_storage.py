@@ -140,7 +140,7 @@ class StorageExecutor(ex.Executor):
                         output = output.replace(value, "[redacted]")
                 path = self.run / "storage-command-failure.log"
                 ex.no_links(path)
-                path.write_text(output[-18000:], encoding="utf-8")
+                path.write_text(output[-64000:], encoding="utf-8")
             return result
 
         super().__init__(repo, run, runner=storage_runner)
@@ -266,6 +266,11 @@ class StorageExecutor(ex.Executor):
         super().test(test_targets)
         # Full Test[] already includes the HTTP file in canonical -m db. Keep
         # clean-commit, collection counts, DB/RLS/pipeline and skip guards intact.
+
+    def pytest_command(self, arguments, stage):
+        return super().pytest_command(
+            [*arguments, "--tb=short", "-o", "verbosity_assertions=0"], stage,
+        )
 
     def stop(self):
         state_file = self.run / "storage-identity.json"

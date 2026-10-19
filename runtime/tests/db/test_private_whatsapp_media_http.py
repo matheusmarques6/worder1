@@ -83,21 +83,30 @@ def storage(admin, two_tenants):
                 assert response.status_code == 200, response.text
             yield state
         finally:
-            for key in (state.own, state.foreign, state.foreign_conversation,
-                        state.own.replace("image.txt", "new.txt")):
-                state.delete(key, jwt=state.service)
-            state.delete("public.txt", jwt=state.service, bucket=state.other_bucket)
-            admin.execute("delete from storage.buckets where id=%s", (state.other_bucket,))
-            admin.execute("drop policy sec17_http_legacy_broad on storage.objects")
+            try:
+                for key in (state.own, state.foreign, state.foreign_conversation,
+                            state.own.replace("image.txt", "new.txt")):
+                    response = state.delete(key, jwt=state.service)
+                    assert response.status_code == 200, response.text
+                response = state.delete("public.txt", jwt=state.service, bucket=state.other_bucket)
+                assert response.status_code == 200, response.text
+                response = state.request(
+                    "DELETE", f"/bucket/{state.other_bucket}", jwt=state.service,
+                )
+                assert response.status_code == 200, response.text
+            finally:
+                admin.execute("drop policy sec17_http_legacy_broad on storage.objects")
 
 
 def test_owned_upload_download_upsert_and_delete(storage):
     key = storage.own.replace("image.txt", "new.txt")
-    assert storage.upload(key, data=b"first").status_code == 200
+    response = storage.upload(key, data=b"first")
+    assert response.status_code == 200, response.text
     downloaded = storage.request("GET", f"/object/authenticated/whatsapp-media/{key}",
                                  jwt=storage.user)
     assert downloaded.status_code == 200 and downloaded.content == b"first"
-    assert storage.upload(key, data=b"replacement", upsert=True).status_code == 200
+    response = storage.upload(key, data=b"replacement", upsert=True)
+    assert response.status_code == 200, response.text
     downloaded = storage.request("GET", f"/object/authenticated/whatsapp-media/{key}",
                                  jwt=storage.user)
     assert downloaded.status_code == 200 and downloaded.content == b"replacement"
