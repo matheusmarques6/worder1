@@ -34,12 +34,12 @@ it('runs the complete runtime database gate through one disposable executor', ()
     ['Run complete database gates', 'Test'],
   ]) {
     expect(databaseJob).toContain(
-      `- name: ${name}\n        shell: pwsh\n        run: ./scripts/test-disposable-db.ps1 -Action ${action} -RunDirectory $env:RUNTIME_DB_RUN_DIRECTORY`,
+      `- name: ${name}\n        shell: pwsh\n        run: ./scripts/test-disposable-db.ps1 -StorageHttp -Action ${action} -RunDirectory $env:RUNTIME_DB_RUN_DIRECTORY`,
     )
   }
 
   expect(databaseJob).toContain(
-    '- name: Stop disposable database\n        if: always()\n        shell: pwsh\n        run: ./scripts/test-disposable-db.ps1 -Action Stop -RunDirectory $env:RUNTIME_DB_RUN_DIRECTORY',
+    '- name: Stop disposable database\n        if: always()\n        shell: pwsh\n        run: ./scripts/test-disposable-db.ps1 -StorageHttp -Action Stop -RunDirectory $env:RUNTIME_DB_RUN_DIRECTORY',
   )
   expect(databaseJob).not.toContain('run: supabase start')
   expect(databaseJob).not.toContain('pytest -m "db or pipeline"')
