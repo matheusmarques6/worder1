@@ -19,23 +19,43 @@ promoção para produção depende dos resultados obrigatórios.
 - CI: pnpm fixado em 11.25.0, Node mínimo 22.13; política 44/44 passou. O scan
   remoto anterior reprovou uma fixture sintética; triagem limitada à regra,
   caminho e valor exatos, com testes de rejeição fora desse limite.
-- Storage: perfil explícito com schema e API oficiais, 25 guardas e 17 verificações
-  diferenciais passaram. Os 25 casos SQL/repositório/HTTP reais ainda precisam
-  executar; inicialização local não completou. Guardas canônicas completas ficaram
-  incompletas com falhas observadas; não há aprovação global atual.
+- Storage: perfil explícito com schema e API oficiais. A execução remota completa
+  aprovou os 25 casos reais: 11 HTTP, 11 SQL/RLS e 3 de repositório. O lookup
+  booleano `SECURITY DEFINER`, com `search_path` vazio, verifica sessão/vínculo/MFA
+  e organização/conversa sem conceder SELECT da tabela privada ao usuário.
 
-Evidência remota posterior: app 3.512 passed/1 skip e política CI 44/44; runtime
-2.325 unitários, tipos, build, seis grupos de interface, segurança e Redis passaram
-nos candidatos anteriores. O banco aplicou as migrations e chegou a 1.036 passed
-com duas falhas HTTP: o helper invoker não podia consultar a tabela privada de
-conversas. A correção usa lookup booleano `SECURITY DEFINER` com `search_path`
-vazio, checagem explícita de sessão/vínculo/MFA e organização/conversa; não concede
-SELECT da tabela ao usuário. Reexecução completa após a correção é obrigatória.
-- Reexecutar app, tipos, build, interface, runtime, banco/RLS/pipeline e scanner
-  no candidato remoto. Os resultados globais de 17/10 são históricos.
+O commit de código `41e97cf1b7dc83262ff13c010e761807507f1ad2` foi validado no
+[run 39308208509](https://github.com/matheusmarques6/worder1/actions/runs/39308208509):
+
+| Gate | Resultado observado |
+|---|---|
+| App / política CI | 3.512 passed, 1 skip manual / 44 passed |
+| Tipos / build | Sucesso / 153 páginas, lint e tipos habilitados |
+| Interface | 50 passed nos seis grupos, sem skips ou retries |
+| Runtime / fronteiras | 2.326 unitários / Ruff limpo e 4 contratos preservados |
+| Banco / RLS / pipeline | 1.038 / 167 / 45 passed; zero falhas, erros ou skips |
+| Redis real | 2 passed, SDK e Lua reais |
+| Segurança | 9 passed; scanner do intervalo sem achados; audit 0 critical/high, 3 moderate |
+| Jornadas / Release readiness | Falha por configuração de QA ausente / `Release blocked: journeys` |
+
+Os 167 casos RLS coletados foram executados. O gate `db` seleciona `db and not rls`;
+as contagens acima identificam as três seleções executadas. O skip do app é o gerador manual
+`GEN_BUBBLE_VECTORS`, sem dispensar jornadas. O executor encerrou com
+`scope=full`, `state=stopped` e `failure=null`; cleanup também passou.
+
+- As falhas reais encontradas no CI foram corrigidas e revisadas antes dessa
+  execução: lookup de mídia, expectativas exatas das políticas restritivas,
+  contrato OAuth exclusivo de serviço e contexto transacional de DELETE Storage.
 - Homologação não provisionada: o job de jornadas reprovou por configuração
   ausente. Não ignorar esse gate. KMS, rotação externa e aplicação de dados
   continuam pendentes; não afirmar conformidade LGPD integral.
+- A validação das proteções de publicação segue pendente após a primeira
+  homologação verde, conforme o runbook de QA. Diagnóstico operacional detalhado
+  mantido na evidência local; o agregador reprovado não é prova de ativação.
+
+A branch de produção foi conferida em `53e1d7d50060b896a7bedb50c0a4a6250f04b789`;
+não houve promoção nesta execução. Commits posteriores somente de documentação
+têm suas próprias execuções de CI; a evidência acima identifica o SHA testado.
 
 Os metadados hospedados precisam ser conferidos novamente antes do rollout.
 Identidade/runtime vêm antes ou junto do código; privatização de mídia vem depois

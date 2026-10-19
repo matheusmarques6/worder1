@@ -10,25 +10,33 @@ antes da promoção. Produção não foi alterada nesta retomada.
 
 | Área | Evidência atual | Pendência |
 |---|---|---|
-| SEC-01 | Triagem de fixture limitada; 15 achados da árvore classificados como sintéticos/preexistentes | Scanner no candidato remoto e revogação externa da chave histórica |
-| SEC-02 | Audit de produção: 0 critical, 0 high, 3 moderate; pnpm/Node alinhados | Revalidar CI do candidato |
+| SEC-01 | Triagem de fixture limitada; 15 achados da árvore classificados como sintéticos/preexistentes; scanner remoto do intervalo sem achados | Revogação externa da chave histórica |
+| SEC-02 | Audit remoto: 0 critical, 0 high, 3 moderate; pnpm/Node alinhados | Três moderate registrados |
 | SEC-03/04/06 e SEC-05 | Revisão posterior aprovada, 80 testes focais | Migration hospedada; autorização por número continua com negação conservadora |
-| SEC-07 | Revisão aprovada, provas do editor preservadas | Gate global no candidato |
-| SEC-08 | Revisão concluída, quatro achados corrigidos e revisão posterior aprovada; 54 testes focais | Gates globais, backfill controlado e verificação hospedada |
+| SEC-07 | Revisão aprovada, provas do editor preservadas; app e navegador remotos passaram | Smoke em QA/produção |
+| SEC-08 | Revisão concluída, quatro achados corrigidos e revisão posterior aprovada; 54 testes focais e gates de código passaram | Backfill controlado e verificação hospedada |
 | SEC-09 | Configuração externa pendente | Definir KMS; chave compartilhada não é envelope externo |
 | SEC-10/11 | Fix revisado; grafo incompleto continua `needs_review` | Não declarar exclusão integral nem conformidade LGPD concluída |
-| SEC-17 | Código revisado; 18 testes TS e 45 Python focais | 25 casos reais SQL/repositório/Storage HTTP e rollout da mídia privada |
-| SEC-18 | Subset mínimo revisado | Gates completos de runtime/banco e configuração das roles hospedadas |
-| Redis | 2/2 reais passaram, gate obrigatório adicionado | Execução remota; caminho proprietário legado não certificado |
-| Lint | Sem warnings/erros em 19/10; troca de organização coberta | Gate global no candidato |
-| Jornadas | CI anterior reprovou por configuração ausente | Provisionar QA e provar bloqueio da promoção |
+| SEC-17 | Código revisado; 25 casos reais SQL/repositório/Storage HTTP passaram no CI completo | Inventário hospedado e rollout da mídia privada após os leitores |
+| SEC-18 | Subset mínimo revisado; runtime, banco/RLS/pipeline completos passaram | Configuração das roles hospedadas; não ampliar a prova ao escopo não implementado |
+| Redis | 2/2 reais passaram no CI, gate obrigatório adicionado | Caminho proprietário legado não certificado |
+| Lint | Sem warnings/erros em 19/10; troca de organização coberta; build remoto passou | Smoke em QA |
+| Jornadas | CI reprovou por configuração ausente; agregador reprovou por jornadas | Provisionar QA, ativar proteção nos provedores/GitHub e provar bloqueio efetivo |
 
-Os resultados globais abaixo pertencem ao checkout de 17/10. Não são aprovação
-das correções posteriores. O último runtime global teve uma falha de fitness
-de fixture depois corrigida; a repetição completa continua pendente. A última
-repetição do scanner teve timeouts/erros de cleanup local; não foi declarada verde.
-Guardas canônicas de banco ficaram incompletas, com três falhas sem diagnóstico
-final. Estes resultados precisam ser esclarecidos nos runners antes da promoção.
+Prova remota do código `41e97cf1b7dc83262ff13c010e761807507f1ad2`:
+[run 39308208509](https://github.com/matheusmarques6/worder1/actions/runs/39308208509).
+App 3.512 passed/1 skip manual (`GEN_BUBBLE_VECTORS`); política CI 44;
+interface 50; runtime 2.326; banco 1.038; RLS 167; pipeline 45; Redis 2.
+Banco/RLS/pipeline sem falhas, erros ou skips; RLS executado igual ao coletado,
+executor `scope=full`, cleanup `stopped`, sem falha. Tipos, build (153 páginas),
+Ruff, quatro contratos de importação e segurança passaram. O gate `db` seleciona
+`db and not rls`; RLS tem execução separada com coleta e contagem conferidas.
+
+O resultado agregado continua vermelho exclusivamente por jornadas sem QA.
+Ativação e prova das proteções de publicação continuam pendentes após QA.
+Diagnóstico operacional detalhado mantido localmente.
+Os resultados abaixo são históricos de 17/10, superados apenas onde há prova
+atual explícita; não comprovam conformidade LGPD integral ou rollout hospedado.
 
 Ordem de rollout e detalhes atualizados em
 `docs/security/PENDENCIAS-SEGURANCA-P0-P1.md`. Nenhuma dispensa de teste foi criada.
