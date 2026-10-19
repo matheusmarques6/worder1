@@ -4,9 +4,11 @@ insert into storage.buckets (id, name, public, file_size_limit)
 values ('whatsapp-media', 'whatsapp-media', false, 52428800)
 on conflict (id) do update set public = false;
 
--- Invoker function: membership/session/MFA and conversation RLS still apply.
+-- Boolean-only privileged lookup: callers receive no conversation table grant.
+-- Explicit live membership/session/MFA and exact org/conversation checks below
+-- remain mandatory; search_path is fixed and no caller SQL is executed.
 create or replace function internal.can_access_whatsapp_media(p_name text)
-returns boolean language sql stable security invoker set search_path = '' as $$
+returns boolean language sql stable security definer set search_path = '' as $$
   select p_name ~ '^[a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+/[a-zA-Z0-9][a-zA-Z0-9_.-]*$'
     and position('..' in p_name) = 0
     and internal.has_active_org_access(split_part(p_name, '/', 1))

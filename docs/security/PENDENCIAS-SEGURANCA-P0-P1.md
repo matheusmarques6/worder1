@@ -23,6 +23,14 @@ promoção para produção depende dos resultados obrigatórios.
   diferenciais passaram. Os 25 casos SQL/repositório/HTTP reais ainda precisam
   executar; inicialização local não completou. Guardas canônicas completas ficaram
   incompletas com falhas observadas; não há aprovação global atual.
+
+Evidência remota posterior: app 3.512 passed/1 skip e política CI 44/44; runtime
+2.325 unitários, tipos, build, seis grupos de interface, segurança e Redis passaram
+nos candidatos anteriores. O banco aplicou as migrations e chegou a 1.036 passed
+com duas falhas HTTP: o helper invoker não podia consultar a tabela privada de
+conversas. A correção usa lookup booleano `SECURITY DEFINER` com `search_path`
+vazio, checagem explícita de sessão/vínculo/MFA e organização/conversa; não concede
+SELECT da tabela ao usuário. Reexecução completa após a correção é obrigatória.
 - Reexecutar app, tipos, build, interface, runtime, banco/RLS/pipeline e scanner
   no candidato remoto. Os resultados globais de 17/10 são históricos.
 - Homologação não provisionada: o job de jornadas reprovou por configuração

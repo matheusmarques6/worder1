@@ -98,7 +98,11 @@ def storage(admin, two_tenants):
                 admin.execute("drop policy sec17_http_legacy_broad on storage.objects")
 
 
-def test_owned_upload_download_upsert_and_delete(storage):
+def test_owned_upload_download_upsert_and_delete(storage, admin):
+    assert not admin.execute(
+        "select has_table_privilege('authenticated', "
+        "'public.whatsapp_cloud_conversations', 'SELECT')"
+    ).fetchone()[0], "private-media authorization must not grant direct conversation reads"
     key = storage.own.replace("image.txt", "new.txt")
     response = storage.upload(key, data=b"first")
     assert response.status_code == 200, response.text
