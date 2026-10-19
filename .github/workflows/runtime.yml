@@ -97,4 +97,5 @@ jobs:
             ${{ env.RUNTIME_DB_RUN_DIRECTORY }}/gates.json
             ${{ env.RUNTIME_DB_RUN_DIRECTORY }}/events.jsonl
             ${{ env.RUNTIME_DB_RUN_DIRECTORY }}/artifacts/*.xml
+            ${{ env.RUNTIME_DB_RUN_DIRECTORY }}/storage-command-failure.log
           if-no-files-found: warn

@@ -123,6 +123,26 @@ def test_extra_test_targets_are_rejected_before_storage_start(tmp_path):
         executor.test(['tests/db/test_other.py'])
 
 
+def test_storage_failure_evidence_redacts_local_credentials(tmp_path):
+    run = tmp_path / ('a' * 32)
+    run.mkdir()
+    secret, sentinel = 'c' * 64, 'd' * 64
+    jwt = 'eyJ' + 'synthetic.header.signature'
+    output = f'failure {secret} {sentinel} {jwt} postgresql://fixture:fixture@localhost/db'
+    executor = storage.StorageExecutor(
+        Path(__file__).resolve().parents[3], run,
+        runner=lambda argv, **kwargs: SimpleNamespace(returncode=1, stdout=output, stderr=''),
+    )
+    executor.storage_secret = secret
+    executor.identity = {'sentinel': sentinel}
+    executor.runner(['synthetic-command'])
+    evidence = (run / 'storage-command-failure.log').read_text(encoding='utf-8')
+    for value in (secret, sentinel, jwt, 'postgresql://'):
+        assert value not in evidence
+    assert 'failure' in evidence
+    assert '[jwt-redacted]' in evidence and '[url-redacted]' in evidence
+
+
 @pytest.mark.parametrize('local_proven', [False, True])
 def test_storage_pulls_exact_digest_only_after_local_proof(tmp_path, monkeypatch, local_proven):
     executor = storage.StorageExecutor(Path(__file__).resolve().parents[3], tmp_path / ('a' * 32))
