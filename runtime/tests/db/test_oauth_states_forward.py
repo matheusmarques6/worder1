@@ -96,15 +96,27 @@ def test_forward_repair_refuses_missing_relation_without_recreating_it(admin):
 
 
 @pytest.mark.parametrize('member,parent', (
-    ('runtime_worker_login', 'service_role'), ('service_role', 'postgres'),
+    ('runtime_worker_login', 'service_role'), ('service_role', 'synthetic_bypass'),
 ))
 def test_forward_repair_refuses_privileged_membership(admin, member, parent):
     before = _snapshot(admin)
-    membership = admin.execute('select pg_has_role(%s,%s,\'MEMBER\')',
-                               (member, parent)).fetchone()
+    synthetic = parent == 'synthetic_bypass'
+    if synthetic:
+        parent = 'oauth_bypass_' + uuid.uuid4().hex[:12]
+    else:
+        membership = admin.execute('select pg_has_role(%s,%s,\'MEMBER\')',
+                                   (member, parent)).fetchone()
     with admin.transaction(force_rollback=True):
-        admin.execute(sql.SQL('grant {} to {}').format(sql.Identifier(parent),
-                                                      sql.Identifier(member)))
+        if synthetic:
+            creator = admin.execute('select current_user').fetchone()[0]
+            admin.execute(sql.SQL('create role {} nologin bypassrls admin {}').format(
+                sql.Identifier(parent), sql.Identifier(creator),
+            ))
+        admin.execute(sql.SQL('grant {} to {} with inherit false, set true').format(
+            sql.Identifier(parent), sql.Identifier(member),
+        ))
+        assert admin.execute('select pg_has_role(%s,%s,\'SET\')',
+                             (member, parent)).fetchone() == (True,)
         if member == 'runtime_worker_login':
             assert admin.execute(
                 "select rolinherit from pg_roles where rolname='runtime_worker_login'"
@@ -115,5 +127,9 @@ def test_forward_repair_refuses_privileged_membership(admin, member, parent):
                 admin.execute(_body())
         assert _snapshot(admin) == drift
     assert _snapshot(admin) == before
-    assert admin.execute('select pg_has_role(%s,%s,\'MEMBER\')',
-                         (member, parent)).fetchone() == membership
+    if synthetic:
+        assert admin.execute('select count(*) from pg_roles where rolname=%s',
+                             (parent,)).fetchone() == (0,)
+    else:
+        assert admin.execute('select pg_has_role(%s,%s,\'MEMBER\')',
+                             (member, parent)).fetchone() == membership
